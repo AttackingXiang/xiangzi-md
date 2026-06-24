@@ -2,8 +2,12 @@ import { app, shell, BrowserWindow, session } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { buildMenu } from './menu'
+import { registerXmdPrivileges, handleXmdProtocol } from './protocol'
 
 let mainWindow: BrowserWindow | null = null
+
+// 必须在 app ready 之前注册自定义协议的权限
+registerXmdPrivileges()
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -53,6 +57,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  handleXmdProtocol()
+
   // 仅在生产环境注入严格 CSP；开发环境不加，避免阻断 Vite HMR
   if (!process.env['ELECTRON_RENDERER_URL']) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -60,7 +66,7 @@ app.whenReady().then(() => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: file:; font-src 'self' data:; script-src 'self'"
+            "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: file: xmd:; font-src 'self' data:; script-src 'self'"
           ]
         }
       })

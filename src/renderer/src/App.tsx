@@ -5,10 +5,25 @@ import Editor from './components/Editor'
 import SourceEditor from './components/SourceEditor'
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
-import type { Folder, Tab } from './types'
+import Settings from './components/Settings'
+import type { AppSettings, Folder, Tab } from './types'
 
 let tabSeq = 0
 const newTabId = (): string => `tab-${Date.now()}-${tabSeq++}`
+
+/** 取路径所在目录 */
+function dirOf(path: string | null): string | null {
+  if (!path) return null
+  const i = path.lastIndexOf('/')
+  if (i < 0) return null
+  return i === 0 ? '/' : path.slice(0, i)
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  attachmentMode: 'subfolder',
+  attachmentFolder: 'assets',
+  imageMaxWidth: 800
+}
 
 export default function App(): JSX.Element {
   const [folder, setFolder] = useState<Folder | null>(null)
@@ -16,8 +31,22 @@ export default function App(): JSX.Element {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [sourceMode, setSourceMode] = useState(false)
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
+  const [showSettings, setShowSettings] = useState(false)
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null
+  // 当前文档目录：已保存文件用其所在目录，未保存则退回已打开的文件夹根目录
+  const activeDocDir = activeTab ? (dirOf(activeTab.path) ?? folder?.root ?? null) : null
+
+  // 启动时加载设置
+  useEffect(() => {
+    if (window.api) window.api.getSettings().then(setSettings)
+  }, [])
+
+  const saveSettings = useCallback(async (patch: Partial<AppSettings>) => {
+    const next = await window.api.setSettings(patch)
+    setSettings(next)
+  }, [])
 
   // 用 ref 保存最新状态，供原生菜单回调读取，避免闭包陈旧
   const stateRef = useRef({ tabs, activeId })
@@ -176,6 +205,7 @@ export default function App(): JSX.Element {
           activePath={activeTab?.path ?? null}
           onOpenFolder={openFolder}
           onOpenFile={openPath}
+          onOpenSettings={() => setShowSettings(true)}
           onRefresh={async () => {
             if (folder) {
               const tree = await window.api.readDir(folder.root)
@@ -208,6 +238,8 @@ export default function App(): JSX.Element {
               <Editor
                 key={activeTab.id}
                 content={activeTab.content}
+                docDir={activeDocDir}
+                imageMaxWidth={settings.imageMaxWidth}
                 onChange={(c) => updateContent(activeTab.id, c)}
               />
             )
@@ -218,6 +250,14 @@ export default function App(): JSX.Element {
 
         <StatusBar tab={activeTab} sourceMode={sourceMode} />
       </div>
+
+      {showSettings && (
+        <Settings
+          settings={settings}
+          onChange={saveSettings}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   )
 }

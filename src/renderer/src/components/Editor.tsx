@@ -1,29 +1,57 @@
 import { useEffect, useRef } from 'react'
-import { Crepe } from '@milkdown/crepe'
+import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
+import { resolveAssetURL } from '../lib/asset'
 
 interface Props {
   content: string
+  /** 当前文档所在目录（用于解析相对图片路径、保存附件）；新建未保存为 null */
+  docDir: string | null
+  imageMaxWidth: number
   onChange: (markdown: string) => void
 }
 
 /**
  * 所见即所得编辑器（Typora 风格），基于 Milkdown Crepe（ProseMirror 内核）。
- * 组件以 tab.id 作为 key，切换标签时重建实例。
+ * - 本地图片通过 proxyDomURL 解析为 xmd:// 协议显示，Markdown 中仍保存相对路径
+ * - 粘贴/拖入图片经 onUpload 存到文档同级附件目录
  */
-export default function Editor({ content, onChange }: Props): JSX.Element {
+export default function Editor({ content, docDir, imageMaxWidth, onChange }: Props): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  // docDir 可能在保存后变化（同一标签重命名/落盘），用 ref 保证回调读到最新值
+  const docDirRef = useRef(docDir)
+  docDirRef.current = docDir
 
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
 
+    const upload = async (file: File): Promise<string> => {
+      const dir = docDirRef.current
+      if (!dir) {
+        window.alert('请先保存文档，再插入本地图片。')
+        return ''
+      }
+      const buf = new Uint8Array(await file.arrayBuffer())
+      const { relPath } = await window.api.saveAttachment(dir, file.name || 'image.png', buf)
+      return relPath
+    }
+
     const crepe = new Crepe({
       root,
-      defaultValue: content
+      defaultValue: content,
+      featureConfigs: {
+        [CrepeFeature.ImageBlock]: {
+          proxyDomURL: (url: string) => resolveAssetURL(docDirRef.current, url),
+          onUpload: upload,
+          blockOnUpload: upload,
+          inlineOnUpload: upload,
+          ...(imageMaxWidth > 0 ? { maxWidth: imageMaxWidth } : {})
+        }
+      }
     })
 
     crepe.on((listener) => {
