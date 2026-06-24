@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import type { FileNode } from '../types'
 
 interface Props {
   nodes: FileNode[]
   activePath: string | null
-  onOpenFile: (path: string, name: string) => void
+  onOpenFile: (path: string, name?: string) => void
   depth: number
 }
 
@@ -32,7 +33,7 @@ function TreeNode({
 }: {
   node: FileNode
   activePath: string | null
-  onOpenFile: (path: string, name: string) => void
+  onOpenFile: (path: string, name?: string) => void
   depth: number
 }): JSX.Element {
   const [expanded, setExpanded] = useState(depth < 1)
@@ -43,8 +44,10 @@ function TreeNode({
     return (
       <li>
         <div className="tree-row dir" style={indent} onClick={() => setExpanded((v) => !v)}>
-          <span className="tree-caret">{expanded ? '▾' : '▸'}</span>
-          <span className="tree-icon">📁</span>
+          <span className="tree-caret">
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+          <Folder size={15} className="tree-icon" />
           <span className="tree-name">{node.name}</span>
         </div>
         {expanded && node.children && node.children.length > 0 && (
@@ -66,7 +69,8 @@ function TreeNode({
         style={indent}
         onClick={() => onOpenFile(node.path, node.name)}
       >
-        <span className="tree-icon">📄</span>
+        <span className="tree-caret" />
+        <FileText size={15} className="tree-icon" />
         <span className="tree-name">{node.name}</span>
       </div>
     </li>
