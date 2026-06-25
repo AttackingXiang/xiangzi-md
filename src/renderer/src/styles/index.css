@@ -921,6 +921,26 @@ button {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
 }
 
+/* ---------- 表格 ---------- */
+/* 编译后的 Crepe 主题缺失了 ProseMirror 表格的核心布局规则，这里补全：
+   固定布局让列宽稳定、内容自动换行不被裁剪，表格始终撑满容器宽度 */
+.milkdown .milkdown-table-block table,
+.milkdown table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.milkdown .milkdown-table-block th,
+.milkdown .milkdown-table-block td,
+.milkdown th,
+.milkdown td {
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- 图片放大预览 ---------- */
 .lightbox {
   position: fixed;
