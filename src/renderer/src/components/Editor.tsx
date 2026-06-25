@@ -5,6 +5,7 @@ import '@milkdown/crepe/theme/frame.css'
 import { resolveAssetURL } from '../lib/asset'
 import { codeMirrorTheme } from '../lib/codeTheme'
 import { setupTableResize } from '../lib/tableResize'
+import { typoraHeadingKeymap } from '../lib/headingKeymap'
 
 interface Props {
   content: string
@@ -66,6 +67,9 @@ export default function Editor({
         }
       }
     })
+
+    // 注入 Typora 风格的标题快捷键（⌘1~6 / ⌘0）
+    crepe.editor.use(typoraHeadingKeymap)
 
     crepe.on((listener) => {
       listener.markdownUpdated((_ctx, markdown) => {
