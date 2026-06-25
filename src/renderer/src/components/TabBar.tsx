@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Code2, Eye, List, PanelLeft, X } from 'lucide-react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
@@ -7,6 +8,7 @@ interface Props {
   activeId: string | null
   onSelect: (id: string) => void
   onClose: (id: string) => void
+  onTabContext: (id: string, x: number, y: number) => void
   sourceMode: boolean
   outlineVisible: boolean
   onToggleSource: () => void
@@ -19,12 +21,20 @@ export default function TabBar({
   activeId,
   onSelect,
   onClose,
+  onTabContext,
   sourceMode,
   outlineVisible,
   onToggleSource,
   onToggleSidebar,
   onToggleOutline
 }: Props): JSX.Element {
+  const activeRef = useRef<HTMLDivElement>(null)
+
+  // 切换标签时把活动标签滚动到可见区域（标签很多时尤其需要）
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+  }, [activeId])
+
   return (
     <div className="tabbar">
       <button className="icon-btn drag-none" title={`${t('切换侧边栏')} (⌘\\)`} onClick={onToggleSidebar}>
@@ -35,8 +45,20 @@ export default function TabBar({
         {tabs.map((tab) => (
           <div
             key={tab.id}
+            ref={tab.id === activeId ? activeRef : undefined}
             className={`tab${tab.id === activeId ? ' active' : ''}${tab.dirty ? ' dirty' : ''}`}
             onClick={() => onSelect(tab.id)}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              onTabContext(tab.id, e.clientX, e.clientY)
+            }}
+            onAuxClick={(e) => {
+              // 鼠标中键关闭标签
+              if (e.button === 1) {
+                e.preventDefault()
+                onClose(tab.id)
+              }
+            }}
             title={tab.path ?? tab.name}
           >
             <span className="tab-name">{tab.name}</span>
