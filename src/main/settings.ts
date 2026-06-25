@@ -3,9 +3,16 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 
 export interface AppSettings {
-  /** 附件（图片等）存放方式 */
-  attachmentMode: 'subfolder' | 'same'
-  /** subfolder 模式下，文档同级的子文件夹名（Obsidian 风格，如 assets） */
+  /**
+   * 附件（图片等）存放方式（对齐 Obsidian）：
+   * - same           与文档相同目录
+   * - subfolder      文档同级子文件夹（名 = attachmentFolder，如 assets）
+   * - docSubfolder   文档同级、按文档名再分一层（如 assets/<文档名>/）
+   * - vault          仓库（已打开文件夹）根目录
+   * - vaultSubfolder 仓库根下的子文件夹（如 根/assets）
+   */
+  attachmentMode: 'same' | 'subfolder' | 'docSubfolder' | 'vault' | 'vaultSubfolder'
+  /** 子文件夹名（subfolder / docSubfolder / vaultSubfolder 模式用，默认 assets） */
   attachmentFolder: string
   /** 图片最大显示宽度（像素），0 表示不限制 */
   imageMaxWidth: number

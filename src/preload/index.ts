@@ -8,7 +8,7 @@ export interface FileNode {
 }
 
 export interface AppSettings {
-  attachmentMode: 'subfolder' | 'same'
+  attachmentMode: 'same' | 'subfolder' | 'docSubfolder' | 'vault' | 'vaultSubfolder'
   attachmentFolder: string
   imageMaxWidth: number
   language: 'zh' | 'en'
@@ -70,13 +70,15 @@ const api = {
     { path: string; name: string; matches: { lineNumber: number; text: string }[] }[]
   > => ipcRenderer.invoke('search:inFolder', root, query),
 
-  /** 保存图片等附件到文档同级附件目录，返回相对路径 */
+  /** 保存图片等附件，按设置的模式决定目录，返回相对文档目录的路径 */
   saveAttachment: (
     docDir: string,
+    docName: string,
+    vaultRoot: string | null,
     fileName: string,
     data: Uint8Array
   ): Promise<{ relPath: string }> =>
-    ipcRenderer.invoke('attachment:save', docDir, fileName, data),
+    ipcRenderer.invoke('attachment:save', docDir, docName, vaultRoot, fileName, data),
 
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
 

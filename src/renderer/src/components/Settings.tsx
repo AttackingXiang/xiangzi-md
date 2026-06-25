@@ -17,17 +17,23 @@ export default function Settings({
   onClose
 }: Props): JSX.Element {
   const en = getLang() === 'en'
+  const folder = settings.attachmentFolder || 'assets'
+  const usesFolder =
+    settings.attachmentMode === 'subfolder' ||
+    settings.attachmentMode === 'docSubfolder' ||
+    settings.attachmentMode === 'vaultSubfolder'
+
+  // 示例路径（相对文档目录），帮助理解
+  const sample: Record<AppSettings['attachmentMode'], string> = {
+    same: 'image.png',
+    subfolder: `${folder}/image.png`,
+    docSubfolder: `${folder}/${en ? 'doc-name' : '文档名'}/image.png`,
+    vault: `…/image.png`,
+    vaultSubfolder: `…/${folder}/image.png`
+  }
   const attachHint = en
-    ? `Pasted or dropped images are saved to ${
-        settings.attachmentMode === 'subfolder'
-          ? `the "${settings.attachmentFolder || 'assets'}" folder next to the document`
-          : 'the same folder as the document'
-      }, and inserted with a relative path.`
-    : `粘贴或拖入图片时，会自动保存到${
-        settings.attachmentMode === 'subfolder'
-          ? `文档同级的「${settings.attachmentFolder || 'assets'}」文件夹`
-          : '与文档相同的目录'
-      }，并以相对路径写入 Markdown。`
+    ? `Pasted or dropped images are saved automatically; the path written to Markdown looks like: ${sample[settings.attachmentMode]}`
+    : `粘贴或拖入图片时自动保存，写入 Markdown 的路径形如：${sample[settings.attachmentMode]}`
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -135,12 +141,15 @@ export default function Settings({
                   onChange({ attachmentMode: e.target.value as AppSettings['attachmentMode'] })
                 }
               >
-                <option value="subfolder">{t('文档同级的子文件夹')}</option>
+                <option value="subfolder">{t('文档同级子文件夹')}</option>
+                <option value="docSubfolder">{t('文档同级·按文档名分文件夹')}</option>
                 <option value="same">{t('与文档相同目录')}</option>
+                <option value="vault">{t('仓库根目录')}</option>
+                <option value="vaultSubfolder">{t('仓库根的子文件夹')}</option>
               </select>
             </label>
 
-            {settings.attachmentMode === 'subfolder' && (
+            {usesFolder && (
               <label className="settings-row">
                 <span className="settings-label">{t('子文件夹名称')}</span>
                 <input
