@@ -1,4 +1,5 @@
 import { app, shell, BrowserWindow, session, ipcMain } from 'electron'
+import { existsSync } from 'fs'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { buildMenu } from './menu'
@@ -15,6 +16,55 @@ const iconPath = join(app.getAppPath(), 'resources', 'icon.png')
 
 // 必须在 app ready 之前注册自定义协议的权限
 registerXmdPrivileges()
+
+// ---- 用系统「打开方式 / 双击」打开文件 ----
+const pendingOpenPaths: string[] = []
+let rendererReady = false
+
+function flushOpenPaths(): void {
+  if (!rendererReady || !mainWindow) return
+  for (const p of pendingOpenPaths.splice(0)) {
+    mainWindow.webContents.send('app:open-path', p)
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function queueOpen(p: string | null | undefined): void {
+  if (!p) return
+  pendingOpenPaths.push(p)
+  flushOpenPaths()
+}
+
+/** 从命令行参数里挑出要打开的文档路径（Windows/Linux） */
+function fileFromArgv(argv: string[]): string | null {
+  for (const a of argv.slice(1)) {
+    if (a.startsWith('-')) continue
+    if (/\.(md|markdown|mdown|mkd|mdx|txt)$/i.test(a) && existsSync(a)) return a
+  }
+  return null
+}
+
+// 单实例：第二次启动（含双击文件）把参数转发给已运行的实例
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_e, argv) => {
+    queueOpen(fileFromArgv(argv))
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
+}
+
+// macOS：通过「打开方式」/双击/拖到 dock 打开文件（可能在 ready 之前触发）
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  queueOpen(path)
+})
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -92,6 +142,15 @@ app.whenReady().then(() => {
 
   registerIpcHandlers(() => mainWindow)
   createWindow()
+
+  // 渲染层就绪后，把待打开的文件发过去
+  ipcMain.on('app:ready', () => {
+    rendererReady = true
+    flushOpenPaths()
+  })
+
+  // Windows/Linux：首次启动带的文件参数
+  queueOpen(fileFromArgv(process.argv))
 
   // 按已保存的语言构建本地化菜单
   getSettings().then((s) => buildMenu(() => mainWindow, s.language))
