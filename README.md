@@ -14,8 +14,45 @@
 | Windows | `Xiangzi-MD-Setup-*.exe` | 安装版（NSIS） |
 | Windows | `Xiangzi-MD-*-portable.exe` | 便携版，免安装直接运行 |
 
-> 安装包未做代码签名：macOS 首次打开请「右键 → 打开」；Windows 出现 SmartScreen 时点「仍要运行」。
->
+### 首次打开（绕过系统安全提示）
+
+安装包暂未做代码签名，首次打开系统会提示"无法验证开发者"，按下面操作一次即可，之后正常打开。
+
+**macOS**
+
+1. 把 `.dmg` 里的 **Xiangzi MD** 拖入「应用程序」。
+2. 在「应用程序」里 **右键（或 Control+点按）图标 →「打开」**。
+3. 弹窗里再点一次 **「打开」**。（只需第一次这样做）
+4. 若仍打不开：系统设置 →「隐私与安全性」→ 找到被拦截的提示，点 **「仍要打开」**。
+5. 个别情况下可在终端执行：`xattr -dr com.apple.quarantine "/Applications/Xiangzi MD.app"`。
+
+**Windows**
+
+1. 双击安装版 `...Setup.exe` 或便携版 `...portable.exe`。
+2. 若出现蓝色窗口 **"Windows 已保护你的电脑 / Windows protected your PC"**，点 **「更多信息 / More info」**。
+3. 再点下方出现的 **「仍要运行 / Run anyway」**。（只需第一次）
+
+<details>
+<summary>English</summary>
+
+The installers are not code-signed yet, so the OS shows a warning on first launch. Do this once, then it opens normally.
+
+**macOS**
+
+1. Drag **Xiangzi MD** from the `.dmg` into **Applications**.
+2. In Applications, **right-click (or Control-click) the icon → Open**.
+3. Click **Open** again in the dialog. (First launch only.)
+4. If still blocked: System Settings → **Privacy & Security** → click **Open Anyway** next to the blocked message.
+5. As a last resort, run in Terminal: `xattr -dr com.apple.quarantine "/Applications/Xiangzi MD.app"`.
+
+**Windows**
+
+1. Run the installer (`...Setup.exe`) or the portable build (`...portable.exe`).
+2. If a blue **"Windows protected your PC"** dialog appears, click **More info**.
+3. Then click **Run anyway**. (First launch only.)
+
+</details>
+
 > 维护者发布新版本：`git tag v0.1.3 && git push origin v0.1.3`，GitHub Actions 会自动在 macOS / Windows 构建安装包并**自动发布**到 Releases（无需手动操作）。
 
 ## 功能
