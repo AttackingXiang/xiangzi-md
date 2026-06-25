@@ -1009,6 +1009,59 @@ kbd {
   cursor: zoom-in;
 }
 
+/* 标题自动编号（视图层，不写回 Markdown） */
+[data-heading-number='on'] .milkdown {
+  counter-reset: h1 h2 h3 h4 h5 h6;
+}
+[data-heading-number='on'] .milkdown h1 {
+  counter-reset: h2 h3 h4 h5 h6;
+  counter-increment: h1;
+}
+[data-heading-number='on'] .milkdown h2 {
+  counter-reset: h3 h4 h5 h6;
+  counter-increment: h2;
+}
+[data-heading-number='on'] .milkdown h3 {
+  counter-reset: h4 h5 h6;
+  counter-increment: h3;
+}
+[data-heading-number='on'] .milkdown h4 {
+  counter-reset: h5 h6;
+  counter-increment: h4;
+}
+[data-heading-number='on'] .milkdown h5 {
+  counter-reset: h6;
+  counter-increment: h5;
+}
+[data-heading-number='on'] .milkdown h6 {
+  counter-increment: h6;
+}
+[data-heading-number='on'] .milkdown h1::before {
+  content: counter(h1) '\00a0\00a0';
+  color: var(--text-muted);
+}
+[data-heading-number='on'] .milkdown h2::before {
+  content: counter(h1) '.' counter(h2) '\00a0\00a0';
+  color: var(--text-muted);
+}
+[data-heading-number='on'] .milkdown h3::before {
+  content: counter(h1) '.' counter(h2) '.' counter(h3) '\00a0\00a0';
+  color: var(--text-muted);
+}
+[data-heading-number='on'] .milkdown h4::before {
+  content: counter(h1) '.' counter(h2) '.' counter(h3) '.' counter(h4) '\00a0\00a0';
+  color: var(--text-muted);
+}
+[data-heading-number='on'] .milkdown h5::before {
+  content: counter(h1) '.' counter(h2) '.' counter(h3) '.' counter(h4) '.' counter(h5) '\00a0\00a0';
+  color: var(--text-muted);
+}
+[data-heading-number='on'] .milkdown h6::before {
+  content: counter(h1) '.' counter(h2) '.' counter(h3) '.' counter(h4) '.' counter(h5) '.'
+    counter(h6) '\00a0\00a0';
+  color: var(--text-muted);
+}
+
 /* ---------- 代码块 ---------- */
 .milkdown .cm-editor {
   background: var(--bg-sidebar);

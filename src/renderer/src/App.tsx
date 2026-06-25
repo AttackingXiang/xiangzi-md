@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   editorWidth: 'normal',
   customCssPath: '',
+  headingNumber: false,
   autoSave: false,
   recentFiles: [],
   recentFolders: [],
@@ -203,6 +204,11 @@ export default function App(): JSX.Element {
       settings.editorWidth === 'full' ? '100%' : settings.editorWidth === 'wide' ? '1080px' : '820px'
     document.documentElement.style.setProperty('--editor-max-width', width)
   }, [settings.editorWidth])
+
+  // ---- 标题自动编号 ----
+  useEffect(() => {
+    document.documentElement.dataset.headingNumber = settings.headingNumber ? 'on' : 'off'
+  }, [settings.headingNumber])
 
   // ---- 自定义主题 CSS ----
   useEffect(() => {
