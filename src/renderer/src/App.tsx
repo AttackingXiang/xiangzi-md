@@ -15,6 +15,7 @@ import InputDialog from './components/InputDialog'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
+import { setLang, getLang, t } from './lib/i18n'
 import {
   Bold,
   Italic,
@@ -54,6 +55,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   attachmentMode: 'subfolder',
   attachmentFolder: 'assets',
   imageMaxWidth: 800,
+  language: 'zh',
   theme: 'system',
   editorWidth: 'normal',
   customCssPath: '',
@@ -113,7 +115,10 @@ export default function App(): JSX.Element {
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
 
-  const activeTab = tabs.find((t) => t.id === activeId) ?? null
+  // 同步设置当前语言，保证本次渲染的 t() 使用最新语言
+  setLang(settings.language)
+
+  const activeTab = tabs.find((tab) => tab.id === activeId) ?? null
   const activeDocDir = activeTab ? (dirOf(activeTab.path) ?? folder?.root ?? null) : null
   const outline = useMemo(
     () => (activeTab ? parseOutline(activeTab.content) : []),
@@ -233,6 +238,11 @@ export default function App(): JSX.Element {
     document.documentElement.dataset.headingNumber = settings.headingNumber ? 'on' : 'off'
   }, [settings.headingNumber])
 
+  // ---- 语言：通知主进程重建本地化菜单 ----
+  useEffect(() => {
+    window.api.setLanguage(settings.language)
+  }, [settings.language])
+
   // ---- 自定义主题 CSS ----
   useEffect(() => {
     const id = 'custom-theme-style'
@@ -277,7 +287,10 @@ export default function App(): JSX.Element {
         setFolder(result)
         pushRecentFolder(result.root)
       } else {
-        window.alert('文件夹不存在或无法打开：\n' + root)
+        window.alert(
+          (getLang() === 'en' ? 'Folder not found or cannot open:\n' : '文件夹不存在或无法打开：\n') +
+            root
+        )
       }
     },
     [pushRecentFolder]
@@ -294,7 +307,9 @@ export default function App(): JSX.Element {
       try {
         file = await window.api.readFile(path)
       } catch {
-        window.alert('文件不存在或无法打开：\n' + path)
+        window.alert(
+          (getLang() === 'en' ? 'File not found or cannot open:\n' : '文件不存在或无法打开：\n') + path
+        )
         return
       }
       const tab: Tab = {
@@ -417,9 +432,9 @@ export default function App(): JSX.Element {
   const createFileIn = useCallback(
     (dir: string) => {
       setInputDialog({
-        title: '新建文件',
-        initial: '未命名.md',
-        confirmText: '创建',
+        title: t('新建文件'),
+        initial: getLang() === 'en' ? 'Untitled.md' : '未命名.md',
+        confirmText: t('创建'),
         onSubmit: async (name) => {
           const fname = /\.[^.]+$/.test(name) ? name : `${name}.md`
           try {
@@ -427,7 +442,7 @@ export default function App(): JSX.Element {
             await refreshTree()
             openPath(res.path, res.name)
           } catch {
-            window.alert('创建失败：文件可能已存在')
+            window.alert(t('创建失败：文件可能已存在'))
           }
         }
       })
@@ -438,15 +453,15 @@ export default function App(): JSX.Element {
   const createFolderIn = useCallback(
     (dir: string) => {
       setInputDialog({
-        title: '新建文件夹',
-        initial: '新建文件夹',
-        confirmText: '创建',
+        title: t('新建文件夹'),
+        initial: getLang() === 'en' ? 'New Folder' : '新建文件夹',
+        confirmText: t('创建'),
         onSubmit: async (name) => {
           try {
             await window.api.createDir(dir, name)
             await refreshTree()
           } catch {
-            window.alert('创建失败：文件夹可能已存在')
+            window.alert(t('创建失败：文件夹可能已存在'))
           }
         }
       })
@@ -457,20 +472,20 @@ export default function App(): JSX.Element {
   const renameNode = useCallback(
     (node: FileNode) => {
       setInputDialog({
-        title: '重命名',
+        title: t('重命名'),
         initial: node.name,
-        confirmText: '重命名',
+        confirmText: t('重命名'),
         onSubmit: async (name) => {
           try {
             const res = await window.api.rename(node.path, name)
             await refreshTree()
             setTabs((prev) =>
-              prev.map((t) =>
-                t.path === node.path ? { ...t, path: res.path, name: res.name } : t
+              prev.map((tab) =>
+                tab.path === node.path ? { ...tab, path: res.path, name: res.name } : tab
               )
             )
           } catch {
-            window.alert('重命名失败')
+            window.alert(t('重命名失败'))
           }
         }
       })
@@ -480,16 +495,20 @@ export default function App(): JSX.Element {
 
   const deleteNode = useCallback(
     async (node: FileNode) => {
-      if (!window.confirm(`确定要删除「${node.name}」吗？将移入废纸篓。`)) return
+      const confirmMsg =
+        getLang() === 'en'
+          ? `Delete "${node.name}"? It will be moved to Trash.`
+          : `确定要删除「${node.name}」吗？将移入废纸篓。`
+      if (!window.confirm(confirmMsg)) return
       try {
         await window.api.trash(node.path)
         const affected = stateRef.current.tabs.filter(
-          (t) => t.path && (t.path === node.path || t.path.startsWith(node.path + '/'))
+          (tab) => tab.path && (tab.path === node.path || tab.path.startsWith(node.path + '/'))
         )
-        affected.forEach((t) => closeTab(t.id))
+        affected.forEach((tab) => closeTab(tab.id))
         await refreshTree()
       } catch {
-        window.alert('删除失败')
+        window.alert(t('删除失败'))
       }
     },
     [refreshTree, closeTab]
@@ -499,14 +518,14 @@ export default function App(): JSX.Element {
     (node: FileNode, x: number, y: number) => {
       const items: MenuItem[] = []
       if (node.isDir) {
-        items.push({ label: '新建文件', onClick: () => createFileIn(node.path) })
-        items.push({ label: '新建文件夹', onClick: () => createFolderIn(node.path) })
+        items.push({ label: t('新建文件'), onClick: () => createFileIn(node.path) })
+        items.push({ label: t('新建文件夹'), onClick: () => createFolderIn(node.path) })
       } else {
-        items.push({ label: '打开', onClick: () => openPath(node.path, node.name) })
+        items.push({ label: t('打开'), onClick: () => openPath(node.path, node.name) })
       }
-      items.push({ label: '重命名', onClick: () => renameNode(node), separatorBefore: true })
-      items.push({ label: '在访达中显示', onClick: () => window.api.reveal(node.path) })
-      items.push({ label: '删除', onClick: () => deleteNode(node), danger: true, separatorBefore: true })
+      items.push({ label: t('重命名'), onClick: () => renameNode(node), separatorBefore: true })
+      items.push({ label: t('在访达中显示'), onClick: () => window.api.reveal(node.path) })
+      items.push({ label: t('删除'), onClick: () => deleteNode(node), danger: true, separatorBefore: true })
       setCtxMenu({ x, y, items })
     },
     [createFileIn, createFolderIn, openPath, renameNode, deleteNode]
@@ -519,9 +538,9 @@ export default function App(): JSX.Element {
         x,
         y,
         items: [
-          { label: '新建文件', onClick: () => createFileIn(folder.root) },
-          { label: '新建文件夹', onClick: () => createFolderIn(folder.root) },
-          { label: '刷新', onClick: () => refreshTree(), separatorBefore: true }
+          { label: t('新建文件'), onClick: () => createFileIn(folder.root) },
+          { label: t('新建文件夹'), onClick: () => createFolderIn(folder.root) },
+          { label: t('刷新'), onClick: () => refreshTree(), separatorBefore: true }
         ]
       })
     },
@@ -532,27 +551,27 @@ export default function App(): JSX.Element {
   const openEditorContext = useCallback((x: number, y: number) => {
     const sz = 15
     const items: MenuItem[] = [
-      { label: '剪切', icon: <Scissors size={sz} />, hint: '⌘X', onClick: clipboardCmd.cut },
-      { label: '复制', icon: <Copy size={sz} />, hint: '⌘C', onClick: clipboardCmd.copy },
-      { label: '粘贴', icon: <ClipboardPaste size={sz} />, hint: '⌘V', onClick: clipboardCmd.paste }
+      { label: t('剪切'), icon: <Scissors size={sz} />, hint: '⌘X', onClick: clipboardCmd.cut },
+      { label: t('复制'), icon: <Copy size={sz} />, hint: '⌘C', onClick: clipboardCmd.copy },
+      { label: t('粘贴'), icon: <ClipboardPaste size={sz} />, hint: '⌘V', onClick: clipboardCmd.paste }
     ]
     if (hasWysiwyg()) {
       items.push(
-        { label: '加粗', icon: <Bold size={sz} />, hint: '⌘B', onClick: editorCmd.bold, separatorBefore: true },
-        { label: '斜体', icon: <Italic size={sz} />, hint: '⌘I', onClick: editorCmd.italic },
-        { label: '行内代码', icon: <Code size={sz} />, hint: '⌘E', onClick: editorCmd.inlineCode },
-        { label: '标题 1', icon: <Heading1 size={sz} />, onClick: () => editorCmd.heading(1), separatorBefore: true },
-        { label: '标题 2', icon: <Heading2 size={sz} />, onClick: () => editorCmd.heading(2) },
-        { label: '标题 3', icon: <Heading3 size={sz} />, onClick: () => editorCmd.heading(3) },
-        { label: '正文', icon: <Pilcrow size={sz} />, onClick: editorCmd.paragraph },
-        { label: '无序列表', icon: <List size={sz} />, onClick: editorCmd.bulletList, separatorBefore: true },
-        { label: '有序列表', icon: <ListOrdered size={sz} />, onClick: editorCmd.orderedList },
-        { label: '引用', icon: <Quote size={sz} />, onClick: editorCmd.quote },
-        { label: '代码块', icon: <SquareCode size={sz} />, onClick: editorCmd.codeBlock }
+        { label: t('加粗'), icon: <Bold size={sz} />, hint: '⌘B', onClick: editorCmd.bold, separatorBefore: true },
+        { label: t('斜体'), icon: <Italic size={sz} />, hint: '⌘I', onClick: editorCmd.italic },
+        { label: t('行内代码'), icon: <Code size={sz} />, hint: '⌘E', onClick: editorCmd.inlineCode },
+        { label: t('标题 1'), icon: <Heading1 size={sz} />, onClick: () => editorCmd.heading(1), separatorBefore: true },
+        { label: t('标题 2'), icon: <Heading2 size={sz} />, onClick: () => editorCmd.heading(2) },
+        { label: t('标题 3'), icon: <Heading3 size={sz} />, onClick: () => editorCmd.heading(3) },
+        { label: t('正文'), icon: <Pilcrow size={sz} />, onClick: editorCmd.paragraph },
+        { label: t('无序列表'), icon: <List size={sz} />, onClick: editorCmd.bulletList, separatorBefore: true },
+        { label: t('有序列表'), icon: <ListOrdered size={sz} />, onClick: editorCmd.orderedList },
+        { label: t('引用'), icon: <Quote size={sz} />, onClick: editorCmd.quote },
+        { label: t('代码块'), icon: <SquareCode size={sz} />, onClick: editorCmd.codeBlock }
       )
     }
     items.push({
-      label: '全选',
+      label: t('全选'),
       icon: <TextSelect size={sz} />,
       hint: '⌘A',
       onClick: clipboardCmd.selectAll,
@@ -566,7 +585,7 @@ export default function App(): JSX.Element {
     if (!stateRef.current.activeId) return
     const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeId)
     const res = await window.api.exportPDF(tab?.name ?? 'document')
-    if (res) window.alert('已导出 PDF：\n' + res.path)
+    if (res) window.alert((getLang() === 'en' ? 'Exported PDF:\n' : '已导出 PDF：\n') + res.path)
   }, [])
 
   const exportHTML = useCallback(async () => {
@@ -585,7 +604,7 @@ export default function App(): JSX.Element {
   table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}
 </style></head><body><article>${inner}</article></body></html>`
     const res = await window.api.exportHTML(html, tab?.name ?? 'document')
-    if (res) window.alert('已导出 HTML：\n' + res.path)
+    if (res) window.alert((getLang() === 'en' ? 'Exported HTML:\n' : '已导出 HTML：\n') + res.path)
   }, [])
 
   const scrollToHeading = useCallback((index: number) => {
@@ -600,31 +619,31 @@ export default function App(): JSX.Element {
   const paletteFiles = useMemo(() => (folder ? flattenFiles(folder.tree) : []), [folder])
   const paletteCommands = useMemo<Command[]>(
     () => [
-      { id: 'new', label: '新建文件', run: newFile },
-      { id: 'open-file', label: '打开文件…', run: openFile },
-      { id: 'open-folder', label: '打开文件夹…', run: openFolder },
-      { id: 'save', label: '保存', run: () => activeId && saveTab(activeId) },
-      { id: 'save-as', label: '另存为…', run: () => activeId && saveAsTab(activeId) },
+      { id: 'new', label: t('新建文件'), run: newFile },
+      { id: 'open-file', label: t('打开文件…'), run: openFile },
+      { id: 'open-folder', label: t('打开文件夹…'), run: openFolder },
+      { id: 'save', label: t('保存'), run: () => activeId && saveTab(activeId) },
+      { id: 'save-as', label: t('另存为…'), run: () => activeId && saveAsTab(activeId) },
       {
         id: 'search',
-        label: '在文件夹中搜索',
+        label: t('在文件夹中搜索'),
         run: () => {
           setSidebarVisible(true)
           setSearchView(true)
         }
       },
-      { id: 'find', label: '查找 / 替换', run: () => setShowFind(true) },
-      { id: 'outline', label: '切换大纲', run: () => setOutlineVisible((v) => !v) },
-      { id: 'sidebar', label: '切换侧边栏', run: () => setSidebarVisible((v) => !v) },
-      { id: 'source', label: '切换源码模式', run: () => setSourceMode((v) => !v) },
-      { id: 'focus', label: '专注模式', run: () => setFocusMode((v) => !v) },
-      { id: 'typewriter', label: '打字机模式', run: () => setTypewriterMode((v) => !v) },
-      { id: 'export-pdf', label: '导出 PDF', run: exportPDF },
-      { id: 'export-html', label: '导出 HTML', run: exportHTML },
-      { id: 'settings', label: '设置', run: () => setShowSettings(true) },
-      { id: 'shortcuts', label: '快捷键', run: () => setShowShortcuts(true) }
+      { id: 'find', label: t('查找 / 替换'), run: () => setShowFind(true) },
+      { id: 'outline', label: t('切换大纲'), run: () => setOutlineVisible((v) => !v) },
+      { id: 'sidebar', label: t('切换侧边栏'), run: () => setSidebarVisible((v) => !v) },
+      { id: 'source', label: t('切换源码模式'), run: () => setSourceMode((v) => !v) },
+      { id: 'focus', label: t('专注模式'), run: () => setFocusMode((v) => !v) },
+      { id: 'typewriter', label: t('打字机模式'), run: () => setTypewriterMode((v) => !v) },
+      { id: 'export-pdf', label: t('导出 PDF'), run: exportPDF },
+      { id: 'export-html', label: t('导出 HTML'), run: exportHTML },
+      { id: 'settings', label: t('设置'), run: () => setShowSettings(true) },
+      { id: 'shortcuts', label: t('快捷键'), run: () => setShowShortcuts(true) }
     ],
-    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportPDF, exportHTML]
+    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportPDF, exportHTML, settings.language]
   )
 
   // ---- 自动保存 ----
@@ -738,7 +757,7 @@ export default function App(): JSX.Element {
               />
             ) : (
               <Editor
-                key={activeTab.id + '-' + resolvedTheme}
+                key={activeTab.id + '-' + resolvedTheme + '-' + settings.language}
                 content={activeTab.content}
                 docDir={activeDocDir}
                 imageMaxWidth={settings.imageMaxWidth}

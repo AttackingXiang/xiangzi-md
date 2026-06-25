@@ -1,4 +1,5 @@
 import mermaid from 'mermaid'
+import { t } from './i18n'
 
 let currentTheme: string | null = null
 
@@ -36,7 +37,7 @@ export function renderMermaid(theme: 'light' | 'dark') {
       .then(({ svg }) => applyPreview(`<div class="mermaid-preview">${svg}</div>`))
       .catch((err: unknown) => {
         const msg = escapeHtml(String((err as Error)?.message ?? err))
-        applyPreview(`<div class="mermaid-error">图表语法有误：${msg}</div>`)
+        applyPreview(`<div class="mermaid-error">${t('图表语法有误')}: ${msg}</div>`)
       })
 
     // 返回 undefined：告知组件这是异步预览（先显示 loading，待 applyPreview 回填）

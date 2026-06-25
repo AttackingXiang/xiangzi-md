@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, Command as CommandIcon } from 'lucide-react'
+import { t } from '../lib/i18n'
 
 export interface Command {
   id: string
@@ -82,7 +83,7 @@ export default function CommandPalette({
         <input
           ref={inputRef}
           className="palette-input"
-          placeholder="输入命令或文件名…"
+          placeholder={t('输入命令或文件名…')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -100,7 +101,7 @@ export default function CommandPalette({
           }}
         />
         <div className="palette-list" ref={listRef}>
-          {items.length === 0 && <div className="palette-empty">无匹配项</div>}
+          {items.length === 0 && <div className="palette-empty">{t('无匹配项')}</div>}
           {items.map((it, i) => (
             <div
               key={it.key}

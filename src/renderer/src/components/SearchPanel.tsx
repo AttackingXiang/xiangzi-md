@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, FileText, Search } from 'lucide-react'
 import type { SearchResult } from '../types'
+import { t, getLang } from '../lib/i18n'
 
 interface Props {
   root: string
@@ -67,10 +68,10 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
   return (
     <aside className="sidebar search-panel">
       <div className="sidebar-header">
-        <button className="icon-btn sm" title="返回文件" onClick={onBack}>
+        <button className="icon-btn sm" title={t('返回文件')} onClick={onBack}>
           <ArrowLeft size={15} />
         </button>
-        <span className="sidebar-title">搜索</span>
+        <span className="sidebar-title">{t('搜索')}</span>
         <span />
       </div>
 
@@ -79,14 +80,20 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
         <input
           ref={inputRef}
           className="search-field"
-          placeholder="在文件夹中搜索…"
+          placeholder={t('在文件夹中搜索…')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
 
       <div className="search-meta">
-        {loading ? '搜索中…' : query.trim() ? `${results.length} 个文件，${totalMatches} 处匹配` : ''}
+        {loading
+          ? t('搜索中…')
+          : query.trim()
+            ? getLang() === 'en'
+              ? `${results.length} files, ${totalMatches} matches`
+              : `${results.length} 个文件，${totalMatches} 处匹配`
+            : ''}
       </div>
 
       <div className="sidebar-body">
@@ -102,7 +109,7 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
                 key={i}
                 className="search-match"
                 onClick={() => onOpenResult(r.path, query)}
-                title={`第 ${m.lineNumber} 行`}
+                title={getLang() === 'en' ? `Line ${m.lineNumber}` : `第 ${m.lineNumber} 行`}
               >
                 {highlight(m.text, query)}
               </div>
