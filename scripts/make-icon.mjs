@@ -7,20 +7,19 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   .wrap{width:1024px;height:1024px;display:flex;align-items:center;justify-content:center}
   .squircle{
     width:824px;height:824px;border-radius:190px;
-    background:linear-gradient(135deg,#5b6bf5 0%,#8b5cf6 55%,#a855f7 100%);
-    box-shadow:0 40px 80px rgba(80,70,200,.35), inset 0 4px 10px rgba(255,255,255,.25);
-    display:flex;align-items:center;justify-content:center;position:relative;
-    font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;
+    background:#ffffff;
+    box-shadow:0 30px 70px rgba(60,50,120,.18), inset 0 0 0 2px rgba(120,110,180,.10);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;line-height:1;
   }
-  .mark{color:#fff;font-weight:800;font-size:392px;letter-spacing:-26px;
-    text-shadow:0 6px 18px rgba(40,30,120,.30);margin-left:-18px}
-  .arrow{position:absolute;right:150px;bottom:150px;width:150px;height:150px}
+  .xz{font-weight:700;font-size:168px;letter-spacing:6px;color:#9aa0b3;margin-bottom:18px}
+  .md{font-weight:800;font-size:452px;letter-spacing:-14px;
+    background:linear-gradient(135deg,#5b6bf5 0%,#8b5cf6 55%,#a855f7 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
 </style></head><body>
   <div class="wrap"><div class="squircle">
-    <span class="mark">xz</span>
-    <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/>
-    </svg>
+    <span class="xz">xz</span>
+    <span class="md">MD</span>
   </div></div>
 </body></html>`
 
