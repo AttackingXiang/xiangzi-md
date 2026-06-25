@@ -1282,7 +1282,9 @@ kbd {
 
 .ctx-menu {
   position: fixed;
-  min-width: 168px;
+  min-width: 200px;
+  max-height: 80vh;
+  overflow-y: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1293,14 +1295,42 @@ kbd {
 }
 
 .ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 7px 10px;
-  border-radius: 6px;
+  border-radius: 7px;
   cursor: pointer;
   color: var(--text);
 }
 
 .ctx-item:hover {
   background: var(--bg-hover);
+}
+
+.ctx-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.ctx-item:hover .ctx-icon {
+  color: var(--text);
+}
+
+.ctx-item.danger .ctx-icon {
+  color: inherit;
+}
+
+.ctx-item-label {
+  flex: 1;
+}
+
+.ctx-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
 }
 
 .ctx-item.danger {
@@ -1424,6 +1454,104 @@ kbd {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
+}
+
+/* ---------- 斜杠 / 命令菜单（覆盖 Crepe 默认样式，更简洁、适配主题） ---------- */
+.milkdown .milkdown-slash-menu {
+  background: var(--bg-elevated) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--shadow) !important;
+  overflow: hidden;
+  min-width: 248px;
+}
+
+.milkdown .milkdown-slash-menu .tab-group {
+  border-bottom: 1px solid var(--border) !important;
+  padding: 8px 8px 0 !important;
+}
+
+.milkdown .milkdown-slash-menu .tab-group ul {
+  padding: 4px 6px !important;
+  gap: 4px !important;
+}
+
+.milkdown .milkdown-slash-menu .tab-group li {
+  padding: 4px 10px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  border-radius: 7px !important;
+  color: var(--text-2) !important;
+}
+
+.milkdown .milkdown-slash-menu .tab-group li:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text) !important;
+}
+
+.milkdown .milkdown-slash-menu .tab-group li.selected {
+  background: var(--bg-active) !important;
+  color: var(--accent-text) !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-groups {
+  padding: 6px !important;
+  max-height: 320px !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-group h6 {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 8px 10px 4px !important;
+  color: var(--text-muted) !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-group li {
+  min-width: 200px !important;
+  gap: 10px !important;
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+  color: var(--text) !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-group li > span {
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-group li svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: var(--text-muted) !important;
+  fill: var(--text-muted) !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-group li.hover,
+.milkdown .milkdown-slash-menu .menu-group li.active,
+.milkdown .milkdown-slash-menu .menu-group li:hover {
+  background: var(--bg-active) !important;
+  color: var(--accent-text) !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-group li.hover svg,
+.milkdown .milkdown-slash-menu .menu-group li.active svg,
+.milkdown .milkdown-slash-menu .menu-group li:hover svg {
+  color: var(--accent-text) !important;
+  fill: var(--accent-text) !important;
+}
+
+.milkdown .milkdown-slash-menu .menu-group + .menu-group::before {
+  background: var(--border) !important;
+}
+
+/* 块拖拽手柄配色 */
+.milkdown .milkdown-block-handle .operation-item svg {
+  fill: var(--text-muted) !important;
+}
+
+.milkdown .milkdown-block-handle .operation-item:hover {
+  background: var(--bg-hover) !important;
 }
 
 /* ---------- 图片放大预览 ---------- */

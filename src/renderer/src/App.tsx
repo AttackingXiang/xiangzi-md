@@ -14,6 +14,24 @@ import ContextMenu, { type MenuItem } from './components/ContextMenu'
 import InputDialog from './components/InputDialog'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette, { type Command } from './components/CommandPalette'
+import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
+import {
+  Bold,
+  Italic,
+  Code,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Quote,
+  SquareCode,
+  Pilcrow,
+  Copy,
+  Scissors,
+  ClipboardPaste,
+  TextSelect
+} from 'lucide-react'
 import { parseOutline } from './lib/outline'
 import type { AppSettings, FileNode, Folder, Tab } from './types'
 
@@ -79,7 +97,12 @@ export default function App(): JSX.Element {
   const [showPalette, setShowPalette] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number
+    y: number
+    items: MenuItem[]
+    preserveSelection?: boolean
+  } | null>(null)
   const [inputDialog, setInputDialog] = useState<{
     title: string
     initial?: string
@@ -505,6 +528,39 @@ export default function App(): JSX.Element {
     [folder, createFileIn, createFolderIn, refreshTree]
   )
 
+  // ---- 编辑器右键菜单 ----
+  const openEditorContext = useCallback((x: number, y: number) => {
+    const sz = 15
+    const items: MenuItem[] = [
+      { label: '剪切', icon: <Scissors size={sz} />, hint: '⌘X', onClick: clipboardCmd.cut },
+      { label: '复制', icon: <Copy size={sz} />, hint: '⌘C', onClick: clipboardCmd.copy },
+      { label: '粘贴', icon: <ClipboardPaste size={sz} />, hint: '⌘V', onClick: clipboardCmd.paste }
+    ]
+    if (hasWysiwyg()) {
+      items.push(
+        { label: '加粗', icon: <Bold size={sz} />, hint: '⌘B', onClick: editorCmd.bold, separatorBefore: true },
+        { label: '斜体', icon: <Italic size={sz} />, hint: '⌘I', onClick: editorCmd.italic },
+        { label: '行内代码', icon: <Code size={sz} />, hint: '⌘E', onClick: editorCmd.inlineCode },
+        { label: '标题 1', icon: <Heading1 size={sz} />, onClick: () => editorCmd.heading(1), separatorBefore: true },
+        { label: '标题 2', icon: <Heading2 size={sz} />, onClick: () => editorCmd.heading(2) },
+        { label: '标题 3', icon: <Heading3 size={sz} />, onClick: () => editorCmd.heading(3) },
+        { label: '正文', icon: <Pilcrow size={sz} />, onClick: editorCmd.paragraph },
+        { label: '无序列表', icon: <List size={sz} />, onClick: editorCmd.bulletList, separatorBefore: true },
+        { label: '有序列表', icon: <ListOrdered size={sz} />, onClick: editorCmd.orderedList },
+        { label: '引用', icon: <Quote size={sz} />, onClick: editorCmd.quote },
+        { label: '代码块', icon: <SquareCode size={sz} />, onClick: editorCmd.codeBlock }
+      )
+    }
+    items.push({
+      label: '全选',
+      icon: <TextSelect size={sz} />,
+      hint: '⌘A',
+      onClick: clipboardCmd.selectAll,
+      separatorBefore: true
+    })
+    setCtxMenu({ x, y, items, preserveSelection: true })
+  }, [])
+
   // ---- 导出 ----
   const exportPDF = useCallback(async () => {
     if (!stateRef.current.activeId) return
@@ -667,6 +723,11 @@ export default function App(): JSX.Element {
               if (src) setZoomSrc(src)
             }
           }}
+          onContextMenu={(e) => {
+            if (!activeTab) return
+            e.preventDefault()
+            openEditorContext(e.clientX, e.clientY)
+          }}
         >
           {activeTab ? (
             sourceMode ? (
@@ -737,6 +798,7 @@ export default function App(): JSX.Element {
           x={ctxMenu.x}
           y={ctxMenu.y}
           items={ctxMenu.items}
+          preserveSelection={ctxMenu.preserveSelection}
           onClose={() => setCtxMenu(null)}
         />
       )}
