@@ -1,6 +1,6 @@
 # Xiangzi MD
 
-一个所见即所得的 Markdown 编辑器（Typora 风格），基于 **Electron + React + Milkdown(Crepe)**。
+一个所见即所得的 Markdown 编辑器，基于 **Electron + React + Milkdown(Crepe)**。
 
 定位为「复合型文档软件」：打开单个 `.md` 文件只是其中一个功能，同时支持打开整个文件夹、在侧边栏浏览、多标签页编辑。
 
@@ -16,7 +16,7 @@
 
 > 安装包未做代码签名：macOS 首次打开请「右键 → 打开」；Windows 出现 SmartScreen 时点「仍要运行」。
 >
-> 维护者发布新版本：`git tag v0.1.2 && git push origin v0.1.2`，GitHub Actions 会自动在 macOS / Windows 构建安装包并**自动发布**到 Releases（无需手动操作）。
+> 维护者发布新版本：`git tag v0.1.3 && git push origin v0.1.3`，GitHub Actions 会自动在 macOS / Windows 构建安装包并**自动发布**到 Releases（无需手动操作）。
 
 ## 功能
 
