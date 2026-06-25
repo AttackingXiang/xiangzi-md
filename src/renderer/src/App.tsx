@@ -12,6 +12,7 @@ import Lightbox from './components/Lightbox'
 import Shortcuts from './components/Shortcuts'
 import ContextMenu, { type MenuItem } from './components/ContextMenu'
 import InputDialog from './components/InputDialog'
+import SearchPanel from './components/SearchPanel'
 import { parseOutline } from './lib/outline'
 import type { AppSettings, FileNode, Folder, Tab } from './types'
 
@@ -52,6 +53,8 @@ export default function App(): JSX.Element {
   const [sourceMode, setSourceMode] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showFind, setShowFind] = useState(false)
+  const [findInitial, setFindInitial] = useState('')
+  const [searchView, setSearchView] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
@@ -243,6 +246,15 @@ export default function App(): JSX.Element {
     setTabs((prev) => [...prev, tab])
     setActiveId(tab.id)
   }, [])
+
+  const openSearchResult = useCallback(
+    (path: string, query: string) => {
+      openPath(path, baseName(path))
+      setFindInitial(query)
+      setShowFind(true)
+    },
+    [openPath]
+  )
 
   // ---- 编辑/保存 ----
   const updateContent = useCallback((id: string, content: string) => {
@@ -486,6 +498,7 @@ export default function App(): JSX.Element {
         case 'toggle-focus': setFocusMode((v) => !v); break
         case 'toggle-typewriter': setTypewriterMode((v) => !v); break
         case 'find': setShowFind(true); break
+        case 'search-in-folder': setSidebarVisible(true); setSearchView(true); break
         case 'open-settings': setShowSettings(true); break
         case 'show-shortcuts': setShowShortcuts(true); break
         case 'export-pdf': exportPDF(); break
@@ -497,22 +510,30 @@ export default function App(): JSX.Element {
 
   return (
     <div className="app">
-      {sidebarVisible && (
-        <Sidebar
-          folder={folder}
-          activePath={activeTab?.path ?? null}
-          favorites={settings.favorites}
-          recentFiles={settings.recentFiles}
-          onOpenFolder={openFolder}
-          onOpenFolderPath={openFolderByPath}
-          onOpenFile={openPath}
-          onOpenSettings={() => setShowSettings(true)}
-          onToggleFavorite={toggleFavorite}
-          onRefresh={refreshTree}
-          onNodeContext={openNodeContext}
-          onRootContext={openRootContext}
-        />
-      )}
+      {sidebarVisible &&
+        (searchView && folder ? (
+          <SearchPanel
+            root={folder.root}
+            onOpenResult={openSearchResult}
+            onBack={() => setSearchView(false)}
+          />
+        ) : (
+          <Sidebar
+            folder={folder}
+            activePath={activeTab?.path ?? null}
+            favorites={settings.favorites}
+            recentFiles={settings.recentFiles}
+            onOpenFolder={openFolder}
+            onOpenFolderPath={openFolderByPath}
+            onOpenFile={openPath}
+            onOpenSettings={() => setShowSettings(true)}
+            onOpenSearch={() => setSearchView(true)}
+            onToggleFavorite={toggleFavorite}
+            onRefresh={refreshTree}
+            onNodeContext={openNodeContext}
+            onRootContext={openRootContext}
+          />
+        ))}
 
       <div className={`main${sidebarVisible ? '' : ' no-sidebar'}`}>
         <TabBar
@@ -527,7 +548,15 @@ export default function App(): JSX.Element {
           onToggleOutline={() => setOutlineVisible((v) => !v)}
         />
 
-        {showFind && <FindBar onClose={() => setShowFind(false)} />}
+        {showFind && (
+          <FindBar
+            initialQuery={findInitial}
+            onClose={() => {
+              setShowFind(false)
+              setFindInitial('')
+            }}
+          />
+        )}
 
         <div
           className="editor-area"

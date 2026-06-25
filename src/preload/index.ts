@@ -57,6 +57,13 @@ const api = {
 
   reveal: (targetPath: string): Promise<void> => ipcRenderer.invoke('fs:reveal', targetPath),
 
+  searchInFolder: (
+    root: string,
+    query: string
+  ): Promise<
+    { path: string; name: string; matches: { lineNumber: number; text: string }[] }[]
+  > => ipcRenderer.invoke('search:inFolder', root, query),
+
   /** 保存图片等附件到文档同级附件目录，返回相对路径 */
   saveAttachment: (
     docDir: string,
