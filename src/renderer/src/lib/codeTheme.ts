@@ -31,9 +31,11 @@ const lightTheme = EditorView.theme({
 
 /** 选中文本配色：柔和、低饱和，不发黑 */
 function selectionTheme(mode: 'light' | 'dark'): Extension {
-  const sel = mode === 'dark' ? 'rgba(120,144,200,0.32)' : '#d6e4ff'
+  const sel = mode === 'dark' ? 'rgba(125,175,255,0.22)' : '#eaf1ff'
   return EditorView.theme(
     {
+      '.cm-selectionLayer .cm-selectionBackground': { backgroundColor: sel },
+      '&.cm-focused .cm-selectionLayer .cm-selectionBackground': { backgroundColor: sel },
       '.cm-selectionBackground': { backgroundColor: sel },
       '&.cm-focused .cm-selectionBackground': { backgroundColor: sel },
       '.cm-content ::selection': { backgroundColor: sel },
