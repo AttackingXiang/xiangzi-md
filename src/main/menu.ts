@@ -116,6 +116,11 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
         },
         { type: 'separator' },
         {
+          label: '命令面板',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => send(getWindow(), 'command-palette')
+        },
+        {
           label: '快捷键',
           accelerator: 'CmdOrCtrl+Shift+/',
           click: () => send(getWindow(), 'show-shortcuts')

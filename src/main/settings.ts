@@ -23,6 +23,12 @@ export interface AppSettings {
   recentFolders: string[]
   /** 收藏（置顶）的常用目录 */
   favorites: string[]
+  /** 上次会话（用于重开恢复） */
+  session: {
+    folder: string | null
+    openFiles: string[]
+    activePath: string | null
+  }
 }
 
 const DEFAULTS: AppSettings = {
@@ -35,7 +41,8 @@ const DEFAULTS: AppSettings = {
   autoSave: false,
   recentFiles: [],
   recentFolders: [],
-  favorites: []
+  favorites: [],
+  session: { folder: null, openFiles: [], activePath: null }
 }
 
 function settingsFile(): string {
