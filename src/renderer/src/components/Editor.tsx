@@ -6,6 +6,7 @@ import { resolveAssetURL } from '../lib/asset'
 import { codeMirrorTheme } from '../lib/codeTheme'
 import { setupTableResize } from '../lib/tableResize'
 import { typoraHeadingKeymap } from '../lib/headingKeymap'
+import { focusPlugin } from '../lib/focusPlugin'
 
 interface Props {
   content: string
@@ -14,6 +15,8 @@ interface Props {
   imageMaxWidth: number
   /** 已解析的主题，用于代码块语法高亮配色 */
   theme: 'light' | 'dark'
+  focusMode: boolean
+  typewriterMode: boolean
   onChange: (markdown: string) => void
 }
 
@@ -27,6 +30,8 @@ export default function Editor({
   docDir,
   imageMaxWidth,
   theme,
+  focusMode,
+  typewriterMode,
   onChange
 }: Props): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
@@ -68,8 +73,9 @@ export default function Editor({
       }
     })
 
-    // 注入 Typora 风格的标题快捷键（⌘1~6 / ⌘0）
+    // 注入 Typora 风格的标题快捷键（⌘1~6 / ⌘0）与专注模式装饰
     crepe.editor.use(typoraHeadingKeymap)
+    crepe.editor.use(focusPlugin)
 
     crepe.on((listener) => {
       listener.markdownUpdated((_ctx, markdown) => {
@@ -96,5 +102,26 @@ export default function Editor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return <div className="wysiwyg-editor" ref={rootRef} />
+  // 打字机模式：保持光标垂直居中
+  useEffect(() => {
+    if (!typewriterMode) return
+    const scroller = rootRef.current
+    if (!scroller) return
+    const onSel = (): void => {
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0) return
+      const range = sel.getRangeAt(0)
+      if (!scroller.contains(range.startContainer)) return
+      const rect = range.getBoundingClientRect()
+      if (rect.height === 0 && rect.top === 0) return
+      const sRect = scroller.getBoundingClientRect()
+      const delta = rect.top + rect.height / 2 - (sRect.top + sRect.height / 2)
+      if (Math.abs(delta) > 2) scroller.scrollBy({ top: delta })
+    }
+    document.addEventListener('selectionchange', onSel)
+    return () => document.removeEventListener('selectionchange', onSel)
+  }, [typewriterMode])
+
+  return <div className={`wysiwyg-editor${focusMode ? ' focus-mode' : ''}`} ref={rootRef} />
 }
+

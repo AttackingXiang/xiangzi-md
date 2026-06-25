@@ -100,6 +100,17 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
         },
         { type: 'separator' },
         {
+          label: '专注模式',
+          accelerator: 'CmdOrCtrl+Shift+F',
+          click: () => send(getWindow(), 'toggle-focus')
+        },
+        {
+          label: '打字机模式',
+          accelerator: 'CmdOrCtrl+Shift+T',
+          click: () => send(getWindow(), 'toggle-typewriter')
+        },
+        { type: 'separator' },
+        {
           label: '快捷键',
           accelerator: 'CmdOrCtrl+Shift+/',
           click: () => send(getWindow(), 'show-shortcuts')

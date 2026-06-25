@@ -12,6 +12,8 @@ export interface AppSettings {
   attachmentFolder: string
   imageMaxWidth: number
   theme: 'system' | 'light' | 'dark'
+  editorWidth: 'normal' | 'wide' | 'full'
+  customCssPath: string
   autoSave: boolean
   recentFiles: string[]
   recentFolders: string[]
@@ -53,6 +55,8 @@ const api = {
   trash: (targetPath: string): Promise<{ path: string }> =>
     ipcRenderer.invoke('fs:trash', targetPath),
 
+  reveal: (targetPath: string): Promise<void> => ipcRenderer.invoke('fs:reveal', targetPath),
+
   /** 保存图片等附件到文档同级附件目录，返回相对路径 */
   saveAttachment: (
     docDir: string,
@@ -76,6 +80,8 @@ const api = {
 
   exportHTML: (html: string, suggestedName: string): Promise<{ path: string } | null> =>
     ipcRenderer.invoke('export:html', html, suggestedName),
+
+  pickCss: (): Promise<{ path: string } | null> => ipcRenderer.invoke('dialog:pickCss'),
 
   /** 监听来自原生菜单的动作；返回取消监听函数 */
   onMenuAction: (callback: (action: string) => void): (() => void) => {

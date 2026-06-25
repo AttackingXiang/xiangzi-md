@@ -21,7 +21,9 @@
     "@lezer/highlight": "^1.2.3",
     "@milkdown/crepe": "^7.6.4",
     "@milkdown/kit": "^7.6.4",
-    "lucide-react": "^0.468.0"
+    "lucide-react": "^0.468.0",
+    "mermaid": "^11.15.0",
+    "prosemirror-search": "^1.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
