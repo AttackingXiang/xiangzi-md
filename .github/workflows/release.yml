@@ -1,6 +1,6 @@
 name: Release
 
-# 打标签（如 v0.1.0）或手动触发时，分别在 macOS / Windows / Linux 上构建安装包并发布到 GitHub Releases
+# 打标签（如 v0.1.0）或手动触发时，分别在 macOS / Windows 上构建安装包并发布到 GitHub Releases
 on:
   push:
     tags:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

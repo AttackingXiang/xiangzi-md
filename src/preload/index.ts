@@ -46,6 +46,9 @@ const api = {
 
   readDir: (path: string): Promise<FileNode[]> => ipcRenderer.invoke('fs:readDir', path),
 
+  listFiles: (root: string): Promise<{ path: string; name: string }[]> =>
+    ipcRenderer.invoke('fs:listFiles', root),
+
   createFile: (dirPath: string, fileName: string): Promise<{ path: string; name: string }> =>
     ipcRenderer.invoke('fs:createFile', dirPath, fileName),
 
