@@ -4,6 +4,22 @@
 
 定位为「复合型文档软件」：打开单个 `.md` 文件只是其中一个功能，同时支持打开整个文件夹、在侧边栏浏览、多标签页编辑。
 
+## 下载
+
+前往 **[Releases 页面](https://github.com/AttackingXiang/xiangzi-md/releases/latest)** 下载：
+
+| 平台 | 文件 | 说明 |
+| --- | --- | --- |
+| macOS (Apple Silicon) | `Xiangzi-MD-*-arm64.dmg` | 打开后拖入「应用程序」 |
+| macOS (Intel) | `Xiangzi-MD-*-x64.dmg` | 同上 |
+| Windows | `Xiangzi-MD-Setup-*.exe` | 安装版（NSIS） |
+| Windows | `Xiangzi-MD-*-portable.exe` | 便携版，免安装直接运行 |
+| Linux | `Xiangzi-MD-*.AppImage` | 赋予可执行权限后运行 |
+
+> 安装包未做代码签名：macOS 首次打开请「右键 → 打开」；Windows 出现 SmartScreen 时点「仍要运行」。
+>
+> 维护者发布新版本：`git tag v0.1.0 && git push --tags`，GitHub Actions 会自动构建三平台安装包并发布到 Releases。
+
 ## 功能
 
 - 📝 **所见即所得编辑**：边写边渲染，基于 ProseMirror 内核，无损读写 Markdown

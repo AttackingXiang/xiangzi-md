@@ -6,12 +6,18 @@
   "author": "guoxiangzi",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AttackingXiang/xiangzi-md.git"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "dist": "electron-vite build && electron-builder",
-    "dist:mac": "electron-vite build && electron-builder --mac"
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@codemirror/language": "^6.12.3",
@@ -48,18 +54,51 @@
       "out/**/*",
       "resources/**/*"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "AttackingXiang",
+      "repo": "xiangzi-md"
+    },
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns",
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64", "x64"]
+        }
       ]
     },
+    "dmg": {
+      "title": "${productName}"
+    },
     "win": {
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Xiangzi MD"
     },
     "linux": {
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "category": "Office",
+      "target": ["AppImage"]
     }
   }
 }

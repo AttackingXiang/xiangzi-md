@@ -2,6 +2,7 @@ import { FolderOpen, RefreshCw, Search, Settings as SettingsIcon, Star, Folder }
 import FileTree from './FileTree'
 import type { FileNode, Folder as FolderType } from '../types'
 import { t } from '../lib/i18n'
+import { baseName } from '../lib/path'
 
 interface Props {
   folder: FolderType | null
@@ -17,11 +18,6 @@ interface Props {
   onRefresh: () => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onRootContext: (x: number, y: number) => void
-}
-
-function baseName(p: string): string {
-  const i = p.lastIndexOf('/')
-  return i < 0 ? p : p.slice(i + 1)
 }
 
 export default function Sidebar({

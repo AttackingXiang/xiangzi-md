@@ -1,5 +1,6 @@
 import { FilePlus2, FolderOpen, FileText, Clock, Folder } from 'lucide-react'
 import { t } from '../lib/i18n'
+import { baseName, dirName } from '../lib/path'
 
 interface Props {
   recentFiles: string[]
@@ -11,14 +12,8 @@ interface Props {
   onOpenRecentFolder: (path: string) => void
 }
 
-function baseName(p: string): string {
-  const i = p.lastIndexOf('/')
-  return i < 0 ? p : p.slice(i + 1)
-}
-
 function parentDir(p: string): string {
-  const i = p.lastIndexOf('/')
-  return i <= 0 ? '' : p.slice(0, i)
+  return dirName(p) ?? ''
 }
 
 export default function Welcome({
