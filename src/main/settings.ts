@@ -40,6 +40,10 @@ export interface AppSettings {
     openFiles: string[]
     activePath: string | null
   }
+  /** 在文件树中隐藏附件文件夹 */
+  hideAttachmentFolders: boolean
+  /** 额外的图片搜索目录列表 */
+  assetSearchPaths: string[]
 }
 
 const DEFAULTS: AppSettings = {
@@ -55,7 +59,9 @@ const DEFAULTS: AppSettings = {
   recentFiles: [],
   recentFolders: [],
   favorites: [],
-  session: { folder: null, openFiles: [], activePath: null }
+  session: { folder: null, openFiles: [], activePath: null },
+  hideAttachmentFolders: false,
+  assetSearchPaths: []
 }
 
 function settingsFile(): string {

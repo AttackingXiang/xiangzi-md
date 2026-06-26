@@ -8,9 +8,11 @@ interface Props {
   onSelect: (index: number) => void
   onReorder: (fromIndex: number, toIndex: number) => void
   onClose: () => void
+  /** 可选宽度覆盖（拖放调整后的动态宽度） */
+  width?: number
 }
 
-export default function Outline({ items, onSelect, onReorder, onClose }: Props): JSX.Element {
+export default function Outline({ items, onSelect, onReorder, onClose, width }: Props): JSX.Element {
   const dragSrc = useRef<number | null>(null)
   const [dropTarget, setDropTarget] = useState<number | null>(null)
 
@@ -40,7 +42,7 @@ export default function Outline({ items, onSelect, onReorder, onClose }: Props):
   }
 
   return (
-    <aside className="outline">
+    <aside className="outline" style={width !== undefined ? { width } : undefined}>
       <div className="outline-header">
         <span>{t('大纲')}</span>
         <button className="icon-btn sm" onClick={onClose} title={t('关闭大纲')}>
@@ -55,7 +57,7 @@ export default function Outline({ items, onSelect, onReorder, onClose }: Props):
             <div
               key={it.index}
               className={`outline-item${dropTarget === i ? ' drop-target' : ''}`}
-              style={{ paddingLeft: `${(it.level - 1) * 12 + 12}px` }}
+              style={{ paddingLeft: `${(it.level - 1) * 10 + 8}px` }}
               draggable
               onDragStart={(e) => handleDragStart(e, i)}
               onDragOver={(e) => handleDragOver(e, i)}

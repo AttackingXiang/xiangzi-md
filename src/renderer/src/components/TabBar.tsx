@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Code2, Eye, List, PanelLeft, X } from 'lucide-react'
+import { Code2, Eye, List, MapPin, PanelLeft, X } from 'lucide-react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 
@@ -14,6 +14,9 @@ interface Props {
   onToggleSource: () => void
   onToggleSidebar: () => void
   onToggleOutline: () => void
+  /** 在文件夹中定位当前文件；只有当前文件有路径时显示 */
+  onRevealFile?: () => void
+  activeHasPath?: boolean
 }
 
 export default function TabBar({
@@ -26,7 +29,9 @@ export default function TabBar({
   outlineVisible,
   onToggleSource,
   onToggleSidebar,
-  onToggleOutline
+  onToggleOutline,
+  onRevealFile,
+  activeHasPath
 }: Props): JSX.Element {
   const activeRef = useRef<HTMLDivElement>(null)
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -57,6 +62,16 @@ export default function TabBar({
       <button className="icon-btn drag-none" title={`${t('切换侧边栏')} (⌘\\)`} onClick={onToggleSidebar}>
         <PanelLeft size={16} />
       </button>
+
+      {onRevealFile && activeHasPath && (
+        <button
+          className="icon-btn drag-none"
+          title={t('在文件夹中定位')}
+          onClick={onRevealFile}
+        >
+          <MapPin size={16} />
+        </button>
+      )}
 
       <div className="tabs" ref={tabsRef}>
         {tabs.map((tab) => (

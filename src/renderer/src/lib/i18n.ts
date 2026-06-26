@@ -14,6 +14,7 @@ const EN: Record<string, string> = {
   设置: 'Settings',
   // TabBar
   切换侧边栏: 'Toggle sidebar',
+  在文件夹中定位: 'Reveal in sidebar',
   大纲: 'Outline',
   '源码 / 所见即所得': 'Source / WYSIWYG',
   // Welcome
@@ -63,6 +64,12 @@ const EN: Record<string, string> = {
   图片最大显示宽度: 'Max image width',
   'px（0 = 不限制）': 'px (0 = no limit)',
   '修改后对新打开的文档生效。': 'Takes effect for newly opened documents.',
+  文件树中隐藏附件文件夹: 'Hide attachment folder in tree',
+  '勾选后，文件树不显示与「子文件夹名称」同名的目录（不影响文件实际存储）。':
+    'When on, directories matching the attachment subfolder name are hidden from the file tree (files are not affected).',
+  额外图片搜索目录: 'Extra image search dirs',
+  '图片无法在文档目录找到时，依次搜索这里列出的目录（每行一个绝对路径）。适用于图片统一存放在与文档不同层级的情况。':
+    'When an image cannot be found relative to the document, these directories are searched in order (one absolute path per line). Useful when images are stored at a different level than the document.',
   键盘: 'Keyboard',
   快捷键: 'Shortcuts',
   查看全部快捷键: 'View all shortcuts',

@@ -8,7 +8,6 @@ function normalize(input: string): string {
     if (seg === '..') out.pop()
     else out.push(seg)
   }
-  // Windows 保留盘符前缀（C:/...），POSIX 保留根斜杠（/...）
   return isWin ? out.join('/') : '/' + out.join('/')
 }
 
@@ -20,24 +19,63 @@ function isAbsolute(src: string): boolean {
  * 把 Markdown 中的图片/资源 src 解析成可在渲染层显示的 URL。
  * - http(s)/data/blob/xmd：原样返回
  * - file://、绝对路径、相对 docDir 的路径：转成 xmd:// 协议
- * 兼容 macOS / Windows 路径分隔符。
+ *
+ * 当提供 vaultRoot / searchPaths 时，会在 xmd:// URL 中附加备用路径
+ * (?alts=…)，供主进程协议处理器依序尝试，从而支持：
+ *   - 站点根相对路径（/static/img.png → vaultRoot/static/img.png）
+ *   - 图片目录与文档不在同一层级的情况
  */
-export function resolveAssetURL(docDir: string | null, src: string): string {
+export function resolveAssetURL(
+  docDir: string | null,
+  src: string,
+  vaultRoot?: string | null,
+  searchPaths?: string[]
+): string {
   if (!src) return src
   if (/^(https?|data|blob|xmd):/i.test(src)) return src
 
-  let abs: string | null = null
+  let primary: string | null = null
+
   if (src.startsWith('file://')) {
     let p = decodeURIComponent(src.replace(/^file:\/\//, ''))
-    // Windows 文件 URL 形如 file:///C:/x -> /C:/x，去掉多余的前导斜杠
     if (/^\/[A-Za-z]:/.test(p)) p = p.slice(1)
-    abs = normalize(p)
+    primary = normalize(p)
   } else if (isAbsolute(src)) {
-    abs = normalize(src)
+    primary = normalize(src)
   } else if (docDir) {
-    abs = normalize(`${docDir}/${src}`)
+    primary = normalize(`${docDir}/${src}`)
   }
 
-  if (!abs) return src
-  return `xmd://local/${encodeURIComponent(abs)}`
+  if (!primary) return src
+
+  // Build alternative candidates for paths that may live outside docDir
+  const alts: string[] = []
+  const seen = new Set<string>([primary])
+
+  const addAlt = (p: string): void => {
+    if (!seen.has(p)) { seen.add(p); alts.push(p) }
+  }
+
+  if (vaultRoot) {
+    if (src.startsWith('/')) {
+      // Site-root-relative: /static/img.png → vaultRoot + /static/img.png
+      addAlt(normalize(`${vaultRoot}${src}`))
+    } else {
+      // Relative path: also try from vault root
+      addAlt(normalize(`${vaultRoot}/${src}`))
+    }
+  }
+
+  // User-configured extra search directories
+  if (searchPaths) {
+    for (const base of searchPaths) {
+      const trimmed = base.trim()
+      if (trimmed) addAlt(normalize(`${trimmed}/${src}`))
+    }
+  }
+
+  const primaryUrl = `xmd://local/${encodeURIComponent(primary)}`
+  if (alts.length === 0) return primaryUrl
+  // Encode alt paths as newline-separated query param (URLSearchParams auto-encodes)
+  return `${primaryUrl}?alts=${encodeURIComponent(alts.join('\n'))}`
 }

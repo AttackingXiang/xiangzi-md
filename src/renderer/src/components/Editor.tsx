@@ -22,6 +22,8 @@ interface Props {
   docName: string
   /** 已打开文件夹（仓库）根目录，用于仓库级附件模式 */
   vaultRoot: string | null
+  /** 额外图片搜索目录，解析失败时依序尝试 */
+  assetSearchPaths: string[]
   imageMaxWidth: number
   /** 已解析的主题，用于代码块语法高亮配色 */
   theme: 'light' | 'dark'
@@ -40,6 +42,7 @@ export default function Editor({
   docDir,
   docName,
   vaultRoot,
+  assetSearchPaths,
   imageMaxWidth,
   theme,
   focusMode,
@@ -56,6 +59,8 @@ export default function Editor({
   docNameRef.current = docName
   const vaultRootRef = useRef(vaultRoot)
   vaultRootRef.current = vaultRoot
+  const assetSearchPathsRef = useRef(assetSearchPaths)
+  assetSearchPathsRef.current = assetSearchPaths
 
   useEffect(() => {
     const root = rootRef.current
@@ -83,7 +88,8 @@ export default function Editor({
       defaultValue: content,
       featureConfigs: {
         [CrepeFeature.ImageBlock]: {
-          proxyDomURL: (url: string) => resolveAssetURL(docDirRef.current, url),
+          proxyDomURL: (url: string) =>
+            resolveAssetURL(docDirRef.current, url, vaultRootRef.current, assetSearchPathsRef.current),
           onUpload: upload,
           blockOnUpload: upload,
           inlineOnUpload: upload,
