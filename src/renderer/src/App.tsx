@@ -8,6 +8,7 @@ import StatusBar from './components/StatusBar'
 import Settings from './components/Settings'
 import Outline from './components/Outline'
 import FindBar from './components/FindBar'
+import Lightbox from './components/Lightbox'
 import { parseOutline } from './lib/outline'
 import type { AppSettings, Folder, Tab } from './types'
 
@@ -46,6 +47,8 @@ export default function App(): JSX.Element {
   const [sourceMode, setSourceMode] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showFind, setShowFind] = useState(false)
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null
@@ -104,6 +107,7 @@ export default function App(): JSX.Element {
         t = settings.theme
       }
       document.documentElement.dataset.theme = t
+      setResolvedTheme(t)
     }
     apply()
     if (settings.theme === 'system') {
@@ -352,7 +356,17 @@ export default function App(): JSX.Element {
 
         {showFind && <FindBar onClose={() => setShowFind(false)} />}
 
-        <div className="editor-area">
+        <div
+          className="editor-area"
+          onClick={(e) => {
+            const target = e.target as HTMLElement
+            if (target.tagName === 'IMG') {
+              const img = target as HTMLImageElement
+              const src = img.currentSrc || img.src
+              if (src) setZoomSrc(src)
+            }
+          }}
+        >
           {activeTab ? (
             sourceMode ? (
               <SourceEditor
@@ -362,10 +376,11 @@ export default function App(): JSX.Element {
               />
             ) : (
               <Editor
-                key={activeTab.id}
+                key={activeTab.id + '-' + resolvedTheme}
                 content={activeTab.content}
                 docDir={activeDocDir}
                 imageMaxWidth={settings.imageMaxWidth}
+                theme={resolvedTheme}
                 onChange={(c) => updateContent(activeTab.id, c)}
               />
             )
@@ -392,6 +407,8 @@ export default function App(): JSX.Element {
       {showSettings && (
         <Settings settings={settings} onChange={saveSettings} onClose={() => setShowSettings(false)} />
       )}
+
+      {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
     </div>
   )
 }
