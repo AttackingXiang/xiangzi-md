@@ -9,6 +9,7 @@ import Settings from './components/Settings'
 import Outline from './components/Outline'
 import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
+import Shortcuts from './components/Shortcuts'
 import { parseOutline } from './lib/outline'
 import type { AppSettings, Folder, Tab } from './types'
 
@@ -47,6 +48,7 @@ export default function App(): JSX.Element {
   const [sourceMode, setSourceMode] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showFind, setShowFind] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
@@ -312,6 +314,7 @@ export default function App(): JSX.Element {
         case 'toggle-source': setSourceMode((v) => !v); break
         case 'find': setShowFind(true); break
         case 'open-settings': setShowSettings(true); break
+        case 'show-shortcuts': setShowShortcuts(true); break
         case 'export-pdf': exportPDF(); break
         case 'export-html': exportHTML(); break
       }
@@ -405,8 +408,18 @@ export default function App(): JSX.Element {
       </div>
 
       {showSettings && (
-        <Settings settings={settings} onChange={saveSettings} onClose={() => setShowSettings(false)} />
+        <Settings
+          settings={settings}
+          onChange={saveSettings}
+          onShowShortcuts={() => {
+            setShowSettings(false)
+            setShowShortcuts(true)
+          }}
+          onClose={() => setShowSettings(false)}
+        />
       )}
+
+      {showShortcuts && <Shortcuts onClose={() => setShowShortcuts(false)} />}
 
       {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
     </div>

@@ -99,6 +99,12 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
           click: () => send(getWindow(), 'toggle-source')
         },
         { type: 'separator' },
+        {
+          label: '快捷键',
+          accelerator: 'CmdOrCtrl+Shift+/',
+          click: () => send(getWindow(), 'show-shortcuts')
+        },
+        { type: 'separator' },
         { role: 'resetZoom', label: '实际大小' },
         { role: 'zoomIn', label: '放大' },
         { role: 'zoomOut', label: '缩小' },

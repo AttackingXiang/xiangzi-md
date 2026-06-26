@@ -20,6 +20,7 @@
     "@codemirror/view": "^6.43.2",
     "@lezer/highlight": "^1.2.3",
     "@milkdown/crepe": "^7.6.4",
+    "@milkdown/kit": "^7.6.4",
     "lucide-react": "^0.468.0"
   },
   "devDependencies": {
