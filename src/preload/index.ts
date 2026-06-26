@@ -95,6 +95,9 @@ const api = {
 
   stopFind: (): Promise<void> => ipcRenderer.invoke('find:stop'),
 
+  exportHTML: (html: string, suggestedName: string): Promise<{ path: string } | null> =>
+    ipcRenderer.invoke('export:html', html, suggestedName),
+
   exportPDF: (html: string, suggestedName: string): Promise<{ path: string } | null> =>
     ipcRenderer.invoke('export:pdf', html, suggestedName),
 

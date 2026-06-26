@@ -343,6 +343,19 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     getWindow()?.webContents.stopFindInPage('clearSelection')
   })
 
+  // 导出为 HTML
+  ipcMain.handle('export:html', async (_e, html: string, suggestedName: string) => {
+    const win = getWindow()
+    if (!win) return null
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: suggestedName.replace(/\.md$/i, '') + '.html',
+      filters: [{ name: 'HTML', extensions: ['html'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    await fs.writeFile(result.filePath, html, 'utf-8')
+    return { path: result.filePath }
+  })
+
   // 导出为 PDF：在隐藏窗口中加载完整文档 HTML 再打印，避免只导出当前视口
   ipcMain.handle('export:pdf', async (_e, html: string, suggestedName: string) => {
     const win = getWindow()
