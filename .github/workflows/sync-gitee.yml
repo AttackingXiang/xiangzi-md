@@ -1,0 +1,23 @@
+name: Sync to Gitee
+
+# 每次推送 main 分支或打版本标签时，自动把代码 + 标签镜像到 Gitee
+on:
+  push:
+    branches: [ main ]
+    tags:     [ 'v*' ]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror to Gitee
+        uses: Yikun/hub-mirror-action@master
+        with:
+          src:          'github/AttackingXiang'
+          dst:          'gitee/tlqgyx'
+          dst_key:      ${{ secrets.GITEE_PRIVATE_KEY }}
+          dst_token:    ${{ secrets.GITEE_TOKEN }}
+          account_type: user
+          static_list:  'xiangzi-md'
+          force_update: true
+          timeout:      '30m'

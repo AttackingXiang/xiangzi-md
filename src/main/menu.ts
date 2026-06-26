@@ -1,10 +1,12 @@
 import { app, Menu, BrowserWindow, type MenuItemConstructorOptions } from 'electron'
+import { checkForUpdates } from './updater'
 
 type Lang = 'zh' | 'en'
 
 const EN: Record<string, string> = {
   '关于 Xiangzi MD': 'About Xiangzi MD',
   '设置…': 'Settings…',
+  '检查更新…': 'Check for Updates…',
   隐藏: 'Hide',
   隐藏其他: 'Hide Others',
   全部显示: 'Show All',
@@ -72,6 +74,10 @@ export function buildMenu(getWindow: () => BrowserWindow | null, lang: Lang = 'z
                 label: T('设置…'),
                 accelerator: 'CmdOrCtrl+,',
                 click: () => send(getWindow(), 'open-settings')
+              },
+              {
+                label: T('检查更新…'),
+                click: () => checkForUpdates(false)
               },
               { type: 'separator' as const },
               { role: 'hide' as const, label: T('隐藏') },
