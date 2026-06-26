@@ -3,7 +3,6 @@ import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { buildMenu } from './menu'
 import { registerXmdPrivileges, handleXmdProtocol } from './protocol'
-import { attachContextMenu } from './contextMenu'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -31,8 +30,6 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
   })
-
-  attachContextMenu(mainWindow.webContents)
 
   // 诊断：把渲染层的报错冒泡到主进程日志
   mainWindow.webContents.on('console-message', (_e, level, message) => {
