@@ -1,0 +1,38 @@
+name: Release
+
+# 打标签（如 v0.1.0）或手动触发时，分别在 macOS / Windows / Linux 上构建安装包并发布到 GitHub Releases
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 无 Apple/Windows 签名证书：跳过自动签名，产出未签名安装包
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run dist -- --publish always
