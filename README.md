@@ -82,9 +82,20 @@ src/
 | 切换侧边栏 | `Cmd/Ctrl + \` |
 | 大纲 | `Cmd/Ctrl + Shift + K` |
 | 切换源码模式 | `Cmd/Ctrl + /` |
+| 快捷键面板 | `Cmd/Ctrl + Shift + /` |
 | 设置 | `Cmd/Ctrl + ,` |
 
-> 注：`Cmd/Ctrl + B`（加粗）、`+ I`（斜体）等留给编辑器本身，未被菜单占用。
+编辑类（编辑器聚焦时）：
+
+| 操作 | 快捷键 |
+| --- | --- |
+| 一~六级标题 | `Cmd/Ctrl + 1…6`（备用 `Cmd/Ctrl + Alt + 1…6`） |
+| 设为正文 | `Cmd/Ctrl + 0` |
+| 加粗 / 斜体 / 行内代码 | `Cmd/Ctrl + B / I / E` |
+| 引用 / 代码块 | `Cmd/Ctrl + Shift + B` / `Cmd/Ctrl + Alt + C` |
+| 无序 / 有序列表 | `Cmd/Ctrl + Alt + 8 / 7` |
+
+> 完整列表见应用内「视图 → 快捷键」面板。
 
 ## 后续可扩展方向
 

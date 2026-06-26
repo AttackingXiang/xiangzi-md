@@ -4,11 +4,17 @@ import type { AppSettings } from '../types'
 interface Props {
   settings: AppSettings
   onChange: (patch: Partial<AppSettings>) => void
+  onShowShortcuts: () => void
   onClose: () => void
 }
 
 /** 设置面板：外观、附件存储方式、图片尺寸 */
-export default function Settings({ settings, onChange, onClose }: Props): JSX.Element {
+export default function Settings({
+  settings,
+  onChange,
+  onShowShortcuts,
+  onClose
+}: Props): JSX.Element {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -94,6 +100,16 @@ export default function Settings({ settings, onChange, onClose }: Props): JSX.El
               </span>
             </label>
             <p className="settings-hint">修改后对新打开的文档生效。</p>
+          </section>
+
+          <section className="settings-group">
+            <h3>键盘</h3>
+            <label className="settings-row">
+              <span className="settings-label">快捷键</span>
+              <button className="secondary-btn" onClick={onShowShortcuts}>
+                查看全部快捷键
+              </button>
+            </label>
           </section>
         </div>
       </div>
