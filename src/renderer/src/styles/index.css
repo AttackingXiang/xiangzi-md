@@ -1,0 +1,394 @@
+:root {
+  --bg: #ffffff;
+  --bg-sidebar: #f7f7f5;
+  --bg-elevated: #fbfbfa;
+  --border: #e8e8e6;
+  --text: #2c2c2c;
+  --text-muted: #8a8a87;
+  --accent: #4c8bf5;
+  --accent-soft: #eaf1fe;
+  --tab-active-bg: #ffffff;
+  --hover: #eeeeec;
+  font-size: 15px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e;
+    --bg-sidebar: #252526;
+    --bg-elevated: #2a2a2b;
+    --border: #3a3a3a;
+    --text: #d8d8d8;
+    --text-muted: #888;
+    --accent: #4c8bf5;
+    --accent-soft: #2a3a52;
+    --tab-active-bg: #1e1e1e;
+    --hover: #2f2f30;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- 侧边栏 ---------- */
+.sidebar {
+  width: 260px;
+  min-width: 180px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  /* 给 macOS 红绿灯留出空间 */
+  padding-top: 30px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.sidebar-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
+.sidebar-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.sidebar-empty p {
+  margin: 0 0 12px;
+}
+
+/* ---------- 文件树 ---------- */
+.file-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding-right: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tree-row:hover {
+  background: var(--hover);
+}
+
+.tree-row.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.tree-caret {
+  width: 12px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.tree-icon {
+  font-size: 13px;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- 主区域 ---------- */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ---------- 标签栏 ---------- */
+.tabbar {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  -webkit-app-region: drag;
+}
+
+.tabbar button,
+.tabbar .tab {
+  -webkit-app-region: no-drag;
+}
+
+.tabs {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  height: 100%;
+  align-items: flex-end;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 12px;
+  font-size: 13px;
+  background: transparent;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  max-width: 200px;
+  color: var(--text-muted);
+}
+
+.tab:hover {
+  background: var(--hover);
+}
+
+.tab.active {
+  background: var(--tab-active-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-bottom: none;
+}
+
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-dirty {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.tab-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
+.tab-close:hover {
+  background: var(--hover);
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.mode-toggle.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* ---------- 编辑区 ---------- */
+.editor-area {
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg);
+  display: flex;
+}
+
+.wysiwyg-editor {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.source-editor {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 40px max(40px, calc((100% - 800px) / 2));
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* ---------- 欢迎页 ---------- */
+.welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.welcome h1 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+}
+
+.welcome-sub {
+  margin: 0 0 20px;
+  color: var(--text-muted);
+}
+
+.welcome-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.primary-btn,
+.secondary-btn {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.primary-btn {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.primary-btn:hover {
+  opacity: 0.9;
+}
+
+.secondary-btn {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.secondary-btn:hover {
+  background: var(--hover);
+}
+
+.welcome-tips {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 2;
+  text-align: center;
+}
+
+kbd {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+/* ---------- 状态栏 ---------- */
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 12px;
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.status-left {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+.status-right {
+  display: flex;
+  gap: 14px;
+}
+
+.status-dirty {
+  color: var(--accent);
+}
+
+/* Milkdown Crepe 编辑器内边距，贴近 Typora 居中排版 */
+.milkdown {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 24px 120px;
+}
