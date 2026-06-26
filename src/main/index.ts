@@ -6,6 +6,12 @@ import { registerXmdPrivileges, handleXmdProtocol } from './protocol'
 
 let mainWindow: BrowserWindow | null = null
 
+// 应用名（菜单、关于面板等）
+app.setName('Xiangzi MD')
+
+// 图标路径（dev 与打包后均可解析；resources 已包含进打包文件）
+const iconPath = join(app.getAppPath(), 'resources', 'icon.png')
+
 // 必须在 app ready 之前注册自定义协议的权限
 registerXmdPrivileges()
 
@@ -17,6 +23,7 @@ function createWindow(): void {
     minHeight: 480,
     show: false,
     title: 'Xiangzi MD',
+    icon: iconPath,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: '#ffffff',
     webPreferences: {
@@ -57,6 +64,15 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // 开发期把 dock 图标换成自定义图标（打包后由 icns 决定，无需此步）
+  if (process.platform === 'darwin' && app.dock) {
+    try {
+      app.dock.setIcon(iconPath)
+    } catch {
+      /* 忽略 */
+    }
+  }
+
   handleXmdProtocol()
 
   // 仅在生产环境注入严格 CSP；开发环境不加，避免阻断 Vite HMR
