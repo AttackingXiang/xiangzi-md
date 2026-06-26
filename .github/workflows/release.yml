@@ -40,20 +40,14 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist -- --publish always
 
-      # macOS：额外构建 arm64-only DMG 供 Gitee 上传（universal 超 100MB 限制）
-      - name: Build arm64 DMG for Gitee
-        if: runner.os == 'macOS'
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder --mac dmg --arm64 --publish never
-
-      # 暂存产物供后续 Gitee 上传
+      # 暂存产物供后续 Gitee 上传（macOS 产出 arm64 + x64 两个 DMG，均在 100MB 以内）
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
             release/*-arm64.dmg
+            release/*-x64.dmg
             release/*.exe
             release/*.yml
             release/*.blockmap
@@ -99,7 +93,7 @@ jobs:
           done
 
           # 创建 Gitee Release
-          BODY="macOS (Apple Silicon) 和 Windows 安装包见下方附件。\nmacOS Intel 用户请前往 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG}) 下载 universal DMG。"
+          BODY="macOS（Apple Silicon M芯片用 arm64，Intel 芯片用 x64）和 Windows 安装包见下方附件。"
           RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
             -H "Content-Type: application/json" \
             -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"target_commitish\":\"main\",\"body\":\"${BODY}\"}")
@@ -119,8 +113,8 @@ jobs:
             exit 0
           fi
 
-          # 上传 arm64 DMG、Windows 安装包、更新清单
-          for FILE in artifacts/macos/*-arm64.dmg artifacts/windows/*.exe artifacts/windows/*.yml; do
+          # 上传 arm64 + x64 DMG、Windows 安装包、更新清单
+          for FILE in artifacts/macos/*-arm64.dmg artifacts/macos/*-x64.dmg artifacts/windows/*.exe artifacts/windows/*.yml; do
             [ -f "$FILE" ] || continue
             NAME=$(basename "$FILE")
             echo "Uploading: $NAME"
