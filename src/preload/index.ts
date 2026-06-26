@@ -18,6 +18,7 @@ export interface AppSettings {
   recentFiles: string[]
   recentFolders: string[]
   favorites: string[]
+  session: { folder: string | null; openFiles: string[]; activePath: string | null }
 }
 
 const api = {

@@ -13,6 +13,7 @@ import Shortcuts from './components/Shortcuts'
 import ContextMenu, { type MenuItem } from './components/ContextMenu'
 import InputDialog from './components/InputDialog'
 import SearchPanel from './components/SearchPanel'
+import CommandPalette, { type Command } from './components/CommandPalette'
 import { parseOutline } from './lib/outline'
 import type { AppSettings, FileNode, Folder, Tab } from './types'
 
@@ -41,7 +42,25 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoSave: false,
   recentFiles: [],
   recentFolders: [],
-  favorites: []
+  favorites: [],
+  session: { folder: null, openFiles: [], activePath: null }
+}
+
+interface FileEntry {
+  path: string
+  name: string
+}
+
+/** 递归展平文件树为文件列表（用于命令面板快速打开） */
+function flattenFiles(nodes: FileNode[], out: FileEntry[] = []): FileEntry[] {
+  for (const n of nodes) {
+    if (n.isDir) {
+      if (n.children) flattenFiles(n.children, out)
+    } else {
+      out.push({ path: n.path, name: n.name })
+    }
+  }
+  return out
 }
 
 export default function App(): JSX.Element {
@@ -56,6 +75,7 @@ export default function App(): JSX.Element {
   const [findInitial, setFindInitial] = useState('')
   const [searchView, setSearchView] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showPalette, setShowPalette] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
@@ -79,10 +99,51 @@ export default function App(): JSX.Element {
   const stateRef = useRef({ tabs, activeId })
   stateRef.current = { tabs, activeId }
 
-  // ---- 设置 ----
+  // ---- 设置与会话恢复 ----
+  const didInit = useRef(false)
   useEffect(() => {
-    if (window.api) window.api.getSettings().then(setSettings)
+    if (didInit.current || !window.api) return
+    didInit.current = true
+    window.api.getSettings().then(async (s) => {
+      setSettings(s)
+      // 恢复上次会话
+      const session = s.session
+      if (session?.folder) {
+        const res = await window.api.openFolderPath(session.folder)
+        if (res) setFolder(res)
+      }
+      if (session?.openFiles?.length) {
+        const restored: Tab[] = []
+        for (const p of session.openFiles) {
+          try {
+            const f = await window.api.readFile(p)
+            restored.push({ id: newTabId(), path: f.path, name: f.name, content: f.content, dirty: false })
+          } catch {
+            /* 文件已不存在，跳过 */
+          }
+        }
+        if (restored.length) {
+          setTabs(restored)
+          const act = restored.find((t) => t.path === session.activePath) ?? restored[0]
+          setActiveId(act.id)
+        }
+      }
+      sessionReady.current = true
+    })
   }, [])
+
+  // ---- 会话持久化 ----
+  const sessionReady = useRef(false)
+  useEffect(() => {
+    if (!sessionReady.current) return
+    const session = {
+      folder: folder?.root ?? null,
+      openFiles: tabs.filter((t) => t.path).map((t) => t.path as string),
+      activePath: activeTab?.path ?? null
+    }
+    const t = setTimeout(() => window.api.setSettings({ session }), 500)
+    return () => clearTimeout(t)
+  }, [folder?.root, tabs, activeTab?.path])
 
   const saveSettings = useCallback(async (patch: Partial<AppSettings>) => {
     const next = await window.api.setSettings(patch)
@@ -473,6 +534,37 @@ export default function App(): JSX.Element {
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
+  // ---- 命令面板 ----
+  const paletteFiles = useMemo(() => (folder ? flattenFiles(folder.tree) : []), [folder])
+  const paletteCommands = useMemo<Command[]>(
+    () => [
+      { id: 'new', label: '新建文件', run: newFile },
+      { id: 'open-file', label: '打开文件…', run: openFile },
+      { id: 'open-folder', label: '打开文件夹…', run: openFolder },
+      { id: 'save', label: '保存', run: () => activeId && saveTab(activeId) },
+      { id: 'save-as', label: '另存为…', run: () => activeId && saveAsTab(activeId) },
+      {
+        id: 'search',
+        label: '在文件夹中搜索',
+        run: () => {
+          setSidebarVisible(true)
+          setSearchView(true)
+        }
+      },
+      { id: 'find', label: '查找 / 替换', run: () => setShowFind(true) },
+      { id: 'outline', label: '切换大纲', run: () => setOutlineVisible((v) => !v) },
+      { id: 'sidebar', label: '切换侧边栏', run: () => setSidebarVisible((v) => !v) },
+      { id: 'source', label: '切换源码模式', run: () => setSourceMode((v) => !v) },
+      { id: 'focus', label: '专注模式', run: () => setFocusMode((v) => !v) },
+      { id: 'typewriter', label: '打字机模式', run: () => setTypewriterMode((v) => !v) },
+      { id: 'export-pdf', label: '导出 PDF', run: exportPDF },
+      { id: 'export-html', label: '导出 HTML', run: exportHTML },
+      { id: 'settings', label: '设置', run: () => setShowSettings(true) },
+      { id: 'shortcuts', label: '快捷键', run: () => setShowShortcuts(true) }
+    ],
+    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportPDF, exportHTML]
+  )
+
   // ---- 自动保存 ----
   useEffect(() => {
     if (!settings.autoSave || !activeTab || !activeTab.path || !activeTab.dirty) return
@@ -501,6 +593,7 @@ export default function App(): JSX.Element {
         case 'search-in-folder': setSidebarVisible(true); setSearchView(true); break
         case 'open-settings': setShowSettings(true); break
         case 'show-shortcuts': setShowShortcuts(true); break
+        case 'command-palette': setShowPalette(true); break
         case 'export-pdf': exportPDF(); break
         case 'export-html': exportHTML(); break
       }
@@ -621,6 +714,15 @@ export default function App(): JSX.Element {
       )}
 
       {showShortcuts && <Shortcuts onClose={() => setShowShortcuts(false)} />}
+
+      {showPalette && (
+        <CommandPalette
+          commands={paletteCommands}
+          files={paletteFiles}
+          onOpenFile={(p, n) => openPath(p, n)}
+          onClose={() => setShowPalette(false)}
+        />
+      )}
 
       {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
 
