@@ -92,9 +92,11 @@ jobs:
           done
 
           # 创建 Gitee Release（target_commitish 为必填字段）
+          # 说明：macOS DMG 超过 Gitee 100MB 附件限制，仅上传 Windows 安装包
+          BODY="Windows 安装包见下方附件，macOS 用户请前往 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG}) 下载 .dmg 文件。"
           RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
             -H "Content-Type: application/json" \
-            -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"target_commitish\":\"main\",\"body\":\"详细更新日志请查看 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG})\"}")
+            -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"target_commitish\":\"main\",\"body\":\"${BODY}\"}")
           echo "Create response: ${RESP:0:300}"
           RELEASE_ID=$(echo "$RESP" | jq -r '.id // empty' 2>/dev/null || true)
 
@@ -111,8 +113,8 @@ jobs:
             exit 0
           fi
 
-          # 上传安装包和更新清单；blockmap 跳过
-          for FILE in artifacts/macos/*.dmg artifacts/windows/*.exe artifacts/macos/*.yml artifacts/windows/*.yml; do
+          # 只上传 Windows 安装包和更新清单；macOS DMG 超 100MB Gitee 限制跳过
+          for FILE in artifacts/windows/*.exe artifacts/windows/*.yml; do
             [ -f "$FILE" ] || continue
             NAME=$(basename "$FILE")
             echo "Uploading: $NAME"
