@@ -91,37 +91,18 @@ jobs:
             sleep 10
           done
 
-          # 解析 JSON，出错时返回空字符串并打印原始响应
-          parse_id() {
-            python3 -c "
-import sys, json
-raw = sys.stdin.read()
-try:
-    d = json.loads(raw)
-    print(d.get('id','') if isinstance(d, dict) else '')
-except Exception as e:
-    import sys as s; s.stderr.write('Parse error: ' + str(e) + '\nRaw: ' + raw[:500] + '\n')
-    print('')
-"
-          }
-
           # 创建 Gitee Release
           RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"access_token\": \"${GITEE_TOKEN}\",
-              \"tag_name\": \"${TAG}\",
-              \"name\": \"${TAG}\",
-              \"body\": \"详细更新日志请查看 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG})\"
-            }")
-          echo "Create response: ${RESP:0:200}"
-          RELEASE_ID=$(echo "$RESP" | parse_id)
+            -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"详细更新日志请查看 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG})\"}")
+          echo "Create response: ${RESP:0:300}"
+          RELEASE_ID=$(echo "$RESP" | jq -r '.id // empty' 2>/dev/null || true)
 
           # Release 已存在时直接查询
           if [ -z "$RELEASE_ID" ]; then
             RESP2=$(curl -s "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}")
-            echo "Query response: ${RESP2:0:200}"
-            RELEASE_ID=$(echo "$RESP2" | parse_id)
+            echo "Query response: ${RESP2:0:300}"
+            RELEASE_ID=$(echo "$RESP2" | jq -r '.id // empty' 2>/dev/null || true)
           fi
 
           echo "Gitee Release ID: $RELEASE_ID"
