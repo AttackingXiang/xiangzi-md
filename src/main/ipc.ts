@@ -1,6 +1,6 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { promises as fs } from 'fs'
-import { basename, dirname, extname, join } from 'path'
+import { basename, dirname, extname, join, relative, sep } from 'path'
 import { getSettings, setSettings } from './settings'
 
 /** 在目标目录内生成不冲突的文件名（已存在则追加 -1、-2 …） */
@@ -257,17 +257,48 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return results
   })
 
-  // 保存附件（图片）到文档同级的附件文件夹，返回相对 docDir 的 POSIX 路径
+  // 保存附件（图片），按设置的模式决定目录，返回相对 docDir 的 POSIX 路径
   ipcMain.handle(
     'attachment:save',
-    async (_e, docDir: string, fileName: string, data: Uint8Array) => {
+    async (
+      _e,
+      docDir: string,
+      docName: string,
+      vaultRoot: string | null,
+      fileName: string,
+      data: Uint8Array
+    ) => {
       const settings = await getSettings()
-      const subfolder = settings.attachmentMode === 'same' ? '' : settings.attachmentFolder
-      const targetDir = subfolder ? join(docDir, subfolder) : docDir
+      const folder = settings.attachmentFolder || 'assets'
+      const root = vaultRoot || docDir
+      const docBase = basename(docName || 'untitled', extname(docName || '')) || 'untitled'
+
+      let targetDir: string
+      switch (settings.attachmentMode) {
+        case 'same':
+          targetDir = docDir
+          break
+        case 'docSubfolder':
+          targetDir = join(docDir, folder, docBase)
+          break
+        case 'vault':
+          targetDir = root
+          break
+        case 'vaultSubfolder':
+          targetDir = join(root, folder)
+          break
+        case 'subfolder':
+        default:
+          targetDir = join(docDir, folder)
+      }
+
       await fs.mkdir(targetDir, { recursive: true })
       const unique = await uniqueName(targetDir, fileName || 'image.png')
-      await fs.writeFile(join(targetDir, unique), Buffer.from(data))
-      const relPath = subfolder ? `${subfolder}/${unique}` : unique
+      const fullPath = join(targetDir, unique)
+      await fs.writeFile(fullPath, Buffer.from(data))
+
+      // 转成相对文档目录的 POSIX 路径写入 Markdown（如 assets/x.png 或 ../assets/x.png）
+      const relPath = relative(docDir, fullPath).split(sep).join('/')
       return { relPath }
     }
   )
