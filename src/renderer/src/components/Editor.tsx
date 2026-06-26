@@ -9,6 +9,7 @@ import { setupTableResize } from '../lib/tableResize'
 import { headingShortcutKeymap } from '../lib/headingKeymap'
 import { focusPlugin } from '../lib/focusPlugin'
 import { searchPlugin } from '../lib/searchPlugin'
+import { headingFoldPlugin } from '../lib/headingFold'
 import { editorBridge } from '../lib/editorBridge'
 import { renderMermaid } from '../lib/mermaidPreview'
 import { t } from '../lib/i18n'
@@ -132,6 +133,7 @@ export default function Editor({
     crepe.editor.use(headingShortcutKeymap)
     crepe.editor.use(focusPlugin)
     crepe.editor.use(searchPlugin)
+    crepe.editor.use(headingFoldPlugin)
 
     crepe.on((listener) => {
       listener.markdownUpdated((_ctx, markdown) => {

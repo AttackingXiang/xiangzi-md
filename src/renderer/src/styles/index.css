@@ -1589,6 +1589,44 @@ kbd {
   }
 }
 
+/* ── Heading fold ─────────────────────────────────────────────────────────── */
+.fold-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 9px;
+  color: var(--text-muted);
+  user-select: none;
+  vertical-align: middle;
+  transition: color 0.15s, background 0.15s;
+}
+.fold-btn::before { content: '▼' }
+.fold-btn.is-folded::before { content: '▶' }
+.fold-btn:hover { color: var(--accent); background: var(--bg-hover) }
+
+/* Completely hide folded content — decoration adds this class */
+.heading-fold-hidden { display: none !important }
+
+/* ── Outline drag ─────────────────────────────────────────────────────────── */
+.outline-drag-handle {
+  display: inline-block;
+  margin-right: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 0.15s;
+}
+.outline-item:hover .outline-drag-handle { opacity: 1 }
+.outline-item.drop-target {
+  border-top: 2px solid var(--accent);
+}
+
 /* 滚动条更轻量 */
 ::-webkit-scrollbar {
   width: 10px;

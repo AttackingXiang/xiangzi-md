@@ -89,6 +89,16 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
+  // Before close: ask renderer if there are unsaved files.
+  // The renderer handles window.confirm() synchronously; if user cancels, we prevent close.
+  let quitConfirmed = false
+  ipcMain.once('app:quit-ok', () => { quitConfirmed = true; mainWindow?.close() })
+  mainWindow.on('close', (event) => {
+    if (quitConfirmed) return
+    event.preventDefault()
+    mainWindow?.webContents.send('menu:action', 'query-dirty')
+  })
+
   // 诊断：把渲染层的报错冒泡到主进程日志
   mainWindow.webContents.on('console-message', (_e, level, message) => {
     if (level >= 2) console.log('[renderer]', message)
