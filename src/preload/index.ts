@@ -105,7 +105,17 @@ const api = {
     const listener = (_e: unknown, action: string): void => callback(action)
     ipcRenderer.on('menu:action', listener)
     return () => ipcRenderer.removeListener('menu:action', listener)
-  }
+  },
+
+  /** 监听系统「打开方式 / 双击」传入的文件路径；返回取消监听函数 */
+  onOpenPath: (callback: (path: string) => void): (() => void) => {
+    const listener = (_e: unknown, path: string): void => callback(path)
+    ipcRenderer.on('app:open-path', listener)
+    return () => ipcRenderer.removeListener('app:open-path', listener)
+  },
+
+  /** 渲染层就绪，通知主进程可以发送待打开的文件 */
+  notifyReady: (): void => ipcRenderer.send('app:ready')
 }
 
 contextBridge.exposeInMainWorld('api', api)
