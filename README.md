@@ -6,7 +6,8 @@
 
 ## 下载
 
-前往 **[Releases 页面](https://github.com/AttackingXiang/xiangzi-md/releases/latest)** 下载：
+- **GitHub**（国际）：[Releases 页面](https://github.com/AttackingXiang/xiangzi-md/releases/latest)
+- **Gitee**（国内镜像）：[发行版页面](https://gitee.com/tlqgyx/xiangzi-md/releases)
 
 | 平台 | 文件 | 说明 |
 | --- | --- | --- |
@@ -53,7 +54,7 @@ The installers are not code-signed yet, so the OS shows a warning on first launc
 
 </details>
 
-> 维护者发布新版本：`git tag v0.1.4 && git push origin v0.1.4`，GitHub Actions 会自动在 macOS / Windows 构建安装包并**自动发布**到 Releases（无需手动操作）。
+> 维护者发布新版本：`git tag v0.x.x && git push origin --tags`，GitHub Actions 会自动在 macOS / Windows 构建安装包并发布到 GitHub Releases，同时同步安装包到 Gitee 发行版（无需手动操作）。
 
 ## 功能
 
