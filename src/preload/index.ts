@@ -14,6 +14,7 @@ export interface AppSettings {
   theme: 'system' | 'light' | 'dark'
   editorWidth: 'normal' | 'wide' | 'full'
   customCssPath: string
+  headingNumber: boolean
   autoSave: boolean
   recentFiles: string[]
   recentFolders: string[]

@@ -24,6 +24,8 @@ export interface AppSettings {
   editorWidth: 'normal' | 'wide' | 'full'
   /** 自定义主题 CSS 文件路径 */
   customCssPath: string
+  /** 标题自动编号 */
+  headingNumber: boolean
   /** 自动保存 */
   autoSave: boolean
   /** 最近打开的文件 */

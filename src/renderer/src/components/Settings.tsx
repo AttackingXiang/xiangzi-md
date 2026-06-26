@@ -54,6 +54,15 @@ export default function Settings({
             </label>
 
             <label className="settings-row">
+              <span className="settings-label">标题自动编号</span>
+              <input
+                type="checkbox"
+                checked={settings.headingNumber}
+                onChange={(e) => onChange({ headingNumber: e.target.checked })}
+              />
+            </label>
+
+            <label className="settings-row">
               <span className="settings-label">自动保存</span>
               <input
                 type="checkbox"
