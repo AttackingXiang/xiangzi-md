@@ -89,6 +89,21 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     }
   })
 
+  // 按路径打开文件夹（用于最近/收藏，无需弹窗）
+  ipcMain.handle('fs:openFolderPath', async (_e, root: string) => {
+    try {
+      const stat = await fs.stat(root)
+      if (!stat.isDirectory()) return null
+    } catch {
+      return null
+    }
+    return {
+      root,
+      name: basename(root),
+      tree: await readDirTree(root)
+    }
+  })
+
   // 打开单个文件 -> 返回路径与内容
   ipcMain.handle('fs:openFile', async () => {
     const win = getWindow()
@@ -181,4 +196,41 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   // 设置读写
   ipcMain.handle('settings:get', () => getSettings())
   ipcMain.handle('settings:set', (_e, patch) => setSettings(patch))
+
+  // 页内查找（原生 findInPage）
+  ipcMain.handle('find:start', (_e, text: string, forward: boolean, findNext: boolean) => {
+    const win = getWindow()
+    if (!win || !text) return
+    win.webContents.findInPage(text, { forward, findNext })
+  })
+  ipcMain.handle('find:stop', () => {
+    getWindow()?.webContents.stopFindInPage('clearSelection')
+  })
+
+  // 导出为 PDF
+  ipcMain.handle('export:pdf', async (_e, suggestedName: string) => {
+    const win = getWindow()
+    if (!win) return null
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: suggestedName.replace(/\.md$/i, '') + '.pdf',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    const data = await win.webContents.printToPDF({ printBackground: true })
+    await fs.writeFile(result.filePath, data)
+    return { path: result.filePath }
+  })
+
+  // 导出为 HTML
+  ipcMain.handle('export:html', async (_e, html: string, suggestedName: string) => {
+    const win = getWindow()
+    if (!win) return null
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: suggestedName.replace(/\.md$/i, '') + '.html',
+      filters: [{ name: 'HTML', extensions: ['html'] }]
+    })
+    if (result.canceled || !result.filePath) return null
+    await fs.writeFile(result.filePath, html, 'utf-8')
+    return { path: result.filePath }
+  })
 }

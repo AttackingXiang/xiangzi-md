@@ -1,3 +1,4 @@
+import { X } from 'lucide-react'
 import type { AppSettings } from '../types'
 
 interface Props {
@@ -6,19 +7,43 @@ interface Props {
   onClose: () => void
 }
 
-/** 设置面板：附件存储方式、图片尺寸 */
+/** 设置面板：外观、附件存储方式、图片尺寸 */
 export default function Settings({ settings, onChange, onClose }: Props): JSX.Element {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <span>设置</span>
-          <button className="icon-btn" onClick={onClose}>
-            ×
+          <button className="icon-btn sm" onClick={onClose}>
+            <X size={16} />
           </button>
         </div>
 
         <div className="modal-body">
+          <section className="settings-group">
+            <h3>外观</h3>
+            <label className="settings-row">
+              <span className="settings-label">主题</span>
+              <select
+                value={settings.theme}
+                onChange={(e) => onChange({ theme: e.target.value as AppSettings['theme'] })}
+              >
+                <option value="system">跟随系统</option>
+                <option value="light">浅色</option>
+                <option value="dark">深色</option>
+              </select>
+            </label>
+            <label className="settings-row">
+              <span className="settings-label">自动保存</span>
+              <input
+                type="checkbox"
+                checked={settings.autoSave}
+                onChange={(e) => onChange({ autoSave: e.target.checked })}
+              />
+            </label>
+            <p className="settings-hint">开启后，已保存过的文档在停止输入约 1 秒后自动写回磁盘。</p>
+          </section>
+
           <section className="settings-group">
             <h3>图片与附件</h3>
 

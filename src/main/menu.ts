@@ -14,15 +14,19 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
           {
             label: app.name,
             submenu: [
-              { role: 'about' as const },
+              { role: 'about' as const, label: '关于 Xiangzi MD' },
               { type: 'separator' as const },
-              { role: 'services' as const },
+              {
+                label: '设置…',
+                accelerator: 'CmdOrCtrl+,',
+                click: () => send(getWindow(), 'open-settings')
+              },
               { type: 'separator' as const },
-              { role: 'hide' as const },
-              { role: 'hideOthers' as const },
-              { role: 'unhide' as const },
+              { role: 'hide' as const, label: '隐藏' },
+              { role: 'hideOthers' as const, label: '隐藏其他' },
+              { role: 'unhide' as const, label: '全部显示' },
               { type: 'separator' as const },
-              { role: 'quit' as const }
+              { role: 'quit' as const, label: '退出' }
             ]
           }
         ]
@@ -30,35 +34,36 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
     {
       label: '文件',
       submenu: [
-        {
-          label: '新建文件',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => send(getWindow(), 'new-file')
-        },
+        { label: '新建文件', accelerator: 'CmdOrCtrl+N', click: () => send(getWindow(), 'new-file') },
         { type: 'separator' },
-        {
-          label: '打开文件…',
-          accelerator: 'CmdOrCtrl+O',
-          click: () => send(getWindow(), 'open-file')
-        },
+        { label: '打开文件…', accelerator: 'CmdOrCtrl+O', click: () => send(getWindow(), 'open-file') },
         {
           label: '打开文件夹…',
           accelerator: 'CmdOrCtrl+Shift+O',
           click: () => send(getWindow(), 'open-folder')
         },
         { type: 'separator' },
-        {
-          label: '保存',
-          accelerator: 'CmdOrCtrl+S',
-          click: () => send(getWindow(), 'save')
-        },
+        { label: '保存', accelerator: 'CmdOrCtrl+S', click: () => send(getWindow(), 'save') },
         {
           label: '另存为…',
           accelerator: 'CmdOrCtrl+Shift+S',
           click: () => send(getWindow(), 'save-as')
         },
         { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' }
+        {
+          label: '导出',
+          submenu: [
+            { label: '导出 PDF…', click: () => send(getWindow(), 'export-pdf') },
+            { label: '导出 HTML…', click: () => send(getWindow(), 'export-html') }
+          ]
+        },
+        { type: 'separator' },
+        {
+          label: '关闭标签页',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => send(getWindow(), 'close-tab')
+        },
+        ...(isMac ? [] : [{ role: 'quit' as const, label: '退出' }])
       ]
     },
     {
@@ -70,7 +75,9 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
         { role: 'cut', label: '剪切' },
         { role: 'copy', label: '复制' },
         { role: 'paste', label: '粘贴' },
-        { role: 'selectAll', label: '全选' }
+        { role: 'selectAll', label: '全选' },
+        { type: 'separator' },
+        { label: '查找', accelerator: 'CmdOrCtrl+F', click: () => send(getWindow(), 'find') }
       ]
     },
     {
@@ -78,8 +85,13 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
       submenu: [
         {
           label: '切换侧边栏',
-          accelerator: 'CmdOrCtrl+B',
+          accelerator: 'CmdOrCtrl+\\',
           click: () => send(getWindow(), 'toggle-sidebar')
+        },
+        {
+          label: '大纲',
+          accelerator: 'CmdOrCtrl+Shift+K',
+          click: () => send(getWindow(), 'toggle-outline')
         },
         {
           label: '切换源码模式',

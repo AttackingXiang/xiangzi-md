@@ -9,12 +9,27 @@ export interface AppSettings {
   attachmentFolder: string
   /** 图片最大显示宽度（像素），0 表示不限制 */
   imageMaxWidth: number
+  /** 主题 */
+  theme: 'system' | 'light' | 'dark'
+  /** 自动保存 */
+  autoSave: boolean
+  /** 最近打开的文件（绝对路径，最新在前） */
+  recentFiles: string[]
+  /** 最近打开的文件夹 */
+  recentFolders: string[]
+  /** 收藏（置顶）的常用目录 */
+  favorites: string[]
 }
 
 const DEFAULTS: AppSettings = {
   attachmentMode: 'subfolder',
   attachmentFolder: 'assets',
-  imageMaxWidth: 800
+  imageMaxWidth: 800,
+  theme: 'system',
+  autoSave: false,
+  recentFiles: [],
+  recentFolders: [],
+  favorites: []
 }
 
 function settingsFile(): string {
@@ -25,18 +40,21 @@ let cache: AppSettings | null = null
 
 export async function getSettings(): Promise<AppSettings> {
   if (cache) return cache
+  let loaded: AppSettings
   try {
     const raw = await fs.readFile(settingsFile(), 'utf-8')
-    cache = { ...DEFAULTS, ...JSON.parse(raw) }
+    loaded = { ...DEFAULTS, ...JSON.parse(raw) }
   } catch {
-    cache = { ...DEFAULTS }
+    loaded = { ...DEFAULTS }
   }
-  return cache
+  cache = loaded
+  return loaded
 }
 
 export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings()
-  cache = { ...current, ...patch }
-  await fs.writeFile(settingsFile(), JSON.stringify(cache, null, 2), 'utf-8')
-  return cache
+  const next: AppSettings = { ...current, ...patch }
+  cache = next
+  await fs.writeFile(settingsFile(), JSON.stringify(next, null, 2), 'utf-8')
+  return next
 }

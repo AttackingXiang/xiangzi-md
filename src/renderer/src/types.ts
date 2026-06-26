@@ -18,6 +18,23 @@ export interface AppSettings {
   attachmentFolder: string
   /** 图片最大显示宽度（像素），0 表示不限制 */
   imageMaxWidth: number
+  /** 主题 */
+  theme: 'system' | 'light' | 'dark'
+  /** 自动保存 */
+  autoSave: boolean
+  /** 最近打开的文件 */
+  recentFiles: string[]
+  /** 最近打开的文件夹 */
+  recentFolders: string[]
+  /** 收藏的常用目录 */
+  favorites: string[]
+}
+
+export interface OutlineItem {
+  level: number
+  text: string
+  /** 第几个标题（用于在 DOM 中定位） */
+  index: number
 }
 
 export interface Tab {
