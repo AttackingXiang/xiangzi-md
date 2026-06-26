@@ -16,6 +16,7 @@ import SearchPanel from './components/SearchPanel'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
 import { setLang, getLang, t } from './lib/i18n'
+import { baseName, dirName } from './lib/path'
 import {
   Bold,
   Italic,
@@ -38,18 +39,6 @@ import type { AppSettings, FileNode, Folder, Tab } from './types'
 
 let tabSeq = 0
 const newTabId = (): string => `tab-${Date.now()}-${tabSeq++}`
-
-function dirOf(path: string | null): string | null {
-  if (!path) return null
-  const i = path.lastIndexOf('/')
-  if (i < 0) return null
-  return i === 0 ? '/' : path.slice(0, i)
-}
-
-function baseName(path: string): string {
-  const i = path.lastIndexOf('/')
-  return i < 0 ? path : path.slice(i + 1)
-}
 
 const DEFAULT_SETTINGS: AppSettings = {
   attachmentMode: 'subfolder',
@@ -119,7 +108,7 @@ export default function App(): JSX.Element {
   setLang(settings.language)
 
   const activeTab = tabs.find((tab) => tab.id === activeId) ?? null
-  const activeDocDir = activeTab ? (dirOf(activeTab.path) ?? folder?.root ?? null) : null
+  const activeDocDir = activeTab ? (dirName(activeTab.path) ?? folder?.root ?? null) : null
   const outline = useMemo(
     () => (activeTab ? parseOutline(activeTab.content) : []),
     [activeTab?.content]
