@@ -480,6 +480,32 @@ ${liveStyles}
     if (res) window.alert((getLang() === 'en' ? 'Exported image:\n' : '已导出图片：\n') + res.path)
   }, [generateExportHTML])
 
+  // ── File tree move (drag-and-drop) ────────────────────────────────────────
+  const moveTreeItem = useCallback(async (sourcePath: string, targetDirPath: string) => {
+    try {
+      const res = await window.api.moveItem(sourcePath, targetDirPath)
+      // Update any open tabs whose path was inside the moved item
+      setTabs((prev) =>
+        prev.map((tab) => {
+          if (!tab.path) return tab
+          if (tab.path === sourcePath) {
+            return { ...tab, path: res.path, name: res.name }
+          }
+          // Folder move: update all tabs inside the moved folder
+          const sep = sourcePath.endsWith('/') ? '' : '/'
+          if (tab.path.startsWith(sourcePath + sep)) {
+            const newPath = res.path + tab.path.slice(sourcePath.length)
+            return { ...tab, path: newPath, name: baseName(newPath) ?? tab.name }
+          }
+          return tab
+        })
+      )
+      await refreshTree()
+    } catch (err) {
+      window.alert((getLang() === 'en' ? 'Move failed:\n' : '移动失败：\n') + (err as Error).message)
+    }
+  }, [refreshTree, setTabs])
+
   // ── Palette files (background scan) ───────────────────────────────────────
   const [paletteFiles, setPaletteFiles] = useState<FileEntry[]>([])
   useEffect(() => {
@@ -589,6 +615,7 @@ ${liveStyles}
             onRefresh={refreshTree}
             onNodeContext={openNodeContext}
             onRootContext={openRootContext}
+            onMove={moveTreeItem}
             reloadKey={treeKey}
             style={{ width: sidebarWidth, minWidth: sidebarWidth }}
           />
