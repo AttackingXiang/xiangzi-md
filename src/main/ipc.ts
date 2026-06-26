@@ -178,6 +178,11 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return { path: targetPath }
   })
 
+  // 在系统文件管理器中显示
+  ipcMain.handle('fs:reveal', (_e, targetPath: string) => {
+    shell.showItemInFolder(targetPath)
+  })
+
   // 保存附件（图片）到文档同级的附件文件夹，返回相对 docDir 的 POSIX 路径
   ipcMain.handle(
     'attachment:save',
@@ -192,6 +197,18 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
       return { relPath }
     }
   )
+
+  // 选择一个 CSS 文件（自定义主题）
+  ipcMain.handle('dialog:pickCss', async () => {
+    const win = getWindow()
+    if (!win) return null
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      filters: [{ name: 'CSS', extensions: ['css'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return { path: result.filePaths[0] }
+  })
 
   // 设置读写
   ipcMain.handle('settings:get', () => getSettings())

@@ -40,6 +40,20 @@ export default function Settings({
               </select>
             </label>
             <label className="settings-row">
+              <span className="settings-label">编辑区宽度</span>
+              <select
+                value={settings.editorWidth}
+                onChange={(e) =>
+                  onChange({ editorWidth: e.target.value as AppSettings['editorWidth'] })
+                }
+              >
+                <option value="normal">适中</option>
+                <option value="wide">较宽</option>
+                <option value="full">全宽</option>
+              </select>
+            </label>
+
+            <label className="settings-row">
               <span className="settings-label">自动保存</span>
               <input
                 type="checkbox"
@@ -48,6 +62,32 @@ export default function Settings({
               />
             </label>
             <p className="settings-hint">开启后，已保存过的文档在停止输入约 1 秒后自动写回磁盘。</p>
+
+            <label className="settings-row">
+              <span className="settings-label">自定义主题 CSS</span>
+              <span className="settings-inline">
+                {settings.customCssPath && (
+                  <button
+                    className="secondary-btn"
+                    onClick={() => onChange({ customCssPath: '' })}
+                  >
+                    清除
+                  </button>
+                )}
+                <button
+                  className="secondary-btn"
+                  onClick={async () => {
+                    const res = await window.api.pickCss()
+                    if (res) onChange({ customCssPath: res.path })
+                  }}
+                >
+                  {settings.customCssPath ? '更换…' : '选择…'}
+                </button>
+              </span>
+            </label>
+            {settings.customCssPath && (
+              <p className="settings-hint settings-path">{settings.customCssPath}</p>
+            )}
           </section>
 
           <section className="settings-group">

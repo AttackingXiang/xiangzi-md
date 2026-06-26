@@ -20,6 +20,10 @@ export interface AppSettings {
   imageMaxWidth: number
   /** 主题 */
   theme: 'system' | 'light' | 'dark'
+  /** 编辑区显示宽度 */
+  editorWidth: 'normal' | 'wide' | 'full'
+  /** 自定义主题 CSS 文件路径 */
+  customCssPath: string
   /** 自动保存 */
   autoSave: boolean
   /** 最近打开的文件 */

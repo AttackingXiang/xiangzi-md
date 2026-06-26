@@ -395,7 +395,7 @@ button {
   border: none;
   outline: none;
   resize: none;
-  padding: 40px max(40px, calc((100% - 760px) / 2));
+  padding: 40px max(40px, calc((100% - var(--editor-max-width, 820px)) / 2));
   font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
   font-size: 14px;
   line-height: 1.75;
@@ -826,11 +826,27 @@ kbd {
   color: var(--text-muted);
 }
 
+.settings-path {
+  word-break: break-all;
+  margin-top: 6px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
 /* ---------- Milkdown 排版 ---------- */
 .milkdown {
-  max-width: 820px;
+  max-width: var(--editor-max-width, 820px);
   margin: 0 auto;
   padding: 36px 28px 140px;
+}
+
+/* 专注模式：淡化非当前块 */
+.wysiwyg-editor.focus-mode .ProseMirror > * {
+  opacity: 0.3;
+  transition: opacity 0.2s ease;
+}
+
+.wysiwyg-editor.focus-mode .ProseMirror > .is-focused {
+  opacity: 1;
 }
 
 .milkdown img {
@@ -1014,6 +1030,78 @@ kbd {
   white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* ---------- 右键菜单 ---------- */
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+}
+
+.ctx-menu {
+  position: fixed;
+  min-width: 168px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 5px;
+  font-size: 13px;
+  user-select: none;
+}
+
+.ctx-item {
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.ctx-item:hover {
+  background: var(--bg-hover);
+}
+
+.ctx-item.danger {
+  color: #e5484d;
+}
+
+.ctx-item.danger:hover {
+  background: color-mix(in srgb, #e5484d 14%, transparent);
+}
+
+.ctx-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 5px 4px;
+}
+
+/* ---------- 输入对话框 ---------- */
+.modal-input {
+  width: 400px;
+}
+
+.input-dialog-field {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.input-dialog-field:focus {
+  border-color: var(--accent);
+}
+
+.input-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 /* ---------- 图片放大预览 ---------- */

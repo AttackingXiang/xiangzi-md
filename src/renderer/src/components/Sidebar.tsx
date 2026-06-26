@@ -1,6 +1,6 @@
 import { FolderOpen, RefreshCw, Settings as SettingsIcon, Star, Folder } from 'lucide-react'
 import FileTree from './FileTree'
-import type { Folder as FolderType } from '../types'
+import type { FileNode, Folder as FolderType } from '../types'
 
 interface Props {
   folder: FolderType | null
@@ -13,6 +13,8 @@ interface Props {
   onOpenSettings: () => void
   onToggleFavorite: (path: string) => void
   onRefresh: () => void
+  onNodeContext: (node: FileNode, x: number, y: number) => void
+  onRootContext: (x: number, y: number) => void
 }
 
 function baseName(p: string): string {
@@ -29,7 +31,9 @@ export default function Sidebar({
   onOpenFile,
   onOpenSettings,
   onToggleFavorite,
-  onRefresh
+  onRefresh,
+  onNodeContext,
+  onRootContext
 }: Props): JSX.Element {
   const isFav = folder ? favorites.includes(folder.root) : false
 
@@ -78,9 +82,24 @@ export default function Sidebar({
         </div>
       )}
 
-      <div className="sidebar-body">
+      <div
+        className="sidebar-body"
+        onContextMenu={(e) => {
+          // 仅当点击在空白处（非节点）时弹出根目录菜单
+          if (folder && e.target === e.currentTarget) {
+            e.preventDefault()
+            onRootContext(e.clientX, e.clientY)
+          }
+        }}
+      >
         {folder ? (
-          <FileTree nodes={folder.tree} activePath={activePath} onOpenFile={onOpenFile} depth={0} />
+          <FileTree
+            nodes={folder.tree}
+            activePath={activePath}
+            onOpenFile={onOpenFile}
+            onNodeContext={onNodeContext}
+            depth={0}
+          />
         ) : (
           <div className="sidebar-empty">
             <p>尚未打开文件夹</p>
