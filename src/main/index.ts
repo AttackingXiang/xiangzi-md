@@ -1,7 +1,8 @@
-import { app, shell, BrowserWindow, session } from 'electron'
+import { app, shell, BrowserWindow, session, ipcMain } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { buildMenu } from './menu'
+import { getSettings } from './settings'
 import { registerXmdPrivileges, handleXmdProtocol } from './protocol'
 
 let mainWindow: BrowserWindow | null = null
@@ -91,7 +92,14 @@ app.whenReady().then(() => {
 
   registerIpcHandlers(() => mainWindow)
   createWindow()
-  buildMenu(() => mainWindow)
+
+  // 按已保存的语言构建本地化菜单
+  getSettings().then((s) => buildMenu(() => mainWindow, s.language))
+
+  // 语言切换时重建菜单
+  ipcMain.handle('app:setLanguage', (_e, lang: 'zh' | 'en') => {
+    buildMenu(() => mainWindow, lang)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

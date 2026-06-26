@@ -1,4 +1,5 @@
 import type { Tab } from '../types'
+import { t } from '../lib/i18n'
 
 interface Props {
   tab: Tab | null
@@ -15,15 +16,19 @@ function countWords(text: string): number {
 export default function StatusBar({ tab, sourceMode, autoSave }: Props): JSX.Element {
   return (
     <div className="statusbar">
-      <span className="status-left">{tab ? (tab.path ?? '未保存') : '就绪'}</span>
+      <span className="status-left">{tab ? (tab.path ?? t('未保存')) : t('就绪')}</span>
       <span className="status-right">
         {tab && (
           <>
-            <span>{countWords(tab.content)} 字</span>
-            <span>{tab.content.length} 字符</span>
-            <span>{sourceMode ? '源码' : '所见即所得'}</span>
-            {autoSave && <span>自动保存</span>}
-            {tab.dirty && <span className="status-dirty">●&nbsp;未保存</span>}
+            <span>
+              {countWords(tab.content)} {t('字')}
+            </span>
+            <span>
+              {tab.content.length} {t('字符')}
+            </span>
+            <span>{sourceMode ? t('源码') : t('所见即所得')}</span>
+            {autoSave && <span>{t('自动保存')}</span>}
+            {tab.dirty && <span className="status-dirty">●&nbsp;{t('未保存')}</span>}
           </>
         )}
       </span>

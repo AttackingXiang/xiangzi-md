@@ -18,6 +18,8 @@ export interface AppSettings {
   attachmentFolder: string
   /** 图片最大显示宽度（像素），0 表示不限制 */
   imageMaxWidth: number
+  /** 界面语言 */
+  language: 'zh' | 'en'
   /** 主题 */
   theme: 'system' | 'light' | 'dark'
   /** 编辑区显示宽度 */

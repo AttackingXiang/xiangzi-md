@@ -11,6 +11,7 @@ import { focusPlugin } from '../lib/focusPlugin'
 import { searchPlugin } from '../lib/searchPlugin'
 import { editorBridge } from '../lib/editorBridge'
 import { renderMermaid } from '../lib/mermaidPreview'
+import { t } from '../lib/i18n'
 
 interface Props {
   content: string
@@ -52,7 +53,7 @@ export default function Editor({
     const upload = async (file: File): Promise<string> => {
       const dir = docDirRef.current
       if (!dir) {
-        window.alert('请先保存文档，再插入本地图片。')
+        window.alert(t('请先保存文档，再插入本地图片。'))
         return ''
       }
       const buf = new Uint8Array(await file.arrayBuffer())
@@ -70,6 +71,33 @@ export default function Editor({
           blockOnUpload: upload,
           inlineOnUpload: upload,
           ...(imageMaxWidth > 0 ? { maxWidth: imageMaxWidth } : {})
+        },
+        [CrepeFeature.BlockEdit]: {
+          textGroup: {
+            label: t('文本'),
+            text: { label: t('正文') },
+            h1: { label: t('标题1') },
+            h2: { label: t('标题2') },
+            h3: { label: t('标题3') },
+            h4: { label: t('标题4') },
+            h5: { label: t('标题5') },
+            h6: { label: t('标题6') },
+            quote: { label: t('引用') },
+            divider: { label: t('分割线') }
+          },
+          listGroup: {
+            label: t('列表'),
+            bulletList: { label: t('无序列表') },
+            orderedList: { label: t('有序列表') },
+            taskList: { label: t('任务列表') }
+          },
+          advancedGroup: {
+            label: t('高级'),
+            image: { label: t('图片') },
+            codeBlock: { label: t('代码块') },
+            table: { label: t('表格') },
+            math: { label: t('公式') }
+          }
         },
         [CrepeFeature.CodeMirror]: {
           theme: codeMirrorTheme(theme),

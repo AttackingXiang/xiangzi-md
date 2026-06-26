@@ -1,4 +1,5 @@
 import { FilePlus2, FolderOpen, FileText, Clock, Folder } from 'lucide-react'
+import { t } from '../lib/i18n'
 
 interface Props {
   recentFiles: string[]
@@ -36,22 +37,22 @@ export default function Welcome({
           <div className="welcome-logo">M</div>
           <div>
             <h1>Xiangzi MD</h1>
-            <p className="welcome-sub">所见即所得的 Markdown 编辑器</p>
+            <p className="welcome-sub">{t('所见即所得的 Markdown 编辑器')}</p>
           </div>
         </div>
 
         <div className="welcome-actions">
           <button className="action-card" onClick={onNewFile}>
             <FilePlus2 size={18} />
-            <span>新建文件</span>
+            <span>{t('新建文件')}</span>
           </button>
           <button className="action-card" onClick={onOpenFile}>
             <FileText size={18} />
-            <span>打开文件</span>
+            <span>{t('打开文件')}</span>
           </button>
           <button className="action-card" onClick={onOpenFolder}>
             <FolderOpen size={18} />
-            <span>打开文件夹</span>
+            <span>{t('打开文件夹')}</span>
           </button>
         </div>
 
@@ -59,7 +60,7 @@ export default function Welcome({
           {recentFiles.length > 0 && (
             <div className="recent-col">
               <div className="recent-title">
-                <Clock size={14} /> 最近文件
+                <Clock size={14} /> {t('最近文件')}
               </div>
               {recentFiles.slice(0, 8).map((p) => (
                 <div key={p} className="recent-item" title={p} onClick={() => onOpenRecentFile(p)}>
@@ -74,7 +75,7 @@ export default function Welcome({
           {recentFolders.length > 0 && (
             <div className="recent-col">
               <div className="recent-title">
-                <Folder size={14} /> 最近文件夹
+                <Folder size={14} /> {t('最近文件夹')}
               </div>
               {recentFolders.slice(0, 8).map((p) => (
                 <div key={p} className="recent-item" title={p} onClick={() => onOpenRecentFolder(p)}>

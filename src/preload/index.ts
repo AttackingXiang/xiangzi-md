@@ -11,6 +11,7 @@ export interface AppSettings {
   attachmentMode: 'subfolder' | 'same'
   attachmentFolder: string
   imageMaxWidth: number
+  language: 'zh' | 'en'
   theme: 'system' | 'light' | 'dark'
   editorWidth: 'normal' | 'wide' | 'full'
   customCssPath: string
@@ -91,6 +92,8 @@ const api = {
     ipcRenderer.invoke('export:html', html, suggestedName),
 
   pickCss: (): Promise<{ path: string } | null> => ipcRenderer.invoke('dialog:pickCss'),
+
+  setLanguage: (lang: 'zh' | 'en'): Promise<void> => ipcRenderer.invoke('app:setLanguage', lang),
 
   /** 监听来自原生菜单的动作；返回取消监听函数 */
   onMenuAction: (callback: (action: string) => void): (() => void) => {
