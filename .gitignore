@@ -5,3 +5,4 @@ dist/
 *.log
 .DS_Store
 .vite/
+使用详情.md
