@@ -57,7 +57,7 @@ export default function Outline({ items, onSelect, onReorder, onClose, width }: 
             <div
               key={it.index}
               className={`outline-item${dropTarget === i ? ' drop-target' : ''}`}
-              style={{ paddingLeft: `${(it.level - 1) * 10 + 8}px` }}
+              style={{ paddingLeft: `${(it.level - 1) * 10 + 4}px` }}
               draggable
               onDragStart={(e) => handleDragStart(e, i)}
               onDragOver={(e) => handleDragOver(e, i)}

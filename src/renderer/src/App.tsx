@@ -325,29 +325,16 @@ export default function App(): JSX.Element {
   }, [])
 
   // ── Export ────────────────────────────────────────────────────────────────
-  const exportPDF = useCallback(async () => {
-    const { activeId: id } = stateRef.current
-    if (!id) return
-    const tab = stateRef.current.tabs.find((t) => t.id === id)
-    const res = await window.api.exportPDF(tab?.name ?? 'document')
-    if (res) window.alert((getLang() === 'en' ? 'Exported PDF:\n' : '已导出 PDF：\n') + res.path)
-  }, [])
-
-  const exportHTML = useCallback(async () => {
-    const { activeId: id } = stateRef.current
-    if (!id) return
-    const tab = stateRef.current.tabs.find((t) => t.id === id)
+  /** Build a self-contained HTML string from the current editor DOM */
+  const generateExportHTML = useCallback(async (title: string): Promise<string | null> => {
     const el = document.querySelector('.milkdown')
-    if (!el) return
-
-    // Inline all xmd:// images as base64 so the HTML is self-contained
+    if (!el) return null
     const clone = el.cloneNode(true) as HTMLElement
     const imgs = Array.from(clone.querySelectorAll('img[src]')) as HTMLImageElement[]
     await Promise.all(
       imgs.map(async (img) => {
         const src = img.getAttribute('src') ?? ''
         if (!src.startsWith('xmd://')) return
-        // Load via fetch (xmd:// is registered as a privileged protocol)
         try {
           const res = await fetch(src)
           const blob = await res.blob()
@@ -357,25 +344,42 @@ export default function App(): JSX.Element {
             reader.readAsDataURL(blob)
           })
           img.setAttribute('src', b64)
-        } catch {
-          /* leave original src if fetch fails */
-        }
+        } catch { /* leave original src */ }
       })
     )
-
-    const html = `<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8" /><title>${tab?.name ?? 'document'}</title>
+    return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8" /><title>${title}</title>
 <style>
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;line-height:1.7;color:#2c2c2c;max-width:780px;margin:40px auto;padding:0 20px}
+  *{scrollbar-width:none}*::-webkit-scrollbar{display:none}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;line-height:1.7;color:#2c2c2c;max-width:780px;margin:40px auto;padding:0 20px;background:#fff}
   pre{background:#f5f5f5;padding:14px;border-radius:8px;overflow:auto}
-  code{font-family:'SF Mono',Menlo,monospace}
+  code{font-family:'SF Mono',Menlo,monospace;font-size:.92em}
   img{max-width:100%}
   blockquote{border-left:3px solid #ddd;margin:0;padding-left:16px;color:#666}
   table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}
+  h1,h2,h3,h4,h5,h6{line-height:1.3}
 </style></head><body><article>${clone.innerHTML}</article></body></html>`
-    const res = await window.api.exportHTML(html, tab?.name ?? 'document')
-    if (res) window.alert((getLang() === 'en' ? 'Exported HTML:\n' : '已导出 HTML：\n') + res.path)
   }, [])
+
+  const exportPDF = useCallback(async () => {
+    const { activeId: id } = stateRef.current
+    if (!id) return
+    const tab = stateRef.current.tabs.find((t) => t.id === id)
+    const html = await generateExportHTML(tab?.name ?? 'document')
+    if (!html) return
+    const res = await window.api.exportPDF(html, tab?.name ?? 'document')
+    if (res) window.alert((getLang() === 'en' ? 'Exported PDF:\n' : '已导出 PDF：\n') + res.path)
+  }, [generateExportHTML])
+
+  const exportImage = useCallback(async () => {
+    const { activeId: id } = stateRef.current
+    if (!id) return
+    const tab = stateRef.current.tabs.find((t) => t.id === id)
+    const html = await generateExportHTML(tab?.name ?? 'document')
+    if (!html) return
+    const res = await window.api.exportImage(html, tab?.name ?? 'document')
+    if (res) window.alert((getLang() === 'en' ? 'Exported image:\n' : '已导出图片：\n') + res.path)
+  }, [generateExportHTML])
 
   // ── Palette files (background scan) ───────────────────────────────────────
   const [paletteFiles, setPaletteFiles] = useState<FileEntry[]>([])
@@ -401,12 +405,12 @@ export default function App(): JSX.Element {
       { id: 'focus', label: t('专注模式'), run: () => setFocusMode((v) => !v) },
       { id: 'typewriter', label: t('打字机模式'), run: () => setTypewriterMode((v) => !v) },
       { id: 'export-pdf', label: t('导出 PDF'), run: exportPDF },
-      { id: 'export-html', label: t('导出 HTML'), run: exportHTML },
+      { id: 'export-image', label: t('导出图片'), run: exportImage },
       { id: 'settings', label: t('设置'), run: () => setShowSettings(true) },
       { id: 'shortcuts', label: t('快捷键'), run: () => setShowShortcuts(true) }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportPDF, exportHTML, lang]
+    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportPDF, exportImage, lang]
   )
 
   // ── Auto-save ─────────────────────────────────────────────────────────────
@@ -439,7 +443,7 @@ export default function App(): JSX.Element {
         case 'show-shortcuts': setShowShortcuts(true); break
         case 'command-palette': setShowPalette(true); break
         case 'export-pdf': exportPDF(); break
-        case 'export-html': exportHTML(); break
+        case 'export-image': exportImage(); break
         case 'query-dirty': {
           const dirty = hasDirtyTabs()
           const proceed =
@@ -454,7 +458,7 @@ export default function App(): JSX.Element {
         }
       }
     })
-  }, [newFile, openFile, openFolder, saveTab, saveAsTab, closeTab, exportPDF, exportHTML, hasDirtyTabs])
+  }, [newFile, openFile, openFolder, saveTab, saveAsTab, closeTab, exportPDF, exportImage, hasDirtyTabs])
 
   // Don't render until settings are loaded (avoids flash of wrong theme/width)
   if (!settings) return <div className="app" />
