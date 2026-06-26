@@ -5,6 +5,7 @@ import { registerIpcHandlers } from './ipc'
 import { buildMenu } from './menu'
 import { getSettings } from './settings'
 import { registerXmdPrivileges, handleXmdProtocol } from './protocol'
+import { checkForUpdates } from './updater'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -172,6 +173,11 @@ app.whenReady().then(() => {
 
   // 按已保存的语言构建本地化菜单
   getSettings().then((s) => buildMenu(() => mainWindow, s.language))
+
+  // 启动后 4 秒静默检查更新（仅生产环境）
+  if (!process.env['ELECTRON_RENDERER_URL']) {
+    setTimeout(() => checkForUpdates(true), 4000)
+  }
 
   // 语言切换时重建菜单
   ipcMain.handle('app:setLanguage', (_e, lang: 'zh' | 'en') => {
