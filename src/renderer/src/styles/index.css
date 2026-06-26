@@ -376,6 +376,75 @@ button {
   border-color: var(--accent);
 }
 
+.find-input:disabled {
+  opacity: 0.6;
+}
+
+.findbar-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.findbar-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.text-btn {
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 7px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.text-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.text-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* prosemirror-search 匹配高亮 */
+.ProseMirror-search-match {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 2px;
+}
+
+.ProseMirror-active-search-match {
+  background: color-mix(in srgb, var(--accent) 48%, transparent);
+  border-radius: 2px;
+}
+
+/* Mermaid 图表预览 */
+.mermaid-preview {
+  display: flex;
+  justify-content: center;
+  padding: 12px 4px;
+  overflow-x: auto;
+}
+
+.mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  color: #e5484d;
+  font-size: 13px;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
 /* ---------- 编辑区 ---------- */
 .editor-area {
   flex: 1;
