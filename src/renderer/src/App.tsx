@@ -407,6 +407,53 @@ export default function App(): JSX.Element {
     })
   }, [])
 
+  const closeOthers = useCallback((id: string) => {
+    setTabs((prev) => prev.filter((tb) => tb.id === id))
+    setActiveId(id)
+  }, [])
+
+  const closeAllTabs = useCallback(() => {
+    setTabs([])
+    setActiveId(null)
+  }, [])
+
+  const closeLeft = useCallback((id: string) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((tb) => tb.id === id)
+      if (idx <= 0) return prev
+      const next = prev.slice(idx)
+      setActiveId((curr) => (next.some((tb) => tb.id === curr) ? curr : id))
+      return next
+    })
+  }, [])
+
+  const closeRight = useCallback((id: string) => {
+    setTabs((prev) => {
+      const idx = prev.findIndex((tb) => tb.id === id)
+      if (idx < 0 || idx >= prev.length - 1) return prev
+      const next = prev.slice(0, idx + 1)
+      setActiveId((curr) => (next.some((tb) => tb.id === curr) ? curr : id))
+      return next
+    })
+  }, [])
+
+  const openTabContext = useCallback(
+    (id: string, x: number, y: number) => {
+      const list = stateRef.current.tabs
+      const idx = list.findIndex((tb) => tb.id === id)
+      const items: MenuItem[] = [
+        { label: t('关闭'), onClick: () => closeTab(id) },
+        { label: t('关闭其他'), onClick: () => closeOthers(id) }
+      ]
+      if (idx > 0) items.push({ label: t('关闭左侧全部'), onClick: () => closeLeft(id) })
+      if (idx >= 0 && idx < list.length - 1)
+        items.push({ label: t('关闭右侧全部'), onClick: () => closeRight(id) })
+      items.push({ label: t('关闭全部'), onClick: closeAllTabs, separatorBefore: true })
+      setCtxMenu({ x, y, items })
+    },
+    [closeTab, closeOthers, closeLeft, closeRight, closeAllTabs]
+  )
+
   // ---- 文件树操作 ----
   const [treeKey, setTreeKey] = useState(0)
   const refreshTree = useCallback(async () => {
@@ -719,6 +766,7 @@ export default function App(): JSX.Element {
           activeId={activeId}
           onSelect={setActiveId}
           onClose={closeTab}
+          onTabContext={openTabContext}
           sourceMode={sourceMode}
           outlineVisible={outlineVisible}
           onToggleSource={() => setSourceMode((v) => !v)}
