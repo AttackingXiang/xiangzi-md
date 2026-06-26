@@ -11,11 +11,21 @@ export interface AppSettings {
   attachmentMode: 'subfolder' | 'same'
   attachmentFolder: string
   imageMaxWidth: number
+  theme: 'system' | 'light' | 'dark'
+  autoSave: boolean
+  recentFiles: string[]
+  recentFolders: string[]
+  favorites: string[]
 }
 
 const api = {
   openFolder: (): Promise<{ root: string; name: string; tree: FileNode[] } | null> =>
     ipcRenderer.invoke('fs:openFolder'),
+
+  openFolderPath: (
+    root: string
+  ): Promise<{ root: string; name: string; tree: FileNode[] } | null> =>
+    ipcRenderer.invoke('fs:openFolderPath', root),
 
   openFile: (): Promise<{ path: string; name: string; content: string } | null> =>
     ipcRenderer.invoke('fs:openFile'),
@@ -55,6 +65,17 @@ const api = {
 
   setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> =>
     ipcRenderer.invoke('settings:set', patch),
+
+  findInPage: (text: string, forward = true, findNext = false): Promise<void> =>
+    ipcRenderer.invoke('find:start', text, forward, findNext),
+
+  stopFind: (): Promise<void> => ipcRenderer.invoke('find:stop'),
+
+  exportPDF: (suggestedName: string): Promise<{ path: string } | null> =>
+    ipcRenderer.invoke('export:pdf', suggestedName),
+
+  exportHTML: (html: string, suggestedName: string): Promise<{ path: string } | null> =>
+    ipcRenderer.invoke('export:html', html, suggestedName),
 
   /** 监听来自原生菜单的动作；返回取消监听函数 */
   onMenuAction: (callback: (action: string) => void): (() => void) => {
