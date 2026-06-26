@@ -11,9 +11,10 @@
 
 | 平台 | 文件 | 说明 |
 | --- | --- | --- |
-| macOS（Intel + Apple Silicon 通用） | `Xiangzi-MD-*.dmg` | 打开后拖入「应用程序」 |
-| Windows | `Xiangzi-MD-Setup-*.exe` | 安装版（NSIS） |
-| Windows | `Xiangzi-MD-*-portable.exe` | 便携版，免安装直接运行 |
+| macOS（Apple Silicon，M1/M2/M3/M4） | `Xiangzi MD-*-arm64.dmg` | 打开后拖入「应用程序」 |
+| macOS（Intel，x86_64） | `Xiangzi MD-*-x64.dmg` | 打开后拖入「应用程序」 |
+| Windows | `Xiangzi MD Setup *.exe` | 安装版（NSIS） |
+| Windows | `Xiangzi MD-*-portable.exe` | 便携版，免安装直接运行 |
 
 ### 首次打开（绕过系统安全提示）
 
