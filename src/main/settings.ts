@@ -15,6 +15,8 @@ export interface AppSettings {
   editorWidth: 'normal' | 'wide' | 'full'
   /** 自定义主题 CSS 文件路径（空为不启用） */
   customCssPath: string
+  /** 标题自动编号（1、1.1、1.1.1…） */
+  headingNumber: boolean
   /** 自动保存 */
   autoSave: boolean
   /** 最近打开的文件（绝对路径，最新在前） */
@@ -38,6 +40,7 @@ const DEFAULTS: AppSettings = {
   theme: 'system',
   editorWidth: 'normal',
   customCssPath: '',
+  headingNumber: false,
   autoSave: false,
   recentFiles: [],
   recentFolders: [],
