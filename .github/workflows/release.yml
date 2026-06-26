@@ -16,10 +16,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            artifact: macos
+          - os: macos-latest   # Apple Silicon runner → 原生构建 arm64
+            artifact: macos-arm64
+            eb_flags: --mac --arm64
+          - os: macos-13       # Intel runner → 原生构建 x64（避免交叉编译 dmg 问题）
+            artifact: macos-x64
+            eb_flags: --mac --x64
           - os: windows-latest
             artifact: windows
+            eb_flags: --win
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -38,9 +43,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run dist -- --publish always
+        run: |
+          npm run build
+          npx electron-builder ${{ matrix.eb_flags }} --publish always
 
-      # 暂存产物供后续 Gitee 上传（macOS 产出 arm64 + x64 两个 DMG，均在 100MB 以内）
+      # 暂存产物供后续 Gitee 上传
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -58,10 +65,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download macOS artifacts
+      - name: Download macOS arm64 artifacts
         uses: actions/download-artifact@v4
         with:
-          name: macos
+          name: macos-arm64
+          path: artifacts/macos
+
+      - name: Download macOS x64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-x64
           path: artifacts/macos
 
       - name: Download Windows artifacts
