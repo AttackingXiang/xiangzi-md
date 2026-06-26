@@ -30,18 +30,13 @@ export function searchFind(text: string, replace = ''): void {
 
 export function searchNext(): void {
   const view = editorBridge.get()
-  if (view) {
-    findNext(view.state, view.dispatch)
-    view.focus()
-  }
+  // 不调用 view.focus()：保持焦点在查找框，避免回车落到编辑器替换选中文本
+  if (view) findNext(view.state, view.dispatch)
 }
 
 export function searchPrev(): void {
   const view = editorBridge.get()
-  if (view) {
-    findPrev(view.state, view.dispatch)
-    view.focus()
-  }
+  if (view) findPrev(view.state, view.dispatch)
 }
 
 export function searchReplace(text: string, replace: string): void {
