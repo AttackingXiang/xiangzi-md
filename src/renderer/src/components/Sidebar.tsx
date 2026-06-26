@@ -6,6 +6,7 @@ interface Props {
   activePath: string | null
   onOpenFolder: () => void
   onOpenFile: (path: string, name: string) => void
+  onOpenSettings: () => void
   onRefresh: () => void
 }
 
@@ -14,6 +15,7 @@ export default function Sidebar({
   activePath,
   onOpenFolder,
   onOpenFile,
+  onOpenSettings,
   onRefresh
 }: Props): JSX.Element {
   return (
@@ -28,6 +30,9 @@ export default function Sidebar({
           )}
           <button className="icon-btn" title="打开文件夹" onClick={onOpenFolder}>
             📂
+          </button>
+          <button className="icon-btn" title="设置" onClick={onOpenSettings}>
+            ⚙
           </button>
         </div>
       </div>
