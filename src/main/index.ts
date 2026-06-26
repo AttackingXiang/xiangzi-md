@@ -90,9 +90,17 @@ function createWindow(): void {
   })
 
   // Before close: ask renderer if there are unsaved files.
-  // The renderer handles window.confirm() synchronously; if user cancels, we prevent close.
+  // We use ipcMain.on (not once) so the handler survives cancelled-close attempts.
+  // When the renderer calls notifyQuitOk(), we call app.quit() — not mainWindow.close() —
+  // because on macOS closing the last window does NOT terminate the process.
   let quitConfirmed = false
-  ipcMain.once('app:quit-ok', () => { quitConfirmed = true; mainWindow?.close() })
+  const onQuitOk = (): void => {
+    quitConfirmed = true
+    ipcMain.removeListener('app:quit-ok', onQuitOk)
+    app.quit()
+  }
+  ipcMain.on('app:quit-ok', onQuitOk)
+  mainWindow.on('closed', () => ipcMain.removeListener('app:quit-ok', onQuitOk))
   mainWindow.on('close', (event) => {
     if (quitConfirmed) return
     event.preventDefault()
