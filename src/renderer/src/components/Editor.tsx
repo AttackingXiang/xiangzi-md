@@ -3,12 +3,15 @@ import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { resolveAssetURL } from '../lib/asset'
+import { codeMirrorTheme } from '../lib/codeTheme'
 
 interface Props {
   content: string
   /** 当前文档所在目录（用于解析相对图片路径、保存附件）；新建未保存为 null */
   docDir: string | null
   imageMaxWidth: number
+  /** 已解析的主题，用于代码块语法高亮配色 */
+  theme: 'light' | 'dark'
   onChange: (markdown: string) => void
 }
 
@@ -17,7 +20,13 @@ interface Props {
  * - 本地图片通过 proxyDomURL 解析为 xmd:// 协议显示，Markdown 中仍保存相对路径
  * - 粘贴/拖入图片经 onUpload 存到文档同级附件目录
  */
-export default function Editor({ content, docDir, imageMaxWidth, onChange }: Props): JSX.Element {
+export default function Editor({
+  content,
+  docDir,
+  imageMaxWidth,
+  theme,
+  onChange
+}: Props): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -50,6 +59,9 @@ export default function Editor({ content, docDir, imageMaxWidth, onChange }: Pro
           blockOnUpload: upload,
           inlineOnUpload: upload,
           ...(imageMaxWidth > 0 ? { maxWidth: imageMaxWidth } : {})
+        },
+        [CrepeFeature.CodeMirror]: {
+          theme: codeMirrorTheme(theme)
         }
       }
     })
