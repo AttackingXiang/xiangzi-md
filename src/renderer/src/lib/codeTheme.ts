@@ -26,12 +26,25 @@ const lightTheme = EditorView.theme({
   '&': { backgroundColor: 'transparent', color: '#24292f' },
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: '#8c959f' },
   '.cm-activeLine': { backgroundColor: 'rgba(0,0,0,0.03)' },
-  '.cm-activeLineGutter': { backgroundColor: 'transparent' },
-  '.cm-selectionBackground, ::selection': { backgroundColor: '#dbe9ff' }
+  '.cm-activeLineGutter': { backgroundColor: 'transparent' }
 })
+
+/** 选中文本配色：柔和、低饱和，不发黑 */
+function selectionTheme(mode: 'light' | 'dark'): Extension {
+  const sel = mode === 'dark' ? 'rgba(120,144,200,0.32)' : '#d6e4ff'
+  return EditorView.theme(
+    {
+      '.cm-selectionBackground': { backgroundColor: sel },
+      '&.cm-focused .cm-selectionBackground': { backgroundColor: sel },
+      '.cm-content ::selection': { backgroundColor: sel },
+      '.cm-line::selection': { backgroundColor: sel }
+    },
+    { dark: mode === 'dark' }
+  )
+}
 
 /** 按当前主题返回代码块的 CodeMirror 主题扩展 */
 export function codeMirrorTheme(mode: 'light' | 'dark'): Extension {
-  if (mode === 'dark') return [oneDark]
-  return [lightTheme, syntaxHighlighting(lightHighlight)]
+  if (mode === 'dark') return [oneDark, selectionTheme('dark')]
+  return [lightTheme, syntaxHighlighting(lightHighlight), selectionTheme('light')]
 }
