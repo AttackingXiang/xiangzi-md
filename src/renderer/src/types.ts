@@ -38,6 +38,10 @@ export interface AppSettings {
   favorites: string[]
   /** 上次会话 */
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
+  /** 在文件树中隐藏附件文件夹（按 attachmentFolder 名称匹配） */
+  hideAttachmentFolders: boolean
+  /** 额外的图片搜索目录（每行一个绝对路径），用于解析无法在文档目录找到的图片 */
+  assetSearchPaths: string[]
 }
 
 export interface SearchMatch {

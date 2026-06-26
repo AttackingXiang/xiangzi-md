@@ -21,6 +21,8 @@ export interface AppSettings {
   recentFolders: string[]
   favorites: string[]
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
+  hideAttachmentFolders: boolean
+  assetSearchPaths: string[]
 }
 
 const api = {

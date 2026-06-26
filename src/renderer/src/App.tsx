@@ -66,6 +66,75 @@ export default function App(): JSX.Element {
     [activeTab?.content]
   )
 
+  // ── Panel widths (drag-to-resize) ──────────────────────────────────────────
+  const [sidebarWidth, setSidebarWidth] = useState(256)
+  const [outlineWidth, setOutlineWidth] = useState(240)
+  const sidebarWidthRef = useRef(sidebarWidth)
+  sidebarWidthRef.current = sidebarWidth
+  const outlineWidthRef = useRef(outlineWidth)
+  outlineWidthRef.current = outlineWidth
+
+  const startSidebarResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = sidebarWidthRef.current
+    const onMove = (ev: MouseEvent): void =>
+      setSidebarWidth(Math.max(160, Math.min(520, startW + ev.clientX - startX)))
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
+  const startOutlineResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = outlineWidthRef.current
+    // Outline is on the right; dragging left widens it
+    const onMove = (ev: MouseEvent): void =>
+      setOutlineWidth(Math.max(160, Math.min(520, startW + startX - ev.clientX)))
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
+  // ── Reveal active file in sidebar ──────────────────────────────────────────
+  const [revealPath, setRevealPath] = useState<string | null>(null)
+  const folderRef = useRef(folder)
+  folderRef.current = folder
+
+  // Auto-clear reveal highlight after 2 s (enough time for the tree to scroll)
+  useEffect(() => {
+    if (!revealPath) return
+    const t = setTimeout(() => setRevealPath(null), 2000)
+    return () => clearTimeout(t)
+  }, [revealPath])
+
+  const revealActiveFile = useCallback(async () => {
+    const { tabs, activeId: aid } = stateRef.current
+    const tab = tabs.find((tb) => tb.id === aid)
+    if (!tab?.path) return
+    setSidebarVisible(true)
+    setSearchView(false)
+    const fileParent = dirName(tab.path)
+    if (!fileParent) return
+    const currentFolder = folderRef.current
+    const isUnderFolder =
+      currentFolder?.root &&
+      (tab.path.startsWith(currentFolder.root + '/') ||
+        tab.path.startsWith(currentFolder.root + '\\'))
+    if (!isUnderFolder) {
+      const result = await window.api.openFolderPath(fileParent)
+      if (result) { setFolder(result); pushRecentFolder(result.root) }
+    }
+    setRevealPath(tab.path)
+  }, [pushRecentFolder])
+
   // ── UI state ───────────────────────────────────────────────────────────────
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [outlineVisible, setOutlineVisible] = useState(false)
@@ -405,6 +474,9 @@ export default function App(): JSX.Element {
             activePath={activeTab?.path ?? null}
             favorites={settings.favorites}
             recentFiles={settings.recentFiles}
+            revealPath={revealPath}
+            hideAttachmentFolders={settings.hideAttachmentFolders ?? false}
+            attachmentFolder={settings.attachmentFolder || 'assets'}
             onOpenFolder={openFolder}
             onOpenFolderPath={openFolderByPath}
             onOpenFile={openPath}
@@ -415,8 +487,13 @@ export default function App(): JSX.Element {
             onNodeContext={openNodeContext}
             onRootContext={openRootContext}
             reloadKey={treeKey}
+            style={{ width: sidebarWidth, minWidth: sidebarWidth }}
           />
         ))}
+
+      {sidebarVisible && !searchView && (
+        <div className="resize-handle" onMouseDown={startSidebarResize} />
+      )}
 
       <div className={`main${sidebarVisible ? '' : ' no-sidebar'}`}>
         <TabBar
@@ -430,6 +507,8 @@ export default function App(): JSX.Element {
           onToggleSource={() => setSourceMode((v) => !v)}
           onToggleSidebar={() => setSidebarVisible((v) => !v)}
           onToggleOutline={() => setOutlineVisible((v) => !v)}
+          onRevealFile={revealActiveFile}
+          activeHasPath={!!activeTab?.path}
         />
 
         {showFind && (
@@ -470,6 +549,7 @@ export default function App(): JSX.Element {
                   docDir={activeDocDir}
                   docName={activeTab.name}
                   vaultRoot={folder?.root ?? null}
+                  assetSearchPaths={settings.assetSearchPaths ?? []}
                   imageMaxWidth={settings.imageMaxWidth}
                   theme={resolvedTheme}
                   focusMode={focusMode}
@@ -491,12 +571,16 @@ export default function App(): JSX.Element {
           )}
 
           {outlineVisible && activeTab && (
-            <Outline
-              items={outline}
-              onSelect={scrollToHeading}
-              onReorder={reorderSection}
-              onClose={() => setOutlineVisible(false)}
-            />
+            <>
+              <div className="resize-handle" onMouseDown={startOutlineResize} />
+              <Outline
+                items={outline}
+                onSelect={scrollToHeading}
+                onReorder={reorderSection}
+                onClose={() => setOutlineVisible(false)}
+                width={outlineWidth}
+              />
+            </>
           )}
         </div>
 

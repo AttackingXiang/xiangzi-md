@@ -29,8 +29,20 @@ export function handleXmdProtocol(): void {
     try {
       const url = new URL(request.url)
       const encoded = url.pathname.replace(/^\/+/, '')
-      const filePath = decodeURIComponent(encoded)
-      return await net.fetch(pathToFileURL(filePath).toString())
+      const primaryPath = decodeURIComponent(encoded)
+
+      // Optional fallback paths encoded as ?alts=path1%0Apath2…
+      // Each alt is a decoded absolute path; try primary first, then alts in order.
+      const altsParam = url.searchParams.get('alts')
+      const altPaths = altsParam ? altsParam.split('\n').filter(Boolean) : []
+
+      for (const p of [primaryPath, ...altPaths]) {
+        try {
+          const res = await net.fetch(pathToFileURL(p).toString())
+          if (res.ok) return res
+        } catch { /* try next candidate */ }
+      }
+      return new Response('Not Found', { status: 404 })
     } catch {
       return new Response('Not Found', { status: 404 })
     }

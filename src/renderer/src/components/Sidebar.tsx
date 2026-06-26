@@ -9,6 +9,11 @@ interface Props {
   activePath: string | null
   favorites: string[]
   recentFiles: string[]
+  /** 当前需要在文件树中定位的绝对路径；null 时不触发 */
+  revealPath: string | null
+  /** 是否在文件树中隐藏与 attachmentFolder 同名的目录 */
+  hideAttachmentFolders: boolean
+  attachmentFolder: string
   onOpenFolder: () => void
   onOpenFolderPath: (root: string) => void
   onOpenFile: (path: string, name?: string) => void
@@ -19,12 +24,16 @@ interface Props {
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onRootContext: (x: number, y: number) => void
   reloadKey: number
+  style?: React.CSSProperties
 }
 
 export default function Sidebar({
   folder,
   activePath,
   favorites,
+  revealPath,
+  hideAttachmentFolders,
+  attachmentFolder,
   onOpenFolder,
   onOpenFolderPath,
   onOpenFile,
@@ -34,12 +43,15 @@ export default function Sidebar({
   onRefresh,
   onNodeContext,
   onRootContext,
-  reloadKey
+  reloadKey,
+  style
 }: Props): JSX.Element {
   const isFav = folder ? favorites.includes(folder.root) : false
+  const hideFolderNames =
+    hideAttachmentFolders && attachmentFolder ? [attachmentFolder] : []
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={style}>
       <div className="sidebar-header">
         <span className="sidebar-title">{folder ? folder.name : t('资源管理器')}</span>
         <div className="sidebar-actions">
@@ -91,7 +103,6 @@ export default function Sidebar({
       <div
         className="sidebar-body"
         onContextMenu={(e) => {
-          // 仅当点击在空白处（非节点）时弹出根目录菜单
           if (folder && e.target === e.currentTarget) {
             e.preventDefault()
             onRootContext(e.clientX, e.clientY)
@@ -103,6 +114,8 @@ export default function Sidebar({
             key={reloadKey}
             nodes={folder.tree}
             activePath={activePath}
+            revealPath={revealPath}
+            hideFolderNames={hideFolderNames}
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}
             depth={0}
