@@ -794,10 +794,122 @@ button {
   font-size: 12px;
 }
 
-/* 代码块顶部的语言选择/工具条 */
-.milkdown .milkdown-code-block .tools,
-.milkdown .code-block-tools {
+/* 代码块容器：背景交给内部 .cm-editor 卡片承载 */
+.milkdown .milkdown-code-block {
+  background: transparent !important;
+  padding: 6px 0 18px !important;
+}
+
+.milkdown .milkdown-code-block .tools {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+}
+
+/* —— 左上角语言选择器：简洁常显的小标签 —— */
+.milkdown .milkdown-code-block .tools .language-button {
+  opacity: 1 !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  padding: 3px 5px 3px 9px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  margin-bottom: 8px !important;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.milkdown .milkdown-code-block .tools .language-button:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.milkdown .milkdown-code-block .tools .language-button .expand-icon svg {
+  color: var(--text-muted) !important;
+}
+
+/* —— 右上角复制/预览按钮：与语言标签风格统一 —— */
+.milkdown .milkdown-code-block .tools .tools-button-group button {
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border-radius: 7px !important;
+  font-weight: 500 !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group button:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text) !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group button:first-child,
+.milkdown .milkdown-code-block .tools .tools-button-group button:last-child {
+  border-radius: 7px !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group button svg {
+  fill: currentColor !important;
+}
+
+/* —— 语言下拉面板 —— */
+.milkdown .milkdown-code-block .list-wrapper {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow) !important;
+  width: 216px !important;
+  padding-top: 8px !important;
+  overflow: hidden;
+}
+
+.milkdown .milkdown-code-block .language-list {
+  height: auto !important;
+  max-height: 280px !important;
+  padding-bottom: 6px !important;
+}
+
+.milkdown .milkdown-code-block .language-list-item {
+  padding: 6px 14px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--text-2) !important;
+}
+
+.milkdown .milkdown-code-block .language-list-item:hover,
+.milkdown .milkdown-code-block .language-list-item:focus-visible {
+  background: var(--bg-hover) !important;
+  color: var(--text) !important;
+}
+
+.milkdown .milkdown-code-block .language-list-item .leading,
+.milkdown .milkdown-code-block .language-list-item .leading svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* —— 下拉里的搜索框 —— */
+.milkdown .milkdown-code-block .search-box {
+  margin: 0 10px 8px !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  outline: none !important;
+  border: 1px solid var(--border-strong) !important;
+  background: var(--bg) !important;
+}
+
+.milkdown .milkdown-code-block .search-box:has(input:focus) {
+  outline: none !important;
+  border-color: var(--accent) !important;
+}
+
+.milkdown .milkdown-code-block .search-box .search-input,
+.milkdown .milkdown-code-block .search-box input {
+  color: var(--text) !important;
+  font-size: 13px !important;
+}
+
+.milkdown .milkdown-code-block .search-box .clear-icon svg {
+  color: var(--text-muted) !important;
+  fill: var(--text-muted) !important;
 }
 
 /* 行内代码 */
