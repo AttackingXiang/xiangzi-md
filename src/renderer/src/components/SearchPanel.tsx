@@ -5,7 +5,7 @@ import { t, getLang } from '../lib/i18n'
 
 interface Props {
   root: string
-  onOpenResult: (path: string, query: string) => void
+  onOpenResult: (path: string, query: string, lineNumber?: number) => void
   onBack: () => void
 }
 
@@ -108,7 +108,7 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
               <div
                 key={i}
                 className="search-match"
-                onClick={() => onOpenResult(r.path, query)}
+                onClick={() => onOpenResult(r.path, query, m.lineNumber)}
                 title={getLang() === 'en' ? `Line ${m.lineNumber}` : `第 ${m.lineNumber} 行`}
               >
                 {highlight(m.text, query)}

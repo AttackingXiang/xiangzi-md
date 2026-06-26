@@ -3,7 +3,6 @@ import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
 import SourceEditor from './components/SourceEditor'
 
-// 懒加载较重的所见即所得编辑器（Crepe），加快应用启动与首屏
 const Editor = lazy(() => import('./components/Editor'))
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
@@ -17,246 +16,146 @@ import InputDialog from './components/InputDialog'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
-import { setLang, getLang, t } from './lib/i18n'
+import { getLang, t } from './lib/i18n'
 import { baseName, dirName } from './lib/path'
 import {
-  Bold,
-  Italic,
-  Code,
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
-  Quote,
-  SquareCode,
-  Pilcrow,
-  Copy,
-  Scissors,
-  ClipboardPaste,
-  TextSelect
+  Bold, Italic, Code, Heading1, Heading2, Heading3,
+  List, ListOrdered, Quote, SquareCode, Pilcrow,
+  Copy, Scissors, ClipboardPaste, TextSelect
 } from 'lucide-react'
 import { parseOutline } from './lib/outline'
-import type { AppSettings, FileNode, Folder, Tab } from './types'
+import type { Folder } from './types'
+import { useSettings } from './hooks/useSettings'
+import { useFileOps } from './hooks/useFileOps'
+import { useTreeOps } from './hooks/useTreeOps'
 
-let tabSeq = 0
-const newTabId = (): string => `tab-${Date.now()}-${tabSeq++}`
-
-const DEFAULT_SETTINGS: AppSettings = {
-  attachmentMode: 'subfolder',
-  attachmentFolder: 'assets',
-  imageMaxWidth: 800,
-  language: 'zh',
-  theme: 'system',
-  editorWidth: 'full',
-  customCssPath: '',
-  headingNumber: false,
-  autoSave: false,
-  recentFiles: [],
-  recentFolders: [],
-  favorites: [],
-  session: { folder: null, openFiles: [], activePath: null }
-}
-
-interface FileEntry {
-  path: string
-  name: string
-}
+interface FileEntry { path: string; name: string }
 
 export default function App(): JSX.Element {
+  // ── Settings (theme, width, i18n, CSS side-effects all live here) ──────────
+  const {
+    settings,
+    settingsReady,
+    saveSettings,
+    pushRecentFile,
+    pushRecentFolder,
+    toggleFavorite
+  } = useSettings()
+
+  const lang = settings?.language ?? 'zh'
+
+  // ── Folder state ───────────────────────────────────────────────────────────
   const [folder, setFolder] = useState<Folder | null>(null)
-  const [tabs, setTabs] = useState<Tab[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
+  const setFolderUpdater = useCallback(
+    (updater: (prev: Folder | null) => Folder | null) => setFolder(updater),
+    []
+  )
+
+  // ── File / tab operations ──────────────────────────────────────────────────
+  const {
+    tabs, setTabs, activeId, setActiveId, activeTab, stateRef,
+    openPath, openFile, newFile, saveTab, saveAsTab,
+    closeTab, closeOthers, closeAllTabs, closeLeft, closeRight,
+    updateContent, restoreSession, hasDirtyTabs
+  } = useFileOps({ pushRecentFile, lang })
+
+  const activeDocDir = activeTab ? (dirName(activeTab.path) ?? folder?.root ?? null) : null
+  const outline = useMemo(
+    () => (activeTab ? parseOutline(activeTab.content) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeTab?.content]
+  )
+
+  // ── UI state ───────────────────────────────────────────────────────────────
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [outlineVisible, setOutlineVisible] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showFind, setShowFind] = useState(false)
   const [findInitial, setFindInitial] = useState('')
+  const [findLine, setFindLine] = useState<number | undefined>(undefined)
   const [searchView, setSearchView] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showPalette, setShowPalette] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{
-    x: number
-    y: number
-    items: MenuItem[]
-    preserveSelection?: boolean
+    x: number; y: number; items: MenuItem[]; preserveSelection?: boolean
   } | null>(null)
   const [inputDialog, setInputDialog] = useState<{
-    title: string
-    initial?: string
-    confirmText?: string
+    title: string; initial?: string; confirmText?: string
     onSubmit: (value: string) => void
   } | null>(null)
+
+  // Resolved theme for the Editor key (determines CodeMirror theme)
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
-  const [zoomSrc, setZoomSrc] = useState<string | null>(null)
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
-
-  // 同步设置当前语言，保证本次渲染的 t() 使用最新语言
-  setLang(settings.language)
-
-  const activeTab = tabs.find((tab) => tab.id === activeId) ?? null
-  const activeDocDir = activeTab ? (dirName(activeTab.path) ?? folder?.root ?? null) : null
-  const outline = useMemo(
-    () => (activeTab ? parseOutline(activeTab.content) : []),
-    [activeTab?.content]
-  )
-
-  const stateRef = useRef({ tabs, activeId })
-  stateRef.current = { tabs, activeId }
-
-  // ---- 设置与会话恢复 ----
-  const didInit = useRef(false)
-  useEffect(() => {
-    if (didInit.current || !window.api) return
-    didInit.current = true
-    window.api.getSettings().then(async (s) => {
-      setSettings(s)
-      // 恢复上次会话
-      const session = s.session
-      if (session?.folder) {
-        const res = await window.api.openFolderPath(session.folder)
-        if (res) setFolder(res)
-      }
-      if (session?.openFiles?.length) {
-        const restored: Tab[] = []
-        for (const p of session.openFiles) {
-          try {
-            const f = await window.api.readFile(p)
-            restored.push({ id: newTabId(), path: f.path, name: f.name, content: f.content, dirty: false })
-          } catch {
-            /* 文件已不存在，跳过 */
-          }
-        }
-        if (restored.length) {
-          setTabs(restored)
-          const act = restored.find((t) => t.path === session.activePath) ?? restored[0]
-          setActiveId(act.id)
-        }
-      }
-      sessionReady.current = true
-    })
-  }, [])
-
-  // ---- 会话持久化 ----
-  const sessionReady = useRef(false)
-  useEffect(() => {
-    if (!sessionReady.current) return
-    const session = {
-      folder: folder?.root ?? null,
-      openFiles: tabs.filter((t) => t.path).map((t) => t.path as string),
-      activePath: activeTab?.path ?? null
-    }
-    const t = setTimeout(() => window.api.setSettings({ session }), 500)
-    return () => clearTimeout(t)
-  }, [folder?.root, tabs, activeTab?.path])
-
-  const saveSettings = useCallback(async (patch: Partial<AppSettings>) => {
-    const next = await window.api.setSettings(patch)
-    setSettings(next)
-  }, [])
-
-  // 历史与收藏（用函数式更新避免陈旧，并异步持久化）
-  const pushRecentFile = useCallback((p: string) => {
-    setSettings((prev) => {
-      const recentFiles = [p, ...prev.recentFiles.filter((x) => x !== p)].slice(0, 15)
-      window.api.setSettings({ recentFiles })
-      return { ...prev, recentFiles }
-    })
-  }, [])
-
-  const pushRecentFolder = useCallback((p: string) => {
-    setSettings((prev) => {
-      const recentFolders = [p, ...prev.recentFolders.filter((x) => x !== p)].slice(0, 15)
-      window.api.setSettings({ recentFolders })
-      return { ...prev, recentFolders }
-    })
-  }, [])
-
-  const toggleFavorite = useCallback((p: string) => {
-    setSettings((prev) => {
-      const has = prev.favorites.includes(p)
-      const favorites = has ? prev.favorites.filter((x) => x !== p) : [...prev.favorites, p]
-      window.api.setSettings({ favorites })
-      return { ...prev, favorites }
-    })
-  }, [])
-
-  // ---- 主题 ----
   useEffect(() => {
     const apply = (): void => {
-      let t: 'light' | 'dark'
-      if (settings.theme === 'system') {
-        t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-      } else {
-        t = settings.theme
-      }
-      document.documentElement.dataset.theme = t
-      setResolvedTheme(t)
+      const t =
+        settings?.theme === 'system'
+          ? window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          : (settings?.theme ?? 'light')
+      setResolvedTheme(t as 'light' | 'dark')
     }
     apply()
-    if (settings.theme === 'system') {
+    if (settings?.theme === 'system') {
       const mq = window.matchMedia('(prefers-color-scheme: dark)')
       mq.addEventListener('change', apply)
       return () => mq.removeEventListener('change', apply)
     }
     return undefined
-  }, [settings.theme])
+  }, [settings?.theme])
 
-  // ---- 编辑区显示宽度 ----
+  // ── Session restore (runs once after settings load) ─────────────────────
+  const didRestore = useRef(false)
   useEffect(() => {
-    const width =
-      settings.editorWidth === 'full' ? '100%' : settings.editorWidth === 'wide' ? '1080px' : '820px'
-    document.documentElement.style.setProperty('--editor-max-width', width)
-  }, [settings.editorWidth])
+    if (!settingsReady || didRestore.current || !settings) return
+    didRestore.current = true
+    ;(async () => {
+      if (settings.session?.folder) {
+        const res = await window.api.openFolderPath(settings.session.folder)
+        if (res) setFolder(res)
+      }
+      if (settings.session?.openFiles?.length) {
+        await restoreSession(settings.session.openFiles, settings.session.activePath)
+      }
+    })()
+  }, [settingsReady, settings, restoreSession])
 
-  // ---- 标题自动编号 ----
+  // ── Session persistence (debounced, single write) ─────────────────────────
+  const sessionReadyRef = useRef(false)
   useEffect(() => {
-    document.documentElement.dataset.headingNumber = settings.headingNumber ? 'on' : 'off'
-  }, [settings.headingNumber])
+    if (settingsReady) sessionReadyRef.current = true
+  }, [settingsReady])
 
-  // ---- 语言：通知主进程重建本地化菜单 ----
   useEffect(() => {
-    window.api.setLanguage(settings.language)
-  }, [settings.language])
-
-  // ---- 自定义主题 CSS ----
-  useEffect(() => {
-    const id = 'custom-theme-style'
-    let el = document.getElementById(id) as HTMLStyleElement | null
-    if (!settings.customCssPath) {
-      el?.remove()
-      return
+    if (!sessionReadyRef.current) return
+    const session = {
+      folder: folder?.root ?? null,
+      openFiles: tabs.filter((t) => t.path).map((t) => t.path as string),
+      activePath: activeTab?.path ?? null
     }
-    let cancelled = false
-    window.api
-      .readFile(settings.customCssPath)
-      .then((res) => {
-        if (cancelled) return
-        if (!el) {
-          el = document.createElement('style')
-          el.id = id
-          document.head.appendChild(el)
-        }
-        el.textContent = res.content
-      })
-      .catch(() => {
-        /* 文件不存在则忽略 */
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [settings.customCssPath])
+    const timer = setTimeout(() => window.api.setSettings({ session }), 500)
+    return () => clearTimeout(timer)
+  }, [folder?.root, tabs, activeTab?.path])
 
-  // ---- 打开 ----
+  // ── File tree ops ──────────────────────────────────────────────────────────
+  const { treeKey, refreshTree, createFileIn, createFolderIn, openNodeContext, openRootContext } =
+    useTreeOps({
+      folder,
+      setFolder: setFolderUpdater,
+      openPath,
+      closeTab,
+      tabs,
+      setCtxMenu,
+      setInputDialog
+    })
+
+  // ── Folder open ────────────────────────────────────────────────────────────
   const openFolder = useCallback(async () => {
     const result = await window.api.openFolder()
-    if (result) {
-      setFolder(result)
-      pushRecentFolder(result.root)
-    }
+    if (result) { setFolder(result); pushRecentFolder(result.root) }
   }, [pushRecentFolder])
 
   const openFolderByPath = useCallback(
@@ -267,45 +166,14 @@ export default function App(): JSX.Element {
         pushRecentFolder(result.root)
       } else {
         window.alert(
-          (getLang() === 'en' ? 'Folder not found or cannot open:\n' : '文件夹不存在或无法打开：\n') +
-            root
+          (getLang() === 'en' ? 'Folder not found:\n' : '文件夹不存在：\n') + root
         )
       }
     },
     [pushRecentFolder]
   )
 
-  const openPath = useCallback(
-    async (path: string, name?: string) => {
-      const existing = stateRef.current.tabs.find((t) => t.path === path)
-      if (existing) {
-        setActiveId(existing.id)
-        return
-      }
-      let file
-      try {
-        file = await window.api.readFile(path)
-      } catch {
-        window.alert(
-          (getLang() === 'en' ? 'File not found or cannot open:\n' : '文件不存在或无法打开：\n') + path
-        )
-        return
-      }
-      const tab: Tab = {
-        id: newTabId(),
-        path: file.path,
-        name: name || file.name,
-        content: file.content,
-        dirty: false
-      }
-      setTabs((prev) => [...prev, tab])
-      setActiveId(tab.id)
-      pushRecentFile(file.path)
-    },
-    [pushRecentFile]
-  )
-
-  // 系统「打开方式 / 双击」打开文件
+  // ── System open-path (file association / double-click) ────────────────────
   useEffect(() => {
     if (!window.api) return undefined
     const dispose = window.api.onOpenPath((p) => openPath(p, baseName(p)))
@@ -313,130 +181,7 @@ export default function App(): JSX.Element {
     return dispose
   }, [openPath])
 
-  const openFile = useCallback(async () => {
-    const file = await window.api.openFile()
-    if (!file) return
-    const existing = stateRef.current.tabs.find((t) => t.path === file.path)
-    if (existing) {
-      setActiveId(existing.id)
-      return
-    }
-    const tab: Tab = {
-      id: newTabId(),
-      path: file.path,
-      name: file.name,
-      content: file.content,
-      dirty: false
-    }
-    setTabs((prev) => [...prev, tab])
-    setActiveId(tab.id)
-    pushRecentFile(file.path)
-  }, [pushRecentFile])
-
-  const newFile = useCallback(() => {
-    const tab: Tab = { id: newTabId(), path: null, name: '未命名.md', content: '', dirty: false }
-    setTabs((prev) => [...prev, tab])
-    setActiveId(tab.id)
-  }, [])
-
-  const openSearchResult = useCallback(
-    (path: string, query: string) => {
-      openPath(path, baseName(path))
-      setFindInitial(query)
-      setShowFind(true)
-    },
-    [openPath]
-  )
-
-  // ---- 编辑/保存 ----
-  const updateContent = useCallback((id: string, content: string) => {
-    setTabs((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, content, dirty: t.content !== content || t.dirty } : t))
-    )
-  }, [])
-
-  const saveTab = useCallback(
-    async (id: string) => {
-      const tab = stateRef.current.tabs.find((t) => t.id === id)
-      if (!tab) return
-      if (tab.path) {
-        await window.api.writeFile(tab.path, tab.content)
-        setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, dirty: false } : t)))
-      } else {
-        const result = await window.api.saveAs(tab.content, tab.name)
-        if (result) {
-          setTabs((prev) =>
-            prev.map((t) =>
-              t.id === id ? { ...t, path: result.path, name: result.name, dirty: false } : t
-            )
-          )
-          pushRecentFile(result.path)
-        }
-      }
-    },
-    [pushRecentFile]
-  )
-
-  const saveAsTab = useCallback(
-    async (id: string) => {
-      const tab = stateRef.current.tabs.find((t) => t.id === id)
-      if (!tab) return
-      const result = await window.api.saveAs(tab.content, tab.name)
-      if (result) {
-        setTabs((prev) =>
-          prev.map((t) =>
-            t.id === id ? { ...t, path: result.path, name: result.name, dirty: false } : t
-          )
-        )
-        pushRecentFile(result.path)
-      }
-    },
-    [pushRecentFile]
-  )
-
-  const closeTab = useCallback((id: string) => {
-    setTabs((prev) => {
-      const idx = prev.findIndex((t) => t.id === id)
-      const next = prev.filter((t) => t.id !== id)
-      setActiveId((curr) => {
-        if (curr !== id) return curr
-        if (next.length === 0) return null
-        return next[Math.min(idx, next.length - 1)].id
-      })
-      return next
-    })
-  }, [])
-
-  const closeOthers = useCallback((id: string) => {
-    setTabs((prev) => prev.filter((tb) => tb.id === id))
-    setActiveId(id)
-  }, [])
-
-  const closeAllTabs = useCallback(() => {
-    setTabs([])
-    setActiveId(null)
-  }, [])
-
-  const closeLeft = useCallback((id: string) => {
-    setTabs((prev) => {
-      const idx = prev.findIndex((tb) => tb.id === id)
-      if (idx <= 0) return prev
-      const next = prev.slice(idx)
-      setActiveId((curr) => (next.some((tb) => tb.id === curr) ? curr : id))
-      return next
-    })
-  }, [])
-
-  const closeRight = useCallback((id: string) => {
-    setTabs((prev) => {
-      const idx = prev.findIndex((tb) => tb.id === id)
-      if (idx < 0 || idx >= prev.length - 1) return prev
-      const next = prev.slice(0, idx + 1)
-      setActiveId((curr) => (next.some((tb) => tb.id === curr) ? curr : id))
-      return next
-    })
-  }, [])
-
+  // ── Tab context menu ───────────────────────────────────────────────────────
   const openTabContext = useCallback(
     (id: string, x: number, y: number) => {
       const list = stateRef.current.tabs
@@ -454,136 +199,7 @@ export default function App(): JSX.Element {
     [closeTab, closeOthers, closeLeft, closeRight, closeAllTabs]
   )
 
-  // ---- 文件树操作 ----
-  const [treeKey, setTreeKey] = useState(0)
-  const refreshTree = useCallback(async () => {
-    const root = folder?.root
-    if (!root) return
-    const tree = await window.api.readDir(root)
-    setFolder((f) => (f ? { ...f, tree } : f))
-    // 重建文件树以反映子目录变化（懒加载的子项状态会被重置）
-    setTreeKey((k) => k + 1)
-  }, [folder?.root])
-
-  const createFileIn = useCallback(
-    (dir: string) => {
-      setInputDialog({
-        title: t('新建文件'),
-        initial: getLang() === 'en' ? 'Untitled.md' : '未命名.md',
-        confirmText: t('创建'),
-        onSubmit: async (name) => {
-          const fname = /\.[^.]+$/.test(name) ? name : `${name}.md`
-          try {
-            const res = await window.api.createFile(dir, fname)
-            await refreshTree()
-            openPath(res.path, res.name)
-          } catch {
-            window.alert(t('创建失败：文件可能已存在'))
-          }
-        }
-      })
-    },
-    [refreshTree, openPath]
-  )
-
-  const createFolderIn = useCallback(
-    (dir: string) => {
-      setInputDialog({
-        title: t('新建文件夹'),
-        initial: getLang() === 'en' ? 'New Folder' : '新建文件夹',
-        confirmText: t('创建'),
-        onSubmit: async (name) => {
-          try {
-            await window.api.createDir(dir, name)
-            await refreshTree()
-          } catch {
-            window.alert(t('创建失败：文件夹可能已存在'))
-          }
-        }
-      })
-    },
-    [refreshTree]
-  )
-
-  const renameNode = useCallback(
-    (node: FileNode) => {
-      setInputDialog({
-        title: t('重命名'),
-        initial: node.name,
-        confirmText: t('重命名'),
-        onSubmit: async (name) => {
-          try {
-            const res = await window.api.rename(node.path, name)
-            await refreshTree()
-            setTabs((prev) =>
-              prev.map((tab) =>
-                tab.path === node.path ? { ...tab, path: res.path, name: res.name } : tab
-              )
-            )
-          } catch {
-            window.alert(t('重命名失败'))
-          }
-        }
-      })
-    },
-    [refreshTree]
-  )
-
-  const deleteNode = useCallback(
-    async (node: FileNode) => {
-      const confirmMsg =
-        getLang() === 'en'
-          ? `Delete "${node.name}"? It will be moved to Trash.`
-          : `确定要删除「${node.name}」吗？将移入废纸篓。`
-      if (!window.confirm(confirmMsg)) return
-      try {
-        await window.api.trash(node.path)
-        const affected = stateRef.current.tabs.filter(
-          (tab) => tab.path && (tab.path === node.path || tab.path.startsWith(node.path + '/'))
-        )
-        affected.forEach((tab) => closeTab(tab.id))
-        await refreshTree()
-      } catch {
-        window.alert(t('删除失败'))
-      }
-    },
-    [refreshTree, closeTab]
-  )
-
-  const openNodeContext = useCallback(
-    (node: FileNode, x: number, y: number) => {
-      const items: MenuItem[] = []
-      if (node.isDir) {
-        items.push({ label: t('新建文件'), onClick: () => createFileIn(node.path) })
-        items.push({ label: t('新建文件夹'), onClick: () => createFolderIn(node.path) })
-      } else {
-        items.push({ label: t('打开'), onClick: () => openPath(node.path, node.name) })
-      }
-      items.push({ label: t('重命名'), onClick: () => renameNode(node), separatorBefore: true })
-      items.push({ label: t('在访达中显示'), onClick: () => window.api.reveal(node.path) })
-      items.push({ label: t('删除'), onClick: () => deleteNode(node), danger: true, separatorBefore: true })
-      setCtxMenu({ x, y, items })
-    },
-    [createFileIn, createFolderIn, openPath, renameNode, deleteNode]
-  )
-
-  const openRootContext = useCallback(
-    (x: number, y: number) => {
-      if (!folder) return
-      setCtxMenu({
-        x,
-        y,
-        items: [
-          { label: t('新建文件'), onClick: () => createFileIn(folder.root) },
-          { label: t('新建文件夹'), onClick: () => createFolderIn(folder.root) },
-          { label: t('刷新'), onClick: () => refreshTree(), separatorBefore: true }
-        ]
-      })
-    },
-    [folder, createFileIn, createFolderIn, refreshTree]
-  )
-
-  // ---- 编辑器右键菜单 ----
+  // ── Editor right-click menu ────────────────────────────────────────────────
   const openEditorContext = useCallback((x: number, y: number) => {
     const sz = 15
     const items: MenuItem[] = [
@@ -607,28 +223,77 @@ export default function App(): JSX.Element {
       )
     }
     items.push({
-      label: t('全选'),
-      icon: <TextSelect size={sz} />,
-      hint: '⌘A',
-      onClick: clipboardCmd.selectAll,
-      separatorBefore: true
+      label: t('全选'), icon: <TextSelect size={sz} />, hint: '⌘A',
+      onClick: clipboardCmd.selectAll, separatorBefore: true
     })
     setCtxMenu({ x, y, items, preserveSelection: true })
   }, [])
 
-  // ---- 导出 ----
+  // ── Search ─────────────────────────────────────────────────────────────────
+  const openSearchResult = useCallback(
+    (path: string, query: string, lineNumber?: number) => {
+      openPath(path, baseName(path))
+      setFindInitial(query)
+      setFindLine(lineNumber)
+      setShowFind(true)
+    },
+    [openPath]
+  )
+
+  // ── Outline navigation ─────────────────────────────────────────────────────
+  const scrollToHeading = useCallback((index: number) => {
+    const els = document.querySelectorAll(
+      '.milkdown h1, .milkdown h2, .milkdown h3, .milkdown h4, .milkdown h5, .milkdown h6'
+    )
+    ;(els[index] as HTMLElement | undefined)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  const reorderSection = useCallback((fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return
+    import('./lib/outlineReorder').then(({ reorderHeadingSections }) => {
+      reorderHeadingSections(fromIndex, toIndex)
+    })
+  }, [])
+
+  // ── Export ────────────────────────────────────────────────────────────────
   const exportPDF = useCallback(async () => {
-    if (!stateRef.current.activeId) return
-    const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeId)
+    const { activeId: id } = stateRef.current
+    if (!id) return
+    const tab = stateRef.current.tabs.find((t) => t.id === id)
     const res = await window.api.exportPDF(tab?.name ?? 'document')
     if (res) window.alert((getLang() === 'en' ? 'Exported PDF:\n' : '已导出 PDF：\n') + res.path)
   }, [])
 
   const exportHTML = useCallback(async () => {
-    if (!stateRef.current.activeId) return
-    const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeId)
+    const { activeId: id } = stateRef.current
+    if (!id) return
+    const tab = stateRef.current.tabs.find((t) => t.id === id)
     const el = document.querySelector('.milkdown')
-    const inner = el ? el.innerHTML : ''
+    if (!el) return
+
+    // Inline all xmd:// images as base64 so the HTML is self-contained
+    const clone = el.cloneNode(true) as HTMLElement
+    const imgs = Array.from(clone.querySelectorAll('img[src]')) as HTMLImageElement[]
+    await Promise.all(
+      imgs.map(async (img) => {
+        const src = img.getAttribute('src') ?? ''
+        if (!src.startsWith('xmd://')) return
+        // Load via fetch (xmd:// is registered as a privileged protocol)
+        try {
+          const res = await fetch(src)
+          const blob = await res.blob()
+          const b64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.readAsDataURL(blob)
+          })
+          img.setAttribute('src', b64)
+        } catch {
+          /* leave original src if fetch fails */
+        }
+      })
+    )
+
     const html = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8" /><title>${tab?.name ?? 'document'}</title>
 <style>
@@ -638,35 +303,20 @@ export default function App(): JSX.Element {
   img{max-width:100%}
   blockquote{border-left:3px solid #ddd;margin:0;padding-left:16px;color:#666}
   table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}
-</style></head><body><article>${inner}</article></body></html>`
+</style></head><body><article>${clone.innerHTML}</article></body></html>`
     const res = await window.api.exportHTML(html, tab?.name ?? 'document')
     if (res) window.alert((getLang() === 'en' ? 'Exported HTML:\n' : '已导出 HTML：\n') + res.path)
   }, [])
 
-  const scrollToHeading = useCallback((index: number) => {
-    const els = document.querySelectorAll(
-      '.milkdown h1, .milkdown h2, .milkdown h3, .milkdown h4, .milkdown h5, .milkdown h6'
-    )
-    const el = els[index] as HTMLElement | undefined
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
-
-  // ---- 命令面板 ----
-  // 文件列表后台异步加载（不阻塞打开文件夹），供命令面板快速打开
+  // ── Palette files (background scan) ───────────────────────────────────────
   const [paletteFiles, setPaletteFiles] = useState<FileEntry[]>([])
   useEffect(() => {
-    if (!folder) {
-      setPaletteFiles([])
-      return
-    }
+    if (!folder) { setPaletteFiles([]); return }
     let cancelled = false
-    window.api.listFiles(folder.root).then((list) => {
-      if (!cancelled) setPaletteFiles(list)
-    })
-    return () => {
-      cancelled = true
-    }
+    window.api.listFiles(folder.root).then((list) => { if (!cancelled) setPaletteFiles(list) })
+    return () => { cancelled = true }
   }, [folder?.root])
+
   const paletteCommands = useMemo<Command[]>(
     () => [
       { id: 'new', label: t('新建文件'), run: newFile },
@@ -674,14 +324,7 @@ export default function App(): JSX.Element {
       { id: 'open-folder', label: t('打开文件夹…'), run: openFolder },
       { id: 'save', label: t('保存'), run: () => activeId && saveTab(activeId) },
       { id: 'save-as', label: t('另存为…'), run: () => activeId && saveAsTab(activeId) },
-      {
-        id: 'search',
-        label: t('在文件夹中搜索'),
-        run: () => {
-          setSidebarVisible(true)
-          setSearchView(true)
-        }
-      },
+      { id: 'search', label: t('在文件夹中搜索'), run: () => { setSidebarVisible(true); setSearchView(true) } },
       { id: 'find', label: t('查找 / 替换'), run: () => setShowFind(true) },
       { id: 'outline', label: t('切换大纲'), run: () => setOutlineVisible((v) => !v) },
       { id: 'sidebar', label: t('切换侧边栏'), run: () => setSidebarVisible((v) => !v) },
@@ -693,20 +336,21 @@ export default function App(): JSX.Element {
       { id: 'settings', label: t('设置'), run: () => setShowSettings(true) },
       { id: 'shortcuts', label: t('快捷键'), run: () => setShowShortcuts(true) }
     ],
-    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportPDF, exportHTML, settings.language]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportPDF, exportHTML, lang]
   )
 
-  // ---- 自动保存 ----
+  // ── Auto-save ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!settings.autoSave || !activeTab || !activeTab.path || !activeTab.dirty) return
+    if (!settings?.autoSave || !activeTab?.path || !activeTab.dirty) return
     const id = setTimeout(() => saveTab(activeTab.id), 1200)
     return () => clearTimeout(id)
-  }, [settings.autoSave, activeTab?.content, activeTab?.dirty, activeTab?.id, activeTab, saveTab])
+  }, [settings?.autoSave, activeTab?.content, activeTab?.dirty, activeTab?.id, activeTab, saveTab])
 
-  // ---- 原生菜单动作 ----
+  // ── Native menu actions ───────────────────────────────────────────────────
   useEffect(() => {
     if (!window.api) return undefined
-    const dispose = window.api.onMenuAction((action) => {
+    return window.api.onMenuAction((action) => {
       const id = stateRef.current.activeId
       switch (action) {
         case 'new-file': newFile(); break
@@ -727,10 +371,24 @@ export default function App(): JSX.Element {
         case 'command-palette': setShowPalette(true); break
         case 'export-pdf': exportPDF(); break
         case 'export-html': exportHTML(); break
+        case 'query-dirty': {
+          const dirty = hasDirtyTabs()
+          const proceed =
+            !dirty ||
+            window.confirm(
+              getLang() === 'en'
+                ? 'You have unsaved changes. Quit anyway?'
+                : '还有未保存的文件，确定退出？'
+            )
+          if (proceed) window.api.notifyQuitOk()
+          break
+        }
       }
     })
-    return dispose
-  }, [newFile, openFile, openFolder, saveTab, saveAsTab, closeTab, exportPDF, exportHTML])
+  }, [newFile, openFile, openFolder, saveTab, saveAsTab, closeTab, exportPDF, exportHTML, hasDirtyTabs])
+
+  // Don't render until settings are loaded (avoids flash of wrong theme/width)
+  if (!settings) return <div className="app" />
 
   return (
     <div className="app">
@@ -777,10 +435,8 @@ export default function App(): JSX.Element {
         {showFind && (
           <FindBar
             initialQuery={findInitial}
-            onClose={() => {
-              setShowFind(false)
-              setFindInitial('')
-            }}
+            initialLine={findLine}
+            onClose={() => { setShowFind(false); setFindInitial(''); setFindLine(undefined) }}
           />
         )}
 
@@ -789,8 +445,7 @@ export default function App(): JSX.Element {
           onClick={(e) => {
             const target = e.target as HTMLElement
             if (target.tagName === 'IMG') {
-              const img = target as HTMLImageElement
-              const src = img.currentSrc || img.src
+              const src = (target as HTMLImageElement).currentSrc || (target as HTMLImageElement).src
               if (src) setZoomSrc(src)
             }
           }}
@@ -810,7 +465,7 @@ export default function App(): JSX.Element {
             ) : (
               <Suspense fallback={<div className="editor-loading" />}>
                 <Editor
-                  key={activeTab.id + '-' + resolvedTheme + '-' + settings.language}
+                  key={activeTab.id + '-' + resolvedTheme + '-' + lang}
                   content={activeTab.content}
                   docDir={activeDocDir}
                   docName={activeTab.name}
@@ -836,7 +491,12 @@ export default function App(): JSX.Element {
           )}
 
           {outlineVisible && activeTab && (
-            <Outline items={outline} onSelect={scrollToHeading} onClose={() => setOutlineVisible(false)} />
+            <Outline
+              items={outline}
+              onSelect={scrollToHeading}
+              onReorder={reorderSection}
+              onClose={() => setOutlineVisible(false)}
+            />
           )}
         </div>
 
@@ -847,10 +507,7 @@ export default function App(): JSX.Element {
         <Settings
           settings={settings}
           onChange={saveSettings}
-          onShowShortcuts={() => {
-            setShowSettings(false)
-            setShowShortcuts(true)
-          }}
+          onShowShortcuts={() => { setShowSettings(false); setShowShortcuts(true) }}
           onClose={() => setShowSettings(false)}
         />
       )}

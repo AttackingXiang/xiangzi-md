@@ -115,7 +115,10 @@ const api = {
   },
 
   /** 渲染层就绪，通知主进程可以发送待打开的文件 */
-  notifyReady: (): void => ipcRenderer.send('app:ready')
+  notifyReady: (): void => ipcRenderer.send('app:ready'),
+
+  /** 用户确认退出（关窗口时无未保存文件、或 confirm 通过） */
+  notifyQuitOk: (): void => ipcRenderer.send('app:quit-ok')
 }
 
 contextBridge.exposeInMainWorld('api', api)

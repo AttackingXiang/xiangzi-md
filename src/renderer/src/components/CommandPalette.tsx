@@ -71,6 +71,14 @@ export default function CommandPalette({
     setActive(0)
   }, [query])
 
+  // Scroll active item into view when navigating with keyboard
+  useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+    const activeEl = list.children[active] as HTMLElement | undefined
+    activeEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [active])
+
   const exec = (item: Item | undefined): void => {
     if (!item) return
     item.run()
