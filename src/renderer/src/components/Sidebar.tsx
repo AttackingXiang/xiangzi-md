@@ -18,6 +18,7 @@ interface Props {
   onRefresh: () => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onRootContext: (x: number, y: number) => void
+  reloadKey: number
 }
 
 export default function Sidebar({
@@ -32,7 +33,8 @@ export default function Sidebar({
   onToggleFavorite,
   onRefresh,
   onNodeContext,
-  onRootContext
+  onRootContext,
+  reloadKey
 }: Props): JSX.Element {
   const isFav = folder ? favorites.includes(folder.root) : false
 
@@ -98,6 +100,7 @@ export default function Sidebar({
       >
         {folder ? (
           <FileTree
+            key={reloadKey}
             nodes={folder.tree}
             activePath={activePath}
             onOpenFile={onOpenFile}

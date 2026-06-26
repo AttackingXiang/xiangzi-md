@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
-import Editor from './components/Editor'
 import SourceEditor from './components/SourceEditor'
+
+// 懒加载较重的所见即所得编辑器（Crepe），加快应用启动与首屏
+const Editor = lazy(() => import('./components/Editor'))
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
 import Settings from './components/Settings'
@@ -59,18 +61,6 @@ const DEFAULT_SETTINGS: AppSettings = {
 interface FileEntry {
   path: string
   name: string
-}
-
-/** 递归展平文件树为文件列表（用于命令面板快速打开） */
-function flattenFiles(nodes: FileNode[], out: FileEntry[] = []): FileEntry[] {
-  for (const n of nodes) {
-    if (n.isDir) {
-      if (n.children) flattenFiles(n.children, out)
-    } else {
-      out.push({ path: n.path, name: n.name })
-    }
-  }
-  return out
 }
 
 export default function App(): JSX.Element {
@@ -410,12 +400,14 @@ export default function App(): JSX.Element {
   }, [])
 
   // ---- 文件树操作 ----
+  const [treeKey, setTreeKey] = useState(0)
   const refreshTree = useCallback(async () => {
-    setFolder((f) => f) // 触发后续异步替换
     const root = folder?.root
     if (!root) return
     const tree = await window.api.readDir(root)
     setFolder((f) => (f ? { ...f, tree } : f))
+    // 重建文件树以反映子目录变化（懒加载的子项状态会被重置）
+    setTreeKey((k) => k + 1)
   }, [folder?.root])
 
   const createFileIn = useCallback(
@@ -605,7 +597,21 @@ export default function App(): JSX.Element {
   }, [])
 
   // ---- 命令面板 ----
-  const paletteFiles = useMemo(() => (folder ? flattenFiles(folder.tree) : []), [folder])
+  // 文件列表后台异步加载（不阻塞打开文件夹），供命令面板快速打开
+  const [paletteFiles, setPaletteFiles] = useState<FileEntry[]>([])
+  useEffect(() => {
+    if (!folder) {
+      setPaletteFiles([])
+      return
+    }
+    let cancelled = false
+    window.api.listFiles(folder.root).then((list) => {
+      if (!cancelled) setPaletteFiles(list)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [folder?.root])
   const paletteCommands = useMemo<Command[]>(
     () => [
       { id: 'new', label: t('新建文件'), run: newFile },
@@ -695,6 +701,7 @@ export default function App(): JSX.Element {
             onRefresh={refreshTree}
             onNodeContext={openNodeContext}
             onRootContext={openRootContext}
+            reloadKey={treeKey}
           />
         ))}
 
@@ -745,16 +752,18 @@ export default function App(): JSX.Element {
                 onChange={(c) => updateContent(activeTab.id, c)}
               />
             ) : (
-              <Editor
-                key={activeTab.id + '-' + resolvedTheme + '-' + settings.language}
-                content={activeTab.content}
-                docDir={activeDocDir}
-                imageMaxWidth={settings.imageMaxWidth}
-                theme={resolvedTheme}
-                focusMode={focusMode}
-                typewriterMode={typewriterMode}
-                onChange={(c) => updateContent(activeTab.id, c)}
-              />
+              <Suspense fallback={<div className="editor-loading" />}>
+                <Editor
+                  key={activeTab.id + '-' + resolvedTheme + '-' + settings.language}
+                  content={activeTab.content}
+                  docDir={activeDocDir}
+                  imageMaxWidth={settings.imageMaxWidth}
+                  theme={resolvedTheme}
+                  focusMode={focusMode}
+                  typewriterMode={typewriterMode}
+                  onChange={(c) => updateContent(activeTab.id, c)}
+                />
+              </Suspense>
             )
           ) : (
             <Welcome

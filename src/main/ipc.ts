@@ -33,7 +33,7 @@ export interface FileNode {
 const MARKDOWN_EXTS = new Set(['.md', '.markdown', '.mdown', '.mkd', '.mdx'])
 const IGNORED_DIRS = new Set(['.git', 'node_modules', '.DS_Store', '.obsidian', '.vscode'])
 
-/** 递归读取目录，返回文件树（隐藏被忽略的目录） */
+/** 只读取一层目录（懒加载）：目录的 children 留空，待展开时再读 */
 async function readDirTree(dirPath: string): Promise<FileNode[]> {
   let entries
   try {
@@ -49,12 +49,8 @@ async function readDirTree(dirPath: string): Promise<FileNode[]> {
 
     const fullPath = join(dirPath, entry.name)
     if (entry.isDirectory()) {
-      nodes.push({
-        name: entry.name,
-        path: fullPath,
-        isDir: true,
-        children: await readDirTree(fullPath)
-      })
+      // 不递归：children 保持 undefined，展开时通过 fs:readDir 按需加载
+      nodes.push({ name: entry.name, path: fullPath, isDir: true })
     } else if (entry.isFile()) {
       // 只展示 markdown 与常见纯文本，其它隐藏以保持整洁
       const ext = extname(entry.name).toLowerCase()
@@ -146,9 +142,35 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return { path: result.filePath, name: basename(result.filePath) }
   })
 
-  // 刷新目录树
+  // 读取/刷新某一层目录
   ipcMain.handle('fs:readDir', async (_e, dirPath: string) => {
     return readDirTree(dirPath)
+  })
+
+  // 递归列出文件夹内所有 markdown 文件（仅路径，供命令面板快速打开；后台调用，不阻塞）
+  ipcMain.handle('fs:listFiles', async (_e, root: string) => {
+    const out: { path: string; name: string }[] = []
+    const MAX = 8000
+    async function walk(dir: string): Promise<void> {
+      if (out.length >= MAX) return
+      let entries
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        if (IGNORED_DIRS.has(entry.name)) continue
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) await walk(full)
+        else if (entry.isFile() && MARKDOWN_EXTS.has(extname(entry.name).toLowerCase())) {
+          out.push({ path: full, name: entry.name })
+          if (out.length >= MAX) return
+        }
+      }
+    }
+    await walk(root)
+    return out
   })
 
   // 新建文件
