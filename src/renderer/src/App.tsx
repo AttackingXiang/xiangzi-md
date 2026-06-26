@@ -198,6 +198,9 @@ export default function App(): JSX.Element {
     if (settingsReady) sessionReadyRef.current = true
   }, [settingsReady])
 
+  // Stable key that only changes when tab paths change, not when content changes.
+  // Without this, every keystroke would restart the 500ms debounce timer.
+  const tabPathsKey = tabs.map((t) => t.path ?? '').join('\0')
   useEffect(() => {
     if (!sessionReadyRef.current) return
     const session = {
@@ -207,7 +210,8 @@ export default function App(): JSX.Element {
     }
     const timer = setTimeout(() => window.api.setSettings({ session }), 500)
     return () => clearTimeout(timer)
-  }, [folder?.root, tabs, activeTab?.path])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folder?.root, tabPathsKey, activeTab?.path])
 
   // ── File tree ops ──────────────────────────────────────────────────────────
   const { treeKey, refreshTree, createFileIn, createFolderIn, openNodeContext, openRootContext } =
@@ -447,7 +451,7 @@ ${liveStyles}
     if (!settings?.autoSave || !activeTab?.path || !activeTab.dirty) return
     const id = setTimeout(() => saveTab(activeTab.id), 1200)
     return () => clearTimeout(id)
-  }, [settings?.autoSave, activeTab?.content, activeTab?.dirty, activeTab?.id, activeTab, saveTab])
+  }, [settings?.autoSave, activeTab?.content, activeTab?.dirty, activeTab?.id, saveTab])
 
   // ── Native menu actions ───────────────────────────────────────────────────
   useEffect(() => {
@@ -577,7 +581,7 @@ ${liveStyles}
             ) : (
               <Suspense fallback={<div className="editor-loading" />}>
                 <Editor
-                  key={activeTab.id + '-' + resolvedTheme + '-' + lang}
+                  key={activeTab.id + '-' + resolvedTheme}
                   content={activeTab.content}
                   docDir={activeDocDir}
                   docName={activeTab.name}

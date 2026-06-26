@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import type { FileNode } from '../types'
 
@@ -46,7 +46,7 @@ export default function FileTree({
   )
 }
 
-function TreeNode({
+const TreeNode = memo(function TreeNode({
   node,
   activePath,
   revealPath,
@@ -170,4 +170,4 @@ function TreeNode({
       </div>
     </li>
   )
-}
+})
