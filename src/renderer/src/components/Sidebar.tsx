@@ -1,6 +1,7 @@
 import { FolderOpen, RefreshCw, Search, Settings as SettingsIcon, Star, Folder } from 'lucide-react'
 import FileTree from './FileTree'
 import type { FileNode, Folder as FolderType } from '../types'
+import { t } from '../lib/i18n'
 
 interface Props {
   folder: FolderType | null
@@ -42,31 +43,31 @@ export default function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <span className="sidebar-title">{folder ? folder.name : '资源管理器'}</span>
+        <span className="sidebar-title">{folder ? folder.name : t('资源管理器')}</span>
         <div className="sidebar-actions">
           {folder && (
             <button
               className={`icon-btn sm${isFav ? ' active' : ''}`}
-              title={isFav ? '取消收藏' : '收藏此目录'}
+              title={isFav ? t('取消收藏') : t('收藏此目录')}
               onClick={() => onToggleFavorite(folder.root)}
             >
               <Star size={15} fill={isFav ? 'currentColor' : 'none'} />
             </button>
           )}
           {folder && (
-            <button className="icon-btn sm" title="刷新" onClick={onRefresh}>
+            <button className="icon-btn sm" title={t('刷新')} onClick={onRefresh}>
               <RefreshCw size={15} />
             </button>
           )}
           {folder && (
-            <button className="icon-btn sm" title="在文件夹中搜索" onClick={onOpenSearch}>
+            <button className="icon-btn sm" title={t('在文件夹中搜索')} onClick={onOpenSearch}>
               <Search size={15} />
             </button>
           )}
-          <button className="icon-btn sm" title="打开文件夹" onClick={onOpenFolder}>
+          <button className="icon-btn sm" title={t('打开文件夹')} onClick={onOpenFolder}>
             <FolderOpen size={15} />
           </button>
-          <button className="icon-btn sm" title="设置" onClick={onOpenSettings}>
+          <button className="icon-btn sm" title={t('设置')} onClick={onOpenSettings}>
             <SettingsIcon size={15} />
           </button>
         </div>
@@ -74,7 +75,7 @@ export default function Sidebar({
 
       {favorites.length > 0 && (
         <div className="sidebar-section">
-          <div className="section-label">收藏目录</div>
+          <div className="section-label">{t('收藏目录')}</div>
           {favorites.map((fav) => (
             <div
               key={fav}
@@ -109,9 +110,9 @@ export default function Sidebar({
           />
         ) : (
           <div className="sidebar-empty">
-            <p>尚未打开文件夹</p>
+            <p>{t('尚未打开文件夹')}</p>
             <button className="primary-btn" onClick={onOpenFolder}>
-              打开文件夹
+              {t('打开文件夹')}
             </button>
           </div>
         )}

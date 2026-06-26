@@ -9,6 +9,7 @@ import {
   searchReplace,
   searchReplaceAll
 } from '../lib/searchBridge'
+import { t } from '../lib/i18n'
 
 interface Props {
   initialQuery?: string
@@ -72,7 +73,7 @@ export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Elem
     <div className="findbar">
       <button
         className={`icon-btn sm${showReplace ? ' active' : ''}`}
-        title="替换"
+        title={t('替换')}
         onClick={() => setShowReplace((v) => !v)}
       >
         <Replace size={15} />
@@ -83,7 +84,7 @@ export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Elem
           <input
             ref={inputRef}
             className="find-input"
-            placeholder="查找…"
+            placeholder={t('查找…')}
             value={find}
             onChange={(e) => {
               setFind(e.target.value)
@@ -97,10 +98,10 @@ export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Elem
               if (e.key === 'Escape') onClose()
             }}
           />
-          <button className="icon-btn sm" title="上一个 (⇧Enter)" onClick={goPrev}>
+          <button className="icon-btn sm" title={`${t('上一个')} (⇧Enter)`} onClick={goPrev}>
             <ChevronUp size={15} />
           </button>
-          <button className="icon-btn sm" title="下一个 (Enter)" onClick={goNext}>
+          <button className="icon-btn sm" title={`${t('下一个')} (Enter)`} onClick={goNext}>
             <ChevronDown size={15} />
           </button>
         </div>
@@ -109,7 +110,7 @@ export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Elem
           <div className="findbar-row">
             <input
               className="find-input"
-              placeholder={wysiwyg ? '替换为…' : '源码模式暂不支持替换'}
+              placeholder={wysiwyg ? t('替换为…') : t('源码模式暂不支持替换')}
               value={replace}
               disabled={!wysiwyg}
               onChange={(e) => setReplace(e.target.value)}
@@ -122,20 +123,20 @@ export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Elem
               disabled={!wysiwyg || !find}
               onClick={() => searchReplace(find, replace)}
             >
-              替换
+              {t('替换')}
             </button>
             <button
               className="text-btn"
               disabled={!wysiwyg || !find}
               onClick={() => searchReplaceAll(find, replace)}
             >
-              全部替换
+              {t('全部替换')}
             </button>
           </div>
         )}
       </div>
 
-      <button className="icon-btn sm" title="关闭 (Esc)" onClick={onClose}>
+      <button className="icon-btn sm" title={`${t('关闭')} (Esc)`} onClick={onClose}>
         <X size={15} />
       </button>
     </div>

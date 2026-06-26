@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import type { OutlineItem } from '../types'
+import { t } from '../lib/i18n'
 
 interface Props {
   items: OutlineItem[]
@@ -11,14 +12,14 @@ export default function Outline({ items, onSelect, onClose }: Props): JSX.Elemen
   return (
     <aside className="outline">
       <div className="outline-header">
-        <span>大纲</span>
-        <button className="icon-btn sm" onClick={onClose} title="关闭大纲">
+        <span>{t('大纲')}</span>
+        <button className="icon-btn sm" onClick={onClose} title={t('关闭大纲')}>
           <X size={14} />
         </button>
       </div>
       <div className="outline-body">
         {items.length === 0 ? (
-          <p className="outline-empty">暂无标题</p>
+          <p className="outline-empty">{t('暂无标题')}</p>
         ) : (
           items.map((it) => (
             <div
@@ -28,7 +29,7 @@ export default function Outline({ items, onSelect, onClose }: Props): JSX.Elemen
               onClick={() => onSelect(it.index)}
               title={it.text}
             >
-              {it.text || '（空标题）'}
+              {it.text || t('（空标题）')}
             </div>
           ))
         )}

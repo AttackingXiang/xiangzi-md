@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { t } from '../lib/i18n'
 
 interface Props {
   title: string
@@ -13,7 +14,7 @@ export default function InputDialog({
   title,
   initial = '',
   placeholder,
-  confirmText = '确定',
+  confirmText = t('确定'),
   onSubmit,
   onClose
 }: Props): JSX.Element {
@@ -56,7 +57,7 @@ export default function InputDialog({
           />
           <div className="input-dialog-actions">
             <button className="secondary-btn" onClick={onClose}>
-              取消
+              {t('取消')}
             </button>
             <button className="primary-btn" onClick={submit}>
               {confirmText}
