@@ -343,16 +343,20 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     await fs.writeFile(tmpPath, html, 'utf-8')
     const printWin = new BrowserWindow({ show: false, width: 900, height: 800,
       webPreferences: { sandbox: false } })
-    await printWin.loadFile(tmpPath)
-    const data = await printWin.webContents.printToPDF({ printBackground: true })
-    printWin.close()
-    fs.unlink(tmpPath).catch(() => {})
-
-    await fs.writeFile(result.filePath, data)
+    try {
+      await printWin.loadFile(tmpPath)
+      const data = await printWin.webContents.printToPDF({ printBackground: true })
+      await fs.writeFile(result.filePath, data)
+    } finally {
+      printWin.close()
+      fs.unlink(tmpPath).catch(() => {})
+    }
     return { path: result.filePath }
   })
 
-  // 导出为长图（PNG / JPG）：同样用隐藏窗口渲染完整文档，截图后保存
+  // 导出为长图（PNG / JPG）
+  // macOS 上 show:false 的窗口没有渲染面，capturePage() 会返回空图。
+  // 使用 offscreen:true 模式让 Chromium 渲染到离屏缓冲区，再调 capturePage()。
   ipcMain.handle('export:image', async (_e, html: string, suggestedName: string) => {
     const win = getWindow()
     if (!win) return null
@@ -371,23 +375,35 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     const tmpPath = join(app.getPath('temp'), `xmd_img_${Date.now()}.html`)
     await fs.writeFile(tmpPath, html, 'utf-8')
 
-    const imgWin = new BrowserWindow({ show: false, width: 920, height: 800,
-      webPreferences: { sandbox: false } })
-    await imgWin.loadFile(tmpPath)
+    // offscreen:true — 离屏渲染，capturePage() 可正常捕获，不依赖可见窗口
+    const imgWin = new BrowserWindow({
+      show: false,
+      width: 920,
+      height: 800,
+      webPreferences: { offscreen: true, sandbox: false }
+    })
+    try {
+      await imgWin.loadFile(tmpPath)
 
-    // 获取文档实际高度，将窗口扩展到全文高度后再截图
-    const docHeight: number = await imgWin.webContents.executeJavaScript(
-      'document.documentElement.scrollHeight'
-    )
-    imgWin.setContentSize(920, Math.min(docHeight + 20, 20000))
-    await new Promise<void>((r) => setTimeout(r, 150))
+      // 获取文档完整高度，将窗口内容区扩展到全文
+      const docHeight: number = await imgWin.webContents.executeJavaScript(
+        'document.documentElement.scrollHeight'
+      )
+      const contentH = Math.min(docHeight + 20, 20000)
+      imgWin.setContentSize(920, contentH)
+      // invalidate 触发离屏帧刷新，等待重绘完成
+      imgWin.webContents.invalidate()
+      await new Promise<void>((r) => setTimeout(r, 300))
 
-    const nimg = await imgWin.webContents.capturePage()
-    imgWin.close()
-    fs.unlink(tmpPath).catch(() => {})
+      const nimg = await imgWin.webContents.capturePage()
+      if (nimg.isEmpty()) return null
 
-    const buf = isJpg ? nimg.toJPEG(92) : nimg.toPNG()
-    await fs.writeFile(fp, buf)
+      const buf = isJpg ? nimg.toJPEG(92) : nimg.toPNG()
+      await fs.writeFile(fp, buf)
+    } finally {
+      imgWin.close()
+      fs.unlink(tmpPath).catch(() => {})
+    }
     return { path: fp }
   })
 }
