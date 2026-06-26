@@ -1,4 +1,4 @@
-import { FolderOpen, RefreshCw, Settings as SettingsIcon, Star, Folder } from 'lucide-react'
+import { FolderOpen, RefreshCw, Search, Settings as SettingsIcon, Star, Folder } from 'lucide-react'
 import FileTree from './FileTree'
 import type { FileNode, Folder as FolderType } from '../types'
 
@@ -11,6 +11,7 @@ interface Props {
   onOpenFolderPath: (root: string) => void
   onOpenFile: (path: string, name?: string) => void
   onOpenSettings: () => void
+  onOpenSearch: () => void
   onToggleFavorite: (path: string) => void
   onRefresh: () => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
@@ -30,6 +31,7 @@ export default function Sidebar({
   onOpenFolderPath,
   onOpenFile,
   onOpenSettings,
+  onOpenSearch,
   onToggleFavorite,
   onRefresh,
   onNodeContext,
@@ -54,6 +56,11 @@ export default function Sidebar({
           {folder && (
             <button className="icon-btn sm" title="刷新" onClick={onRefresh}>
               <RefreshCw size={15} />
+            </button>
+          )}
+          {folder && (
+            <button className="icon-btn sm" title="在文件夹中搜索" onClick={onOpenSearch}>
+              <Search size={15} />
             </button>
           )}
           <button className="icon-btn sm" title="打开文件夹" onClick={onOpenFolder}>

@@ -34,6 +34,17 @@ export interface AppSettings {
   favorites: string[]
 }
 
+export interface SearchMatch {
+  lineNumber: number
+  text: string
+}
+
+export interface SearchResult {
+  path: string
+  name: string
+  matches: SearchMatch[]
+}
+
 export interface OutlineItem {
   level: number
   text: string

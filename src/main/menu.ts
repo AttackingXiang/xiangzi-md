@@ -77,7 +77,12 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
         { role: 'paste', label: '粘贴' },
         { role: 'selectAll', label: '全选' },
         { type: 'separator' },
-        { label: '查找', accelerator: 'CmdOrCtrl+F', click: () => send(getWindow(), 'find') }
+        { label: '查找', accelerator: 'CmdOrCtrl+F', click: () => send(getWindow(), 'find') },
+        {
+          label: '在文件夹中搜索',
+          accelerator: 'CmdOrCtrl+Shift+F',
+          click: () => send(getWindow(), 'search-in-folder')
+        }
       ]
     },
     {
@@ -101,7 +106,7 @@ export function buildMenu(getWindow: () => BrowserWindow | null): void {
         { type: 'separator' },
         {
           label: '专注模式',
-          accelerator: 'CmdOrCtrl+Shift+F',
+          accelerator: 'CmdOrCtrl+Alt+F',
           click: () => send(getWindow(), 'toggle-focus')
         },
         {
