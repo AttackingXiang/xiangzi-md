@@ -81,9 +81,9 @@ jobs:
           # 等待 Gitee 镜像同步完成（最多 3 分钟）
           echo "Waiting for Gitee mirror to sync tag ${TAG}..."
           for i in $(seq 1 18); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/git/refs/tags/${TAG}?access_token=${GITEE_TOKEN}")
-            if [ "$STATUS" = "200" ]; then
+            FOUND=$(curl -s "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/tags?access_token=${GITEE_TOKEN}&limit=100" \
+              | jq -r --arg t "$TAG" '.[] | select(.name==$t) | .name' 2>/dev/null || true)
+            if [ "$FOUND" = "$TAG" ]; then
               echo "Tag synced to Gitee."
               break
             fi
@@ -91,10 +91,10 @@ jobs:
             sleep 10
           done
 
-          # 创建 Gitee Release
+          # 创建 Gitee Release（target_commitish 为必填字段）
           RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
             -H "Content-Type: application/json" \
-            -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"body\":\"详细更新日志请查看 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG})\"}")
+            -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"target_commitish\":\"main\",\"body\":\"详细更新日志请查看 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG})\"}")
           echo "Create response: ${RESP:0:300}"
           RELEASE_ID=$(echo "$RESP" | jq -r '.id // empty' 2>/dev/null || true)
 
