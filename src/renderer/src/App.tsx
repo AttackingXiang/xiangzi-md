@@ -305,6 +305,14 @@ export default function App(): JSX.Element {
     [pushRecentFile]
   )
 
+  // 系统「打开方式 / 双击」打开文件
+  useEffect(() => {
+    if (!window.api) return undefined
+    const dispose = window.api.onOpenPath((p) => openPath(p, baseName(p)))
+    window.api.notifyReady()
+    return dispose
+  }, [openPath])
+
   const openFile = useCallback(async () => {
     const file = await window.api.openFile()
     if (!file) return
