@@ -396,7 +396,8 @@ export default function App(): JSX.Element {
       '.milkdown-link-edit', '.milkdown-link-preview',
       '.milkdown-diff-controls', '.milkdown-diff-controls-block',
       '.handle', '.drag-preview',
-      '.tools',  // code block top-bar: language picker + copy / toggle buttons
+      '.tools',   // code block top-bar: language picker + copy / toggle buttons
+      '.fold-btn', // heading fold toggle injected by headingFoldPlugin
     ].join(', ')
     clone.querySelectorAll(MILKDOWN_UI).forEach((el) => el.remove())
     clone.querySelectorAll('.selectedCell, .ProseMirror-selectednode').forEach((el) => {
@@ -459,6 +460,16 @@ ${liveStyles}
 <div class="milkdown"><div class="ProseMirror export-content">${clone.innerHTML}</div></div>
 </body></html>`
   }, [])
+
+  const exportHTML = useCallback(async () => {
+    const { activeId: id } = stateRef.current
+    if (!id) return
+    const tab = stateRef.current.tabs.find((t) => t.id === id)
+    const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
+    if (!html) return
+    const res = await window.api.exportHTML(html, tab?.name ?? 'document')
+    if (res) window.alert((getLang() === 'en' ? 'Exported HTML:\n' : '已导出 HTML：\n') + res.path)
+  }, [generateExportHTML])
 
   const exportPDF = useCallback(async () => {
     const { activeId: id } = stateRef.current
@@ -529,13 +540,14 @@ ${liveStyles}
       { id: 'source', label: t('切换源码模式'), run: () => setSourceMode((v) => !v) },
       { id: 'focus', label: t('专注模式'), run: () => setFocusMode((v) => !v) },
       { id: 'typewriter', label: t('打字机模式'), run: () => setTypewriterMode((v) => !v) },
+      { id: 'export-html', label: t('导出 HTML'), run: exportHTML },
       { id: 'export-pdf', label: t('导出 PDF'), run: exportPDF },
       { id: 'export-image', label: t('导出图片'), run: exportImage },
       { id: 'settings', label: t('设置'), run: () => setShowSettings(true) },
       { id: 'shortcuts', label: t('快捷键'), run: () => setShowShortcuts(true) }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportPDF, exportImage, lang]
+    [newFile, openFile, openFolder, activeId, saveTab, saveAsTab, exportHTML, exportPDF, exportImage, lang]
   )
 
   // ── Auto-save ─────────────────────────────────────────────────────────────
@@ -567,6 +579,7 @@ ${liveStyles}
         case 'open-settings': setShowSettings(true); break
         case 'show-shortcuts': setShowShortcuts(true); break
         case 'command-palette': setShowPalette(true); break
+        case 'export-html': exportHTML(); break
         case 'export-pdf': exportPDF(); break
         case 'export-image': exportImage(); break
         case 'query-dirty': {
@@ -583,7 +596,7 @@ ${liveStyles}
         }
       }
     })
-  }, [newFile, openFile, openFolder, saveTab, saveAsTab, closeTab, exportPDF, exportImage, hasDirtyTabs])
+  }, [newFile, openFile, openFolder, saveTab, saveAsTab, closeTab, exportHTML, exportPDF, exportImage, hasDirtyTabs])
 
   // Don't render until settings are loaded (avoids flash of wrong theme/width)
   if (!settings) return <div className="app" />
