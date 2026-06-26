@@ -4,6 +4,7 @@ import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { resolveAssetURL } from '../lib/asset'
 import { codeMirrorTheme } from '../lib/codeTheme'
+import { setupTableResize } from '../lib/tableResize'
 
 interface Props {
   content: string
@@ -73,12 +74,18 @@ export default function Editor({
     })
 
     let destroyed = false
+    let disposeTableResize: (() => void) | undefined
     crepe.create().then(() => {
-      if (destroyed) crepe.destroy()
+      if (destroyed) {
+        crepe.destroy()
+        return
+      }
+      disposeTableResize = setupTableResize(root)
     })
 
     return () => {
       destroyed = true
+      disposeTableResize?.()
       crepe.destroy()
     }
     // 仅在挂载时创建；内容更新由 Crepe 内部维护
