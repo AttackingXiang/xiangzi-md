@@ -325,11 +325,30 @@ export default function App(): JSX.Element {
   }, [])
 
   // ── Export ────────────────────────────────────────────────────────────────
-  /** Build a self-contained HTML string from the current editor DOM */
+  /** Build a self-contained HTML string that renders identically to the app view */
   const generateExportHTML = useCallback(async (title: string): Promise<string | null> => {
-    const el = document.querySelector('.milkdown')
-    if (!el) return null
-    const clone = el.cloneNode(true) as HTMLElement
+    // Target only the ProseMirror content node — not the full .milkdown wrapper
+    // (which contains floating toolbars, bubble menus and other editor chrome)
+    const pm =
+      document.querySelector<HTMLElement>('.milkdown .ProseMirror') ??
+      document.querySelector<HTMLElement>('.milkdown [contenteditable="true"]') ??
+      document.querySelector<HTMLElement>('.milkdown')
+    if (!pm) return null
+
+    const clone = pm.cloneNode(true) as HTMLElement
+
+    // Strip Milkdown UI decorations: table handles, drag handles, toolbars…
+    // These are ProseMirror decoration nodes, not actual document content.
+    clone.querySelectorAll(
+      '[class*="milkdown-"], .handle, .drag-preview, [data-role], [data-show]'
+    ).forEach((el) => el.remove())
+
+    // Remove editor selection state classes that look wrong in a static export
+    clone.querySelectorAll('.selectedCell, .ProseMirror-selectednode').forEach((el) => {
+      el.classList.remove('selectedCell', 'ProseMirror-selectednode')
+    })
+
+    // Inline xmd:// images as base64 so the HTML is fully self-contained
     const imgs = Array.from(clone.querySelectorAll('img[src]')) as HTMLImageElement[]
     await Promise.all(
       imgs.map(async (img) => {
@@ -347,18 +366,28 @@ export default function App(): JSX.Element {
         } catch { /* leave original src */ }
       })
     )
+
+    // Collect all live <style> tags — includes Milkdown styles, code highlighting,
+    // theme variables, etc. — so the export renders with the exact same CSS.
+    const liveStyles = Array.from(document.querySelectorAll('style'))
+      .map((s) => s.outerHTML)
+      .join('\n')
+
+    // Preserve dark / light theme
+    const theme = document.documentElement.getAttribute('data-theme') ?? ''
+
     return `<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8" /><title>${title}</title>
+<html${theme ? ` data-theme="${theme}"` : ''}><head><meta charset="utf-8" /><title>${title}</title>
+${liveStyles}
 <style>
   *{scrollbar-width:none}*::-webkit-scrollbar{display:none}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;line-height:1.7;color:#2c2c2c;max-width:780px;margin:40px auto;padding:0 20px;background:#fff}
-  pre{background:#f5f5f5;padding:14px;border-radius:8px;overflow:auto}
-  code{font-family:'SF Mono',Menlo,monospace;font-size:.92em}
-  img{max-width:100%}
-  blockquote{border-left:3px solid #ddd;margin:0;padding-left:16px;color:#666}
-  table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}
-  h1,h2,h3,h4,h5,h6{line-height:1.3}
-</style></head><body><article>${clone.innerHTML}</article></body></html>`
+  html,body{margin:0;padding:0;background:var(--bg,#fff)}
+  .milkdown{padding:0;background:var(--bg,#fff)}
+  .ProseMirror.export-content{max-width:800px;margin:0 auto;padding:48px 40px 80px;outline:none}
+</style>
+</head><body>
+<div class="milkdown"><div class="ProseMirror export-content">${clone.innerHTML}</div></div>
+</body></html>`
   }, [])
 
   const exportPDF = useCallback(async () => {
