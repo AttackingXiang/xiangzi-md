@@ -10,11 +10,9 @@
 
 | 平台 | 文件 | 说明 |
 | --- | --- | --- |
-| macOS (Apple Silicon) | `Xiangzi-MD-*-arm64.dmg` | 打开后拖入「应用程序」 |
-| macOS (Intel) | `Xiangzi-MD-*-x64.dmg` | 同上 |
+| macOS（Intel + Apple Silicon 通用） | `Xiangzi-MD-*.dmg` | 打开后拖入「应用程序」 |
 | Windows | `Xiangzi-MD-Setup-*.exe` | 安装版（NSIS） |
 | Windows | `Xiangzi-MD-*-portable.exe` | 便携版，免安装直接运行 |
-| Linux | `Xiangzi-MD-*.AppImage` | 赋予可执行权限后运行 |
 
 > 安装包未做代码签名：macOS 首次打开请「右键 → 打开」；Windows 出现 SmartScreen 时点「仍要运行」。
 >

@@ -543,6 +543,11 @@ button {
   overflow-y: auto;
 }
 
+.editor-loading {
+  flex: 1;
+  background: var(--bg);
+}
+
 .source-editor {
   flex: 1;
   border: none;

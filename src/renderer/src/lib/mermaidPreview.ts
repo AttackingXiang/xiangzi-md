@@ -1,14 +1,21 @@
-import mermaid from 'mermaid'
 import { t } from './i18n'
 
+// 动态加载 mermaid（体积较大）：只有真正渲染图表时才加载，避免拖慢启动
+type MermaidApi = typeof import('mermaid')['default']
+let mermaidPromise: Promise<MermaidApi> | null = null
 let currentTheme: string | null = null
 
-function ensureInit(theme: 'light' | 'dark'): void {
+async function getMermaid(theme: 'light' | 'dark'): Promise<MermaidApi> {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((m) => m.default)
+  }
+  const mermaid = await mermaidPromise
   const mTheme = theme === 'dark' ? 'dark' : 'default'
   if (currentTheme !== mTheme) {
     mermaid.initialize({ startOnLoad: false, theme: mTheme, securityLevel: 'strict' })
     currentTheme = mTheme
   }
+  return mermaid
 }
 
 function escapeHtml(s: string): string {
@@ -17,9 +24,7 @@ function escapeHtml(s: string): string {
 
 /**
  * 供 Crepe code-mirror 的 renderPreview 使用：mermaid 代码块异步渲染为图表。
- *
- * 注意：PreviewPanel 仅在 preview 值被「重新赋值」时刷新，且会 sanitizeSvg(value)。
- * 因此必须返回 undefined 表示异步，并在渲染完成后通过 applyPreview 传入 SVG 字符串。
+ * 返回 undefined 表示异步，渲染完成后经 applyPreview 回填 SVG 字符串。
  */
 export function renderMermaid(theme: 'light' | 'dark') {
   return (
@@ -29,18 +34,19 @@ export function renderMermaid(theme: 'light' | 'dark') {
   ): void | null => {
     if (!language || language.toLowerCase() !== 'mermaid') return null
     if (!content.trim()) return null
-    ensureInit(theme)
 
     const id = 'mmd-' + Math.random().toString(36).slice(2)
-    mermaid
-      .render(id, content)
-      .then(({ svg }) => applyPreview(`<div class="mermaid-preview">${svg}</div>`))
-      .catch((err: unknown) => {
+    void (async () => {
+      try {
+        const mermaid = await getMermaid(theme)
+        const { svg } = await mermaid.render(id, content)
+        applyPreview(`<div class="mermaid-preview">${svg}</div>`)
+      } catch (err: unknown) {
         const msg = escapeHtml(String((err as Error)?.message ?? err))
         applyPreview(`<div class="mermaid-error">${t('图表语法有误')}: ${msg}</div>`)
-      })
+      }
+    })()
 
-    // 返回 undefined：告知组件这是异步预览（先显示 loading，待 applyPreview 回填）
     return undefined
   }
 }
