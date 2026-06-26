@@ -41,7 +41,7 @@ const DEFAULTS: AppSettings = {
   imageMaxWidth: 800,
   language: 'zh',
   theme: 'system',
-  editorWidth: 'normal',
+  editorWidth: 'full',
   customCssPath: '',
   headingNumber: false,
   autoSave: false,
