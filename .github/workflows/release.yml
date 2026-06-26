@@ -1,6 +1,5 @@
 name: Release
 
-# 打标签（如 v0.1.0）或手动触发时，分别在 macOS / Windows 上构建安装包并发布到 GitHub Releases
 on:
   push:
     tags:
@@ -11,11 +10,16 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  # ── 各平台构建 & 发布到 GitHub Releases ──────────────────────────────────
+  build:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            artifact: macos
+          - os: windows-latest
+            artifact: windows
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -30,9 +34,81 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish
+      - name: Build and publish to GitHub
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 无 Apple/Windows 签名证书：跳过自动签名，产出未签名安装包
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist -- --publish always
+
+      # 暂存产物供后续 Gitee 上传
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            release/*.dmg
+            release/*.exe
+            release/*.yml
+            release/*.blockmap
+          retention-days: 1
+
+  # ── 所有平台构建完成后，同步上传到 Gitee Releases ────────────────────────
+  publish-gitee:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos
+          path: artifacts/macos
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: artifacts/windows
+
+      - name: Create Gitee Release and upload assets
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          OWNER="tlqgyx"
+          REPO="xiangzi-md"
+
+          # 创建 Gitee Release
+          RELEASE=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"access_token\": \"${GITEE_TOKEN}\",
+              \"tag_name\": \"${TAG}\",
+              \"name\": \"${TAG}\",
+              \"body\": \"详细更新日志请查看 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG})\"
+            }")
+          RELEASE_ID=$(echo "$RELEASE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))")
+
+          # Release 已存在时查询 ID
+          if [ -z "$RELEASE_ID" ]; then
+            EXISTING=$(curl -s "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}")
+            RELEASE_ID=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))")
+          fi
+
+          echo "Gitee Release ID: $RELEASE_ID"
+          if [ -z "$RELEASE_ID" ]; then
+            echo "Failed to get release ID, skipping upload"
+            exit 0
+          fi
+
+          # 上传安装包（dmg / exe）和更新清单（yml）；blockmap 跳过
+          for FILE in artifacts/macos/*.dmg artifacts/windows/*.exe artifacts/macos/*.yml artifacts/windows/*.yml; do
+            [ -f "$FILE" ] || continue
+            NAME=$(basename "$FILE")
+            echo "Uploading: $NAME"
+            curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files" \
+              -F "access_token=${GITEE_TOKEN}" \
+              -F "file=@${FILE};filename=${NAME}" \
+              --max-time 600 \
+            && echo "  ✓ $NAME" \
+            || echo "  ✗ $NAME (failed, possibly exceeds Gitee size limit)"
+          done
