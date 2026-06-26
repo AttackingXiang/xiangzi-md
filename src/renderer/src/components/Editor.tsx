@@ -136,7 +136,12 @@ export default function Editor({
     crepe.editor.use(headingFoldPlugin)
 
     crepe.on((listener) => {
+      // Skip the very first markdownUpdated after mount — Milkdown normalizes
+      // the content on initialization (trailing newline, whitespace, etc.) which
+      // would mark the tab dirty even though the user hasn't typed anything.
+      let mounted = false
       listener.markdownUpdated((_ctx, markdown) => {
+        if (!mounted) { mounted = true; return }
         onChangeRef.current(markdown)
       })
     })
