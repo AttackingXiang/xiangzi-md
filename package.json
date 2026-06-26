@@ -89,7 +89,8 @@
     },
     "dmg": {
       "title": "${productName}",
-      "writeUpdateInfo": false
+      "writeUpdateInfo": false,
+      "background": "build/background.png"
     },
     "win": {
       "icon": "build/icon.png",
