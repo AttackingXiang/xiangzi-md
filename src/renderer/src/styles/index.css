@@ -945,6 +945,29 @@ kbd {
   padding: 4px 2px;
 }
 
+/* 代码块选中配色：明确覆盖 CodeMirror 注入主题，浅色用淡蓝、深色用低亮度蓝 */
+.milkdown .cm-editor .cm-selectionLayer .cm-selectionBackground,
+.milkdown .cm-editor.cm-focused .cm-selectionLayer .cm-selectionBackground,
+.milkdown .cm-editor .cm-selectionBackground {
+  background: #eaf1ff !important;
+}
+
+.milkdown .cm-editor .cm-content ::selection,
+.milkdown .cm-editor .cm-line::selection {
+  background: #eaf1ff !important;
+}
+
+[data-theme='dark'] .milkdown .cm-editor .cm-selectionLayer .cm-selectionBackground,
+[data-theme='dark'] .milkdown .cm-editor.cm-focused .cm-selectionLayer .cm-selectionBackground,
+[data-theme='dark'] .milkdown .cm-editor .cm-selectionBackground {
+  background: rgba(125, 175, 255, 0.2) !important;
+}
+
+[data-theme='dark'] .milkdown .cm-editor .cm-content ::selection,
+[data-theme='dark'] .milkdown .cm-editor .cm-line::selection {
+  background: rgba(125, 175, 255, 0.2) !important;
+}
+
 .milkdown .cm-editor.cm-focused {
   outline: none;
   border-color: var(--accent);
