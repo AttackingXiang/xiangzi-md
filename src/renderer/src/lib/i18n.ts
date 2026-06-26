@@ -95,7 +95,7 @@ const EN: Record<string, string> = {
   专注模式: 'Focus mode',
   打字机模式: 'Typewriter mode',
   '导出 PDF': 'Export PDF',
-  '导出 HTML': 'Export HTML',
+  导出图片: 'Export Image',
   '另存为…': 'Save As…',
   另存为: 'Save As',
   查找: 'Find',

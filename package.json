@@ -1,6 +1,6 @@
 {
   "name": "xiangzi-md",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Xiangzi MD — 一个所见即所得的 Markdown 编辑器",
   "main": "./out/main/index.js",
   "author": "guoxiangzi",

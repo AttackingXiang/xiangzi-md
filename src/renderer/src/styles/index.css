@@ -40,6 +40,25 @@
   box-sizing: border-box;
 }
 
+/* Auto-hide scrollbars: transparent by default, appear when hovering the container */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted) !important;
+}
+
 html,
 body,
 #root {
@@ -606,7 +625,7 @@ button {
 .outline-body {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 6px 16px;
+  padding: 4px 6px 16px 2px;
 }
 
 .outline-empty {

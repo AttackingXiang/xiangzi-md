@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
+import { ipcMain, dialog, BrowserWindow, shell, app } from 'electron'
 import { promises as fs } from 'fs'
 import { basename, dirname, extname, join, relative, sep } from 'path'
 import { getSettings, setSettings } from './settings'
@@ -329,8 +329,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     getWindow()?.webContents.stopFindInPage('clearSelection')
   })
 
-  // 导出为 PDF
-  ipcMain.handle('export:pdf', async (_e, suggestedName: string) => {
+  // 导出为 PDF：在隐藏窗口中加载完整文档 HTML 再打印，避免只导出当前视口
+  ipcMain.handle('export:pdf', async (_e, html: string, suggestedName: string) => {
     const win = getWindow()
     if (!win) return null
     const result = await dialog.showSaveDialog(win, {
@@ -338,21 +338,56 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
       filters: [{ name: 'PDF', extensions: ['pdf'] }]
     })
     if (result.canceled || !result.filePath) return null
-    const data = await win.webContents.printToPDF({ printBackground: true })
+
+    const tmpPath = join(app.getPath('temp'), `xmd_pdf_${Date.now()}.html`)
+    await fs.writeFile(tmpPath, html, 'utf-8')
+    const printWin = new BrowserWindow({ show: false, width: 900, height: 800,
+      webPreferences: { sandbox: false } })
+    await printWin.loadFile(tmpPath)
+    const data = await printWin.webContents.printToPDF({ printBackground: true })
+    printWin.close()
+    fs.unlink(tmpPath).catch(() => {})
+
     await fs.writeFile(result.filePath, data)
     return { path: result.filePath }
   })
 
-  // 导出为 HTML
-  ipcMain.handle('export:html', async (_e, html: string, suggestedName: string) => {
+  // 导出为长图（PNG / JPG）：同样用隐藏窗口渲染完整文档，截图后保存
+  ipcMain.handle('export:image', async (_e, html: string, suggestedName: string) => {
     const win = getWindow()
     if (!win) return null
     const result = await dialog.showSaveDialog(win, {
-      defaultPath: suggestedName.replace(/\.md$/i, '') + '.html',
-      filters: [{ name: 'HTML', extensions: ['html'] }]
+      defaultPath: suggestedName.replace(/\.md$/i, ''),
+      filters: [
+        { name: 'PNG 图片', extensions: ['png'] },
+        { name: 'JPEG 图片', extensions: ['jpg'] }
+      ]
     })
     if (result.canceled || !result.filePath) return null
-    await fs.writeFile(result.filePath, html, 'utf-8')
-    return { path: result.filePath }
+
+    const fp = result.filePath
+    const isJpg = /\.(jpe?g)$/i.test(fp)
+
+    const tmpPath = join(app.getPath('temp'), `xmd_img_${Date.now()}.html`)
+    await fs.writeFile(tmpPath, html, 'utf-8')
+
+    const imgWin = new BrowserWindow({ show: false, width: 920, height: 800,
+      webPreferences: { sandbox: false } })
+    await imgWin.loadFile(tmpPath)
+
+    // 获取文档实际高度，将窗口扩展到全文高度后再截图
+    const docHeight: number = await imgWin.webContents.executeJavaScript(
+      'document.documentElement.scrollHeight'
+    )
+    imgWin.setContentSize(920, Math.min(docHeight + 20, 20000))
+    await new Promise<void>((r) => setTimeout(r, 150))
+
+    const nimg = await imgWin.webContents.capturePage()
+    imgWin.close()
+    fs.unlink(tmpPath).catch(() => {})
+
+    const buf = isJpg ? nimg.toJPEG(92) : nimg.toPNG()
+    await fs.writeFile(fp, buf)
+    return { path: fp }
   })
 }

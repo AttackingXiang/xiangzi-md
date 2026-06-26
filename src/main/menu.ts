@@ -17,7 +17,7 @@ const EN: Record<string, string> = {
   '另存为…': 'Save As…',
   导出: 'Export',
   '导出 PDF…': 'Export PDF…',
-  '导出 HTML…': 'Export HTML…',
+  '导出图片…': 'Export Image…',
   关闭标签页: 'Close Tab',
   编辑: 'Edit',
   撤销: 'Undo',
@@ -105,7 +105,7 @@ export function buildMenu(getWindow: () => BrowserWindow | null, lang: Lang = 'z
           label: T('导出'),
           submenu: [
             { label: T('导出 PDF…'), click: () => send(getWindow(), 'export-pdf') },
-            { label: T('导出 HTML…'), click: () => send(getWindow(), 'export-html') }
+            { label: T('导出图片…'), click: () => send(getWindow(), 'export-image') }
           ]
         },
         { type: 'separator' },

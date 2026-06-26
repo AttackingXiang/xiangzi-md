@@ -92,11 +92,11 @@ const api = {
 
   stopFind: (): Promise<void> => ipcRenderer.invoke('find:stop'),
 
-  exportPDF: (suggestedName: string): Promise<{ path: string } | null> =>
-    ipcRenderer.invoke('export:pdf', suggestedName),
+  exportPDF: (html: string, suggestedName: string): Promise<{ path: string } | null> =>
+    ipcRenderer.invoke('export:pdf', html, suggestedName),
 
-  exportHTML: (html: string, suggestedName: string): Promise<{ path: string } | null> =>
-    ipcRenderer.invoke('export:html', html, suggestedName),
+  exportImage: (html: string, suggestedName: string): Promise<{ path: string } | null> =>
+    ipcRenderer.invoke('export:image', html, suggestedName),
 
   pickCss: (): Promise<{ path: string } | null> => ipcRenderer.invoke('dialog:pickCss'),
 
