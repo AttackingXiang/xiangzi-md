@@ -40,13 +40,20 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist -- --publish always
 
+      # macOS：额外构建 arm64-only DMG 供 Gitee 上传（universal 超 100MB 限制）
+      - name: Build arm64 DMG for Gitee
+        if: runner.os == 'macOS'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npx electron-builder --mac dmg --arm64 --publish never
+
       # 暂存产物供后续 Gitee 上传
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
-            release/*.dmg
+            release/*-arm64.dmg
             release/*.exe
             release/*.yml
             release/*.blockmap
@@ -70,7 +77,7 @@ jobs:
           path: artifacts/windows
 
       - name: Create Gitee Release and upload assets
-        continue-on-error: true          # Gitee 上传失败不影响主流程
+        continue-on-error: true
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
@@ -91,9 +98,8 @@ jobs:
             sleep 10
           done
 
-          # 创建 Gitee Release（target_commitish 为必填字段）
-          # 说明：macOS DMG 超过 Gitee 100MB 附件限制，仅上传 Windows 安装包
-          BODY="Windows 安装包见下方附件，macOS 用户请前往 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG}) 下载 .dmg 文件。"
+          # 创建 Gitee Release
+          BODY="macOS (Apple Silicon) 和 Windows 安装包见下方附件。\nmacOS Intel 用户请前往 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG}) 下载 universal DMG。"
           RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
             -H "Content-Type: application/json" \
             -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"target_commitish\":\"main\",\"body\":\"${BODY}\"}")
@@ -113,8 +119,8 @@ jobs:
             exit 0
           fi
 
-          # 只上传 Windows 安装包和更新清单；macOS DMG 超 100MB Gitee 限制跳过
-          for FILE in artifacts/windows/*.exe artifacts/windows/*.yml; do
+          # 上传 arm64 DMG、Windows 安装包、更新清单
+          for FILE in artifacts/macos/*-arm64.dmg artifacts/windows/*.exe artifacts/windows/*.yml; do
             [ -f "$FILE" ] || continue
             NAME=$(basename "$FILE")
             echo "Uploading: $NAME"
