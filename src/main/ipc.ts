@@ -183,6 +183,58 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     shell.showItemInFolder(targetPath)
   })
 
+  // 文件夹内全文搜索
+  ipcMain.handle('search:inFolder', async (_e, root: string, query: string) => {
+    if (!query || !query.trim()) return []
+    const lower = query.toLowerCase()
+    const results: { path: string; name: string; matches: { lineNumber: number; text: string }[] }[] =
+      []
+    const MAX_FILES = 3000
+    const MAX_RESULTS = 400
+    let fileCount = 0
+    let resultCount = 0
+
+    async function walk(dir: string): Promise<void> {
+      if (resultCount >= MAX_RESULTS || fileCount >= MAX_FILES) return
+      let entries
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const entry of entries) {
+        if (IGNORED_DIRS.has(entry.name)) continue
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) {
+          await walk(full)
+        } else if (entry.isFile() && MARKDOWN_EXTS.has(extname(entry.name).toLowerCase())) {
+          if (fileCount++ >= MAX_FILES) return
+          let content: string
+          try {
+            content = await fs.readFile(full, 'utf-8')
+          } catch {
+            continue
+          }
+          if (!content.toLowerCase().includes(lower)) continue
+          const lines = content.split('\n')
+          const matches: { lineNumber: number; text: string }[] = []
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].toLowerCase().includes(lower)) {
+              matches.push({ lineNumber: i + 1, text: lines[i].trim().slice(0, 200) })
+              if (++resultCount >= MAX_RESULTS) break
+              if (matches.length >= 20) break
+            }
+          }
+          if (matches.length) results.push({ path: full, name: basename(full), matches })
+        }
+        if (resultCount >= MAX_RESULTS) break
+      }
+    }
+
+    await walk(root)
+    return results
+  })
+
   // 保存附件（图片）到文档同级的附件文件夹，返回相对 docDir 的 POSIX 路径
   ipcMain.handle(
     'attachment:save',

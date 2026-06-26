@@ -11,6 +11,7 @@ import {
 } from '../lib/searchBridge'
 
 interface Props {
+  initialQuery?: string
   onClose: () => void
 }
 
@@ -19,8 +20,8 @@ interface Props {
  * - 所见即所得模式走 prosemirror-search（编辑器内高亮 + 替换）
  * - 源码模式退回 Electron 原生 findInPage（仅查找）
  */
-export default function FindBar({ onClose }: Props): JSX.Element {
-  const [find, setFind] = useState('')
+export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Element {
+  const [find, setFind] = useState(initialQuery)
   const [replace, setReplace] = useState('')
   const [showReplace, setShowReplace] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -29,11 +30,24 @@ export default function FindBar({ onClose }: Props): JSX.Element {
 
   useEffect(() => {
     inputRef.current?.focus()
+    inputRef.current?.select()
+    // 来自全文搜索时，待编辑器就绪后高亮初始关键词
+    if (initialQuery) {
+      const t = setTimeout(() => {
+        if (hasEditor()) searchFind(initialQuery, '')
+        else window.api.findInPage(initialQuery, true, false)
+      }, 450)
+      return () => {
+        clearTimeout(t)
+        searchClear()
+        window.api.stopFind()
+      }
+    }
     return () => {
       searchClear()
       window.api.stopFind()
     }
-  }, [])
+  }, [initialQuery])
 
   const runFind = (text: string): void => {
     if (!text) {
