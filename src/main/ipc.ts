@@ -205,6 +205,20 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     shell.showItemInFolder(targetPath)
   })
 
+  // 移动文件 / 文件夹到目标目录
+  ipcMain.handle('fs:move', async (_e, sourcePath: string, targetDirPath: string) => {
+    const dest = join(targetDirPath, basename(sourcePath))
+    // 检查目标是否已存在，避免静默覆盖
+    try {
+      await fs.access(dest)
+      throw new Error(`已存在同名项目：${basename(sourcePath)}`)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    }
+    await fs.rename(sourcePath, dest)
+    return { path: dest, name: basename(sourcePath) }
+  })
+
   // 文件夹内全文搜索
   ipcMain.handle('search:inFolder', async (_e, root: string, query: string) => {
     if (!query || !query.trim()) return []

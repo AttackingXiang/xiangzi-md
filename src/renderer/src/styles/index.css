@@ -287,6 +287,13 @@ button {
   text-overflow: ellipsis;
 }
 
+.tree-row.drag-over {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  color: var(--text);
+}
+
 /* ---------- 全文搜索面板 ---------- */
 .search-input-wrap {
   display: flex;

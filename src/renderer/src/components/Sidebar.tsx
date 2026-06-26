@@ -23,6 +23,7 @@ interface Props {
   onRefresh: () => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onRootContext: (x: number, y: number) => void
+  onMove: (sourcePath: string, targetDirPath: string) => void
   reloadKey: number
   style?: React.CSSProperties
 }
@@ -43,6 +44,7 @@ export default function Sidebar({
   onRefresh,
   onNodeContext,
   onRootContext,
+  onMove,
   reloadKey,
   style
 }: Props): JSX.Element {
@@ -118,6 +120,7 @@ export default function Sidebar({
             hideFolderNames={hideFolderNames}
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}
+            onMove={onMove}
             depth={0}
           />
         ) : (

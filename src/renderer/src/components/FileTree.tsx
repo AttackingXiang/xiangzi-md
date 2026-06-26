@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import type { FileNode } from '../types'
+import { dirName, baseName } from '../lib/path'
 
 interface Props {
   nodes: FileNode[]
@@ -11,6 +12,7 @@ interface Props {
   hideFolderNames: string[]
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
+  onMove: (sourcePath: string, targetDirPath: string) => void
   depth: number
 }
 
@@ -21,6 +23,7 @@ export default function FileTree({
   hideFolderNames,
   onOpenFile,
   onNodeContext,
+  onMove,
   depth
 }: Props): JSX.Element {
   const visible =
@@ -39,6 +42,7 @@ export default function FileTree({
           hideFolderNames={hideFolderNames}
           onOpenFile={onOpenFile}
           onNodeContext={onNodeContext}
+          onMove={onMove}
           depth={depth}
         />
       ))}
@@ -53,6 +57,7 @@ const TreeNode = memo(function TreeNode({
   hideFolderNames,
   onOpenFile,
   onNodeContext,
+  onMove,
   depth
 }: {
   node: FileNode
@@ -61,26 +66,25 @@ const TreeNode = memo(function TreeNode({
   hideFolderNames: string[]
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
+  onMove: (sourcePath: string, targetDirPath: string) => void
   depth: number
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const [children, setChildren] = useState<FileNode[] | null>(node.children ?? null)
   const [loading, setLoading] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
   const nodeRef = useRef<HTMLDivElement>(null)
 
   const isActive = activePath === node.path
   const indent = { paddingLeft: `${depth * 14 + 8}px` }
 
-  // Is this dir an ancestor of the reveal target?
   const isAncestor =
     node.isDir &&
     revealPath !== null &&
     (revealPath.startsWith(node.path + '/') || revealPath.startsWith(node.path + '\\'))
 
-  // Is this node the reveal target?
   const isRevealed = !node.isDir && revealPath === node.path
 
-  // Auto-expand ancestor directories when a reveal is requested
   useEffect(() => {
     if (!isAncestor) return
     setExpanded(true)
@@ -91,11 +95,9 @@ const TreeNode = memo(function TreeNode({
         .then((kids) => { setChildren(kids); setLoading(false) })
         .catch(() => { setChildren([]); setLoading(false) })
     }
-    // Only re-run when ancestor relationship changes, not on every children/loading update
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAncestor])
 
-  // Scroll revealed file into view
   useEffect(() => {
     if (!isRevealed || !nodeRef.current) return
     nodeRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -117,12 +119,61 @@ const TreeNode = memo(function TreeNode({
     }
   }
 
+  // ── Drag handlers ────────────────────────────────────────────────────────
+  const handleDragStart = (e: React.DragEvent): void => {
+    e.stopPropagation()
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('application/x-filetree', JSON.stringify({ path: node.path, isDir: node.isDir }))
+  }
+
+  // Only folders accept drops
+  const handleDragOver = (e: React.DragEvent): void => {
+    if (!node.isDir) return
+    if (!e.dataTransfer.types.includes('application/x-filetree')) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent): void => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    if (!node.isDir) return
+
+    const raw = e.dataTransfer.getData('application/x-filetree')
+    if (!raw) return
+    const { path: srcPath, isDir: srcIsDir } = JSON.parse(raw) as { path: string; isDir: boolean }
+
+    // No-op: dropping into its own current parent
+    if (dirName(srcPath) === node.path) return
+
+    // Cycle guard: can't drop a folder into its own descendant
+    if (srcIsDir && (node.path === srcPath || node.path.startsWith(srcPath + '/') || node.path.startsWith(srcPath + '\\'))) return
+
+    // Expand the target folder after drop so the moved item is visible
+    setExpanded(true)
+    onMove(srcPath, node.path)
+  }
+
   if (node.isDir) {
     return (
       <li>
         <div
-          className="tree-row dir"
+          className={`tree-row dir${isDragOver ? ' drag-over' : ''}`}
           style={indent}
+          draggable
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           onClick={toggle}
           onContextMenu={(e) => {
             e.preventDefault()
@@ -144,6 +195,7 @@ const TreeNode = memo(function TreeNode({
             hideFolderNames={hideFolderNames}
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}
+            onMove={onMove}
             depth={depth + 1}
           />
         )}
@@ -157,6 +209,8 @@ const TreeNode = memo(function TreeNode({
         ref={nodeRef}
         className={`tree-row file${isActive ? ' active' : ''}${isRevealed ? ' reveal-flash' : ''}`}
         style={indent}
+        draggable
+        onDragStart={handleDragStart}
         onClick={() => onOpenFile(node.path, node.name)}
         onContextMenu={(e) => {
           e.preventDefault()

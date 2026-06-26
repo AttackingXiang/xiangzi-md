@@ -65,6 +65,9 @@ const api = {
 
   reveal: (targetPath: string): Promise<void> => ipcRenderer.invoke('fs:reveal', targetPath),
 
+  moveItem: (sourcePath: string, targetDirPath: string): Promise<{ path: string; name: string }> =>
+    ipcRenderer.invoke('fs:move', sourcePath, targetDirPath),
+
   searchInFolder: (
     root: string,
     query: string
