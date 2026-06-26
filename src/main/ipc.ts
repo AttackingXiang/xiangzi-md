@@ -1,6 +1,26 @@
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron'
 import { promises as fs } from 'fs'
 import { basename, dirname, extname, join } from 'path'
+import { getSettings, setSettings } from './settings'
+
+/** 在目标目录内生成不冲突的文件名（已存在则追加 -1、-2 …） */
+async function uniqueName(dir: string, fileName: string): Promise<string> {
+  const ext = extname(fileName)
+  const stem = basename(fileName, ext) || 'image'
+  // 清理非法字符
+  const safeStem = stem.replace(/[\\/:*?"<>|]/g, '_')
+  let candidate = `${safeStem}${ext}`
+  let i = 1
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      await fs.access(join(dir, candidate))
+      candidate = `${safeStem}-${i++}${ext}`
+    } catch {
+      return candidate
+    }
+  }
+}
 
 export interface FileNode {
   name: string
@@ -142,4 +162,23 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     await shell.trashItem(targetPath)
     return { path: targetPath }
   })
+
+  // 保存附件（图片）到文档同级的附件文件夹，返回相对 docDir 的 POSIX 路径
+  ipcMain.handle(
+    'attachment:save',
+    async (_e, docDir: string, fileName: string, data: Uint8Array) => {
+      const settings = await getSettings()
+      const subfolder = settings.attachmentMode === 'same' ? '' : settings.attachmentFolder
+      const targetDir = subfolder ? join(docDir, subfolder) : docDir
+      await fs.mkdir(targetDir, { recursive: true })
+      const unique = await uniqueName(targetDir, fileName || 'image.png')
+      await fs.writeFile(join(targetDir, unique), Buffer.from(data))
+      const relPath = subfolder ? `${subfolder}/${unique}` : unique
+      return { relPath }
+    }
+  )
+
+  // 设置读写
+  ipcMain.handle('settings:get', () => getSettings())
+  ipcMain.handle('settings:set', (_e, patch) => setSettings(patch))
 }
