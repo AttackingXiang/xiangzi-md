@@ -90,7 +90,10 @@ export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Elem
               runFind(e.target.value)
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') e.shiftKey ? goPrev() : goNext()
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                e.shiftKey ? goPrev() : goNext()
+              }
               if (e.key === 'Escape') onClose()
             }}
           />
