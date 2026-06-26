@@ -100,12 +100,30 @@ button {
 /* ---------- 侧边栏 ---------- */
 .sidebar {
   width: 256px;
-  min-width: 180px;
+  min-width: 160px;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   user-select: none;
+  flex-shrink: 0;
+}
+
+/* ---------- 面板分隔拖拽条 ---------- */
+.resize-handle {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  position: relative;
+  z-index: 1;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent);
+  opacity: 0.45;
 }
 
 .sidebar-header {
@@ -564,11 +582,13 @@ button {
 /* ---------- 大纲 ---------- */
 .outline {
   width: 240px;
+  min-width: 160px;
   flex-shrink: 0;
   border-left: 1px solid var(--border);
   background: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .outline-header {
@@ -597,6 +617,7 @@ button {
 }
 
 .outline-item {
+  position: relative;
   font-size: 13px;
   color: var(--text-2);
   padding: 5px 8px;
@@ -1613,18 +1634,56 @@ kbd {
 .heading-fold-hidden { display: none !important }
 
 /* ── Outline drag ─────────────────────────────────────────────────────────── */
+/* Absolutely positioned so the handle never pushes the text right */
 .outline-drag-handle {
-  display: inline-block;
-  margin-right: 5px;
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--text-muted);
   font-size: 11px;
   opacity: 0;
   cursor: grab;
   transition: opacity 0.15s;
+  pointer-events: none;
 }
-.outline-item:hover .outline-drag-handle { opacity: 1 }
+.outline-item:hover .outline-drag-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
 .outline-item.drop-target {
   border-top: 2px solid var(--accent);
+}
+
+/* ── File tree reveal flash ───────────────────────────────────────────────── */
+@keyframes reveal-flash {
+  0%   { background: color-mix(in srgb, var(--accent) 35%, transparent) }
+  100% { background: transparent }
+}
+.tree-row.reveal-flash {
+  animation: reveal-flash 1.6s ease-out forwards;
+}
+
+/* Settings textarea */
+.settings-textarea {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  min-width: 200px;
+  resize: vertical;
+  outline: none;
+  line-height: 1.6;
+}
+.settings-textarea:focus {
+  border-color: var(--accent);
+}
+.settings-row-top {
+  align-items: flex-start;
+  padding-top: 4px;
 }
 
 /* 滚动条更轻量 */

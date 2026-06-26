@@ -177,6 +177,39 @@ export default function Settings({
               </span>
             </label>
             <p className="settings-hint">{t('修改后对新打开的文档生效。')}</p>
+
+            <label className="settings-row">
+              <span className="settings-label">{t('文件树中隐藏附件文件夹')}</span>
+              <input
+                type="checkbox"
+                checked={settings.hideAttachmentFolders ?? false}
+                onChange={(e) => onChange({ hideAttachmentFolders: e.target.checked })}
+              />
+            </label>
+            <p className="settings-hint">
+              {t('勾选后，文件树不显示与「子文件夹名称」同名的目录（不影响文件实际存储）。')}
+            </p>
+
+            <label className="settings-row settings-row-top">
+              <span className="settings-label">{t('额外图片搜索目录')}</span>
+              <textarea
+                className="settings-textarea"
+                rows={3}
+                value={(settings.assetSearchPaths ?? []).join('\n')}
+                placeholder={en ? '/path/to/static\n/path/to/public' : '/path/to/static\n/path/to/public'}
+                onChange={(e) =>
+                  onChange({
+                    assetSearchPaths: e.target.value
+                      .split('\n')
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                  })
+                }
+              />
+            </label>
+            <p className="settings-hint">
+              {t('图片无法在文档目录找到时，依次搜索这里列出的目录（每行一个绝对路径）。适用于图片统一存放在与文档不同层级的情况。')}
+            </p>
           </section>
 
           <section className="settings-group">
