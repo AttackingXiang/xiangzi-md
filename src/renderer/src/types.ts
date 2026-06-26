@@ -32,6 +32,8 @@ export interface AppSettings {
   recentFolders: string[]
   /** 收藏的常用目录 */
   favorites: string[]
+  /** 上次会话 */
+  session: { folder: string | null; openFiles: string[]; activePath: string | null }
 }
 
 export interface SearchMatch {

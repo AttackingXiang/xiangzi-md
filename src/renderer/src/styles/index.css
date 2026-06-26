@@ -1264,6 +1264,87 @@ kbd {
   margin: 5px 4px;
 }
 
+/* ---------- 命令面板 ---------- */
+.palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.palette {
+  width: 600px;
+  max-width: 92vw;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  height: 48px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 0 16px;
+  font-size: 15px;
+  outline: none;
+}
+
+.palette-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.palette-empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.palette-item.active {
+  background: var(--bg-active);
+  color: var(--accent-text);
+}
+
+.palette-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.palette-item.active svg {
+  color: var(--accent-text);
+}
+
+.palette-label {
+  font-size: 13.5px;
+  flex-shrink: 0;
+}
+
+.palette-hint {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  max-width: 55%;
+}
+
 /* ---------- 输入对话框 ---------- */
 .modal-input {
   width: 400px;
