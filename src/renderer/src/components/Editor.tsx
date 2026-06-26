@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
+import { editorViewCtx } from '@milkdown/kit/core'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { resolveAssetURL } from '../lib/asset'
@@ -7,6 +8,9 @@ import { codeMirrorTheme } from '../lib/codeTheme'
 import { setupTableResize } from '../lib/tableResize'
 import { typoraHeadingKeymap } from '../lib/headingKeymap'
 import { focusPlugin } from '../lib/focusPlugin'
+import { searchPlugin } from '../lib/searchPlugin'
+import { editorBridge } from '../lib/editorBridge'
+import { renderMermaid } from '../lib/mermaidPreview'
 
 interface Props {
   content: string
@@ -68,14 +72,16 @@ export default function Editor({
           ...(imageMaxWidth > 0 ? { maxWidth: imageMaxWidth } : {})
         },
         [CrepeFeature.CodeMirror]: {
-          theme: codeMirrorTheme(theme)
+          theme: codeMirrorTheme(theme),
+          renderPreview: renderMermaid(theme)
         }
       }
     })
 
-    // 注入 Typora 风格的标题快捷键（⌘1~6 / ⌘0）与专注模式装饰
+    // 注入 Typora 风格的标题快捷键（⌘1~6 / ⌘0）、专注模式装饰、查找替换
     crepe.editor.use(typoraHeadingKeymap)
     crepe.editor.use(focusPlugin)
+    crepe.editor.use(searchPlugin)
 
     crepe.on((listener) => {
       listener.markdownUpdated((_ctx, markdown) => {
@@ -91,11 +97,14 @@ export default function Editor({
         return
       }
       disposeTableResize = setupTableResize(root)
+      // 暴露 ProseMirror 视图给查找/替换
+      crepe.editor.action((ctx) => editorBridge.set(ctx.get(editorViewCtx)))
     })
 
     return () => {
       destroyed = true
       disposeTableResize?.()
+      editorBridge.set(null)
       crepe.destroy()
     }
     // 仅在挂载时创建；内容更新由 Crepe 内部维护
