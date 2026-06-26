@@ -6,7 +6,7 @@ import '@milkdown/crepe/theme/frame.css'
 import { resolveAssetURL } from '../lib/asset'
 import { codeMirrorTheme } from '../lib/codeTheme'
 import { setupTableResize } from '../lib/tableResize'
-import { typoraHeadingKeymap } from '../lib/headingKeymap'
+import { headingShortcutKeymap } from '../lib/headingKeymap'
 import { focusPlugin } from '../lib/focusPlugin'
 import { searchPlugin } from '../lib/searchPlugin'
 import { editorBridge } from '../lib/editorBridge'
@@ -26,7 +26,7 @@ interface Props {
 }
 
 /**
- * 所见即所得编辑器（Typora 风格），基于 Milkdown Crepe（ProseMirror 内核）。
+ * 所见即所得编辑器，基于 Milkdown Crepe（ProseMirror 内核）。
  * - 本地图片通过 proxyDomURL 解析为 xmd:// 协议显示，Markdown 中仍保存相对路径
  * - 粘贴/拖入图片经 onUpload 存到文档同级附件目录
  */
@@ -112,8 +112,8 @@ export default function Editor({
       }
     })
 
-    // 注入 Typora 风格的标题快捷键（⌘1~6 / ⌘0）、专注模式装饰、查找替换
-    crepe.editor.use(typoraHeadingKeymap)
+    // 注入标题快捷键（⌘1~6 / ⌘0）、专注模式装饰、查找替换
+    crepe.editor.use(headingShortcutKeymap)
     crepe.editor.use(focusPlugin)
     crepe.editor.use(searchPlugin)
 

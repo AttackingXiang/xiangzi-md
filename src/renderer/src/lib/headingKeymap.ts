@@ -4,10 +4,10 @@ import { keymap } from '@milkdown/kit/prose/keymap'
 import { setBlockType } from '@milkdown/kit/prose/commands'
 
 /**
- * Typora 风格的标题快捷键：⌘1~⌘6 设为对应级别标题，⌘0 设为正文。
+ * 标题快捷键：⌘1~⌘6 设为对应级别标题，⌘0 设为正文。
  * 与 Milkdown 内置的 ⌘⌥1~6 并存。
  */
-export const typoraHeadingKeymap = $prose((ctx) => {
+export const headingShortcutKeymap = $prose((ctx) => {
   const schema = ctx.get(schemaCtx)
   const heading = schema.nodes.heading
   const paragraph = schema.nodes.paragraph
