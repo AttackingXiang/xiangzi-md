@@ -1010,6 +1010,18 @@ kbd {
   fill: currentColor !important;
 }
 
+/* 预览/源码切换按钮：始终可见，使用描边图标 */
+.milkdown .milkdown-code-block .tools .tools-button-group .preview-toggle-button {
+  opacity: 1 !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group .preview-toggle-button svg {
+  fill: none !important;
+  stroke: currentColor !important;
+  width: 15px;
+  height: 15px;
+}
+
 /* —— 语言下拉面板 —— */
 .milkdown .milkdown-code-block .list-wrapper {
   background: var(--bg-elevated) !important;
