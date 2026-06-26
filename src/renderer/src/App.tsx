@@ -330,29 +330,99 @@ export default function App(): JSX.Element {
 
   // ── Export ────────────────────────────────────────────────────────────────
   /** Build a self-contained HTML string that renders identically to the app view */
-  const generateExportHTML = useCallback(async (title: string): Promise<string | null> => {
-    // Target only the ProseMirror content node — not the full .milkdown wrapper
-    // (which contains floating toolbars, bubble menus and other editor chrome)
+  const generateExportHTML = useCallback(async (title: string, mdContent?: string): Promise<string | null> => {
     const pm =
       document.querySelector<HTMLElement>('.milkdown .ProseMirror') ??
       document.querySelector<HTMLElement>('.milkdown [contenteditable="true"]') ??
       document.querySelector<HTMLElement>('.milkdown')
     if (!pm) return null
 
+    // ── Reading-view: pre-render all Mermaid diagrams ─────────────────────
+    // Parse markdown source to know the language of every code block (including
+    // lazy-not-yet-visible ones whose DOM hasn't been initialized yet).
+    const mdBlocks: Array<{ lang: string; code: string }> = []
+    if (mdContent) {
+      const re = /^```(\S*)\s*\n([\s\S]*?)^```/gm
+      let m: RegExpExecArray | null
+      while ((m = re.exec(mdContent)) !== null) mdBlocks.push({ lang: m[1].toLowerCase(), code: m[2] })
+    }
+
+    const liveBlocks = Array.from(pm.querySelectorAll<HTMLElement>('.milkdown-code-block'))
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    const mermaidTheme = isDark ? 'dark' : 'default'
+
+    // For each code block: collect the rendered SVG (or render it now).
+    const blockSVGs: (string | null)[] = await Promise.all(
+      liveBlocks.map(async (block, i) => {
+        // Already rendered? extract the SVG from the live preview panel.
+        const mermaidPreviewEl = block.querySelector<HTMLElement>('.preview-panel .preview .mermaid-preview')
+        if (mermaidPreviewEl) {
+          const svgEl = mermaidPreviewEl.querySelector('svg') ?? mermaidPreviewEl
+          return svgEl.outerHTML
+        }
+
+        // Determine language: from language-button (initialized block) or from parsed markdown.
+        const langBtn = block.querySelector<HTMLElement>('.tools .language-button')
+        const langFromBtn = langBtn?.textContent?.trim().toLowerCase() ?? ''
+        const lang = langFromBtn || (mdBlocks[i]?.lang ?? '')
+        if (lang !== 'mermaid') return null
+
+        // Get code text: prefer cm-editor lines, fall back to placeholder, then parsed markdown.
+        const cmLines = block.querySelectorAll<HTMLElement>('.cm-line')
+        const codeFromDOM = cmLines.length > 0
+          ? Array.from(cmLines).map(l => l.textContent ?? '').join('\n')
+          : (block.querySelector<HTMLElement>('.milkdown-code-block-placeholder code')?.textContent ?? '')
+        const code = codeFromDOM.trim() || (mdBlocks[i]?.code ?? '')
+        if (!code.trim()) return null
+
+        try {
+          const mermaid = (await import('mermaid')).default
+          mermaid.initialize({ startOnLoad: false, theme: mermaidTheme, securityLevel: 'strict' })
+          const id = 'mmd-export-' + Math.random().toString(36).slice(2)
+          const { svg } = await mermaid.render(id, code)
+          return svg
+        } catch { return null }
+      })
+    )
+
+    // ── Clone and clean ───────────────────────────────────────────────────
     const clone = pm.cloneNode(true) as HTMLElement
 
-    // Strip Milkdown UI decorations: table handles, drag handles, toolbars…
-    // These are ProseMirror decoration nodes, not actual document content.
-    clone.querySelectorAll(
-      '[class*="milkdown-"], .handle, .drag-preview, [data-role], [data-show]'
-    ).forEach((el) => el.remove())
-
-    // Remove editor selection state classes that look wrong in a static export
+    // Strip Milkdown UI decorations AND code-block toolbar (.tools).
+    const MILKDOWN_UI = [
+      '.milkdown-toolbar', '.milkdown-block-handle', '.milkdown-slash-menu',
+      '.milkdown-top-bar', '.milkdown-ai-diff-actions', '.milkdown-ai-instruction',
+      '.milkdown-ai-streaming', '.milkdown-latex-inline-edit',
+      '.milkdown-link-edit', '.milkdown-link-preview',
+      '.milkdown-diff-controls', '.milkdown-diff-controls-block',
+      '.handle', '.drag-preview',
+      '.tools',  // code block top-bar: language picker + copy / toggle buttons
+    ].join(', ')
+    clone.querySelectorAll(MILKDOWN_UI).forEach((el) => el.remove())
     clone.querySelectorAll('.selectedCell, .ProseMirror-selectednode').forEach((el) => {
       el.classList.remove('selectedCell', 'ProseMirror-selectednode')
     })
 
-    // Inline xmd:// images as base64 so the HTML is fully self-contained
+    // Reading-view code block processing.
+    const cloneBlocks = Array.from(clone.querySelectorAll<HTMLElement>('.milkdown-code-block'))
+    cloneBlocks.forEach((block, i) => {
+      const svg = blockSVGs[i]
+      if (svg) {
+        // Replace the entire code block with the static SVG.
+        const wrapper = document.createElement('div')
+        wrapper.className = 'mermaid-export'
+        wrapper.style.cssText = 'margin:16px 0;overflow:auto;text-align:center'
+        wrapper.innerHTML = svg
+        block.replaceWith(wrapper)
+      } else {
+        // Non-mermaid: ensure the code editor is visible (user may have been in preview mode).
+        block.querySelector<HTMLElement>('.codemirror-host')?.classList.remove('hidden')
+        // Remove any stale preview panel that shouldn't appear without the toggle button.
+        block.querySelector<HTMLElement>('.preview-panel')?.remove()
+      }
+    })
+
+    // Inline xmd:// images as base64 so the HTML is fully self-contained.
     const imgs = Array.from(clone.querySelectorAll('img[src]')) as HTMLImageElement[]
     await Promise.all(
       imgs.map(async (img) => {
@@ -371,13 +441,8 @@ export default function App(): JSX.Element {
       })
     )
 
-    // Collect all live <style> tags — includes Milkdown styles, code highlighting,
-    // theme variables, etc. — so the export renders with the exact same CSS.
     const liveStyles = Array.from(document.querySelectorAll('style'))
-      .map((s) => s.outerHTML)
-      .join('\n')
-
-    // Preserve dark / light theme
+      .map((s) => s.outerHTML).join('\n')
     const theme = document.documentElement.getAttribute('data-theme') ?? ''
 
     return `<!doctype html>
@@ -388,6 +453,7 @@ ${liveStyles}
   html,body{margin:0;padding:0;background:var(--bg,#fff)}
   .milkdown{padding:0;background:var(--bg,#fff)}
   .ProseMirror.export-content{max-width:800px;margin:0 auto;padding:48px 40px 80px;outline:none}
+  .mermaid-export svg{max-width:100%;height:auto}
 </style>
 </head><body>
 <div class="milkdown"><div class="ProseMirror export-content">${clone.innerHTML}</div></div>
@@ -398,7 +464,7 @@ ${liveStyles}
     const { activeId: id } = stateRef.current
     if (!id) return
     const tab = stateRef.current.tabs.find((t) => t.id === id)
-    const html = await generateExportHTML(tab?.name ?? 'document')
+    const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
     if (!html) return
     const res = await window.api.exportPDF(html, tab?.name ?? 'document')
     if (res) window.alert((getLang() === 'en' ? 'Exported PDF:\n' : '已导出 PDF：\n') + res.path)
@@ -408,7 +474,7 @@ ${liveStyles}
     const { activeId: id } = stateRef.current
     if (!id) return
     const tab = stateRef.current.tabs.find((t) => t.id === id)
-    const html = await generateExportHTML(tab?.name ?? 'document')
+    const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
     if (!html) return
     const res = await window.api.exportImage(html, tab?.name ?? 'document')
     if (res) window.alert((getLang() === 'en' ? 'Exported image:\n' : '已导出图片：\n') + res.path)
