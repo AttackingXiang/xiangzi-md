@@ -70,6 +70,7 @@ jobs:
           path: artifacts/windows
 
       - name: Create Gitee Release and upload assets
+        continue-on-error: true          # Gitee 上传失败不影响主流程
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
@@ -77,8 +78,35 @@ jobs:
           OWNER="tlqgyx"
           REPO="xiangzi-md"
 
+          # 等待 Gitee 镜像同步完成（最多 3 分钟）
+          echo "Waiting for Gitee mirror to sync tag ${TAG}..."
+          for i in $(seq 1 18); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/git/refs/tags/${TAG}?access_token=${GITEE_TOKEN}")
+            if [ "$STATUS" = "200" ]; then
+              echo "Tag synced to Gitee."
+              break
+            fi
+            echo "  Not yet (attempt $i/18)... waiting 10s"
+            sleep 10
+          done
+
+          # 解析 JSON，出错时返回空字符串并打印原始响应
+          parse_id() {
+            python3 -c "
+import sys, json
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+    print(d.get('id','') if isinstance(d, dict) else '')
+except Exception as e:
+    import sys as s; s.stderr.write('Parse error: ' + str(e) + '\nRaw: ' + raw[:500] + '\n')
+    print('')
+"
+          }
+
           # 创建 Gitee Release
-          RELEASE=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
+          RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
             -H "Content-Type: application/json" \
             -d "{
               \"access_token\": \"${GITEE_TOKEN}\",
@@ -86,21 +114,23 @@ jobs:
               \"name\": \"${TAG}\",
               \"body\": \"详细更新日志请查看 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/tag/${TAG})\"
             }")
-          RELEASE_ID=$(echo "$RELEASE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))")
+          echo "Create response: ${RESP:0:200}"
+          RELEASE_ID=$(echo "$RESP" | parse_id)
 
-          # Release 已存在时查询 ID
+          # Release 已存在时直接查询
           if [ -z "$RELEASE_ID" ]; then
-            EXISTING=$(curl -s "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}")
-            RELEASE_ID=$(echo "$EXISTING" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))")
+            RESP2=$(curl -s "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}")
+            echo "Query response: ${RESP2:0:200}"
+            RELEASE_ID=$(echo "$RESP2" | parse_id)
           fi
 
           echo "Gitee Release ID: $RELEASE_ID"
           if [ -z "$RELEASE_ID" ]; then
-            echo "Failed to get release ID, skipping upload"
+            echo "::warning::Could not create/find Gitee release, skipping upload."
             exit 0
           fi
 
-          # 上传安装包（dmg / exe）和更新清单（yml）；blockmap 跳过
+          # 上传安装包和更新清单；blockmap 跳过
           for FILE in artifacts/macos/*.dmg artifacts/windows/*.exe artifacts/macos/*.yml artifacts/windows/*.yml; do
             [ -f "$FILE" ] || continue
             NAME=$(basename "$FILE")
@@ -110,5 +140,5 @@ jobs:
               -F "file=@${FILE};filename=${NAME}" \
               --max-time 600 \
             && echo "  ✓ $NAME" \
-            || echo "  ✗ $NAME (failed, possibly exceeds Gitee size limit)"
+            || echo "  ✗ $NAME (skipped)"
           done
