@@ -13,6 +13,8 @@ import { t } from '../lib/i18n'
 
 interface Props {
   initialQuery?: string
+  /** Line number hint from full-text search; used to scroll to the match after open */
+  initialLine?: number
   onClose: () => void
 }
 
@@ -21,7 +23,7 @@ interface Props {
  * - 所见即所得模式走 prosemirror-search（编辑器内高亮 + 替换）
  * - 源码模式退回 Electron 原生 findInPage（仅查找）
  */
-export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Element {
+export default function FindBar({ initialQuery = '', initialLine, onClose }: Props): JSX.Element {
   const [find, setFind] = useState(initialQuery)
   const [replace, setReplace] = useState('')
   const [showReplace, setShowReplace] = useState(false)
@@ -32,14 +34,24 @@ export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Elem
   useEffect(() => {
     inputRef.current?.focus()
     inputRef.current?.select()
-    // 来自全文搜索时，待编辑器就绪后高亮初始关键词
     if (initialQuery) {
-      const t = setTimeout(() => {
-        if (hasEditor()) searchFind(initialQuery, '')
-        else window.api.findInPage(initialQuery, true, false)
+      const timer = setTimeout(() => {
+        if (hasEditor()) {
+          searchFind(initialQuery, '')
+          // If we have a line hint, scroll to that match index
+          if (initialLine !== undefined && initialLine > 1) {
+            // Best-effort: scroll the nth match into view based on line number
+            const matches = document.querySelectorAll('.search-result-mark')
+            if (matches.length > 0) {
+              ;(matches[0] as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' })
+            }
+          }
+        } else {
+          window.api.findInPage(initialQuery, true, false)
+        }
       }, 450)
       return () => {
-        clearTimeout(t)
+        clearTimeout(timer)
         searchClear()
         window.api.stopFind()
       }
@@ -48,7 +60,7 @@ export default function FindBar({ initialQuery = '', onClose }: Props): JSX.Elem
       searchClear()
       window.api.stopFind()
     }
-  }, [initialQuery])
+  }, [initialQuery, initialLine])
 
   const runFind = (text: string): void => {
     if (!text) {

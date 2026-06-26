@@ -54,7 +54,7 @@ export default function ContextMenu({
     >
       <div className="ctx-menu" style={style} onClick={(e) => e.stopPropagation()} onMouseDown={guard}>
         {items.map((it, i) => (
-          <div key={i}>
+          <div key={`${it.label}-${i}`}>
             {it.separatorBefore && <div className="ctx-sep" />}
             <div
               className={`ctx-item${it.danger ? ' danger' : ''}`}
