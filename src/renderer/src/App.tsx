@@ -10,8 +10,10 @@ import Outline from './components/Outline'
 import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
 import Shortcuts from './components/Shortcuts'
+import ContextMenu, { type MenuItem } from './components/ContextMenu'
+import InputDialog from './components/InputDialog'
 import { parseOutline } from './lib/outline'
-import type { AppSettings, Folder, Tab } from './types'
+import type { AppSettings, FileNode, Folder, Tab } from './types'
 
 let tabSeq = 0
 const newTabId = (): string => `tab-${Date.now()}-${tabSeq++}`
@@ -33,6 +35,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   attachmentFolder: 'assets',
   imageMaxWidth: 800,
   theme: 'system',
+  editorWidth: 'normal',
+  customCssPath: '',
   autoSave: false,
   recentFiles: [],
   recentFolders: [],
@@ -49,6 +53,15 @@ export default function App(): JSX.Element {
   const [showSettings, setShowSettings] = useState(false)
   const [showFind, setShowFind] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [focusMode, setFocusMode] = useState(false)
+  const [typewriterMode, setTypewriterMode] = useState(false)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+  const [inputDialog, setInputDialog] = useState<{
+    title: string
+    initial?: string
+    confirmText?: string
+    onSubmit: (value: string) => void
+  } | null>(null)
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
@@ -119,6 +132,41 @@ export default function App(): JSX.Element {
     }
     return undefined
   }, [settings.theme])
+
+  // ---- 编辑区显示宽度 ----
+  useEffect(() => {
+    const width =
+      settings.editorWidth === 'full' ? '100%' : settings.editorWidth === 'wide' ? '1080px' : '820px'
+    document.documentElement.style.setProperty('--editor-max-width', width)
+  }, [settings.editorWidth])
+
+  // ---- 自定义主题 CSS ----
+  useEffect(() => {
+    const id = 'custom-theme-style'
+    let el = document.getElementById(id) as HTMLStyleElement | null
+    if (!settings.customCssPath) {
+      el?.remove()
+      return
+    }
+    let cancelled = false
+    window.api
+      .readFile(settings.customCssPath)
+      .then((res) => {
+        if (cancelled) return
+        if (!el) {
+          el = document.createElement('style')
+          el.id = id
+          document.head.appendChild(el)
+        }
+        el.textContent = res.content
+      })
+      .catch(() => {
+        /* 文件不存在则忽略 */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [settings.customCssPath])
 
   // ---- 打开 ----
   const openFolder = useCallback(async () => {
@@ -255,6 +303,129 @@ export default function App(): JSX.Element {
     })
   }, [])
 
+  // ---- 文件树操作 ----
+  const refreshTree = useCallback(async () => {
+    setFolder((f) => f) // 触发后续异步替换
+    const root = folder?.root
+    if (!root) return
+    const tree = await window.api.readDir(root)
+    setFolder((f) => (f ? { ...f, tree } : f))
+  }, [folder?.root])
+
+  const createFileIn = useCallback(
+    (dir: string) => {
+      setInputDialog({
+        title: '新建文件',
+        initial: '未命名.md',
+        confirmText: '创建',
+        onSubmit: async (name) => {
+          const fname = /\.[^.]+$/.test(name) ? name : `${name}.md`
+          try {
+            const res = await window.api.createFile(dir, fname)
+            await refreshTree()
+            openPath(res.path, res.name)
+          } catch {
+            window.alert('创建失败：文件可能已存在')
+          }
+        }
+      })
+    },
+    [refreshTree, openPath]
+  )
+
+  const createFolderIn = useCallback(
+    (dir: string) => {
+      setInputDialog({
+        title: '新建文件夹',
+        initial: '新建文件夹',
+        confirmText: '创建',
+        onSubmit: async (name) => {
+          try {
+            await window.api.createDir(dir, name)
+            await refreshTree()
+          } catch {
+            window.alert('创建失败：文件夹可能已存在')
+          }
+        }
+      })
+    },
+    [refreshTree]
+  )
+
+  const renameNode = useCallback(
+    (node: FileNode) => {
+      setInputDialog({
+        title: '重命名',
+        initial: node.name,
+        confirmText: '重命名',
+        onSubmit: async (name) => {
+          try {
+            const res = await window.api.rename(node.path, name)
+            await refreshTree()
+            setTabs((prev) =>
+              prev.map((t) =>
+                t.path === node.path ? { ...t, path: res.path, name: res.name } : t
+              )
+            )
+          } catch {
+            window.alert('重命名失败')
+          }
+        }
+      })
+    },
+    [refreshTree]
+  )
+
+  const deleteNode = useCallback(
+    async (node: FileNode) => {
+      if (!window.confirm(`确定要删除「${node.name}」吗？将移入废纸篓。`)) return
+      try {
+        await window.api.trash(node.path)
+        const affected = stateRef.current.tabs.filter(
+          (t) => t.path && (t.path === node.path || t.path.startsWith(node.path + '/'))
+        )
+        affected.forEach((t) => closeTab(t.id))
+        await refreshTree()
+      } catch {
+        window.alert('删除失败')
+      }
+    },
+    [refreshTree, closeTab]
+  )
+
+  const openNodeContext = useCallback(
+    (node: FileNode, x: number, y: number) => {
+      const items: MenuItem[] = []
+      if (node.isDir) {
+        items.push({ label: '新建文件', onClick: () => createFileIn(node.path) })
+        items.push({ label: '新建文件夹', onClick: () => createFolderIn(node.path) })
+      } else {
+        items.push({ label: '打开', onClick: () => openPath(node.path, node.name) })
+      }
+      items.push({ label: '重命名', onClick: () => renameNode(node), separatorBefore: true })
+      items.push({ label: '在访达中显示', onClick: () => window.api.reveal(node.path) })
+      items.push({ label: '删除', onClick: () => deleteNode(node), danger: true, separatorBefore: true })
+      setCtxMenu({ x, y, items })
+    },
+    [createFileIn, createFolderIn, openPath, renameNode, deleteNode]
+  )
+
+  const openRootContext = useCallback(
+    (x: number, y: number) => {
+      if (!folder) return
+      setCtxMenu({
+        x,
+        y,
+        items: [
+          { label: '新建文件', onClick: () => createFileIn(folder.root) },
+          { label: '新建文件夹', onClick: () => createFolderIn(folder.root) },
+          { label: '刷新', onClick: () => refreshTree(), separatorBefore: true }
+        ]
+      })
+    },
+    [folder, createFileIn, createFolderIn, refreshTree]
+  )
+
   // ---- 导出 ----
   const exportPDF = useCallback(async () => {
     if (!stateRef.current.activeId) return
@@ -312,6 +483,8 @@ export default function App(): JSX.Element {
         case 'toggle-sidebar': setSidebarVisible((v) => !v); break
         case 'toggle-outline': setOutlineVisible((v) => !v); break
         case 'toggle-source': setSourceMode((v) => !v); break
+        case 'toggle-focus': setFocusMode((v) => !v); break
+        case 'toggle-typewriter': setTypewriterMode((v) => !v); break
         case 'find': setShowFind(true); break
         case 'open-settings': setShowSettings(true); break
         case 'show-shortcuts': setShowShortcuts(true); break
@@ -335,12 +508,9 @@ export default function App(): JSX.Element {
           onOpenFile={openPath}
           onOpenSettings={() => setShowSettings(true)}
           onToggleFavorite={toggleFavorite}
-          onRefresh={async () => {
-            if (folder) {
-              const tree = await window.api.readDir(folder.root)
-              setFolder({ ...folder, tree })
-            }
-          }}
+          onRefresh={refreshTree}
+          onNodeContext={openNodeContext}
+          onRootContext={openRootContext}
         />
       )}
 
@@ -384,6 +554,8 @@ export default function App(): JSX.Element {
                 docDir={activeDocDir}
                 imageMaxWidth={settings.imageMaxWidth}
                 theme={resolvedTheme}
+                focusMode={focusMode}
+                typewriterMode={typewriterMode}
                 onChange={(c) => updateContent(activeTab.id, c)}
               />
             )
@@ -422,6 +594,25 @@ export default function App(): JSX.Element {
       {showShortcuts && <Shortcuts onClose={() => setShowShortcuts(false)} />}
 
       {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
+
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          items={ctxMenu.items}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
+
+      {inputDialog && (
+        <InputDialog
+          title={inputDialog.title}
+          initial={inputDialog.initial}
+          confirmText={inputDialog.confirmText}
+          onSubmit={inputDialog.onSubmit}
+          onClose={() => setInputDialog(null)}
+        />
+      )}
     </div>
   )
 }
