@@ -17,6 +17,10 @@ interface Props {
   content: string
   /** 当前文档所在目录（用于解析相对图片路径、保存附件）；新建未保存为 null */
   docDir: string | null
+  /** 当前文档文件名（用于按文档名分文件夹的附件模式） */
+  docName: string
+  /** 已打开文件夹（仓库）根目录，用于仓库级附件模式 */
+  vaultRoot: string | null
   imageMaxWidth: number
   /** 已解析的主题，用于代码块语法高亮配色 */
   theme: 'light' | 'dark'
@@ -33,6 +37,8 @@ interface Props {
 export default function Editor({
   content,
   docDir,
+  docName,
+  vaultRoot,
   imageMaxWidth,
   theme,
   focusMode,
@@ -45,6 +51,10 @@ export default function Editor({
   // docDir 可能在保存后变化（同一标签重命名/落盘），用 ref 保证回调读到最新值
   const docDirRef = useRef(docDir)
   docDirRef.current = docDir
+  const docNameRef = useRef(docName)
+  docNameRef.current = docName
+  const vaultRootRef = useRef(vaultRoot)
+  vaultRootRef.current = vaultRoot
 
   useEffect(() => {
     const root = rootRef.current
@@ -57,7 +67,13 @@ export default function Editor({
         return ''
       }
       const buf = new Uint8Array(await file.arrayBuffer())
-      const { relPath } = await window.api.saveAttachment(dir, file.name || 'image.png', buf)
+      const { relPath } = await window.api.saveAttachment(
+        dir,
+        docNameRef.current,
+        vaultRootRef.current,
+        file.name || 'image.png',
+        buf
+      )
       return relPath
     }
 

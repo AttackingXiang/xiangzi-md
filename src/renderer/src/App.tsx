@@ -757,6 +757,8 @@ export default function App(): JSX.Element {
                   key={activeTab.id + '-' + resolvedTheme + '-' + settings.language}
                   content={activeTab.content}
                   docDir={activeDocDir}
+                  docName={activeTab.name}
+                  vaultRoot={folder?.root ?? null}
                   imageMaxWidth={settings.imageMaxWidth}
                   theme={resolvedTheme}
                   focusMode={focusMode}

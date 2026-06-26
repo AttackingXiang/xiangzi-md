@@ -12,9 +12,9 @@ export interface Folder {
 }
 
 export interface AppSettings {
-  /** 附件存放方式：subfolder=文档同级子文件夹，same=与文档同目录 */
-  attachmentMode: 'subfolder' | 'same'
-  /** subfolder 模式下的子文件夹名（Obsidian 风格） */
+  /** 附件存放方式（对齐 Obsidian 的多种模式） */
+  attachmentMode: 'same' | 'subfolder' | 'docSubfolder' | 'vault' | 'vaultSubfolder'
+  /** 子文件夹名（subfolder / docSubfolder / vaultSubfolder 用） */
   attachmentFolder: string
   /** 图片最大显示宽度（像素），0 表示不限制 */
   imageMaxWidth: number
