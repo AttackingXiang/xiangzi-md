@@ -53,7 +53,7 @@ The installers are not code-signed yet, so the OS shows a warning on first launc
 
 </details>
 
-> 维护者发布新版本：`git tag v0.1.3 && git push origin v0.1.3`，GitHub Actions 会自动在 macOS / Windows 构建安装包并**自动发布**到 Releases（无需手动操作）。
+> 维护者发布新版本：`git tag v0.1.4 && git push origin v0.1.4`，GitHub Actions 会自动在 macOS / Windows 构建安装包并**自动发布**到 Releases（无需手动操作）。
 
 ## 功能
 
