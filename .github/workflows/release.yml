@@ -1,140 +1,155 @@
-name: Release
+name: Release Desktop
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  # ── 各平台构建 & 发布到 GitHub Releases ──────────────────────────────────
   build:
+    name: Build ${{ matrix.artifact }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest   # Apple Silicon runner → 原生构建 arm64
-            artifact: macos-arm64
-            eb_flags: --mac --arm64
-          - os: macos-13       # Intel runner → 原生构建 x64（避免交叉编译 dmg 问题）
-            artifact: macos-x64
-            eb_flags: --mac --x64
-          - os: windows-latest
-            artifact: windows
-            eb_flags: --win
-    runs-on: ${{ matrix.os }}
+          - platform: macos-latest
+            artifact: macos-universal
+            args: --target universal-apple-darwin --bundles dmg
+          - platform: windows-latest
+            artifact: windows-x64
+            args: --bundles nsis
+    runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
+      - name: Install Rust for macOS universal build
+        if: runner.os == 'macOS'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install Rust
+        if: runner.os != 'macOS'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build and publish to GitHub
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: |
-          npm run build
-          npx electron-builder ${{ matrix.eb_flags }} --publish always
+      - name: Run frontend quality gate
+        run: npm run check
 
-      # 暂存产物供后续 Gitee 上传
-      - name: Upload build artifacts
+      - name: Build and publish GitHub Release assets
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: '-'
+        with:
+          tagName: v__VERSION__
+          releaseName: Xiangzi MD v__VERSION__
+          releaseBody: |
+            Xiangzi MD 1.0 Tauri 版本。
+
+            - macOS：Universal DMG，同时支持 Apple Silicon 与 Intel。
+            - Windows：x64 NSIS 安装包。
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: false
+          args: ${{ matrix.args }}
+
+      - name: Upload macOS artifact for Gitee
+        if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: |
-            release/*-arm64.dmg
-            release/*-x64.dmg
-            release/*.exe
-            release/*.yml
-            release/*.blockmap
-          retention-days: 1
+          name: release-macos-universal
+          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 3
 
-  # ── 所有平台构建完成后，同步上传到 Gitee Releases ────────────────────────
+      - name: Upload Windows artifact for Gitee
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x64
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 3
+
   publish-gitee:
+    name: Publish Gitee Release
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download macOS arm64 artifacts
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
-          name: macos-arm64
-          path: artifacts/macos
-
-      - name: Download macOS x64 artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-x64
-          path: artifacts/macos
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows
-          path: artifacts/windows
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
 
       - name: Create Gitee Release and upload assets
-        continue-on-error: true
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
+          set -euo pipefail
+          test -n "${GITEE_TOKEN}"
+
           TAG="${{ github.ref_name }}"
           OWNER="tlqgyx"
           REPO="xiangzi-md"
 
-          # 等待 Gitee 镜像同步完成（最多 3 分钟）
-          echo "Waiting for Gitee mirror to sync tag ${TAG}..."
-          for i in $(seq 1 18); do
-            FOUND=$(curl -s "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/tags?access_token=${GITEE_TOKEN}&limit=100" \
-              | jq -r --arg t "$TAG" '.[] | select(.name==$t) | .name' 2>/dev/null || true)
-            if [ "$FOUND" = "$TAG" ]; then
-              echo "Tag synced to Gitee."
+          echo "Waiting for Gitee to receive ${TAG}..."
+          FOUND=""
+          for i in $(seq 1 24); do
+            FOUND=$(curl --fail --silent --show-error \
+              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/tags?access_token=${GITEE_TOKEN}&limit=100" \
+              | jq -r --arg tag "${TAG}" '.[] | select(.name == $tag) | .name')
+            if [ "${FOUND}" = "${TAG}" ]; then
               break
             fi
-            echo "  Not yet (attempt $i/18)... waiting 10s"
             sleep 10
           done
+          test "${FOUND}" = "${TAG}"
 
-          # 创建 Gitee Release
-          BODY="macOS（Apple Silicon M芯片用 arm64，Intel 芯片用 x64）和 Windows 安装包见下方附件。"
-          RESP=$(curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
+          PAYLOAD=$(jq -n \
+            --arg token "${GITEE_TOKEN}" \
+            --arg tag "${TAG}" \
+            '{access_token:$token,tag_name:$tag,name:$tag,target_commitish:"main",body:"macOS Universal DMG 与 Windows x64 安装包见附件。"}')
+          RESPONSE=$(curl --silent --show-error -X POST \
+            "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
             -H "Content-Type: application/json" \
-            -d "{\"access_token\":\"${GITEE_TOKEN}\",\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"target_commitish\":\"main\",\"body\":\"${BODY}\"}")
-          echo "Create response: ${RESP:0:300}"
-          RELEASE_ID=$(echo "$RESP" | jq -r '.id // empty' 2>/dev/null || true)
+            -d "${PAYLOAD}")
+          RELEASE_ID=$(echo "${RESPONSE}" | jq -r '.id // empty')
 
-          # Release 已存在时直接查询
-          if [ -z "$RELEASE_ID" ]; then
-            RESP2=$(curl -s "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}")
-            echo "Query response: ${RESP2:0:300}"
-            RELEASE_ID=$(echo "$RESP2" | jq -r '.id // empty' 2>/dev/null || true)
+          if [ -z "${RELEASE_ID}" ]; then
+            RELEASE_ID=$(curl --fail --silent --show-error \
+              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}" \
+              | jq -r '.id')
           fi
 
-          echo "Gitee Release ID: $RELEASE_ID"
-          if [ -z "$RELEASE_ID" ]; then
-            echo "::warning::Could not create/find Gitee release, skipping upload."
-            exit 0
-          fi
-
-          # 上传 arm64 + x64 DMG、Windows 安装包、更新清单
-          for FILE in artifacts/macos/*-arm64.dmg artifacts/macos/*-x64.dmg artifacts/windows/*.exe artifacts/windows/*.yml; do
-            [ -f "$FILE" ] || continue
-            NAME=$(basename "$FILE")
-            echo "Uploading: $NAME"
-            curl -s -X POST "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files" \
+          for FILE in artifacts/*.dmg artifacts/*-setup.exe; do
+            [ -f "${FILE}" ] || continue
+            echo "Uploading $(basename "${FILE}")"
+            curl --fail --silent --show-error -X POST \
+              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files" \
               -F "access_token=${GITEE_TOKEN}" \
-              -F "file=@${FILE};filename=${NAME}" \
-              --max-time 600 \
-            && echo "  ✓ $NAME" \
-            || echo "  ✗ $NAME (skipped)"
+              -F "file=@${FILE}"
           done
