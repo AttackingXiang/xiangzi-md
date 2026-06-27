@@ -23,7 +23,7 @@ permissions:
 
 concurrency:
   group: publish-gitee-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
