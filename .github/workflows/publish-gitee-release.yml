@@ -1,0 +1,153 @@
+name: Publish Gitee Release
+
+on:
+  workflow_run:
+    workflows:
+      - Release Desktop
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag to publish
+        required: true
+        default: v1.0.0
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-gitee-release.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-gitee-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v$(jq -r '.version' package.json)"
+          fi
+          case "${TAG}" in
+            v*) ;;
+            *) echo "Invalid release tag: ${TAG}" >&2; exit 1 ;;
+          esac
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download GitHub Release installers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d artifacts
+          RELEASE=$(curl --fail --silent --show-error \
+            --retry 4 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 20 --max-time 120 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+          mapfile -t URLS < <(echo "${RELEASE}" | jq -r \
+            '.assets[] | select(.name | test("\\.(dmg|exe)$")) | .browser_download_url')
+          test "${#URLS[@]}" -eq 2
+          for URL in "${URLS[@]}"; do
+            FILE="artifacts/$(basename "${URL}")"
+            curl --fail --location --silent --show-error \
+              --retry 4 --retry-delay 5 --retry-all-errors \
+              --connect-timeout 20 --max-time 300 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -o "${FILE}" "${URL}"
+          done
+          test "$(find artifacts -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
+          test "$(find artifacts -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
+
+      - name: Upsert Gitee Release installers
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GITEE_TOKEN}"
+          OWNER="tlqgyx"
+          REPO="xiangzi-md"
+          API="https://gitee.com/api/v5/repos/${OWNER}/${REPO}"
+
+          echo "Waiting for Gitee tag ${TAG}..."
+          FOUND=""
+          for i in $(seq 1 24); do
+            FOUND=$(curl --fail --silent --show-error \
+              --retry 3 --retry-delay 5 --retry-all-errors \
+              --connect-timeout 20 --max-time 60 \
+              "${API}/tags?access_token=${GITEE_TOKEN}&limit=100" \
+              | jq -r --arg tag "${TAG}" '.[] | select(.name == $tag) | .name')
+            [ "${FOUND}" = "${TAG}" ] && break
+            sleep 10
+          done
+          test "${FOUND}" = "${TAG}"
+
+          RELEASE=$(curl --silent --show-error \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 20 --max-time 60 \
+            "${API}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}")
+          RELEASE_ID=$(echo "${RELEASE}" | jq -r '.id // empty')
+          if [ -z "${RELEASE_ID}" ]; then
+            PAYLOAD=$(jq -n \
+              --arg token "${GITEE_TOKEN}" \
+              --arg tag "${TAG}" \
+              '{access_token:$token,tag_name:$tag,name:$tag,target_commitish:"main",body:"macOS Universal DMG 与 Windows x64 安装包见附件。"}')
+            RELEASE=$(curl --fail --silent --show-error -X POST \
+              --retry 3 --retry-delay 5 --retry-all-errors \
+              --connect-timeout 20 --max-time 60 \
+              "${API}/releases" -H "Content-Type: application/json" -d "${PAYLOAD}")
+            RELEASE_ID=$(echo "${RELEASE}" | jq -r '.id')
+          fi
+          test -n "${RELEASE_ID}"
+
+          for FILE in artifacts/*.dmg artifacts/*-setup.exe; do
+            NAME=$(basename "${FILE}")
+            RELEASE=$(curl --fail --silent --show-error \
+              --retry 3 --retry-delay 5 --retry-all-errors \
+              --connect-timeout 20 --max-time 60 \
+              "${API}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}&_=$(date +%s)")
+            if echo "${RELEASE}" | jq -e --arg name "${NAME}" \
+              '.assets[]? | select(.name == $name)' >/dev/null; then
+              echo "Already uploaded: ${NAME}"
+              continue
+            fi
+
+            echo "Uploading ${NAME}"
+            RESPONSE=$(curl --fail --silent --show-error -X POST \
+              --retry 3 --retry-delay 10 --retry-all-errors \
+              --connect-timeout 20 --max-time 300 \
+              "${API}/releases/${RELEASE_ID}/attach_files" \
+              -F "access_token=${GITEE_TOKEN}" \
+              -F "file=@${FILE}")
+            test "$(echo "${RESPONSE}" | jq -r '.name // empty')" = "${NAME}"
+          done
+
+          RELEASE=$(curl --fail --silent --show-error \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 20 --max-time 60 \
+            "${API}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}&_=$(date +%s)")
+          echo "${RELEASE}" | jq -e '.assets[] | select(.name | endswith(".dmg"))' >/dev/null
+          echo "${RELEASE}" | jq -e '.assets[] | select(.name | endswith("-setup.exe"))' >/dev/null

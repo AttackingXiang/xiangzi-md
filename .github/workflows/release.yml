@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -92,64 +92,3 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
           retention-days: 3
-
-  publish-gitee:
-    name: Publish Gitee Release
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: release-*
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create Gitee Release and upload assets
-        env:
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: |
-          set -euo pipefail
-          test -n "${GITEE_TOKEN}"
-
-          TAG="${{ github.ref_name }}"
-          OWNER="tlqgyx"
-          REPO="xiangzi-md"
-
-          echo "Waiting for Gitee to receive ${TAG}..."
-          FOUND=""
-          for i in $(seq 1 24); do
-            FOUND=$(curl --fail --silent --show-error \
-              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/tags?access_token=${GITEE_TOKEN}&limit=100" \
-              | jq -r --arg tag "${TAG}" '.[] | select(.name == $tag) | .name')
-            if [ "${FOUND}" = "${TAG}" ]; then
-              break
-            fi
-            sleep 10
-          done
-          test "${FOUND}" = "${TAG}"
-
-          PAYLOAD=$(jq -n \
-            --arg token "${GITEE_TOKEN}" \
-            --arg tag "${TAG}" \
-            '{access_token:$token,tag_name:$tag,name:$tag,target_commitish:"main",body:"macOS Universal DMG 与 Windows x64 安装包见附件。"}')
-          RESPONSE=$(curl --silent --show-error -X POST \
-            "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases" \
-            -H "Content-Type: application/json" \
-            -d "${PAYLOAD}")
-          RELEASE_ID=$(echo "${RESPONSE}" | jq -r '.id // empty')
-
-          if [ -z "${RELEASE_ID}" ]; then
-            RELEASE_ID=$(curl --fail --silent --show-error \
-              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}" \
-              | jq -r '.id')
-          fi
-
-          for FILE in artifacts/*.dmg artifacts/*-setup.exe; do
-            [ -f "${FILE}" ] || continue
-            echo "Uploading $(basename "${FILE}")"
-            curl --fail --silent --show-error -X POST \
-              "https://gitee.com/api/v5/repos/${OWNER}/${REPO}/releases/${RELEASE_ID}/attach_files" \
-              -F "access_token=${GITEE_TOKEN}" \
-              -F "file=@${FILE}"
-          done
