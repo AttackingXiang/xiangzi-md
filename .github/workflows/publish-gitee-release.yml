@@ -123,14 +123,35 @@ jobs:
           fi
           test -n "${RELEASE_ID}"
 
+          ATTACHMENTS=$(curl --fail --silent --show-error \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 20 --max-time 60 \
+            "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100")
+          declare -A KEPT=()
+          while IFS=$'\t' read -r ATTACHMENT_ID NAME; do
+            case "${NAME}" in
+              *.dmg|*-setup.exe)
+                if [ -f "artifacts/${NAME}" ] && [ -z "${KEPT[${NAME}]+x}" ]; then
+                  KEPT["${NAME}"]=1
+                  continue
+                fi
+                echo "Deleting stale installer: ${NAME}"
+                curl --fail --silent --show-error -X DELETE \
+                  --retry 3 --retry-delay 5 --retry-all-errors \
+                  --connect-timeout 20 --max-time 60 \
+                  "${API}/releases/${RELEASE_ID}/attach_files/${ATTACHMENT_ID}?access_token=${GITEE_TOKEN}"
+                ;;
+            esac
+          done < <(echo "${ATTACHMENTS}" | jq -r '.[] | [.id, .name] | @tsv')
+
           for FILE in artifacts/*.dmg artifacts/*-setup.exe; do
             NAME=$(basename "${FILE}")
-            RELEASE=$(curl --fail --silent --show-error \
+            ATTACHMENTS=$(curl --fail --silent --show-error \
               --retry 3 --retry-delay 5 --retry-all-errors \
               --connect-timeout 20 --max-time 60 \
-              "${API}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}&_=$(date +%s)")
-            if echo "${RELEASE}" | jq -e --arg name "${NAME}" \
-              '.assets[]? | select(.name == $name)' >/dev/null; then
+              "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100&_=$(date +%s)")
+            if echo "${ATTACHMENTS}" | jq -e --arg name "${NAME}" \
+              '.[] | select(.name == $name)' >/dev/null; then
               echo "Already uploaded: ${NAME}"
               continue
             fi
@@ -145,9 +166,9 @@ jobs:
             test "$(echo "${RESPONSE}" | jq -r '.name // empty')" = "${NAME}"
           done
 
-          RELEASE=$(curl --fail --silent --show-error \
+          ATTACHMENTS=$(curl --fail --silent --show-error \
             --retry 3 --retry-delay 5 --retry-all-errors \
             --connect-timeout 20 --max-time 60 \
-            "${API}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}&_=$(date +%s)")
-          echo "${RELEASE}" | jq -e '.assets[] | select(.name | endswith(".dmg"))' >/dev/null
-          echo "${RELEASE}" | jq -e '.assets[] | select(.name | endswith("-setup.exe"))' >/dev/null
+            "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100&_=$(date +%s)")
+          echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith(".dmg"))' >/dev/null
+          echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith("-setup.exe"))' >/dev/null
