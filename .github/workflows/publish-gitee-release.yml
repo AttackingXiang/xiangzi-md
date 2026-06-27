@@ -29,7 +29,7 @@ jobs:
   publish:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -157,13 +157,38 @@ jobs:
             fi
 
             echo "Uploading ${NAME}"
-            RESPONSE=$(curl --fail --silent --show-error -X POST \
-              --retry 3 --retry-delay 10 --retry-all-errors \
-              --connect-timeout 20 --max-time 300 \
-              "${API}/releases/${RELEASE_ID}/attach_files" \
-              -F "access_token=${GITEE_TOKEN}" \
-              -F "file=@${FILE}")
-            test "$(echo "${RESPONSE}" | jq -r '.name // empty')" = "${NAME}"
+            UPLOADED=""
+            for ATTEMPT in 1 2; do
+              RESPONSE=""
+              set +e
+              RESPONSE=$(curl --fail --silent --show-error -X POST \
+                --connect-timeout 20 --max-time 180 \
+                "${API}/releases/${RELEASE_ID}/attach_files" \
+                -F "access_token=${GITEE_TOKEN}" \
+                -F "file=@${FILE}")
+              CURL_STATUS=$?
+              set -e
+              if [ "${CURL_STATUS}" -eq 0 ] && \
+                [ "$(echo "${RESPONSE}" | jq -r '.name // empty')" = "${NAME}" ]; then
+                UPLOADED=1
+                break
+              fi
+
+              echo "Upload response was interrupted; verifying ${NAME} (attempt ${ATTEMPT})"
+              for POLL in $(seq 1 24); do
+                ATTACHMENTS=$(curl --fail --silent --show-error \
+                  --retry 3 --retry-delay 5 --retry-all-errors \
+                  --connect-timeout 20 --max-time 60 \
+                  "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100&_=$(date +%s)")
+                if echo "${ATTACHMENTS}" | jq -e --arg name "${NAME}" \
+                  '.[] | select(.name == $name)' >/dev/null; then
+                  UPLOADED=1
+                  break 2
+                fi
+                sleep 5
+              done
+            done
+            test -n "${UPLOADED}"
           done
 
           ATTACHMENTS=$(curl --fail --silent --show-error \
