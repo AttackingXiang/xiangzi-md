@@ -58,7 +58,7 @@ jobs:
         run: npm run check
 
       - name: Build and publish GitHub Release assets
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: '-'
@@ -72,7 +72,7 @@ jobs:
             - Windows：x64 NSIS 安装包。
           releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: false
+          includeUpdaterJson: false
           args: ${{ matrix.args }}
 
       - name: Upload macOS artifact for Gitee
