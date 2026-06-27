@@ -1,22 +1,12 @@
 [tools]
 node = "22"
+rust = "stable"
 
-[env]
-# 让本地 node_modules/.bin 进入 PATH，方便直接调用 electron-vite 等
-_.path = ["./node_modules/.bin"]
+[tasks.check]
+run = "npm run check && npm run rust:check"
 
 [tasks.dev]
-description = "启动开发模式（带热更新）"
-run = "electron-vite dev"
+run = "npm run tauri:dev"
 
 [tasks.build]
-description = "构建生产代码"
-run = "electron-vite build"
-
-[tasks.start]
-description = "预览构建后的应用"
-run = "electron-vite preview"
-
-[tasks.dist]
-description = "打包为可安装的桌面应用"
-run = "electron-vite build && electron-builder"
+run = "npm run tauri:build"
