@@ -41,7 +41,10 @@ jobs:
         run: |
           set -euo pipefail
           git remote add gitee git@gitee.com:tlqgyx/xiangzi-md.git
-          git fetch origin main electron-legacy-v0.1 --tags
+          git fetch origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/electron-legacy-v0.1:refs/remotes/origin/electron-legacy-v0.1 \
+            +refs/tags/*:refs/tags/*
           git push --force gitee refs/remotes/origin/main:refs/heads/main
           git push --force gitee refs/remotes/origin/electron-legacy-v0.1:refs/heads/electron-legacy-v0.1
           git push --force gitee --tags
