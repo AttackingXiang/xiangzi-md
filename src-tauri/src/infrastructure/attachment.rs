@@ -67,7 +67,10 @@ pub fn save_attachment(
 }
 
 fn unique_attachment_path(directory: &Path, file_name: &str) -> std::path::PathBuf {
-    let source = Path::new(file_name);
+    // Sanitize before asking `Path` to parse the name. On Windows, an input such as
+    // `a:b.png` is otherwise interpreted as a drive-prefixed path and loses `a:`.
+    let sanitized = file_name.replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "_");
+    let source = Path::new(&sanitized);
     let extension = source
         .extension()
         .and_then(|value| value.to_str())
@@ -75,8 +78,7 @@ fn unique_attachment_path(directory: &Path, file_name: &str) -> std::path::PathB
     let stem = source
         .file_stem()
         .and_then(|value| value.to_str())
-        .unwrap_or("image")
-        .replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "_");
+        .unwrap_or("image");
     let mut index = 0usize;
     loop {
         let name = if index == 0 {
