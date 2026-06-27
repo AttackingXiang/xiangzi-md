@@ -29,7 +29,7 @@ jobs:
   publish:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -159,23 +159,29 @@ jobs:
             echo "Uploading ${NAME}"
             UPLOADED=""
             for ATTEMPT in 1 2; do
-              RESPONSE=""
-              set +e
-              RESPONSE=$(curl --fail --silent --show-error -X POST \
-                --connect-timeout 20 --max-time 180 \
+              RESPONSE_FILE=$(mktemp)
+              curl --fail --silent --show-error -X POST \
+                --connect-timeout 20 --max-time 900 \
                 "${API}/releases/${RELEASE_ID}/attach_files" \
                 -F "access_token=${GITEE_TOKEN}" \
-                -F "file=@${FILE}")
-              CURL_STATUS=$?
-              set -e
-              if [ "${CURL_STATUS}" -eq 0 ] && \
-                [ "$(echo "${RESPONSE}" | jq -r '.name // empty')" = "${NAME}" ]; then
-                UPLOADED=1
-                break
-              fi
+                -F "file=@${FILE}" >"${RESPONSE_FILE}" &
+              UPLOAD_PID=$!
+              echo "Watching Gitee while ${NAME} uploads (attempt ${ATTEMPT})"
+              for POLL in $(seq 1 90); do
+                RUNNING=1
+                if ! kill -0 "${UPLOAD_PID}" 2>/dev/null; then
+                  set +e
+                  wait "${UPLOAD_PID}"
+                  CURL_STATUS=$?
+                  set -e
+                  RUNNING=""
+                  if [ "${CURL_STATUS}" -eq 0 ] && \
+                    [ "$(jq -r '.name // empty' "${RESPONSE_FILE}")" = "${NAME}" ]; then
+                    UPLOADED=1
+                    break
+                  fi
+                fi
 
-              echo "Upload response was interrupted; verifying ${NAME} (attempt ${ATTEMPT})"
-              for POLL in $(seq 1 24); do
                 ATTACHMENTS=$(curl --fail --silent --show-error \
                   --retry 3 --retry-delay 5 --retry-all-errors \
                   --connect-timeout 20 --max-time 60 \
@@ -183,10 +189,15 @@ jobs:
                 if echo "${ATTACHMENTS}" | jq -e --arg name "${NAME}" \
                   '.[] | select(.name == $name)' >/dev/null; then
                   UPLOADED=1
-                  break 2
+                  break
                 fi
-                sleep 5
+                [ -n "${RUNNING}" ] || break
+                sleep 10
               done
+              kill "${UPLOAD_PID}" 2>/dev/null || true
+              wait "${UPLOAD_PID}" 2>/dev/null || true
+              rm -f "${RESPONSE_FILE}"
+              [ -z "${UPLOADED}" ] || break
             done
             test -n "${UPLOADED}"
           done
