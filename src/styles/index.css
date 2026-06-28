@@ -1655,8 +1655,13 @@ kbd {
 }
 
 .wysiwyg-editor .milkdown .ProseMirror hr {
-  margin: 1.65em 0;
+  margin: 0.6em 0;
   border-color: var(--border);
+}
+
+/* 分隔线已经承担章节分组，不再叠加小标题的常规上间距。 */
+.wysiwyg-editor .milkdown .ProseMirror hr + :is(h2, h3, h4, h5, h6) {
+  margin-top: 0.48em;
 }
 
 @media (max-width: 760px) {
