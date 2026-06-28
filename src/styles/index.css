@@ -1182,22 +1182,6 @@ kbd {
   flex: 0 0 auto;
 }
 
-.settings-security-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  color: var(--text-2);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated));
-}
-
-.settings-security-note svg {
-  flex: 0 0 auto;
-  color: var(--accent-text);
-}
-
-.settings-security-note p,
 .update-settings-row p,
 .about-description {
   margin: 0;
@@ -1387,8 +1371,23 @@ kbd {
 .update-notes {
   max-height: 140px;
   margin-top: 12px;
-  white-space: pre-wrap;
   overflow-y: auto;
+}
+
+.update-notes h3 {
+  margin: 0 0 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.update-notes ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.update-notes li + li {
+  margin-top: 3px;
 }
 
 .update-progress {
@@ -1692,7 +1691,7 @@ kbd {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
-  cursor: zoom-in;
+  cursor: default;
 }
 
 /* 标题自动编号（视图层，不写回 Markdown） */

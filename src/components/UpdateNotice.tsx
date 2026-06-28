@@ -1,6 +1,7 @@
 import { ArrowDownToLine, CheckCircle2, RefreshCw, X } from 'lucide-react'
 import type { UpdaterController } from '../hooks/useUpdater'
 import { getLang } from '../lib/i18n'
+import { extractUpdateHighlights } from '../lib/updateNotes'
 
 interface Props {
   updater: UpdaterController
@@ -11,6 +12,7 @@ export default function UpdateNotice({ updater }: Props): JSX.Element | null {
   if (!['available', 'downloading'].includes(state.phase)) return null
   const en = getLang() === 'en'
   const downloading = state.phase === 'downloading'
+  const highlights = extractUpdateHighlights(state.notes)
 
   return (
     <div className="modal-backdrop update-backdrop" role="presentation">
@@ -39,10 +41,24 @@ export default function UpdateNotice({ updater }: Props): JSX.Element | null {
           <div className="update-copy">
             <h2>Xiangzi MD {state.version}</h2>
             <p className="update-meta">
-              {en ? 'Verified signed update' : '已验证签名更新'} ·{' '}
-              {state.source === 'gitee' ? 'Gitee' : 'GitHub'}
+              {state.currentVersion
+                ? en
+                  ? `Update from ${state.currentVersion}`
+                  : `从 ${state.currentVersion} 更新`
+                : en
+                  ? 'A new version is ready'
+                  : '新版本已准备好'}
             </p>
-            {state.notes && <div className="update-notes">{state.notes}</div>}
+            {highlights.length > 0 && (
+              <section className="update-notes" aria-label={en ? "What's new" : '本次更新'}>
+                <h3>{en ? "What's new" : '本次更新'}</h3>
+                <ul>
+                  {highlights.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </div>
         </div>
         {downloading ? (

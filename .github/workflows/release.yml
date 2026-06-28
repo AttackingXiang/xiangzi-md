@@ -31,9 +31,12 @@ jobs:
     outputs:
       publish: ${{ steps.release.outputs.publish }}
       tag: ${{ steps.release.outputs.tag }}
+      notes: ${{ steps.notes.outputs.body }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Publish only once per package version
         id: release
@@ -52,6 +55,40 @@ jobs:
             echo "publish=true" >> "${GITHUB_OUTPUT}"
           fi
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build user-facing update notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREVIOUS_TAG="$(git tag --merged HEAD --list 'v*' --sort=-v:refname | head -n 1 || true)"
+          if [ -n "${PREVIOUS_TAG}" ]; then
+            RANGE="${PREVIOUS_TAG}..HEAD"
+          else
+            RANGE="HEAD~20..HEAD"
+          fi
+
+          NOTES_FILE="$(mktemp)"
+          while IFS= read -r SUBJECT; do
+            case "${SUBJECT}" in
+              feat:*|feat\(*\):*|fix:*|fix\(*\):*|perf:*|perf\(*\):*|refactor:*|refactor\(*\):*)
+                TITLE="$(printf '%s' "${SUBJECT}" | sed -E 's/^(feat|fix|perf|refactor)(\([^)]*\))?!?:[[:space:]]*//')"
+                [ -n "${TITLE}" ] && printf -- '- %s\n' "${TITLE}" >> "${NOTES_FILE}"
+                ;;
+            esac
+          done < <(git log "${RANGE}" --no-merges --pretty=format:'%s')
+
+          if [ ! -s "${NOTES_FILE}" ]; then
+            printf '%s\n' '- 常规体验优化与稳定性改进。' > "${NOTES_FILE}"
+          fi
+
+          DELIMITER="RELEASE_NOTES_$(date +%s%N)"
+          {
+            echo "body<<${DELIMITER}"
+            echo '## 本次更新'
+            cat "${NOTES_FILE}"
+            echo "${DELIMITER}"
+          } >> "${GITHUB_OUTPUT}"
 
   build:
     name: Build ${{ matrix.artifact }}
@@ -108,12 +145,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Xiangzi MD v__VERSION__
-          releaseBody: |
-            Xiangzi MD Tauri 桌面版本。
-
-            - macOS：Universal DMG，同时支持 Apple Silicon 与 Intel。
-            - Windows：x64 NSIS 安装包。
-            - 应用内更新：签名校验，GitHub 不可用时自动切换 Gitee。
+          releaseBody: ${{ needs.prepare.outputs.notes }}
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
