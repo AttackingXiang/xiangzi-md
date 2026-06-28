@@ -23,10 +23,11 @@ import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
 import ContextMenu, { type MenuItem } from './components/ContextMenu'
 import InputDialog from './components/InputDialog'
+import ExportCompleteDialog from './components/ExportCompleteDialog'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
-import { escapeHtmlText, serializeStyleSheets } from './lib/exportStyles'
+import { escapeHtmlText, inlineCodeHighlightStyles, serializeStyleSheets } from './lib/exportStyles'
 import { getLang, t } from './lib/i18n'
 import { baseName, dirName } from './lib/path'
 import { replaceMovedPath } from './lib/treeDrag'
@@ -206,6 +207,7 @@ export default function App(): JSX.Element {
     confirmText?: string
     onSubmit: (value: string) => void
   } | null>(null)
+  const [exportResultPath, setExportResultPath] = useState<string | null>(null)
 
   const deferredOutlineContent = useDeferredValue(
     outlineVisible && activeTab ? activeTab.content : '',
@@ -499,6 +501,11 @@ export default function App(): JSX.Element {
       // ── Clone and clean ───────────────────────────────────────────────────
       const clone = pm.cloneNode(true) as HTMLElement
 
+      // CodeMirror's generated token class names are runtime-scoped. Resolve
+      // their actual colors before exporting so reopening the HTML (and the
+      // image/PDF render iframe) cannot remap every token to a single color.
+      inlineCodeHighlightStyles(pm, clone)
+
       // Strip Milkdown UI decorations AND code-block toolbar (.tools).
       const MILKDOWN_UI = [
         '.milkdown-toolbar',
@@ -611,8 +618,7 @@ ${liveStyles}
       const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
       if (!html) return
       const res = await desktop.exportHTML(html, tab?.name ?? 'document')
-      if (res)
-        window.alert((getLang() === 'en' ? 'Exported HTML:\n' : '已导出 HTML：\n') + res.path)
+      if (res) setExportResultPath(res.path)
     } catch (error) {
       window.alert(
         (getLang() === 'en' ? 'HTML export failed:\n' : 'HTML 导出失败：\n') +
@@ -629,7 +635,7 @@ ${liveStyles}
       const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
       if (!html) return
       const res = await desktop.exportPDF(html, tab?.name ?? 'document')
-      if (res) window.alert((getLang() === 'en' ? 'Exported PDF:\n' : '已导出 PDF：\n') + res.path)
+      if (res) setExportResultPath(res.path)
     } catch (error) {
       window.alert(
         (getLang() === 'en' ? 'PDF export failed:\n' : 'PDF 导出失败：\n') +
@@ -646,8 +652,7 @@ ${liveStyles}
       const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
       if (!html) return
       const res = await desktop.exportImage(html, tab?.name ?? 'document')
-      if (res)
-        window.alert((getLang() === 'en' ? 'Exported image:\n' : '已导出图片：\n') + res.path)
+      if (res) setExportResultPath(res.path)
     } catch (error) {
       window.alert(
         (getLang() === 'en' ? 'Image export failed:\n' : '图片导出失败：\n') +
@@ -1082,6 +1087,23 @@ ${liveStyles}
           confirmText={inputDialog.confirmText}
           onSubmit={inputDialog.onSubmit}
           onClose={() => setInputDialog(null)}
+        />
+      )}
+
+      {exportResultPath && (
+        <ExportCompleteDialog
+          path={exportResultPath}
+          onConfirm={() => setExportResultPath(null)}
+          onReveal={() => {
+            const path = exportResultPath
+            setExportResultPath(null)
+            void desktop.reveal(path).catch((error: unknown) => {
+              window.alert(
+                (getLang() === 'en' ? 'Reveal failed:\n' : '打开所在文件夹失败：\n') +
+                  (error as Error).message,
+              )
+            })
+          }}
         />
       )}
 
