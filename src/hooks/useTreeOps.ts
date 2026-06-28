@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { desktop } from '../platform'
 import { getLang, t } from '../lib/i18n'
+import { revealLocationKey } from '../lib/platform'
 import type { FileNode, Folder, Tab } from '../types'
 import type { MenuItem } from '../components/ContextMenu'
 
@@ -142,7 +143,7 @@ export function useTreeOps({
         items.push({ label: t('打开'), onClick: () => openPath(node.path, node.name) })
       }
       items.push({ label: t('重命名'), onClick: () => renameNode(node), separatorBefore: true })
-      items.push({ label: t('在访达中显示'), onClick: () => desktop.reveal(node.path) })
+      items.push({ label: t(revealLocationKey()), onClick: () => desktop.reveal(node.path) })
       items.push({
         label: t('删除'),
         onClick: () => deleteNode(node),

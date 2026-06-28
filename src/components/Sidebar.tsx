@@ -23,7 +23,7 @@ interface Props {
   onRefresh: () => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onRootContext: (x: number, y: number) => void
-  onMove: (sourcePath: string, targetDirPath: string) => void
+  onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
   reloadKey: number
   style?: React.CSSProperties
 }
