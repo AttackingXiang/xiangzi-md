@@ -1510,11 +1510,12 @@ kbd {
   font-family: var(--crepe-font-title);
   color: var(--text);
   letter-spacing: -0.015em;
-  padding: 0 0 0.24em;
+  padding: 0;
 }
 
 .wysiwyg-editor .milkdown .ProseMirror h1 {
-  margin: 0 0 0.46em;
+  margin: 0 0 0.36em;
+  padding-bottom: 0.18em;
   border-bottom: 1px solid var(--border-strong);
   font-size: 36px;
   font-weight: 700;
@@ -1522,7 +1523,8 @@ kbd {
 }
 
 .wysiwyg-editor .milkdown .ProseMirror h2 {
-  margin: 1.45em 0 0.38em;
+  margin: 0.72em 0 0.28em;
+  padding-bottom: 0.14em;
   border-bottom: 1px solid var(--border);
   font-size: 28px;
   font-weight: 700;
@@ -1530,14 +1532,14 @@ kbd {
 }
 
 .wysiwyg-editor .milkdown .ProseMirror h3 {
-  margin: 1.34em 0 0.34em;
+  margin: 0.68em 0 0.24em;
   font-size: 23px;
   font-weight: 700;
   line-height: 1.38;
 }
 
 .wysiwyg-editor .milkdown .ProseMirror h4 {
-  margin: 1.24em 0 0.3em;
+  margin: 0.64em 0 0.22em;
   font-size: 19px;
   font-weight: 600;
   line-height: 1.45;
@@ -1545,7 +1547,7 @@ kbd {
 
 .wysiwyg-editor .milkdown .ProseMirror h5,
 .wysiwyg-editor .milkdown .ProseMirror h6 {
-  margin: 1.16em 0 0.28em;
+  margin: 0.6em 0 0.2em;
   font-size: 16px;
   font-weight: 600;
   line-height: 1.5;
@@ -1563,7 +1565,7 @@ kbd {
   .ProseMirror
   :is(h1, h2, h3, h4, h5, h6)
   + :is(p, blockquote, ul, ol, .milkdown-code-block) {
-  margin-top: 0.28em;
+  margin-top: 0.16em;
 }
 
 .wysiwyg-editor .milkdown .ProseMirror strong {
@@ -1796,7 +1798,7 @@ kbd {
 /* 代码块容器：背景交给内部 .cm-editor 卡片承载 */
 .milkdown .milkdown-code-block {
   background: transparent !important;
-  padding: 2px 0 14px !important;
+  padding: 2px 0 8px !important;
 }
 
 .milkdown .milkdown-code-block .tools {
