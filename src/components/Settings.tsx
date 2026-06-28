@@ -1,13 +1,4 @@
-import {
-  FileImage,
-  Info,
-  Keyboard,
-  Palette,
-  PenLine,
-  RefreshCw,
-  ShieldCheck,
-  X,
-} from 'lucide-react'
+import { FileImage, Info, Keyboard, Palette, PenLine, RefreshCw, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { desktop } from '../platform'
@@ -320,8 +311,8 @@ export default function Settings({
                 title={en ? 'Software updates' : '软件更新'}
                 description={
                   en
-                    ? 'Signed packages with an automatic Gitee fallback.'
-                    : '仅安装签名包，并在 GitHub 不可用时自动切换 Gitee。'
+                    ? 'Keep Xiangzi MD up to date automatically.'
+                    : '自动检查并安装 Xiangzi MD 的最新版本。'
                 }
               >
                 <SettingsCard>
@@ -357,14 +348,6 @@ export default function Settings({
                     </button>
                   </div>
                 </SettingsCard>
-                <div className="settings-security-note">
-                  <ShieldCheck size={18} />
-                  <p>
-                    {en
-                      ? 'Every downloaded update is verified with the embedded signing public key before installation.'
-                      : '每个更新包在安装前都会使用应用内置公钥校验签名。'}
-                  </p>
-                </div>
               </SettingsPage>
             )}
 
@@ -461,16 +444,12 @@ function ToggleRow({
 
 function updateStatusText(updater: UpdaterController, en: boolean): string {
   const { state } = updater
-  if (state.phase === 'checking')
-    return en
-      ? 'Checking GitHub, with Gitee as fallback…'
-      : '正在检查 GitHub，失败时自动切换 Gitee…'
+  if (state.phase === 'checking') return en ? 'Checking for updates…' : '正在检查新版本…'
   if (state.phase === 'up-to-date') return en ? 'You are up to date.' : '当前已经是最新版本。'
   if (state.phase === 'available')
     return en ? `Version ${state.version} is available.` : `发现新版本 ${state.version}。`
-  if (state.phase === 'downloading')
-    return en ? 'Downloading the signed package…' : '正在下载签名更新包…'
+  if (state.phase === 'downloading') return en ? 'Downloading the update…' : '正在下载更新…'
   if (state.phase === 'error')
-    return en ? 'Could not reach either update source.' : 'GitHub 与 Gitee 暂时都无法访问。'
+    return en ? 'Could not check for updates. Try again later.' : '暂时无法检查更新，请稍后重试。'
   return en ? 'Not checked yet.' : '尚未检查。'
 }

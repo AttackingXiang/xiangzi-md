@@ -991,9 +991,10 @@ ${liveStyles}
 
         <div
           className="editor-area"
-          onClick={(e) => {
+          onDoubleClick={(e) => {
             const target = e.target as HTMLElement
             if (target.tagName === 'IMG') {
+              e.preventDefault()
               const src =
                 (target as HTMLImageElement).currentSrc || (target as HTMLImageElement).src
               if (src) setZoomSrc(src)
