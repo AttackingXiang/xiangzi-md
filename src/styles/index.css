@@ -2126,6 +2126,68 @@ kbd {
   margin-top: 16px;
 }
 
+/* ---------- 导出完成 ---------- */
+.export-complete-dialog {
+  width: 520px;
+  padding: 22px;
+}
+
+.export-complete-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.export-complete-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: #2e9d62;
+}
+
+.export-complete-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.export-complete-copy h2 {
+  margin: 1px 0 7px;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.export-complete-copy p {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.export-complete-path {
+  padding: 9px 11px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-sidebar);
+  color: var(--text-2);
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-complete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.export-complete-actions .primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
 /* ---------- 斜杠 / 命令菜单（覆盖 Crepe 默认样式，更简洁、适配主题） ---------- */
 .milkdown .milkdown-slash-menu {
   background: var(--bg-elevated) !important;

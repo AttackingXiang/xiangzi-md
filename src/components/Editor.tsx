@@ -13,6 +13,7 @@ import { headingFoldPlugin } from '../lib/headingFold'
 import { editorBridge } from '../lib/editorBridge'
 import { renderMermaid } from '../lib/mermaidPreview'
 import { t } from '../lib/i18n'
+import { typewriterScrollDelta } from '../lib/typewriterScroll'
 
 interface Props {
   content: string
@@ -194,19 +195,34 @@ export default function Editor({
     if (!typewriterMode) return
     const scroller = rootRef.current
     if (!scroller) return
+    let pointerSelecting = false
+
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.button === 0) pointerSelecting = true
+    }
+    const onPointerUp = (): void => {
+      pointerSelecting = false
+    }
     const onSel = (): void => {
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0) return
       const range = sel.getRangeAt(0)
       if (!scroller.contains(range.startContainer)) return
       const rect = range.getBoundingClientRect()
-      if (rect.height === 0 && rect.top === 0) return
       const sRect = scroller.getBoundingClientRect()
-      const delta = rect.top + rect.height / 2 - (sRect.top + sRect.height / 2)
-      if (Math.abs(delta) > 2) scroller.scrollBy({ top: delta })
+      const delta = typewriterScrollDelta(sel.isCollapsed, pointerSelecting, rect, sRect)
+      if (delta !== null) scroller.scrollBy({ top: delta })
     }
+    scroller.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('pointerup', onPointerUp, true)
+    window.addEventListener('pointercancel', onPointerUp, true)
     document.addEventListener('selectionchange', onSel)
-    return () => document.removeEventListener('selectionchange', onSel)
+    return () => {
+      scroller.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('pointerup', onPointerUp, true)
+      window.removeEventListener('pointercancel', onPointerUp, true)
+      document.removeEventListener('selectionchange', onSel)
+    }
   }, [typewriterMode])
 
   return <div className={`wysiwyg-editor${focusMode ? ' focus-mode' : ''}`} ref={rootRef} />
