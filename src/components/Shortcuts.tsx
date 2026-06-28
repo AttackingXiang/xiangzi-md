@@ -1,110 +1,174 @@
-import { X } from 'lucide-react'
-import { t, getLang } from '../lib/i18n'
+import { RotateCcw } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import {
+  SHORTCUT_DEFINITIONS,
+  displayShortcut,
+  effectiveShortcut,
+  isSafeShortcut,
+  shortcutFromKeyboardEvent,
+  type ShortcutAction,
+  type ShortcutCategory,
+} from '../lib/shortcuts'
+import { getLang } from '../lib/i18n'
 
 interface Props {
-  onClose: () => void
+  overrides: Record<string, string>
+  onChange: (next: Record<string, string>) => void
 }
 
-const isMac = navigator.platform.toLowerCase().includes('mac')
-const MOD = isMac ? '⌘' : 'Ctrl'
-const ALT = isMac ? '⌥' : 'Alt'
-const SHIFT = isMac ? '⇧' : 'Shift'
+const categoryOrder: ShortcutCategory[] = ['file', 'navigation', 'format']
 
-interface Item {
-  label: string
-  keys: string[]
-}
+export default function Shortcuts({ overrides, onChange }: Props): JSX.Element {
+  const en = getLang() === 'en'
+  const [recording, setRecording] = useState<ShortcutAction | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-export default function Shortcuts({ onClose }: Props): JSX.Element {
-  const groups: { title: string; items: Item[] }[] = [
-    {
-      title: t('文件'),
-      items: [
-        { label: t('新建文件'), keys: [MOD, 'N'] },
-        { label: t('打开文件'), keys: [MOD, 'O'] },
-        { label: t('打开文件夹'), keys: [MOD, SHIFT, 'O'] },
-        { label: t('保存'), keys: [MOD, 'S'] },
-        { label: t('另存为'), keys: [MOD, SHIFT, 'S'] },
-        { label: t('关闭标签页'), keys: [MOD, 'W'] },
-      ],
-    },
-    {
-      title: t('视图'),
-      items: [
-        { label: t('切换侧边栏'), keys: [MOD, '\\'] },
-        { label: t('大纲'), keys: [MOD, SHIFT, 'K'] },
-        { label: t('源码 / 所见即所得'), keys: [MOD, '/'] },
-        { label: t('查找'), keys: [MOD, 'F'] },
-        { label: t('在文件夹中搜索'), keys: [MOD, SHIFT, 'F'] },
-        { label: t('命令面板'), keys: [MOD, 'K'] },
-        { label: t('设置'), keys: [MOD, ','] },
-      ],
-    },
-    {
-      title: t('标题与段落'),
-      items: [
-        { label: t('一级 ~ 六级标题'), keys: [MOD, '1 … 6'] },
-        { label: t('标题（备用键位）'), keys: [MOD, ALT, '1 … 6'] },
-        { label: t('设为正文'), keys: [MOD, '0'] },
-      ],
-    },
-    {
-      title: t('文本格式'),
-      items: [
-        { label: t('加粗'), keys: [MOD, 'B'] },
-        { label: t('斜体'), keys: [MOD, 'I'] },
-        { label: t('行内代码'), keys: [MOD, 'E'] },
-      ],
-    },
-    {
-      title: t('块与列表'),
-      items: [
-        { label: t('引用'), keys: [MOD, SHIFT, 'B'] },
-        { label: t('代码块'), keys: [MOD, ALT, 'C'] },
-        { label: t('无序列表'), keys: [MOD, ALT, '8'] },
-        { label: t('有序列表'), keys: [MOD, ALT, '7'] },
-        { label: t('列表缩进'), keys: ['Tab'] },
-        { label: t('列表反缩进'), keys: [SHIFT, 'Tab'] },
-        { label: t('软换行'), keys: [SHIFT, 'Enter'] },
-      ],
-    },
-  ]
+  const grouped = useMemo(
+    () =>
+      categoryOrder.map((category) => ({
+        category,
+        items: SHORTCUT_DEFINITIONS.filter((definition) => definition.category === category),
+      })),
+    [],
+  )
+
+  const setBinding = (action: ShortcutAction, binding: string): void => {
+    const definition = SHORTCUT_DEFINITIONS.find((item) => item.id === action)
+    if (!definition) return
+    const conflict = SHORTCUT_DEFINITIONS.find(
+      (item) => item.id !== action && effectiveShortcut(overrides, item.id) === binding,
+    )
+    if (conflict) {
+      setError(en ? `Already used by “${conflict.labelEn}”.` : `已被“${conflict.labelZh}”使用。`)
+      return
+    }
+    const next = { ...overrides }
+    if (binding === definition.defaultBinding) delete next[action]
+    else next[action] = binding
+    onChange(next)
+    setRecording(null)
+    setError(null)
+  }
+
+  const resetBinding = (action: ShortcutAction): void => {
+    if (!(action in overrides)) return
+    const next = { ...overrides }
+    delete next[action]
+    onChange(next)
+    setError(null)
+  }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <span>{t('快捷键')}</span>
-          <button className="icon-btn sm" onClick={onClose}>
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="sc-grid">
-            {groups.map((g) => (
-              <section key={g.title} className="sc-group">
-                <h3>{g.title}</h3>
-                {g.items.map((it) => (
-                  <div key={it.label} className="sc-row">
-                    <span className="sc-label">{it.label}</span>
-                    <span className="sc-keys">
-                      {it.keys.map((k, i) => (
-                        <kbd key={i}>{k}</kbd>
-                      ))}
-                    </span>
-                  </div>
-                ))}
-              </section>
-            ))}
-          </div>
-          <p className="settings-hint">
-            {getLang() === 'en'
-              ? 'Editing shortcuts (headings, bold, lists…) work when the editor is focused. Markdown syntax (typing "# " for a heading, "- " for a list) works too.'
-              : '标题、加粗、列表等编辑类快捷键在编辑器获得焦点时生效。Markdown 语法（如输入 “# ” 自动成为标题、“- ” 成为列表）同样可用。'}
+    <div className="shortcut-settings">
+      <div className="settings-section-intro">
+        <div>
+          <h2>{en ? 'Keyboard shortcuts' : '自定义快捷键'}</h2>
+          <p>
+            {en
+              ? 'Click a shortcut, then press a new key combination. Conflicts are rejected automatically.'
+              : '点击快捷键后直接按下新组合键；冲突会被自动拦截。'}
           </p>
         </div>
+        <button
+          className="secondary-btn"
+          disabled={Object.keys(overrides).length === 0}
+          onClick={() => onChange({})}
+        >
+          <RotateCcw size={14} />
+          {en ? 'Reset all' : '全部恢复默认'}
+        </button>
       </div>
+
+      {error && (
+        <div className="settings-inline-error" role="alert">
+          {error}
+        </div>
+      )}
+
+      {grouped.map(({ category, items }) => (
+        <section className="shortcut-group" key={category}>
+          <h3>
+            {category === 'file'
+              ? en
+                ? 'File'
+                : '文件'
+              : category === 'navigation'
+                ? en
+                  ? 'Navigation and view'
+                  : '导航与视图'
+                : en
+                  ? 'Editor formatting'
+                  : '编辑与格式'}
+          </h3>
+          <div className="shortcut-list">
+            {items.map((definition) => {
+              const binding = effectiveShortcut(overrides, definition.id)
+              const customized = definition.id in overrides
+              return (
+                <div className="shortcut-row" key={definition.id}>
+                  <span className="shortcut-label">
+                    {en ? definition.labelEn : definition.labelZh}
+                    {customized && <small>{en ? 'Custom' : '已自定义'}</small>}
+                  </span>
+                  <button
+                    type="button"
+                    className={`shortcut-recorder${recording === definition.id ? ' recording' : ''}`}
+                    data-shortcut-recorder
+                    aria-label={`${en ? definition.labelEn : definition.labelZh}: ${binding}`}
+                    onClick={() => {
+                      setRecording(definition.id)
+                      setError(null)
+                    }}
+                    onBlur={() =>
+                      setRecording((current) => (current === definition.id ? null : current))
+                    }
+                    onKeyDown={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (event.key === 'Escape') {
+                        setRecording(null)
+                        return
+                      }
+                      if (event.key === 'Backspace' || event.key === 'Delete') {
+                        resetBinding(definition.id)
+                        setRecording(null)
+                        return
+                      }
+                      const next = shortcutFromKeyboardEvent(event)
+                      if (!next || !isSafeShortcut(next)) {
+                        setError(
+                          en
+                            ? 'Use Command/Ctrl, Control, or Alt with another key.'
+                            : '请使用 Command/Ctrl、Control 或 Alt 与其他按键组合。',
+                        )
+                        return
+                      }
+                      setBinding(definition.id, next)
+                    }}
+                  >
+                    {recording === definition.id ? (
+                      <span className="shortcut-recording-label">
+                        {en ? 'Press keys…' : '请按组合键…'}
+                      </span>
+                    ) : (
+                      displayShortcut(binding).map((key) => <kbd key={key}>{key}</kbd>)
+                    )}
+                  </button>
+                  <button
+                    className="icon-btn sm"
+                    disabled={!customized}
+                    title={en ? 'Reset' : '恢复默认'}
+                    aria-label={en ? 'Reset shortcut' : '恢复默认快捷键'}
+                    onClick={() => resetBinding(definition.id)}
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   )
 }

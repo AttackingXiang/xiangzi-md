@@ -1,7 +1,4 @@
-use crate::{
-    domain::error::AppResult,
-    infrastructure::{lifecycle::LifecycleState, menu},
-};
+use crate::infrastructure::lifecycle::LifecycleState;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
@@ -31,9 +28,4 @@ pub fn frontend_ready(app: AppHandle, lifecycle: State<'_, LifecycleState>) {
 pub fn quit_confirmed(app: AppHandle, lifecycle: State<'_, LifecycleState>) {
     lifecycle.confirm_quit();
     app.exit(0);
-}
-
-#[tauri::command]
-pub fn set_language(app: AppHandle, language: String) -> AppResult<()> {
-    menu::install(&app, &language)
 }

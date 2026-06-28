@@ -1,17 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  lazy,
+  Suspense,
+} from 'react'
 import { desktop } from './platform'
 import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
 import SourceEditor from './components/SourceEditor'
 
 const Editor = lazy(() => import('./components/Editor'))
+const Settings = lazy(() => import('./components/Settings'))
+const UpdateNotice = lazy(() => import('./components/UpdateNotice'))
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
-import Settings from './components/Settings'
 import Outline from './components/Outline'
 import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
-import Shortcuts from './components/Shortcuts'
 import ContextMenu, { type MenuItem } from './components/ContextMenu'
 import InputDialog from './components/InputDialog'
 import SearchPanel from './components/SearchPanel'
@@ -43,11 +52,17 @@ import type { Folder } from './types'
 import { useSettings } from './hooks/useSettings'
 import { useFileOps } from './hooks/useFileOps'
 import { useTreeOps } from './hooks/useTreeOps'
+import { useUpdater } from './hooks/useUpdater'
+import { useAppShortcuts } from './hooks/useAppShortcuts'
+import { isShortcutAction, type ShortcutAction } from './lib/shortcuts'
+import type { SettingsSection } from './components/Settings'
 
 interface FileEntry {
   path: string
   name: string
 }
+
+const EMPTY_SHORTCUTS: Record<string, string> = {}
 
 export default function App(): JSX.Element {
   // ── Settings (theme, width, i18n, CSS side-effects all live here) ──────────
@@ -93,12 +108,6 @@ export default function App(): JSX.Element {
   } = useFileOps({ pushRecentFile, lang })
 
   const activeDocDir = activeTab ? (dirName(activeTab.path) ?? folder?.root ?? null) : null
-  const outline = useMemo(
-    () => (activeTab ? parseOutline(activeTab.content) : []),
-
-    [activeTab?.content],
-  )
-
   // ── Panel widths (drag-to-resize) ──────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [outlineWidth, setOutlineWidth] = useState(240)
@@ -175,12 +184,11 @@ export default function App(): JSX.Element {
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [outlineVisible, setOutlineVisible] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null)
   const [showFind, setShowFind] = useState(false)
   const [findInitial, setFindInitial] = useState('')
   const [findLine, setFindLine] = useState<number | undefined>(undefined)
   const [searchView, setSearchView] = useState(false)
-  const [showShortcuts, setShowShortcuts] = useState(false)
   const [showPalette, setShowPalette] = useState(false)
   const quitPromptOpenRef = useRef(false)
   const [focusMode, setFocusMode] = useState(false)
@@ -198,6 +206,16 @@ export default function App(): JSX.Element {
     confirmText?: string
     onSubmit: (value: string) => void
   } | null>(null)
+
+  const deferredOutlineContent = useDeferredValue(
+    outlineVisible && activeTab ? activeTab.content : '',
+  )
+  const outline = useMemo(
+    () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
+    [deferredOutlineContent, outlineVisible],
+  )
+
+  const updater = useUpdater(settings?.checkUpdatesOnStartup ?? false)
 
   // Resolved theme for the Editor key (determines CodeMirror theme)
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
@@ -222,31 +240,35 @@ export default function App(): JSX.Element {
 
   // ── Session restore (runs once after settings load) ─────────────────────
   const didRestore = useRef(false)
+  const [sessionRestored, setSessionRestored] = useState(false)
   useEffect(() => {
     if (!settingsReady || didRestore.current || !settings) return
     didRestore.current = true
     void (async () => {
-      if (settings.session?.folder) {
-        const res = await desktop.openFolderPath(settings.session.folder)
-        if (res) setFolder(res)
+      try {
+        if (settings.session?.folder) {
+          const res = await desktop.openFolderPath(settings.session.folder)
+          if (res) setFolder(res)
+        }
+        if (settings.session?.openFiles?.length) {
+          await restoreSession(settings.session.openFiles, settings.session.activePath)
+        }
+      } catch (error) {
+        console.error('Session restore failed', error)
+      } finally {
+        // Do not persist an empty session while asynchronous restoration is
+        // still reading files. That race previously erased the saved tabs.
+        setSessionRestored(true)
       }
-      if (settings.session?.openFiles?.length) {
-        await restoreSession(settings.session.openFiles, settings.session.activePath)
-      }
-    })().catch((error: unknown) => console.error('Session restore failed', error))
+    })()
   }, [settingsReady, settings, restoreSession])
 
   // ── Session persistence (debounced, single write) ─────────────────────────
-  const sessionReadyRef = useRef(false)
-  useEffect(() => {
-    if (settingsReady) sessionReadyRef.current = true
-  }, [settingsReady])
-
   // Stable key that only changes when tab paths change, not when content changes.
   // Without this, every keystroke would restart the 500ms debounce timer.
   const tabPathsKey = tabs.map((t) => t.path ?? '').join('\0')
   useEffect(() => {
-    if (!sessionReadyRef.current) return
+    if (!sessionRestored) return
     const session = {
       folder: folder?.root ?? null,
       openFiles: tabs.filter((t) => t.path).map((t) => t.path as string),
@@ -258,7 +280,7 @@ export default function App(): JSX.Element {
         .catch((error: unknown) => console.error('Session persistence failed', error))
     }, 500)
     return () => clearTimeout(timer)
-  }, [folder?.root, tabPathsKey, activeTab?.path])
+  }, [folder?.root, tabPathsKey, activeTab?.path, sessionRestored])
 
   // ── File tree ops ──────────────────────────────────────────────────────────
   const { treeKey, refreshTree, openNodeContext, openRootContext } = useTreeOps({
@@ -267,6 +289,7 @@ export default function App(): JSX.Element {
     openPath,
     closeTab,
     tabs,
+    setTabs,
     setCtxMenu,
     setInputDialog,
   })
@@ -662,7 +685,7 @@ ${liveStyles}
   // ── Palette files (background scan) ───────────────────────────────────────
   const [paletteFiles, setPaletteFiles] = useState<FileEntry[]>([])
   useEffect(() => {
-    if (!folder) {
+    if (!showPalette || !folder) {
       setPaletteFiles([])
       return
     }
@@ -676,7 +699,7 @@ ${liveStyles}
     return () => {
       cancelled = true
     }
-  }, [folder?.root])
+  }, [folder?.root, showPalette])
 
   const paletteCommands = useMemo<Command[]>(
     () => [
@@ -702,8 +725,8 @@ ${liveStyles}
       { id: 'export-html', label: t('导出 HTML'), run: exportHTML },
       { id: 'export-pdf', label: t('导出 PDF'), run: exportPDF },
       { id: 'export-image', label: t('导出图片'), run: exportImage },
-      { id: 'settings', label: t('设置'), run: () => setShowSettings(true) },
-      { id: 'shortcuts', label: t('快捷键'), run: () => setShowShortcuts(true) },
+      { id: 'settings', label: t('设置'), run: () => setSettingsSection('appearance') },
+      { id: 'shortcuts', label: t('快捷键'), run: () => setSettingsSection('shortcuts') },
     ],
 
     [
@@ -720,17 +743,8 @@ ${liveStyles}
     ],
   )
 
-  // ── Auto-save ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!settings?.autoSave || !activeTab?.path || !activeTab.dirty) return
-    const id = setTimeout(() => void saveTab(activeTab.id), 1200)
-    return () => clearTimeout(id)
-  }, [settings?.autoSave, activeTab?.content, activeTab?.dirty, activeTab?.id, saveTab])
-
-  // ── Native menu actions ───────────────────────────────────────────────────
-  useEffect(() => {
-    if (!desktop) return undefined
-    return desktop.onMenuAction((action) => {
+  const dispatchShortcut = useCallback(
+    (action: ShortcutAction) => {
       const id = stateRef.current.activeId
       switch (action) {
         case 'new-file':
@@ -751,21 +765,6 @@ ${liveStyles}
         case 'close-tab':
           if (id) closeTab(id)
           break
-        case 'toggle-sidebar':
-          setSidebarVisible((v) => !v)
-          break
-        case 'toggle-outline':
-          setOutlineVisible((v) => !v)
-          break
-        case 'toggle-source':
-          setSourceMode((v) => !v)
-          break
-        case 'toggle-focus':
-          setFocusMode((v) => !v)
-          break
-        case 'toggle-typewriter':
-          setTypewriterMode((v) => !v)
-          break
         case 'find':
           setShowFind(true)
           break
@@ -773,15 +772,84 @@ ${liveStyles}
           setSidebarVisible(true)
           setSearchView(true)
           break
-        case 'open-settings':
-          setShowSettings(true)
-          break
-        case 'show-shortcuts':
-          setShowShortcuts(true)
-          break
         case 'command-palette':
           setShowPalette(true)
           break
+        case 'toggle-sidebar':
+          setSidebarVisible((visible) => !visible)
+          break
+        case 'toggle-outline':
+          setOutlineVisible((visible) => !visible)
+          break
+        case 'toggle-source':
+          setSourceMode((source) => !source)
+          break
+        case 'toggle-focus':
+          setFocusMode((enabled) => !enabled)
+          break
+        case 'toggle-typewriter':
+          setTypewriterMode((enabled) => !enabled)
+          break
+        case 'open-settings':
+          setSettingsSection('appearance')
+          break
+        case 'show-shortcuts':
+          setSettingsSection('shortcuts')
+          break
+        case 'heading-1':
+        case 'heading-2':
+        case 'heading-3':
+        case 'heading-4':
+        case 'heading-5':
+        case 'heading-6':
+          editorCmd.heading(Number(action.at(-1)))
+          break
+        case 'paragraph':
+          editorCmd.paragraph()
+          break
+        case 'bold':
+          editorCmd.bold()
+          break
+        case 'italic':
+          editorCmd.italic()
+          break
+        case 'inline-code':
+          editorCmd.inlineCode()
+          break
+        case 'quote':
+          editorCmd.quote()
+          break
+        case 'code-block':
+          editorCmd.codeBlock()
+          break
+        case 'bullet-list':
+          editorCmd.bulletList()
+          break
+        case 'ordered-list':
+          editorCmd.orderedList()
+          break
+      }
+    },
+    [closeTab, newFile, openFile, openFolder, saveAsTab, saveTab],
+  )
+
+  useAppShortcuts(settings?.shortcuts ?? EMPTY_SHORTCUTS, dispatchShortcut)
+
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!settings?.autoSave || !activeTab?.path || !activeTab.dirty) return
+    const id = setTimeout(() => void saveTab(activeTab.id), 1200)
+    return () => clearTimeout(id)
+  }, [settings?.autoSave, activeTab?.content, activeTab?.dirty, activeTab?.id, saveTab])
+
+  // ── Native menu actions ───────────────────────────────────────────────────
+  useEffect(() => {
+    return desktop.onMenuAction((action) => {
+      if (isShortcutAction(action)) {
+        dispatchShortcut(action)
+        return
+      }
+      switch (action) {
         case 'export-html':
           void exportHTML()
           break
@@ -790,6 +858,9 @@ ${liveStyles}
           break
         case 'export-image':
           void exportImage()
+          break
+        case 'check-updates':
+          void updater.checkNow(true)
           break
         case 'query-dirty': {
           const dirty = hasDirtyTabs()
@@ -817,18 +888,7 @@ ${liveStyles}
         }
       }
     })
-  }, [
-    newFile,
-    openFile,
-    openFolder,
-    saveTab,
-    saveAsTab,
-    closeTab,
-    exportHTML,
-    exportPDF,
-    exportImage,
-    hasDirtyTabs,
-  ])
+  }, [dispatchShortcut, exportHTML, exportPDF, exportImage, hasDirtyTabs, updater.checkNow])
 
   // Keep web links outside the editor webview. Relative/local links continue
   // through the editor so wiki-style and document navigation remain intact.
@@ -868,7 +928,7 @@ ${liveStyles}
             onOpenFolder={openFolder}
             onOpenFolderPath={openFolderByPath}
             onOpenFile={openPath}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenSettings={() => setSettingsSection('appearance')}
             onOpenSearch={() => setSearchView(true)}
             onToggleFavorite={toggleFavorite}
             onRefresh={refreshTree}
@@ -981,19 +1041,18 @@ ${liveStyles}
         <StatusBar tab={activeTab} sourceMode={sourceMode} autoSave={settings.autoSave} />
       </div>
 
-      {showSettings && (
-        <Settings
-          settings={settings}
-          onChange={saveSettings}
-          onShowShortcuts={() => {
-            setShowSettings(false)
-            setShowShortcuts(true)
-          }}
-          onClose={() => setShowSettings(false)}
-        />
+      {settingsSection && (
+        <Suspense fallback={null}>
+          <Settings
+            key={settingsSection}
+            settings={settings}
+            updater={updater}
+            initialSection={settingsSection}
+            onChange={(patch) => void saveSettings(patch)}
+            onClose={() => setSettingsSection(null)}
+          />
+        </Suspense>
       )}
-
-      {showShortcuts && <Shortcuts onClose={() => setShowShortcuts(false)} />}
 
       {showPalette && (
         <CommandPalette
@@ -1025,6 +1084,10 @@ ${liveStyles}
           onClose={() => setInputDialog(null)}
         />
       )}
+
+      <Suspense fallback={null}>
+        <UpdateNotice updater={updater} />
+      </Suspense>
     </div>
   )
 }

@@ -1,7 +1,9 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import { desktop } from '../platform'
 import { getLang, t } from '../lib/i18n'
 import { revealLocationKey } from '../lib/platform'
+import { baseName } from '../lib/path'
+import { replaceMovedPath } from '../lib/treeDrag'
 import type { FileNode, Folder, Tab } from '../types'
 import type { MenuItem } from '../components/ContextMenu'
 
@@ -11,6 +13,7 @@ interface Deps {
   openPath: (path: string, name?: string) => Promise<void>
   closeTab: (id: string) => void
   tabs: Tab[]
+  setTabs: Dispatch<SetStateAction<Tab[]>>
   setCtxMenu: (menu: { x: number; y: number; items: MenuItem[] } | null) => void
   setInputDialog: (
     dialog: {
@@ -31,6 +34,7 @@ export function useTreeOps({
   openPath,
   closeTab,
   tabs,
+  setTabs,
   setCtxMenu,
   setInputDialog,
 }: Deps) {
@@ -97,17 +101,23 @@ export function useTreeOps({
         onSubmit: async (name) => {
           try {
             const res = await desktop.rename(node.path, name)
+            setTabs((current) =>
+              current.map((tab) => {
+                if (!tab.path) return tab
+                const nextPath = replaceMovedPath(tab.path, node.path, res.path)
+                return nextPath === tab.path
+                  ? tab
+                  : { ...tab, path: nextPath, name: baseName(nextPath) || res.name }
+              }),
+            )
             await refreshTree()
-            // Update any open tabs that point at the renamed path
-            // (handled externally by App.tsx watching tabs)
-            void res
           } catch {
             window.alert(t('重命名失败'))
           }
         },
       })
     },
-    [refreshTree, setInputDialog],
+    [refreshTree, setInputDialog, setTabs],
   )
 
   const deleteNode = useCallback(
@@ -121,7 +131,8 @@ export function useTreeOps({
         await desktop.trash(node.path)
         // Close any tabs that opened this path (or children)
         const affected = tabs.filter(
-          (tab) => tab.path && (tab.path === node.path || tab.path.startsWith(node.path + '/')),
+          (tab) =>
+            tab.path && replaceMovedPath(tab.path, node.path, `${node.path}.deleted`) !== tab.path,
         )
         affected.forEach((tab) => closeTab(tab.id))
         await refreshTree()

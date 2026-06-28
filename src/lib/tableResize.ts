@@ -86,10 +86,16 @@ export function setupTableResize(root: HTMLElement): () => void {
   root.addEventListener('pointerdown', onDown, true)
   root.addEventListener('pointermove', onMove)
   window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onUp)
+  window.addEventListener('blur', onUp)
 
   return () => {
+    onUp()
     root.removeEventListener('pointerdown', onDown, true)
     root.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onUp)
+    window.removeEventListener('blur', onUp)
+    root.style.cursor = ''
   }
 }

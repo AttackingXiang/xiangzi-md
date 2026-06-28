@@ -3,7 +3,10 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { ask, open, save } from '@tauri-apps/plugin-dialog'
 import { writeFile as writeBinaryFile } from '@tauri-apps/plugin-fs'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
+import { relaunch } from '@tauri-apps/plugin-process'
+import { check, type Update } from '@tauri-apps/plugin-updater'
 import type {
+  AvailableUpdate,
   AppInfo,
   AppSettings,
   DesktopPort,
@@ -11,6 +14,7 @@ import type {
   Folder,
   OpenedFile,
   SearchResult,
+  UpdaterPort,
 } from './contracts'
 
 function subscribe<T>(event: string, callback: (payload: T) => void): () => void {
@@ -30,6 +34,38 @@ function subscribe<T>(event: string, callback: (payload: T) => void): () => void
 
 function imageFormatForPath(path: string): 'png' | 'jpeg' {
   return /\.jpe?g$/i.test(path) ? 'jpeg' : 'png'
+}
+
+function updateSource(update: Update): 'github' | 'gitee' {
+  return JSON.stringify(update.rawJson).toLowerCase().includes('gitee.com') ? 'gitee' : 'github'
+}
+
+function adaptUpdate(update: Update): AvailableUpdate {
+  return {
+    version: update.version,
+    currentVersion: update.currentVersion,
+    notes: update.body,
+    source: updateSource(update),
+    downloadAndInstall: (onEvent) =>
+      update.downloadAndInstall((event) => {
+        if (event.event === 'Started') {
+          onEvent({ event: 'Started', contentLength: event.data.contentLength })
+        } else if (event.event === 'Progress') {
+          onEvent({ event: 'Progress', chunkLength: event.data.chunkLength })
+        } else {
+          onEvent({ event: 'Finished' })
+        }
+      }),
+    close: () => update.close(),
+  }
+}
+
+export const tauriUpdaterAdapter: UpdaterPort = {
+  check: async (timeoutMs) => {
+    const update = await check({ timeout: timeoutMs })
+    return update ? adaptUpdate(update) : null
+  },
+  relaunch,
 }
 
 export const tauriDesktopAdapter: DesktopPort = {
@@ -140,7 +176,6 @@ export const tauriDesktopAdapter: DesktopPort = {
       okLabel,
       cancelLabel,
     }),
-  setLanguage: (language) => invoke('set_language', { language }),
   onMenuAction: (callback) => subscribe('menu-action', callback),
   onOpenPath: (callback) => subscribe('open-path', callback),
   notifyReady: () => void invoke('frontend_ready'),

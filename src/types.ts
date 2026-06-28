@@ -32,6 +32,10 @@ export interface AppSettings {
   headingNumber: boolean
   /** 自动保存 */
   autoSave: boolean
+  /** 启动后在后台检查新版本 */
+  checkUpdatesOnStartup: boolean
+  /** 用户覆盖的快捷键；未出现的动作使用内置默认值 */
+  shortcuts: Record<string, string>
   /** 最近打开的文件 */
   recentFiles: string[]
   /** 最近打开的文件夹 */

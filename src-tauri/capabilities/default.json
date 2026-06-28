@@ -8,6 +8,8 @@
     "dialog:default",
     "opener:default",
     "fs:default",
-    "fs:allow-write-file"
+    "fs:allow-write-file",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

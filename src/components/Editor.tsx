@@ -7,7 +7,6 @@ import '@milkdown/crepe/theme/frame.css'
 import { resolveAssetURL } from '../lib/asset'
 import { codeMirrorTheme } from '../lib/codeTheme'
 import { setupTableResize } from '../lib/tableResize'
-import { headingShortcutKeymap } from '../lib/headingKeymap'
 import { focusPlugin } from '../lib/focusPlugin'
 import { searchPlugin } from '../lib/searchPlugin'
 import { headingFoldPlugin } from '../lib/headingFold'
@@ -32,6 +31,8 @@ interface Props {
   typewriterMode: boolean
   onChange: (markdown: string) => void
 }
+
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 /**
  * 所见即所得编辑器，基于 Milkdown Crepe（ProseMirror 内核）。
@@ -71,6 +72,10 @@ export default function Editor({
       const dir = docDirRef.current
       if (!dir) {
         window.alert(t('请先保存文档，再插入本地图片。'))
+        return ''
+      }
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        window.alert(t('单个附件不能超过 20 MB。'))
         return ''
       }
       const buf = new Uint8Array(await file.arrayBuffer())
@@ -142,7 +147,6 @@ export default function Editor({
     })
 
     // 注入标题快捷键（⌘1~6 / ⌘0）、专注模式装饰、查找替换
-    crepe.editor.use(headingShortcutKeymap)
     crepe.editor.use(focusPlugin)
     crepe.editor.use(searchPlugin)
     crepe.editor.use(headingFoldPlugin)

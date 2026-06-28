@@ -28,3 +28,7 @@ vitest.config.d.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Local visual-audit captures can contain workspace paths or document text.
+/audit/current-state/*.png
+/audit/final-state/*.png

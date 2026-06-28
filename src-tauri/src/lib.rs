@@ -13,6 +13,8 @@ pub fn run() {
             infrastructure::lifecycle::queue_supported_arguments(app, args);
             infrastructure::lifecycle::reveal_main_window(app);
         }))
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_opener::init())
@@ -23,7 +25,7 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let settings = app.state::<SettingsStore>().get(&handle)?;
-            menu::install(&handle, &settings.language)?;
+            menu::install(&handle, &settings.language, &settings.shortcuts)?;
             infrastructure::lifecycle::queue_supported_arguments(&handle, std::env::args().skip(1));
             Ok(())
         })
@@ -41,7 +43,6 @@ pub fn run() {
             commands::app::get_app_info,
             commands::app::frontend_ready,
             commands::app::quit_confirmed,
-            commands::app::set_language,
             commands::workspace::open_folder_path,
             commands::workspace::read_file,
             commands::workspace::write_file,

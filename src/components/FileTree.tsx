@@ -1,8 +1,9 @@
-import { memo, useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight, FileText, Folder, LoaderCircle } from 'lucide-react'
 import { desktop } from '../platform'
 import type { FileNode } from '../types'
 import { canDropTreeItem } from '../lib/treeDrag'
+import { t } from '../lib/i18n'
 
 interface Props {
   nodes: FileNode[]
@@ -77,6 +78,8 @@ const TreeNode = memo(function TreeNode({
   const nodeRef = useRef<HTMLDivElement>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
   const suppressClickRef = useRef(false)
+  const mountedRef = useRef(true)
+  const loadingRef = useRef(false)
 
   const isActive = activePath === node.path
   const indent = { paddingLeft: `${depth * 14 + 8}px` }
@@ -88,45 +91,44 @@ const TreeNode = memo(function TreeNode({
 
   const isRevealed = !node.isDir && revealPath === node.path
 
+  const loadChildren = useCallback(async (): Promise<void> => {
+    if (children !== null || loadingRef.current) return
+    loadingRef.current = true
+    setLoading(true)
+    try {
+      const kids = await desktop.readDir(node.path)
+      if (mountedRef.current) setChildren(kids)
+    } catch {
+      if (mountedRef.current) setChildren([])
+    } finally {
+      loadingRef.current = false
+      if (mountedRef.current) setLoading(false)
+    }
+  }, [children, node.path])
+
   useEffect(() => {
     if (!isAncestor) return
     setExpanded(true)
-    if (children === null && !loading) {
-      setLoading(true)
-      desktop
-        .readDir(node.path)
-        .then((kids) => {
-          setChildren(kids)
-          setLoading(false)
-        })
-        .catch(() => {
-          setChildren([])
-          setLoading(false)
-        })
-    }
-  }, [isAncestor])
+    void loadChildren()
+  }, [isAncestor, loadChildren])
 
   useEffect(() => {
     if (!isRevealed || !nodeRef.current) return
     nodeRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [isRevealed])
 
-  useEffect(() => () => dragCleanupRef.current?.(), [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      dragCleanupRef.current?.()
+    }
+  }, [])
 
   const toggle = async (): Promise<void> => {
     const next = !expanded
     setExpanded(next)
-    if (next && children === null && !loading) {
-      setLoading(true)
-      try {
-        const kids = await desktop.readDir(node.path)
-        setChildren(kids)
-      } catch {
-        setChildren([])
-      } finally {
-        setLoading(false)
-      }
-    }
+    if (next) await loadChildren()
   }
 
   // Pointer events are used instead of HTML5 drag events. WKWebView and WebView2
@@ -226,6 +228,8 @@ const TreeNode = memo(function TreeNode({
           style={indent}
           data-tree-path={node.path}
           aria-grabbed={isDragging}
+          aria-expanded={expanded}
+          aria-busy={loading}
           onPointerDown={handlePointerDown}
           onClick={() => {
             if (!consumeSuppressedClick()) void toggle()
@@ -237,7 +241,13 @@ const TreeNode = memo(function TreeNode({
           }}
         >
           <span className="tree-caret">
-            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {loading ? (
+              <LoaderCircle size={13} className="spin" />
+            ) : expanded ? (
+              <ChevronDown size={14} />
+            ) : (
+              <ChevronRight size={14} />
+            )}
           </span>
           <Folder size={15} className="tree-icon" />
           <span className="tree-name">{node.name}</span>
@@ -253,6 +263,11 @@ const TreeNode = memo(function TreeNode({
             onMove={onMove}
             depth={depth + 1}
           />
+        )}
+        {expanded && children?.length === 0 && !loading && (
+          <div className="tree-empty-row" style={{ paddingLeft: `${(depth + 1) * 14 + 27}px` }}>
+            {t('空文件夹')}
+          </div>
         )}
       </li>
     )

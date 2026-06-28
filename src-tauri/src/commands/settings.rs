@@ -1,6 +1,9 @@
 use crate::{
     domain::error::AppResult,
-    infrastructure::settings::{AppSettings, SettingsPatch, SettingsStore},
+    infrastructure::{
+        menu,
+        settings::{AppSettings, SettingsPatch, SettingsStore},
+    },
 };
 use tauri::{AppHandle, State};
 
@@ -15,5 +18,10 @@ pub fn set_settings(
     store: State<'_, SettingsStore>,
     patch: SettingsPatch,
 ) -> AppResult<AppSettings> {
-    store.set(&app, patch)
+    let affects_menu = patch.affects_menu();
+    let settings = store.set(&app, patch)?;
+    if affects_menu {
+        menu::install(&app, &settings.language, &settings.shortcuts)?;
+    }
+    Ok(settings)
 }

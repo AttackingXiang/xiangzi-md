@@ -134,6 +134,7 @@ const EN: Record<string, string> = {
   在访达中显示: 'Reveal in Finder',
   在文件资源管理器中显示: 'Show in File Explorer',
   在文件管理器中显示: 'Show in File Manager',
+  空文件夹: 'Empty folder',
   删除: 'Delete',
   // Input dialog
   创建: 'Create',
@@ -141,6 +142,7 @@ const EN: Record<string, string> = {
   取消: 'Cancel',
   // Alerts / misc
   '请先保存文档，再插入本地图片。': 'Please save the document before inserting a local image.',
+  '单个附件不能超过 20 MB。': 'An attachment cannot exceed 20 MB.',
   请先保存文档后再插入图片: 'Please save the document before inserting an image.',
   重命名失败: 'Rename failed',
   删除失败: 'Delete failed',
