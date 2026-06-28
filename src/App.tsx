@@ -20,6 +20,7 @@ import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
 import { escapeHtmlText, serializeStyleSheets } from './lib/exportStyles'
 import { getLang, t } from './lib/i18n'
 import { baseName, dirName } from './lib/path'
+import { replaceMovedPath } from './lib/treeDrag'
 import {
   Bold,
   Italic,
@@ -573,7 +574,7 @@ ${liveStyles}
   .mermaid-export svg{max-width:100%;height:auto}
 </style>
 </head><body>
-<div class="milkdown"><div class="ProseMirror export-content">${clone.innerHTML}</div></div>
+<div class="wysiwyg-editor export-view"><div class="milkdown"><div class="ProseMirror export-content">${clone.innerHTML}</div></div></div>
 </body></html>`
     },
     [],
@@ -641,19 +642,14 @@ ${liveStyles}
         setTabs((prev) =>
           prev.map((tab) => {
             if (!tab.path) return tab
-            if (tab.path === sourcePath) {
-              return { ...tab, path: res.path, name: res.name }
-            }
-            // Folder move: update all tabs inside the moved folder
-            const sep = sourcePath.endsWith('/') ? '' : '/'
-            if (tab.path.startsWith(sourcePath + sep)) {
-              const newPath = res.path + tab.path.slice(sourcePath.length)
-              return { ...tab, path: newPath, name: baseName(newPath) ?? tab.name }
-            }
-            return tab
+            const newPath = replaceMovedPath(tab.path, sourcePath, res.path)
+            return newPath === tab.path
+              ? tab
+              : { ...tab, path: newPath, name: baseName(newPath) || res.name }
           }),
         )
         await refreshTree()
+        setRevealPath(res.path)
       } catch (err) {
         window.alert(
           (getLang() === 'en' ? 'Move failed:\n' : '移动失败：\n') + (err as Error).message,

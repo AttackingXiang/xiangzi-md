@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import { desktop } from '../platform'
 import type { FileNode } from '../types'
-import { dirName } from '../lib/path'
+import { canDropTreeItem } from '../lib/treeDrag'
 
 interface Props {
   nodes: FileNode[]
@@ -13,7 +13,7 @@ interface Props {
   hideFolderNames: string[]
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
-  onMove: (sourcePath: string, targetDirPath: string) => void
+  onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
   depth: number
 }
 
@@ -67,14 +67,16 @@ const TreeNode = memo(function TreeNode({
   hideFolderNames: string[]
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
-  onMove: (sourcePath: string, targetDirPath: string) => void
+  onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
   depth: number
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const [children, setChildren] = useState<FileNode[] | null>(node.children ?? null)
   const [loading, setLoading] = useState(false)
-  const [isDragOver, setIsDragOver] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const nodeRef = useRef<HTMLDivElement>(null)
+  const dragCleanupRef = useRef<(() => void) | null>(null)
+  const suppressClickRef = useRef(false)
 
   const isActive = activePath === node.path
   const indent = { paddingLeft: `${depth * 14 + 8}px` }
@@ -109,6 +111,8 @@ const TreeNode = memo(function TreeNode({
     nodeRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [isRevealed])
 
+  useEffect(() => () => dragCleanupRef.current?.(), [])
+
   const toggle = async (): Promise<void> => {
     const next = !expanded
     setExpanded(next)
@@ -125,71 +129,107 @@ const TreeNode = memo(function TreeNode({
     }
   }
 
-  // ── Drag handlers ────────────────────────────────────────────────────────
-  const handleDragStart = (e: React.DragEvent): void => {
-    e.stopPropagation()
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData(
-      'application/x-filetree',
-      JSON.stringify({ path: node.path, isDir: node.isDir }),
-    )
-  }
+  // Pointer events are used instead of HTML5 drag events. WKWebView and WebView2
+  // handle native data-transfer drags differently, while pointer events behave
+  // consistently on macOS and Windows.
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
+    if (e.button !== 0 || e.ctrlKey) return
 
-  // Only folders accept drops
-  const handleDragOver = (e: React.DragEvent): void => {
-    if (!node.isDir) return
-    if (!e.dataTransfer.types.includes('application/x-filetree')) return
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    setIsDragOver(true)
-  }
+    dragCleanupRef.current?.()
+    const payload = { path: node.path, isDir: node.isDir }
+    const startX = e.clientX
+    const startY = e.clientY
+    let dragging = false
+    let dropTarget: HTMLElement | null = null
+    let dropTargetPath: string | null = null
 
-  const handleDragLeave = (e: React.DragEvent): void => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOver(false)
+    const clearDropTarget = (): void => {
+      dropTarget?.classList.remove('drag-over')
+      dropTarget = null
+      dropTargetPath = null
     }
+
+    const cleanup = (): void => {
+      clearDropTarget()
+      window.removeEventListener('pointermove', handlePointerMove, true)
+      window.removeEventListener('pointerup', handlePointerUp, true)
+      window.removeEventListener('pointercancel', handlePointerCancel, true)
+      window.removeEventListener('blur', handlePointerCancel, true)
+      document.body.classList.remove('tree-pointer-dragging')
+      setIsDragging(false)
+      dragCleanupRef.current = null
+    }
+
+    const handlePointerMove = (event: PointerEvent): void => {
+      if (!dragging && Math.hypot(event.clientX - startX, event.clientY - startY) < 6) return
+
+      if (!dragging) {
+        dragging = true
+        setIsDragging(true)
+        document.body.classList.add('tree-pointer-dragging')
+        window.getSelection()?.removeAllRanges()
+      }
+
+      event.preventDefault()
+      const candidate = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest<HTMLElement>('.tree-row.dir[data-tree-path]')
+      const candidatePath = candidate?.dataset.treePath ?? null
+
+      if (!candidate || !candidatePath || !canDropTreeItem(payload, candidatePath)) {
+        clearDropTarget()
+        return
+      }
+      if (candidate === dropTarget) return
+
+      clearDropTarget()
+      dropTarget = candidate
+      dropTargetPath = candidatePath
+      dropTarget.classList.add('drag-over')
+    }
+
+    const handlePointerUp = (event: PointerEvent): void => {
+      const targetPath = dropTargetPath
+      if (dragging) {
+        event.preventDefault()
+        suppressClickRef.current = true
+        window.setTimeout(() => {
+          suppressClickRef.current = false
+        }, 0)
+      }
+      cleanup()
+      if (dragging && targetPath && canDropTreeItem(payload, targetPath)) {
+        void onMove(payload.path, targetPath)
+      }
+    }
+
+    const handlePointerCancel = (): void => cleanup()
+
+    window.addEventListener('pointermove', handlePointerMove, true)
+    window.addEventListener('pointerup', handlePointerUp, true)
+    window.addEventListener('pointercancel', handlePointerCancel, true)
+    window.addEventListener('blur', handlePointerCancel, true)
+    dragCleanupRef.current = cleanup
   }
 
-  const handleDrop = (e: React.DragEvent): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragOver(false)
-    if (!node.isDir) return
-
-    const raw = e.dataTransfer.getData('application/x-filetree')
-    if (!raw) return
-    const { path: srcPath, isDir: srcIsDir } = JSON.parse(raw) as { path: string; isDir: boolean }
-
-    // No-op: dropping into its own current parent
-    if (dirName(srcPath) === node.path) return
-
-    // Cycle guard: can't drop a folder into its own descendant
-    if (
-      srcIsDir &&
-      (node.path === srcPath ||
-        node.path.startsWith(srcPath + '/') ||
-        node.path.startsWith(srcPath + '\\'))
-    )
-      return
-
-    // Expand the target folder after drop so the moved item is visible
-    setExpanded(true)
-    onMove(srcPath, node.path)
+  const consumeSuppressedClick = (): boolean => {
+    if (!suppressClickRef.current) return false
+    suppressClickRef.current = false
+    return true
   }
 
   if (node.isDir) {
     return (
       <li>
         <div
-          className={`tree-row dir${isDragOver ? ' drag-over' : ''}`}
+          className={`tree-row dir${isDragging ? ' dragging' : ''}`}
           style={indent}
-          draggable
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={toggle}
+          data-tree-path={node.path}
+          aria-grabbed={isDragging}
+          onPointerDown={handlePointerDown}
+          onClick={() => {
+            if (!consumeSuppressedClick()) void toggle()
+          }}
           onContextMenu={(e) => {
             e.preventDefault()
             e.stopPropagation()
@@ -222,11 +262,14 @@ const TreeNode = memo(function TreeNode({
     <li>
       <div
         ref={nodeRef}
-        className={`tree-row file${isActive ? ' active' : ''}${isRevealed ? ' reveal-flash' : ''}`}
+        className={`tree-row file${isActive ? ' active' : ''}${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
         style={indent}
-        draggable
-        onDragStart={handleDragStart}
-        onClick={() => onOpenFile(node.path, node.name)}
+        data-tree-path={node.path}
+        aria-grabbed={isDragging}
+        onPointerDown={handlePointerDown}
+        onClick={() => {
+          if (!consumeSuppressedClick()) onOpenFile(node.path, node.name)
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
           e.stopPropagation()

@@ -132,6 +132,8 @@ const EN: Record<string, string> = {
   打开: 'Open',
   重命名: 'Rename',
   在访达中显示: 'Reveal in Finder',
+  在文件资源管理器中显示: 'Show in File Explorer',
+  在文件管理器中显示: 'Show in File Manager',
   删除: 'Delete',
   // Input dialog
   创建: 'Create',
