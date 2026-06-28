@@ -30,6 +30,8 @@ gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/xiangzi-md.key
 4. GitHub 构建 macOS Universal DMG、Windows x64 NSIS、updater archive、签名和 `latest.json`。
 5. `Publish Gitee Release` 同步标签与全部附件，将 manifest 中的下载地址改写为 Gitee 地址，并发布到 `updater` 分支。
 
+若平台构建中途失败而标签已创建，可在 `Release Desktop` 的 `Run workflow` 中启用 `force`。修复模式会针对当前版本重新构建并补齐已有 Release，不需要删除标签或发布伪造的新版本。
+
 ## 轮换与恢复
 
 私钥丢失或疑似泄露时立即生成新密钥，并在同一个版本发布周期内同时更新客户端公钥和 GitHub Secret。旧客户端无法信任新私钥签发的更新，因此必须保留一次由旧私钥签发、内置新公钥的桥接版本；若旧私钥已经不可用，只能要求用户手动安装新版本。

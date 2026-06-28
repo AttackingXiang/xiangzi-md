@@ -8,7 +8,14 @@ on:
       - package.json
       - src-tauri/Cargo.toml
       - src-tauri/tauri.conf.json
+      - .github/workflows/release.yml
   workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild and repair an existing version release
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -35,7 +42,10 @@ jobs:
           set -euo pipefail
           TAG="v$(jq -r '.version' package.json)"
           test "${TAG}" != "vnull"
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then
+            echo "Repair mode enabled for ${TAG}; existing release assets will be rebuilt."
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Version ${TAG} is already released; CI will still validate this commit."
             echo "publish=false" >> "${GITHUB_OUTPUT}"
           else
@@ -53,7 +63,7 @@ jobs:
         include:
           - platform: macos-latest
             artifact: macos-universal
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
           - platform: windows-latest
             artifact: windows-x64
             args: --bundles nsis
@@ -95,7 +105,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: '-'
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: Xiangzi MD v__VERSION__
@@ -107,5 +116,6 @@ jobs:
             - 应用内更新：签名校验，GitHub 不可用时自动切换 Gitee。
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
