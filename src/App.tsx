@@ -27,7 +27,7 @@ import ExportCompleteDialog from './components/ExportCompleteDialog'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
-import { escapeHtmlText, inlineCodeHighlightStyles, serializeStyleSheets } from './lib/exportStyles'
+import { escapeHtmlText, serializeStyleSheets } from './lib/exportStyles'
 import { getLang, t } from './lib/i18n'
 import { baseName, dirName } from './lib/path'
 import { replaceMovedPath } from './lib/treeDrag'
@@ -456,8 +456,11 @@ export default function App(): JSX.Element {
       const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
       const mermaidTheme = isDark ? 'dark' : 'default'
 
-      // For each code block: collect the rendered SVG (or render it now).
-      const blockSVGs: (string | null)[] = await Promise.all(
+      const { EXPORT_CODE_STYLES, highlightCodeForExport } = await import('./lib/exportSyntax')
+
+      // Replace editor-only CodeMirror DOM with deterministic reading-view HTML.
+      // This also covers lazy/off-screen blocks by falling back to Markdown source.
+      const blockRenders = await Promise.all(
         liveBlocks.map(async (block, i) => {
           // Already rendered? extract the SVG from the live preview panel.
           const mermaidPreviewEl = block.querySelector<HTMLElement>(
@@ -465,15 +468,13 @@ export default function App(): JSX.Element {
           )
           if (mermaidPreviewEl) {
             const svgEl = mermaidPreviewEl.querySelector('svg') ?? mermaidPreviewEl
-            return svgEl.outerHTML
+            return { kind: 'mermaid' as const, html: svgEl.outerHTML }
           }
 
           // Determine language: from language-button (initialized block) or from parsed markdown.
           const langBtn = block.querySelector<HTMLElement>('.tools .language-button')
           const langFromBtn = langBtn?.textContent?.trim().toLowerCase() ?? ''
           const lang = langFromBtn || (mdBlocks[i]?.lang ?? '')
-          if (lang !== 'mermaid') return null
-
           // Get code text: prefer cm-editor lines, fall back to placeholder, then parsed markdown.
           const cmLines = block.querySelectorAll<HTMLElement>('.cm-line')
           const codeFromDOM =
@@ -483,28 +484,34 @@ export default function App(): JSX.Element {
                   .join('\n')
               : (block.querySelector<HTMLElement>('.milkdown-code-block-placeholder code')
                   ?.textContent ?? '')
-          const code = codeFromDOM.trim() || (mdBlocks[i]?.code ?? '')
-          if (!code.trim()) return null
+          const code = codeFromDOM.trim().length > 0 ? codeFromDOM : (mdBlocks[i]?.code ?? '')
+          if (lang !== 'mermaid') {
+            return {
+              kind: 'code' as const,
+              html: await highlightCodeForExport(code, lang),
+              language: lang,
+            }
+          }
+          if (!code.trim()) return { kind: 'code' as const, html: '', language: lang }
 
           try {
             const mermaid = (await import('mermaid')).default
             mermaid.initialize({ startOnLoad: false, theme: mermaidTheme, securityLevel: 'strict' })
             const id = 'mmd-export-' + Math.random().toString(36).slice(2)
             const { svg } = await mermaid.render(id, code)
-            return svg
+            return { kind: 'mermaid' as const, html: svg }
           } catch {
-            return null
+            return {
+              kind: 'code' as const,
+              html: await highlightCodeForExport(code, lang),
+              language: lang,
+            }
           }
         }),
       )
 
       // ── Clone and clean ───────────────────────────────────────────────────
       const clone = pm.cloneNode(true) as HTMLElement
-
-      // CodeMirror's generated token class names are runtime-scoped. Resolve
-      // their actual colors before exporting so reopening the HTML (and the
-      // image/PDF render iframe) cannot remap every token to a single color.
-      inlineCodeHighlightStyles(pm, clone)
 
       // Strip Milkdown UI decorations AND code-block toolbar (.tools).
       const MILKDOWN_UI = [
@@ -540,19 +547,22 @@ export default function App(): JSX.Element {
       // Reading-view code block processing.
       const cloneBlocks = Array.from(clone.querySelectorAll<HTMLElement>('.milkdown-code-block'))
       cloneBlocks.forEach((block, i) => {
-        const svg = blockSVGs[i]
-        if (svg) {
+        const render = blockRenders[i]
+        if (render?.kind === 'mermaid') {
           // Replace the entire code block with the static SVG.
           const wrapper = document.createElement('div')
           wrapper.className = 'mermaid-export'
           wrapper.style.cssText = 'margin:16px 0;overflow:auto;text-align:center'
-          wrapper.innerHTML = svg
+          wrapper.innerHTML = render.html
           block.replaceWith(wrapper)
         } else {
-          // Non-mermaid: ensure the code editor is visible (user may have been in preview mode).
-          block.querySelector<HTMLElement>('.codemirror-host')?.classList.remove('hidden')
-          // Remove any stale preview panel that shouldn't appear without the toggle button.
-          block.querySelector<HTMLElement>('.preview-panel')?.remove()
+          const pre = document.createElement('pre')
+          pre.className = 'xmd-export-code'
+          const code = document.createElement('code')
+          if (render?.language) code.dataset.language = render.language
+          code.innerHTML = render?.html ?? ''
+          pre.appendChild(code)
+          block.replaceWith(pre)
         }
       })
 
@@ -602,6 +612,7 @@ ${liveStyles}
   .milkdown{padding:0;background:var(--bg,#fff)}
   .ProseMirror.export-content{max-width:800px;margin:0 auto;padding:48px 40px 80px;outline:none}
   .mermaid-export svg{max-width:100%;height:auto}
+  ${EXPORT_CODE_STYLES}
 </style>
 </head><body>
 <div class="wysiwyg-editor export-view"><div class="milkdown"><div class="ProseMirror export-content">${clone.innerHTML}</div></div></div>
@@ -956,6 +967,7 @@ ${liveStyles}
           onSelect={setActiveId}
           onClose={closeTab}
           onTabContext={openTabContext}
+          onShowWelcome={() => setActiveId(null)}
           sourceMode={sourceMode}
           outlineVisible={outlineVisible}
           onToggleSource={() => setSourceMode((v) => !v)}

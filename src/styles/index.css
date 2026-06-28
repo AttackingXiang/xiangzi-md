@@ -494,6 +494,10 @@ button {
   background: var(--accent);
 }
 
+.tab-add {
+  flex: 0 0 auto;
+}
+
 /* ---------- 查找条 ---------- */
 .findbar {
   display: flex;
@@ -1510,7 +1514,7 @@ kbd {
 }
 
 .wysiwyg-editor .milkdown .ProseMirror h1 {
-  margin: 0 0 0.72em;
+  margin: 0 0 0.46em;
   border-bottom: 1px solid var(--border-strong);
   font-size: 36px;
   font-weight: 700;
@@ -1518,7 +1522,7 @@ kbd {
 }
 
 .wysiwyg-editor .milkdown .ProseMirror h2 {
-  margin: 1.55em 0 0.62em;
+  margin: 1.45em 0 0.38em;
   border-bottom: 1px solid var(--border);
   font-size: 28px;
   font-weight: 700;
@@ -1526,14 +1530,14 @@ kbd {
 }
 
 .wysiwyg-editor .milkdown .ProseMirror h3 {
-  margin: 1.42em 0 0.56em;
+  margin: 1.34em 0 0.34em;
   font-size: 23px;
   font-weight: 700;
   line-height: 1.38;
 }
 
 .wysiwyg-editor .milkdown .ProseMirror h4 {
-  margin: 1.3em 0 0.5em;
+  margin: 1.24em 0 0.3em;
   font-size: 19px;
   font-weight: 600;
   line-height: 1.45;
@@ -1541,7 +1545,7 @@ kbd {
 
 .wysiwyg-editor .milkdown .ProseMirror h5,
 .wysiwyg-editor .milkdown .ProseMirror h6 {
-  margin: 1.2em 0 0.46em;
+  margin: 1.16em 0 0.28em;
   font-size: 16px;
   font-weight: 600;
   line-height: 1.5;
@@ -1552,6 +1556,14 @@ kbd {
   padding: 0;
   font-size: 16px;
   line-height: 1.7;
+}
+
+.wysiwyg-editor
+  .milkdown
+  .ProseMirror
+  :is(h1, h2, h3, h4, h5, h6)
+  + :is(p, blockquote, ul, ol, .milkdown-code-block) {
+  margin-top: 0.28em;
 }
 
 .wysiwyg-editor .milkdown .ProseMirror strong {
@@ -1784,7 +1796,7 @@ kbd {
 /* 代码块容器：背景交给内部 .cm-editor 卡片承载 */
 .milkdown .milkdown-code-block {
   background: transparent !important;
-  padding: 6px 0 18px !important;
+  padding: 2px 0 14px !important;
 }
 
 .milkdown .milkdown-code-block .tools {
