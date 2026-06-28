@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Code2, Eye, List, MapPin, PanelLeft, X } from 'lucide-react'
+import { Code2, Eye, List, MapPin, PanelLeft, Plus, X } from 'lucide-react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 
@@ -9,6 +9,7 @@ interface Props {
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onTabContext: (id: string, x: number, y: number) => void
+  onShowWelcome: () => void
   sourceMode: boolean
   outlineVisible: boolean
   onToggleSource: () => void
@@ -25,6 +26,7 @@ export default function TabBar({
   onSelect,
   onClose,
   onTabContext,
+  onShowWelcome,
   sourceMode,
   outlineVisible,
   onToggleSource,
@@ -106,6 +108,10 @@ export default function TabBar({
           </div>
         ))}
       </div>
+
+      <button className="icon-btn tab-add drag-none" title={t('打开首页')} onClick={onShowWelcome}>
+        <Plus size={16} />
+      </button>
 
       <button
         className={`icon-btn drag-none${outlineVisible ? ' active' : ''}`}

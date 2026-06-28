@@ -15,6 +15,7 @@ const EN: Record<string, string> = {
   // TabBar
   切换侧边栏: 'Toggle sidebar',
   在文件夹中定位: 'Reveal in sidebar',
+  打开首页: 'Open start page',
   大纲: 'Outline',
   '源码 / 所见即所得': 'Source / WYSIWYG',
   // Welcome
