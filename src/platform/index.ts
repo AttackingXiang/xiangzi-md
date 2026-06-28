@@ -1,5 +1,6 @@
-import { tauriDesktopAdapter } from './tauriAdapter'
+import { tauriDesktopAdapter, tauriUpdaterAdapter } from './tauriAdapter'
 
 export const desktop = tauriDesktopAdapter
+export const updater = tauriUpdaterAdapter
 
-export type { DesktopPort } from './contracts'
+export type { DesktopPort, UpdaterPort } from './contracts'

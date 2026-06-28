@@ -4,6 +4,7 @@ import { getLang } from '../lib/i18n'
 import type { Tab } from '../types'
 
 let tabSeq = 0
+const MAX_RESTORED_TABS = 12
 const newTabId = (): string => `tab-${Date.now()}-${tabSeq++}`
 
 /** Returns a unique "Untitled" name that doesn't conflict with open tabs. */
@@ -249,21 +250,24 @@ export function useFileOps({ pushRecentFile, lang }: Deps) {
 
   // ── Session restore ────────────────────────────────────────────────────────
   const restoreSession = useCallback(async (openFiles: string[], activePath: string | null) => {
-    const restored: Tab[] = []
-    for (const p of openFiles) {
-      try {
-        const f = await desktop.readFile(p)
-        restored.push({
-          id: newTabId(),
-          path: f.path,
-          name: f.name,
-          content: f.content,
-          dirty: false,
-        })
-      } catch {
-        /* file gone */
-      }
-    }
+    const restored = (
+      await Promise.all(
+        openFiles.slice(0, MAX_RESTORED_TABS).map(async (path): Promise<Tab | null> => {
+          try {
+            const file = await desktop.readFile(path)
+            return {
+              id: newTabId(),
+              path: file.path,
+              name: file.name,
+              content: file.content,
+              dirty: false,
+            }
+          } catch {
+            return null
+          }
+        }),
+      )
+    ).filter((tab): tab is Tab => tab !== null)
     if (restored.length) {
       setTabs(restored)
       const act = restored.find((t) => t.path === activePath) ?? restored[0]

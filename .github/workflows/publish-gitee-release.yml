@@ -12,12 +12,6 @@ on:
         description: Git tag to publish
         required: true
         default: v1.0.0
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/publish-gitee-release.yml
-
 permissions:
   contents: read
 
@@ -33,6 +27,9 @@ jobs:
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || 'main' }}
 
       - name: Resolve release tag
         id: release
@@ -40,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            TAG="${{ github.event.workflow_run.head_branch }}"
+            TAG="v$(jq -r '.version' package.json)"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag }}"
           else
@@ -66,11 +63,13 @@ jobs:
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
-          mapfile -t URLS < <(echo "${RELEASE}" | jq -r \
-            '.assets[] | select(.name | test("\\.(dmg|exe)$")) | .browser_download_url')
-          test "${#URLS[@]}" -eq 2
-          for URL in "${URLS[@]}"; do
-            FILE="artifacts/$(basename "${URL}")"
+          printf '%s' "${RELEASE}" > /tmp/github-release.json
+          mapfile -t ASSETS < <(echo "${RELEASE}" | jq -r \
+            '.assets[] | select(.name == "latest.json" or (.name | test("\\.(dmg|exe|sig|tar\\.gz)$"))) | [.browser_download_url, .name] | @tsv')
+          test "${#ASSETS[@]}" -ge 5
+          for ASSET in "${ASSETS[@]}"; do
+            IFS=$'\t' read -r URL NAME <<< "${ASSET}"
+            FILE="artifacts/${NAME}"
             curl --fail --location --silent --show-error \
               --retry 4 --retry-delay 5 --retry-all-errors \
               --connect-timeout 20 --max-time 300 \
@@ -79,10 +78,13 @@ jobs:
           done
           test "$(find artifacts -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
           test "$(find artifacts -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
+          test -f artifacts/latest.json
+          test "$(find artifacts -maxdepth 1 -name '*.sig' | wc -l | tr -d ' ')" -ge 2
 
       - name: Upsert Gitee Release installers
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_PRIVATE_KEY: ${{ secrets.GITEE_PRIVATE_KEY }}
           TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
@@ -91,6 +93,15 @@ jobs:
           OWNER="tlqgyx"
           REPO="xiangzi-md"
           API="https://gitee.com/api/v5/repos/${OWNER}/${REPO}"
+
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${GITEE_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H gitee.com >> ~/.ssh/known_hosts
+          git fetch origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          git remote add gitee git@gitee.com:${OWNER}/${REPO}.git
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+            git push --force gitee "refs/tags/${TAG}:refs/tags/${TAG}"
 
           echo "Waiting for Gitee tag ${TAG}..."
           FOUND=""
@@ -130,7 +141,7 @@ jobs:
           declare -A KEPT=()
           while IFS=$'\t' read -r ATTACHMENT_ID NAME; do
             case "${NAME}" in
-              *.dmg|*-setup.exe)
+              *.dmg|*.exe|*.sig|*.tar.gz|latest.json)
                 if [ -f "artifacts/${NAME}" ] && [ -z "${KEPT[${NAME}]+x}" ]; then
                   KEPT["${NAME}"]=1
                   continue
@@ -144,7 +155,7 @@ jobs:
             esac
           done < <(echo "${ATTACHMENTS}" | jq -r '.[] | [.id, .name] | @tsv')
 
-          for FILE in artifacts/*.dmg artifacts/*-setup.exe; do
+          for FILE in artifacts/*; do
             NAME=$(basename "${FILE}")
             ATTACHMENTS=$(curl --fail --silent --show-error \
               --retry 3 --retry-delay 5 --retry-all-errors \
@@ -208,3 +219,35 @@ jobs:
             "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100&_=$(date +%s)")
           echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith(".dmg"))' >/dev/null
           echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith("-setup.exe"))' >/dev/null
+          echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith(".tar.gz"))' >/dev/null
+          echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith(".sig"))' >/dev/null
+
+          echo "Building the stable Gitee updater manifest"
+          echo "${ATTACHMENTS}" > /tmp/gitee-attachments.json
+          jq --slurpfile attachments /tmp/gitee-attachments.json \
+             --slurpfile github /tmp/github-release.json '
+            .platforms |= with_entries(
+              .value.url as $github_url |
+              ($github[0].assets[] | select(.browser_download_url == $github_url) | .name) as $asset_name |
+              ($attachments[0][] | select(.name == $asset_name) |
+                (.browser_download_url // .download_url // empty)) as $gitee_url |
+              if ($gitee_url | length) == 0
+              then error("Missing Gitee updater asset: " + $asset_name)
+              else .value.url = $gitee_url
+              end
+            )
+          ' artifacts/latest.json > /tmp/latest.gitee.json
+          jq -e '.platforms | length >= 2' /tmp/latest.gitee.json >/dev/null
+
+          rm -rf /tmp/xiangzi-updater-manifest
+          git init /tmp/xiangzi-updater-manifest
+          cd /tmp/xiangzi-updater-manifest
+          git checkout --orphan updater
+          cp /tmp/latest.gitee.json latest.json
+          git config user.name guoxiangzi
+          git config user.email tlqgyx@163.com
+          git add latest.json
+          git commit -m "chore: publish ${TAG} updater manifest"
+          git remote add gitee git@gitee.com:tlqgyx/xiangzi-md.git
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes" \
+            git push --force gitee HEAD:refs/heads/updater

@@ -65,7 +65,6 @@ export function useSettings() {
   useEffect(() => {
     if (!settings) return
     setLang(settings.language)
-    void desktop.setLanguage(settings.language)
   }, [settings?.language])
 
   // ── Custom CSS ─────────────────────────────────────────────────────────────

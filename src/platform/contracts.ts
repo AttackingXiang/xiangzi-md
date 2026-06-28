@@ -28,6 +28,8 @@ export interface AppSettings {
   customCssPath: string
   headingNumber: boolean
   autoSave: boolean
+  checkUpdatesOnStartup: boolean
+  shortcuts: Record<string, string>
   recentFiles: string[]
   recentFolders: string[]
   favorites: string[]
@@ -46,6 +48,25 @@ export interface SearchResult {
   path: string
   name: string
   matches: Array<{ lineNumber: number; text: string }>
+}
+
+export type UpdateDownloadEvent =
+  | { event: 'Started'; contentLength?: number }
+  | { event: 'Progress'; chunkLength: number }
+  | { event: 'Finished' }
+
+export interface AvailableUpdate {
+  version: string
+  currentVersion: string
+  notes?: string
+  source: 'github' | 'gitee'
+  downloadAndInstall(onEvent: (event: UpdateDownloadEvent) => void): Promise<void>
+  close(): Promise<void>
+}
+
+export interface UpdaterPort {
+  check(timeoutMs: number): Promise<AvailableUpdate | null>
+  relaunch(): Promise<void>
 }
 
 export interface DesktopPort {
@@ -82,7 +103,6 @@ export interface DesktopPort {
   exportImage(html: string, suggestedName: string): Promise<{ path: string } | null>
   pickCss(): Promise<{ path: string } | null>
   confirm(message: string, title: string, okLabel: string, cancelLabel: string): Promise<boolean>
-  setLanguage(language: AppSettings['language']): Promise<void>
   onMenuAction(callback: (action: string) => void): () => void
   onOpenPath(callback: (path: string) => void): () => void
   notifyReady(): void

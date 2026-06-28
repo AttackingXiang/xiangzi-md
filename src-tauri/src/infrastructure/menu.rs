@@ -1,4 +1,5 @@
 use crate::{domain::error::AppError, infrastructure::lifecycle::LifecycleState};
+use std::collections::BTreeMap;
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, Submenu, SubmenuBuilder},
     AppHandle, Emitter, Manager,
@@ -16,30 +17,59 @@ fn action(
     app: &AppHandle,
     id: &str,
     label: &str,
-    accelerator: Option<&str>,
+    accelerator: Option<String>,
 ) -> tauri::Result<MenuItem<tauri::Wry>> {
-    MenuItem::with_id(app, id, label, true, accelerator)
+    MenuItem::with_id(app, id, label, true, accelerator.as_deref())
 }
 
-fn app_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wry>> {
+fn accelerator(
+    shortcuts: &BTreeMap<String, String>,
+    id: &str,
+    default_binding: &str,
+) -> Option<String> {
+    let binding = shortcuts
+        .get(id)
+        .map(String::as_str)
+        .unwrap_or(default_binding);
+    if binding.is_empty() {
+        return None;
+    }
+    Some(
+        binding
+            .split('+')
+            .map(|part| match part {
+                "Mod" => "CmdOrCtrl",
+                "Control" => "Ctrl",
+                other => other,
+            })
+            .collect::<Vec<_>>()
+            .join("+"),
+    )
+}
+
+fn app_menu(
+    app: &AppHandle,
+    language: &str,
+    shortcuts: &BTreeMap<String, String>,
+) -> tauri::Result<Submenu<tauri::Wry>> {
     let settings = action(
         app,
         "open-settings",
         tr(language, "设置…", "Settings…"),
-        Some("CmdOrCtrl+,"),
+        accelerator(shortcuts, "open-settings", "Mod+,"),
     )?;
     let updates = MenuItem::with_id(
         app,
         "check-updates",
         tr(language, "检查更新…", "Check for Updates…"),
-        false,
+        true,
         None::<&str>,
     )?;
     let quit = action(
         app,
         "quit",
         tr(language, "退出 Xiangzi MD", "Quit Xiangzi MD"),
-        Some("CmdOrCtrl+Q"),
+        Some("CmdOrCtrl+Q".into()),
     )?;
 
     SubmenuBuilder::new(app, "Xiangzi MD")
@@ -59,36 +89,40 @@ fn app_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wry
         .build()
 }
 
-fn file_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wry>> {
+fn file_menu(
+    app: &AppHandle,
+    language: &str,
+    shortcuts: &BTreeMap<String, String>,
+) -> tauri::Result<Submenu<tauri::Wry>> {
     let new_file = action(
         app,
         "new-file",
         tr(language, "新建文件", "New File"),
-        Some("CmdOrCtrl+N"),
+        accelerator(shortcuts, "new-file", "Mod+N"),
     )?;
     let open_file = action(
         app,
         "open-file",
         tr(language, "打开文件…", "Open File…"),
-        Some("CmdOrCtrl+O"),
+        accelerator(shortcuts, "open-file", "Mod+O"),
     )?;
     let open_folder = action(
         app,
         "open-folder",
         tr(language, "打开文件夹…", "Open Folder…"),
-        Some("CmdOrCtrl+Shift+O"),
+        accelerator(shortcuts, "open-folder", "Mod+Shift+O"),
     )?;
     let save = action(
         app,
         "save",
         tr(language, "保存", "Save"),
-        Some("CmdOrCtrl+S"),
+        accelerator(shortcuts, "save", "Mod+S"),
     )?;
     let save_as = action(
         app,
         "save-as",
         tr(language, "另存为…", "Save As…"),
-        Some("CmdOrCtrl+Shift+S"),
+        accelerator(shortcuts, "save-as", "Mod+Shift+S"),
     )?;
     let export_html = action(app, "export-html", "HTML…", None)?;
     let export_pdf = action(app, "export-pdf", "PDF…", None)?;
@@ -102,7 +136,7 @@ fn file_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wr
         app,
         "close-tab",
         tr(language, "关闭标签页", "Close Tab"),
-        Some("CmdOrCtrl+W"),
+        accelerator(shortcuts, "close-tab", "Mod+W"),
     )?;
 
     SubmenuBuilder::new(app, tr(language, "文件", "File"))
@@ -120,18 +154,22 @@ fn file_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wr
         .build()
 }
 
-fn edit_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wry>> {
+fn edit_menu(
+    app: &AppHandle,
+    language: &str,
+    shortcuts: &BTreeMap<String, String>,
+) -> tauri::Result<Submenu<tauri::Wry>> {
     let find = action(
         app,
         "find",
         tr(language, "查找", "Find"),
-        Some("CmdOrCtrl+F"),
+        accelerator(shortcuts, "find", "Mod+F"),
     )?;
     let search = action(
         app,
         "search-in-folder",
         tr(language, "在文件夹中搜索", "Search in Folder"),
-        Some("CmdOrCtrl+Shift+F"),
+        accelerator(shortcuts, "search-in-folder", "Mod+Shift+F"),
     )?;
 
     SubmenuBuilder::new(app, tr(language, "编辑", "Edit"))
@@ -148,7 +186,11 @@ fn edit_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wr
         .build()
 }
 
-fn view_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wry>> {
+fn view_menu(
+    app: &AppHandle,
+    language: &str,
+    shortcuts: &BTreeMap<String, String>,
+) -> tauri::Result<Submenu<tauri::Wry>> {
     let entries = [
         (
             "toggle-sidebar",
@@ -180,33 +222,33 @@ fn view_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wr
     ];
     let items = entries
         .into_iter()
-        .map(|(id, zh, en, accelerator)| action(app, id, tr(language, zh, en), Some(accelerator)))
+        .map(|(id, zh, en, default_binding)| {
+            action(
+                app,
+                id,
+                tr(language, zh, en),
+                accelerator(shortcuts, id, &default_binding.replace("CmdOrCtrl", "Mod")),
+            )
+        })
         .collect::<tauri::Result<Vec<_>>>()?;
     let zoom_reset = action(
         app,
         "zoom-reset",
         tr(language, "实际大小", "Actual Size"),
-        Some("CmdOrCtrl+0"),
+        Some("CmdOrCtrl+Shift+0".into()),
     )?;
     let zoom_in = action(
         app,
         "zoom-in",
         tr(language, "放大", "Zoom In"),
-        Some("CmdOrCtrl++"),
+        Some("CmdOrCtrl++".into()),
     )?;
     let zoom_out = action(
         app,
         "zoom-out",
         tr(language, "缩小", "Zoom Out"),
-        Some("CmdOrCtrl+-"),
+        Some("CmdOrCtrl+-".into()),
     )?;
-    let devtools = action(
-        app,
-        "toggle-devtools",
-        tr(language, "开发者工具", "Developer Tools"),
-        None,
-    )?;
-
     SubmenuBuilder::new(app, tr(language, "视图", "View"))
         .item(&items[0])
         .item(&items[1])
@@ -223,7 +265,6 @@ fn view_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wr
         .item(&zoom_out)
         .separator()
         .fullscreen_with_text(tr(language, "切换全屏", "Toggle Full Screen"))
-        .item(&devtools)
         .build()
 }
 
@@ -234,12 +275,16 @@ fn window_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::
         .build()
 }
 
-pub fn install(app: &AppHandle, language: &str) -> Result<(), AppError> {
+pub fn install(
+    app: &AppHandle,
+    language: &str,
+    shortcuts: &BTreeMap<String, String>,
+) -> Result<(), AppError> {
     let install = || -> tauri::Result<()> {
-        let application = app_menu(app, language)?;
-        let file = file_menu(app, language)?;
-        let edit = edit_menu(app, language)?;
-        let view = view_menu(app, language)?;
+        let application = app_menu(app, language, shortcuts)?;
+        let file = file_menu(app, language, shortcuts)?;
+        let edit = edit_menu(app, language, shortcuts)?;
+        let view = view_menu(app, language, shortcuts)?;
         let window = window_menu(app, language)?;
         let menu = Menu::with_items(app, &[&application, &file, &edit, &view, &window])?;
         app.set_menu(menu)?;
@@ -266,13 +311,6 @@ pub fn handle_event(app: &AppHandle, id: &str) {
             };
             let zoom = app.state::<LifecycleState>().update_zoom(delta);
             let _ = window.set_zoom(zoom);
-        }
-        "toggle-devtools" => {
-            if window.is_devtools_open() {
-                window.close_devtools();
-            } else {
-                window.open_devtools();
-            }
         }
         action => {
             let _ = window.emit("menu-action", action);

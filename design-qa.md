@@ -1,32 +1,33 @@
 # Design QA
 
-- Source visual truth: `/var/folders/ld/t1wc9y1x5cjfhkqjqxjfhgwc0000gn/T/codex-clipboard-db7cd3a3-2a97-437b-956c-c511bd782ea1.png`
-- Implementation screenshot: `/tmp/xiangzi-md-list-compact-final-clean.png`
-- Viewport: 1200 × 800 logical pixels, macOS Retina capture at 2×
-- State: light theme, WYSIWYG mode, H1 plus ordered and unordered lists
+- Existing editor state: `audit/current-state/01-editor.png`
+- Existing settings state: `audit/current-state/02-settings.png`
+- Final editor state: `audit/final-state/01-editor.png`
+- Final settings state: `audit/final-state/02-settings.png`
+- Final shortcuts state: `audit/final-state/03-shortcuts.png`
+- Final updater state: `audit/final-state/04-updates.png`
+- Sticky-header evidence: `audit/final-state/05-sticky-close.png`
+- Viewport: 1200 × 800 logical pixels, macOS Retina window capture
+- State: light theme, restored workspace, WYSIWYG editor and settings modal
 
-## Full-view comparison evidence
+## Same-input comparisons
 
-The source and implementation were opened together in one comparison input. The source shows ordered-list labels above the first text line and roughly one empty text line between adjacent items. In the implementation, ordered labels and bullet centers follow the first 25.6px line box, while adjacent items now flow at normal text rhythm without the duplicated paragraph margins. Heading hierarchy, divider, body width, colors, and the intended Typora-like styling remain consistent.
+The existing and final settings screenshots were inspected together in one comparison input. The former single long form has been replaced by six stable categories, preserving the product's white, gray and violet visual language. Field labels, controls and card borders share a consistent baseline; the modal header and close control no longer participate in content scrolling.
 
-## Focused-region comparison evidence
+The existing and final editor screenshots were also inspected together. The final build preserves the established Typora-like typography, compact list rhythm and marker alignment. A temporary `freezePrototype` hardening setting was caught by visual QA because it prevented Milkdown from mounting; that incompatible setting was removed and the signed build was repeated before the final screenshots.
 
-The source image already isolates the title and list region, so no additional crop was required. At the focused list region, `1.`–`4.` and both bullet dots are optically centered against their corresponding first text line. The wrapped first item retains its internal 1.6 line height, while subsequent single-line rows no longer inherit normal paragraph top and bottom margins.
+## Interaction evidence
+
+- Every settings category is keyboard/accessibility reachable.
+- Shortcut rows expose action names, current bindings and reset state; duplicate bindings are rejected before persistence.
+- After scrolling the shortcuts page one viewport, the header and close button remain fixed (`05-sticky-close.png`).
+- The updater page exposes startup checking, manual checking, current version, fallback status and signature assurance.
+- Editor content, ordered-list markers and document navigation render after a clean signed-app restart.
 
 ## Findings
 
-- No actionable P0, P1, or P2 typography findings remain in the tested state.
-- No image assets are present in this comparison state.
-- App copy and sidebar labels are unchanged by this patch.
-
-## Patches made
-
-- Replaced WebView-dependent HTML5 file-tree drag/drop with cross-platform pointer-event drag/drop.
-- Targeted Crepe's actual `[data-content-dom]` wrapper so list paragraphs receive zero vertical margins and padding.
-- Matched ordered, unordered, and task-list marker boxes to the 25.6px list text line without a compensating transform.
-
-## Follow-up polish
-
-- P3: verify marker sizing against unusually large custom CSS font sizes if a custom theme overrides the editor typography.
+- No actionable P0 or P1 visual defect remains in the tested states.
+- P3: the settings dialog is intentionally wider than the earlier form to support category navigation; the 720 px minimum app width remains supported by responsive CSS.
+- P3: custom CSS can still change typography and therefore remains outside pixel-level visual guarantees.
 
 final result: passed

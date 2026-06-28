@@ -8,7 +8,7 @@ use crate::{
 use std::{fs, path::Path};
 use tauri::AppHandle;
 
-const MAX_ATTACHMENT_BYTES: usize = 50 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES: usize = 20 * 1024 * 1024;
 
 pub fn save_attachment(
     app: &AppHandle,
@@ -22,7 +22,7 @@ pub fn save_attachment(
     if data.len() > MAX_ATTACHMENT_BYTES {
         return Err(AppError::new(
             "attachment_too_large",
-            "单个附件不能超过 50 MB",
+            "单个附件不能超过 20 MB",
         ));
     }
     ensure_allowed(app, doc_dir)?;

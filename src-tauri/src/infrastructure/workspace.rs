@@ -16,6 +16,7 @@ use walkdir::WalkDir;
 const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx"];
 const IGNORED_DIRECTORIES: &[&str] = &[".git", "node_modules", ".DS_Store", ".obsidian", ".vscode"];
 const MAX_LISTED_FILES: usize = 8_000;
+const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
 
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
@@ -139,6 +140,13 @@ pub fn open_folder_path(app: &AppHandle, root: &Path) -> AppResult<Option<Folder
 
 pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
     ensure_allowed(app, path)?;
+    let metadata = fs::metadata(path).map_err(|error| AppError::io("读取文件信息失败", error))?;
+    if metadata.len() > MAX_DOCUMENT_BYTES {
+        return Err(AppError::new(
+            "file_too_large",
+            "文件超过 20 MB，为避免内存占用过高已停止打开",
+        ));
+    }
     let content = fs::read_to_string(path).map_err(|error| AppError::io("读取文件失败", error))?;
     Ok(OpenedFile {
         path: path_string(path),
@@ -149,6 +157,12 @@ pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
 
 pub fn write_file(app: &AppHandle, path: &Path, content: &str) -> AppResult<PathResult> {
     ensure_write_allowed(app, path)?;
+    if content.len() as u64 > MAX_DOCUMENT_BYTES {
+        return Err(AppError::new(
+            "file_too_large",
+            "文档超过 20 MB，为避免内存占用过高已停止保存",
+        ));
+    }
     let parent = path
         .parent()
         .ok_or_else(|| AppError::new("invalid_path", "目标路径没有父目录"))?;
@@ -243,6 +257,12 @@ pub fn move_item(app: &AppHandle, source: &Path, target_dir: &Path) -> AppResult
     ensure_allowed(app, source)?;
     ensure_allowed(app, target_dir)?;
     let name = file_name(source);
+    if source.is_dir() && target_dir.starts_with(source) {
+        return Err(AppError::new(
+            "invalid_move",
+            "不能把文件夹移动到它自己的子目录中",
+        ));
+    }
     let target = target_dir.join(&name);
     if target.exists() {
         return Err(AppError::new(

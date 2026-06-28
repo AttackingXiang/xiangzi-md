@@ -1,6 +1,7 @@
 use crate::domain::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -10,7 +11,46 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_fs::FsExt;
 use tempfile::NamedTempFile;
 
-const SETTINGS_SCHEMA_VERSION: u32 = 1;
+const SETTINGS_SCHEMA_VERSION: u32 = 2;
+const MAX_RECENT_ITEMS: usize = 15;
+const MAX_FAVORITES: usize = 32;
+const MAX_SESSION_FILES: usize = 12;
+const MAX_ASSET_SEARCH_PATHS: usize = 32;
+const MAX_SHORTCUT_OVERRIDES: usize = 64;
+const MAX_PATH_LENGTH: usize = 4096;
+
+const SHORTCUT_ACTIONS: &[&str] = &[
+    "new-file",
+    "open-file",
+    "open-folder",
+    "save",
+    "save-as",
+    "close-tab",
+    "find",
+    "search-in-folder",
+    "command-palette",
+    "toggle-sidebar",
+    "toggle-outline",
+    "toggle-source",
+    "toggle-focus",
+    "toggle-typewriter",
+    "open-settings",
+    "show-shortcuts",
+    "heading-1",
+    "heading-2",
+    "heading-3",
+    "heading-4",
+    "heading-5",
+    "heading-6",
+    "paragraph",
+    "bold",
+    "italic",
+    "inline-code",
+    "quote",
+    "code-block",
+    "bullet-list",
+    "ordered-list",
+];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +73,8 @@ pub struct AppSettings {
     pub custom_css_path: String,
     pub heading_number: bool,
     pub auto_save: bool,
+    pub check_updates_on_startup: bool,
+    pub shortcuts: BTreeMap<String, String>,
     pub recent_files: Vec<String>,
     pub recent_folders: Vec<String>,
     pub favorites: Vec<String>,
@@ -54,6 +96,8 @@ impl Default for AppSettings {
             custom_css_path: String::new(),
             heading_number: false,
             auto_save: false,
+            check_updates_on_startup: true,
+            shortcuts: BTreeMap::new(),
             recent_files: Vec::new(),
             recent_folders: Vec::new(),
             favorites: Vec::new(),
@@ -76,12 +120,20 @@ pub struct SettingsPatch {
     pub custom_css_path: Option<String>,
     pub heading_number: Option<bool>,
     pub auto_save: Option<bool>,
+    pub check_updates_on_startup: Option<bool>,
+    pub shortcuts: Option<BTreeMap<String, String>>,
     pub recent_files: Option<Vec<String>>,
     pub recent_folders: Option<Vec<String>>,
     pub favorites: Option<Vec<String>>,
     pub session: Option<SessionSettings>,
     pub hide_attachment_folders: Option<bool>,
     pub asset_search_paths: Option<Vec<String>>,
+}
+
+impl SettingsPatch {
+    pub fn affects_menu(&self) -> bool {
+        self.language.is_some() || self.shortcuts.is_some()
+    }
 }
 
 #[derive(Default)]
@@ -99,37 +151,51 @@ impl SettingsStore {
             return Ok(settings.clone());
         }
 
-        let settings_path = settings_file(app)?;
-        let (settings, imported) = if settings_path.is_file() {
-            (read_settings(&settings_path)?, false)
-        } else if let Some(legacy) = legacy_settings_file().filter(|path| path.is_file()) {
-            (read_settings(&legacy)?, true)
-        } else {
-            (AppSettings::default(), true)
-        };
-
-        if imported {
-            write_settings(&settings_path, &settings)?;
-        }
+        let settings = load_settings(app)?;
         authorize_settings_paths(app, &settings);
         *guard = Some(settings.clone());
         Ok(settings)
     }
 
     pub fn set(&self, app: &AppHandle, patch: SettingsPatch) -> AppResult<AppSettings> {
-        let mut settings = self.get(app)?;
-        apply_patch(&mut settings, patch);
-        settings.schema_version = SETTINGS_SCHEMA_VERSION;
-        write_settings(&settings_file(app)?, &settings)?;
-        authorize_settings_paths(app, &settings);
-
+        // Keep the cache lock for the full read-modify-write transaction. Tauri
+        // commands can run concurrently; releasing it between get and write
+        // allowed unrelated patches (for example recents and session state) to
+        // overwrite each other.
         let mut guard = self
             .cache
             .lock()
             .map_err(|_| AppError::new("settings_lock_failed", "设置缓存不可用"))?;
+        let mut settings = match guard.as_ref() {
+            Some(settings) => settings.clone(),
+            None => load_settings(app)?,
+        };
+        apply_patch(&mut settings, patch);
+        validate_settings(&settings)?;
+        limit_collections(&mut settings);
+        settings.schema_version = SETTINGS_SCHEMA_VERSION;
+        write_settings(&settings_file(app)?, &settings)?;
+        authorize_settings_paths(app, &settings);
         *guard = Some(settings.clone());
         Ok(settings)
     }
+}
+
+fn load_settings(app: &AppHandle) -> AppResult<AppSettings> {
+    let settings_path = settings_file(app)?;
+    let (mut settings, imported) = if settings_path.is_file() {
+        (read_settings(&settings_path)?, false)
+    } else if let Some(legacy) = legacy_settings_file().filter(|path| path.is_file()) {
+        (read_settings(&legacy)?, true)
+    } else {
+        (AppSettings::default(), true)
+    };
+    sanitize_loaded_settings(&mut settings);
+    if imported || settings.schema_version != SETTINGS_SCHEMA_VERSION {
+        settings.schema_version = SETTINGS_SCHEMA_VERSION;
+        write_settings(&settings_path, &settings)?;
+    }
+    Ok(settings)
 }
 
 fn settings_file(app: &AppHandle) -> AppResult<PathBuf> {
@@ -147,6 +213,111 @@ fn read_settings(path: &Path) -> AppResult<AppSettings> {
     let raw = fs::read_to_string(path).map_err(|error| AppError::io("读取设置失败", error))?;
     serde_json::from_str(&raw)
         .map_err(|error| AppError::new("settings_invalid", format!("设置格式无效：{error}")))
+}
+
+fn sanitize_loaded_settings(settings: &mut AppSettings) {
+    if !matches!(settings.language.as_str(), "zh" | "en") {
+        settings.language = "zh".into();
+    }
+    if !matches!(settings.theme.as_str(), "system" | "light" | "dark") {
+        settings.theme = "system".into();
+    }
+    if !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full") {
+        settings.editor_width = "full".into();
+    }
+    if !matches!(
+        settings.attachment_mode.as_str(),
+        "same" | "subfolder" | "docSubfolder" | "vault" | "vaultSubfolder"
+    ) {
+        settings.attachment_mode = "subfolder".into();
+    }
+    if !valid_folder_name(&settings.attachment_folder) {
+        settings.attachment_folder = "assets".into();
+    }
+    settings.image_max_width = settings.image_max_width.min(10_000);
+    let mut seen_shortcuts = BTreeSet::new();
+    settings.shortcuts.retain(|action, binding| {
+        SHORTCUT_ACTIONS.contains(&action.as_str())
+            && valid_shortcut_binding(binding)
+            && seen_shortcuts.insert(binding.clone())
+    });
+    limit_collections(settings);
+}
+
+fn validate_settings(settings: &AppSettings) -> AppResult<()> {
+    if !matches!(settings.language.as_str(), "zh" | "en")
+        || !matches!(settings.theme.as_str(), "system" | "light" | "dark")
+        || !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full")
+        || !matches!(
+            settings.attachment_mode.as_str(),
+            "same" | "subfolder" | "docSubfolder" | "vault" | "vaultSubfolder"
+        )
+    {
+        return Err(AppError::new("settings_invalid", "设置选项无效"));
+    }
+    if !valid_folder_name(&settings.attachment_folder) {
+        return Err(AppError::new("settings_invalid", "附件目录名称无效"));
+    }
+    if settings.image_max_width > 10_000 {
+        return Err(AppError::new("settings_invalid", "图片宽度设置过大"));
+    }
+    let unique_shortcuts = settings.shortcuts.values().collect::<BTreeSet<_>>();
+    if settings.shortcuts.len() > MAX_SHORTCUT_OVERRIDES
+        || unique_shortcuts.len() != settings.shortcuts.len()
+        || settings.shortcuts.iter().any(|(action, binding)| {
+            !SHORTCUT_ACTIONS.contains(&action.as_str()) || !valid_shortcut_binding(binding)
+        })
+    {
+        return Err(AppError::new("settings_invalid", "快捷键设置无效"));
+    }
+    if settings.custom_css_path.len() > MAX_PATH_LENGTH
+        || settings
+            .asset_search_paths
+            .iter()
+            .chain(settings.recent_files.iter())
+            .chain(settings.recent_folders.iter())
+            .chain(settings.favorites.iter())
+            .chain(settings.session.open_files.iter())
+            .chain(settings.session.folder.iter())
+            .chain(settings.session.active_path.iter())
+            .any(|path| path.len() > MAX_PATH_LENGTH)
+    {
+        return Err(AppError::new("settings_invalid", "设置中的路径过长"));
+    }
+    Ok(())
+}
+
+fn valid_folder_name(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed.len() <= 64
+        && !matches!(trimmed, "." | "..")
+        && !trimmed.contains(['/', '\\'])
+}
+
+fn valid_shortcut_binding(binding: &str) -> bool {
+    if binding.is_empty() || binding.len() > 64 {
+        return false;
+    }
+    let parts = binding.split('+').collect::<Vec<_>>();
+    if parts.len() < 2 || parts.iter().any(|part| part.is_empty()) {
+        return false;
+    }
+    let modifiers = &parts[..parts.len() - 1];
+    modifiers
+        .iter()
+        .all(|part| matches!(*part, "Mod" | "Control" | "Alt" | "Shift"))
+        && modifiers
+            .iter()
+            .any(|part| matches!(*part, "Mod" | "Control" | "Alt"))
+}
+
+fn limit_collections(settings: &mut AppSettings) {
+    settings.recent_files.truncate(MAX_RECENT_ITEMS);
+    settings.recent_folders.truncate(MAX_RECENT_ITEMS);
+    settings.favorites.truncate(MAX_FAVORITES);
+    settings.session.open_files.truncate(MAX_SESSION_FILES);
+    settings.asset_search_paths.truncate(MAX_ASSET_SEARCH_PATHS);
 }
 
 fn write_settings(path: &Path, settings: &AppSettings) -> AppResult<()> {
@@ -189,6 +360,8 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(custom_css_path);
     replace_if_some!(heading_number);
     replace_if_some!(auto_save);
+    replace_if_some!(check_updates_on_startup);
+    replace_if_some!(shortcuts);
     replace_if_some!(recent_files);
     replace_if_some!(recent_folders);
     replace_if_some!(favorites);
@@ -229,7 +402,9 @@ fn authorize_settings_paths(app: &AppHandle, settings: &AppSettings) {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_patch, AppSettings, SettingsPatch, SETTINGS_SCHEMA_VERSION};
+    use super::{
+        apply_patch, validate_settings, AppSettings, SettingsPatch, SETTINGS_SCHEMA_VERSION,
+    };
 
     #[test]
     fn legacy_settings_receive_current_defaults() {
@@ -238,6 +413,7 @@ mod tests {
         assert_eq!(settings.schema_version, SETTINGS_SCHEMA_VERSION);
         assert_eq!(settings.language, "en");
         assert_eq!(settings.attachment_folder, "assets");
+        assert!(settings.check_updates_on_startup);
     }
 
     #[test]
@@ -254,5 +430,19 @@ mod tests {
         assert_eq!(settings.language, "en");
         assert!(settings.auto_save);
         assert_eq!(settings.theme, "system");
+    }
+
+    #[test]
+    fn rejects_conflicting_or_malformed_shortcuts() {
+        let mut settings = AppSettings::default();
+        settings.shortcuts.insert("save".into(), "Mod+Alt+S".into());
+        settings
+            .shortcuts
+            .insert("open-file".into(), "Mod+Alt+S".into());
+        assert!(validate_settings(&settings).is_err());
+
+        settings.shortcuts.clear();
+        settings.shortcuts.insert("save".into(), "S".into());
+        assert!(validate_settings(&settings).is_err());
     }
 }

@@ -28,7 +28,7 @@ src/
   shared/                 # 无平台依赖的类型与纯函数
   platform/
     contracts.ts          # UI 依赖的唯一桌面能力接口
-    tauriAdapter.ts       # 唯一允许导入 @tauri-apps/* 的位置
+    tauriAdapter.ts       # 唯一允许导入 @tauri-apps/* 的位置（含 updater adapter）
 
 src-tauri/src/
   commands/               # Tauri command / event 薄适配层
@@ -66,7 +66,13 @@ src-tauri/src/
 ## 性能策略
 
 - 文件树继续按层懒加载。
-- 全文搜索在 Rust 后台线程执行，已有文件数、文件大小、匹配数上限和忽略目录；request id 与取消在性能阶段补齐。
-- 大附件避免重复复制；迁移早期先正确，性能阶段再改通道。
+- 命令面板只在用户打开时建立最多 8000 项的文件索引，不在打开工作区时递归扫描。
+- 全文搜索在 Rust 后台线程执行，已有文件数、文件大小、匹配数上限和忽略目录。
+- 单文档限制 20 MB、单附件限制 20 MB、会话恢复限制 12 个标签，避免异常输入造成无界内存增长。
 - Mermaid 和编辑器继续懒加载，避免首屏把完整编辑器包拉入。
+- 设置和更新界面继续使用动态 import；导出、Mermaid 图类型仍按功能拆包。
 - 所有性能结论都在同一机器、同一测试库、冷/热启动分开测量。
+
+## 更新信任链
+
+更新检查属于平台边界：React hook 只依赖 `UpdaterPort`，Tauri updater 插件封装在 `platform/tauriAdapter.ts`。应用按顺序请求 GitHub 与 Gitee 的静态 manifest；下载后由 Tauri 使用内置公钥验证 `.sig`，失败时不会安装。发布流水线持有私钥，仓库和客户端只保存公钥。

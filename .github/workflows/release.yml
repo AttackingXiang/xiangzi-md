@@ -2,8 +2,13 @@ name: Release Desktop
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+    paths:
+      - package.json
+      - src-tauri/Cargo.toml
+      - src-tauri/tauri.conf.json
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,8 +18,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Publish only once per package version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v$(jq -r '.version' package.json)"
+          test "${TAG}" != "vnull"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Version ${TAG} is already released; CI will still validate this commit."
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
   build:
     name: Build ${{ matrix.artifact }}
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -62,33 +94,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: '-'
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: Xiangzi MD v__VERSION__
           releaseBody: |
-            Xiangzi MD 1.0 Tauri 版本。
+            Xiangzi MD Tauri 桌面版本。
 
             - macOS：Universal DMG，同时支持 Apple Silicon 与 Intel。
             - Windows：x64 NSIS 安装包。
+            - 应用内更新：签名校验，GitHub 不可用时自动切换 Gitee。
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: false
+          includeUpdaterJson: true
           args: ${{ matrix.args }}
-
-      - name: Upload macOS artifact for Gitee
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-macos-universal
-          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-          if-no-files-found: error
-          retention-days: 3
-
-      - name: Upload Windows artifact for Gitee
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-windows-x64
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
-          if-no-files-found: error
-          retention-days: 3

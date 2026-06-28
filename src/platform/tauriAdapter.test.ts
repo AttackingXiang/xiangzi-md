@@ -1,15 +1,18 @@
 import { invoke } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
+import { check } from '@tauri-apps/plugin-updater'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderDocumentImage, renderDocumentPdf } from '../lib/exportDocument'
-import { tauriDesktopAdapter } from './tauriAdapter'
+import { tauriDesktopAdapter, tauriUpdaterAdapter } from './tauriAdapter'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ ask: vi.fn(), open: vi.fn(), save: vi.fn() }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile: vi.fn() }))
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(), revealItemInDir: vi.fn() }))
+vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }))
+vi.mock('@tauri-apps/plugin-updater', () => ({ check: vi.fn() }))
 vi.mock('../lib/exportDocument', () => ({
   imageFormatForPath: vi.fn((path: string) => (/\.jpe?g$/i.test(path) ? 'jpeg' : 'png')),
   renderDocumentImage: vi.fn(),
@@ -19,6 +22,7 @@ vi.mock('../lib/exportDocument', () => ({
 const invokeMock = vi.mocked(invoke)
 const saveMock = vi.mocked(save)
 const writeFileMock = vi.mocked(writeFile)
+const checkMock = vi.mocked(check)
 const renderDocumentImageMock = vi.mocked(renderDocumentImage)
 const renderDocumentPdfMock = vi.mocked(renderDocumentPdf)
 
@@ -29,6 +33,7 @@ describe('tauriDesktopAdapter', () => {
     writeFileMock.mockReset()
     renderDocumentImageMock.mockReset()
     renderDocumentPdfMock.mockReset()
+    checkMock.mockReset()
   })
 
   it('maps file reads to the stable Rust command contract', async () => {
@@ -102,5 +107,30 @@ describe('tauriDesktopAdapter', () => {
     await expect(tauriDesktopAdapter.exportPDF('<h1>A</h1>', 'a.md')).resolves.toBeNull()
     expect(renderDocumentPdfMock).not.toHaveBeenCalled()
     expect(writeFileMock).not.toHaveBeenCalled()
+  })
+
+  it('maps updater metadata without exposing the plugin object to React features', async () => {
+    const close = vi.fn().mockResolvedValue(undefined)
+    const downloadAndInstall = vi.fn().mockResolvedValue(undefined)
+    checkMock.mockResolvedValueOnce({
+      version: '1.2.0',
+      currentVersion: '1.1.0',
+      body: 'Bug fixes',
+      rawJson: { platforms: { darwin: { url: 'https://gitee.com/release.tar.gz' } } },
+      close,
+      downloadAndInstall,
+    } as never)
+
+    const update = await tauriUpdaterAdapter.check(8_000)
+
+    expect(checkMock).toHaveBeenCalledWith({ timeout: 8_000 })
+    expect(update).toMatchObject({
+      version: '1.2.0',
+      currentVersion: '1.1.0',
+      notes: 'Bug fixes',
+      source: 'gitee',
+    })
+    await update?.close()
+    expect(close).toHaveBeenCalledOnce()
   })
 })
