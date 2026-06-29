@@ -73,14 +73,9 @@ pub fn run() {
         }
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Opened { urls } => {
-            let lifecycle = app.state::<LifecycleState>();
             for url in urls {
                 if let Ok(path) = url.to_file_path() {
-                    if let Some(path) =
-                        infrastructure::lifecycle::supported_path(&path.to_string_lossy())
-                    {
-                        lifecycle.queue_open_path(app, path);
-                    }
+                    infrastructure::lifecycle::queue_supported_path(app, &path.to_string_lossy());
                 }
             }
             infrastructure::lifecycle::reveal_main_window(app);
