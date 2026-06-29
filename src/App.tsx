@@ -991,14 +991,18 @@ ${liveStyles}
 
         <div
           className="editor-area"
-          onDoubleClick={(e) => {
-            const target = e.target as HTMLElement
-            if (target.tagName === 'IMG') {
-              e.preventDefault()
-              const src =
-                (target as HTMLImageElement).currentSrc || (target as HTMLImageElement).src
-              if (src) setZoomSrc(src)
-            }
+          onDoubleClickCapture={(event) => {
+            if (!(event.target instanceof Element)) return
+            const target = event.target
+            const image =
+              target instanceof HTMLImageElement
+                ? target
+                : target.closest('.image-wrapper, .milkdown-image-inline')?.querySelector('img')
+            if (!image) return
+            event.preventDefault()
+            event.stopPropagation()
+            const src = image.currentSrc || image.src
+            if (src) setZoomSrc(src)
           }}
           onContextMenu={(e) => {
             if (!activeTab) return
