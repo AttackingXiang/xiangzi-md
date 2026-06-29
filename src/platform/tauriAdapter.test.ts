@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { save } from '@tauri-apps/plugin-dialog'
+import { open, save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { check } from '@tauri-apps/plugin-updater'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -22,6 +22,7 @@ vi.mock('../lib/exportDocument', () => ({
 
 const invokeMock = vi.mocked(invoke)
 const listenMock = vi.mocked(listen)
+const openMock = vi.mocked(open)
 const saveMock = vi.mocked(save)
 const writeFileMock = vi.mocked(writeFile)
 const checkMock = vi.mocked(check)
@@ -32,6 +33,7 @@ describe('tauriDesktopAdapter', () => {
   beforeEach(() => {
     invokeMock.mockReset()
     listenMock.mockReset()
+    openMock.mockReset()
     saveMock.mockReset()
     writeFileMock.mockReset()
     renderDocumentImageMock.mockReset()
@@ -45,6 +47,16 @@ describe('tauriDesktopAdapter', () => {
 
     await expect(tauriDesktopAdapter.readFile(file.path)).resolves.toEqual(file)
     expect(invokeMock).toHaveBeenCalledWith('read_file', { path: file.path })
+  })
+
+  it('authorizes selected folders recursively before loading the workspace tree', async () => {
+    const folder = { root: '/notes', name: 'notes', tree: [] }
+    openMock.mockResolvedValueOnce('/notes')
+    invokeMock.mockResolvedValueOnce(folder)
+
+    await expect(tauriDesktopAdapter.openFolder()).resolves.toEqual(folder)
+    expect(openMock).toHaveBeenCalledWith({ directory: true, multiple: false, recursive: true })
+    expect(invokeMock).toHaveBeenCalledWith('open_folder_path', { root: '/notes' })
   })
 
   it('declares the frontend ready only after the open-path listener is registered', async () => {

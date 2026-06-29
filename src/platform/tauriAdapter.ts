@@ -78,7 +78,7 @@ export const tauriUpdaterAdapter: UpdaterPort = {
 export const tauriDesktopAdapter: DesktopPort = {
   getAppInfo: () => invoke<AppInfo>('get_app_info'),
   openFolder: async () => {
-    const root = await open({ directory: true, multiple: false })
+    const root = await open({ directory: true, multiple: false, recursive: true })
     return root ? invoke<Folder | null>('open_folder_path', { root }) : null
   },
   openFolderPath: (root) => invoke<Folder | null>('open_folder_path', { root }),
