@@ -8,7 +8,7 @@ use std::{
     io::Write,
     path::Path,
 };
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_fs::FsExt;
 use tempfile::NamedTempFile;
 use walkdir::WalkDir;
@@ -131,6 +131,12 @@ pub fn open_folder_path(app: &AppHandle, root: &Path) -> AppResult<Option<Folder
         return Ok(None);
     }
     ensure_allowed(app, root)?;
+    app.fs_scope()
+        .allow_directory(root, true)
+        .map_err(|error| AppError::new("scope_failed", error.to_string()))?;
+    app.asset_protocol_scope()
+        .allow_directory(root, true)
+        .map_err(|error| AppError::new("scope_failed", error.to_string()))?;
     Ok(Some(Folder {
         root: path_string(root),
         name: file_name(root),
