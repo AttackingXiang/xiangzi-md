@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { save } from '@tauri-apps/plugin-dialog'
 import { writeFile } from '@tauri-apps/plugin-fs'
 import { check } from '@tauri-apps/plugin-updater'
@@ -20,6 +21,7 @@ vi.mock('../lib/exportDocument', () => ({
 }))
 
 const invokeMock = vi.mocked(invoke)
+const listenMock = vi.mocked(listen)
 const saveMock = vi.mocked(save)
 const writeFileMock = vi.mocked(writeFile)
 const checkMock = vi.mocked(check)
@@ -29,6 +31,7 @@ const renderDocumentPdfMock = vi.mocked(renderDocumentPdf)
 describe('tauriDesktopAdapter', () => {
   beforeEach(() => {
     invokeMock.mockReset()
+    listenMock.mockReset()
     saveMock.mockReset()
     writeFileMock.mockReset()
     renderDocumentImageMock.mockReset()
@@ -42,6 +45,25 @@ describe('tauriDesktopAdapter', () => {
 
     await expect(tauriDesktopAdapter.readFile(file.path)).resolves.toEqual(file)
     expect(invokeMock).toHaveBeenCalledWith('read_file', { path: file.path })
+  })
+
+  it('declares the frontend ready only after the open-path listener is registered', async () => {
+    const unlisten = vi.fn()
+    let finishListening: ((stop: () => void) => void) | undefined
+    listenMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishListening = resolve
+      }) as never,
+    )
+
+    const dispose = tauriDesktopAdapter.onOpenPath(vi.fn())
+    expect(invokeMock).not.toHaveBeenCalled()
+
+    finishListening?.(unlisten)
+    await vi.waitFor(() => expect(invokeMock).toHaveBeenCalledWith('frontend_ready'))
+
+    dispose()
+    expect(unlisten).toHaveBeenCalledOnce()
   })
 
   it('serializes attachment bytes as a command-safe array', async () => {

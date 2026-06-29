@@ -6,6 +6,7 @@ use std::{
     },
 };
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_fs::FsExt;
 
 const SUPPORTED_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx", "txt"];
 
@@ -77,11 +78,16 @@ pub fn supported_path(raw: &str) -> Option<String> {
 }
 
 pub fn queue_supported_arguments(app: &AppHandle, arguments: impl IntoIterator<Item = String>) {
-    let state = app.state::<LifecycleState>();
     for argument in arguments {
-        if let Some(path) = supported_path(&argument) {
-            state.queue_open_path(app, path);
-        }
+        queue_supported_path(app, &argument);
+    }
+}
+
+pub fn queue_supported_path(app: &AppHandle, raw: &str) {
+    if let Some(path) = supported_path(raw) {
+        let _ = app.fs_scope().allow_file(&path);
+        let _ = app.asset_protocol_scope().allow_file(&path);
+        app.state::<LifecycleState>().queue_open_path(app, path);
     }
 }
 

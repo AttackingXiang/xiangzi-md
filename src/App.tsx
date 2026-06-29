@@ -321,9 +321,7 @@ export default function App(): JSX.Element {
   // ── System open-path (file association / double-click) ────────────────────
   useEffect(() => {
     if (!desktop) return undefined
-    const dispose = desktop.onOpenPath((p) => openPath(p, baseName(p)))
-    desktop.notifyReady()
-    return dispose
+    return desktop.onOpenPath((p) => openPath(p, baseName(p)))
   }, [openPath])
 
   // ── Tab context menu ───────────────────────────────────────────────────────

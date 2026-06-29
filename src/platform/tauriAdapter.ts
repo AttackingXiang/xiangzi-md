@@ -17,13 +17,20 @@ import type {
   UpdaterPort,
 } from './contracts'
 
-function subscribe<T>(event: string, callback: (payload: T) => void): () => void {
+function subscribe<T>(
+  event: string,
+  callback: (payload: T) => void,
+  onSubscribed?: () => void,
+): () => void {
   let disposed = false
   let unlisten: UnlistenFn | undefined
 
   void listen<T>(event, ({ payload }) => callback(payload)).then((stop) => {
     if (disposed) stop()
-    else unlisten = stop
+    else {
+      unlisten = stop
+      onSubscribed?.()
+    }
   })
 
   return () => {
@@ -177,7 +184,9 @@ export const tauriDesktopAdapter: DesktopPort = {
       cancelLabel,
     }),
   onMenuAction: (callback) => subscribe('menu-action', callback),
-  onOpenPath: (callback) => subscribe('open-path', callback),
-  notifyReady: () => void invoke('frontend_ready'),
+  onOpenPath: (callback) =>
+    subscribe('open-path', callback, () => {
+      void invoke('frontend_ready')
+    }),
   notifyQuitOk: () => void invoke('quit_confirmed'),
 }
