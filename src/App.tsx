@@ -63,6 +63,12 @@ import { useAppShortcuts } from './hooks/useAppShortcuts'
 import { isShortcutAction, type ShortcutAction } from './lib/shortcuts'
 import { copyImageElement } from './lib/richClipboard'
 import { mapWithConcurrencyLimit } from './lib/asyncPool'
+import { imageDimensionsFromBytes, planExportImageMemory } from './lib/imageBudget'
+import {
+  blobToDataUrl,
+  exportOwnedObjectUrlAttribute,
+  resizeImageBlob,
+} from './lib/exportImageAsset'
 import type { SettingsSection } from './components/Settings'
 
 interface FileEntry {
@@ -70,12 +76,19 @@ interface FileEntry {
   name: string
 }
 
+interface LocalExportImage {
+  image: HTMLImageElement
+  blob: Blob
+  width: number | null
+  height: number | null
+  displayWidth: number
+}
+
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 const EXPORT_WORK_CONCURRENCY = 2
-const MAX_EXPORT_IMAGE_BYTES = 32 * 1024 * 1024
-const MAX_EXPORT_EMBEDDED_BYTES = 64 * 1024 * 1024
-
-class ExportMemoryBudgetError extends Error {}
+const EXPORT_RESIZE_CONCURRENCY = 1
+const MAX_SINGLE_EXPORT_IMAGE_BYTES = 64 * 1024 * 1024
+const EXPORT_CONTENT_WIDTH = 800
 
 export default function App(): JSX.Element {
   // ── Settings (theme, width, i18n, CSS side-effects all live here) ──────────
@@ -641,57 +654,123 @@ export default function App(): JSX.Element {
         }
       })
 
-      // Inline xmd:// images as base64 so the HTML is fully self-contained.
+      // Inline local images without a compressed-total hard limit. For PDF/image
+      // exports, plan from decoded pixels and resize only the temporary copy.
       const imgs = Array.from(clone.querySelectorAll<HTMLImageElement>('img[src]'))
-      let embeddedBytes = 0
-      await mapWithConcurrencyLimit(imgs, EXPORT_WORK_CONCURRENCY, async (img) => {
-        const src = img.getAttribute('src') ?? ''
-        const paths = xmdAssetPaths(src)
-        if (paths.length === 0) return
+      const liveImgs = Array.from(pm.querySelectorAll<HTMLImageElement>('img[src]'))
+      const localImages = (
+        await mapWithConcurrencyLimit(
+          imgs,
+          EXPORT_WORK_CONCURRENCY,
+          async (image, index): Promise<LocalExportImage | null> => {
+            const source = image.getAttribute('src') ?? ''
+            const paths = xmdAssetPaths(source)
+            if (paths.length === 0) return null
 
-        let failure: unknown
-        for (const path of paths) {
-          try {
-            const bytes = await desktop.readBinaryFile(path, MAX_EXPORT_IMAGE_BYTES)
-            if (embeddedBytes + bytes.byteLength > MAX_EXPORT_EMBEDDED_BYTES) {
-              throw new ExportMemoryBudgetError(
-                '导出图片总大小超过 64 MB，请减少图片数量或压缩图片后重试',
-              )
+            let failure: unknown
+            for (const path of paths) {
+              try {
+                const bytes = await desktop.readBinaryFile(path, MAX_SINGLE_EXPORT_IMAGE_BYTES)
+                const blob = new Blob([blobPartFromBytes(bytes)], { type: imageMimeType(path) })
+                const parsed = imageDimensionsFromBytes(bytes)
+                const liveImage =
+                  liveImgs[index]?.getAttribute('src') === source
+                    ? liveImgs[index]
+                    : liveImgs.find((candidate) => candidate.getAttribute('src') === source)
+                const width = liveImage?.naturalWidth || parsed?.width || null
+                const height = liveImage?.naturalHeight || parsed?.height || null
+                const renderedWidth = liveImage?.getBoundingClientRect().width ?? 0
+                return {
+                  image,
+                  blob,
+                  width,
+                  height,
+                  displayWidth: Math.min(
+                    EXPORT_CONTENT_WIDTH,
+                    Math.max(1, renderedWidth || width || EXPORT_CONTENT_WIDTH),
+                  ),
+                }
+              } catch (error) {
+                failure = error
+              }
             }
-            embeddedBytes += bytes.byteLength
-            const blob = new Blob([blobPartFromBytes(bytes)], { type: imageMimeType(path) })
-            const dataUrl = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader()
-              reader.addEventListener(
-                'load',
-                () => {
-                  if (typeof reader.result === 'string') resolve(reader.result)
-                  else reject(new Error('图片转换结果无效'))
-                },
-                { once: true },
-              )
-              reader.addEventListener(
-                'error',
-                () => reject(reader.error ?? new Error('图片转换失败')),
-                { once: true },
-              )
-              reader.readAsDataURL(blob)
-            })
-            img.setAttribute('src', dataUrl)
-            return
-          } catch (error) {
-            if (error instanceof ExportMemoryBudgetError) throw error
-            failure = error
-          }
+            throw failure instanceof Error ? failure : new Error(`无法读取导出图片：${paths[0]}`)
+          },
+        )
+      ).filter((image): image is LocalExportImage => image !== null)
+
+      const plannedDimensions = new Map<HTMLImageElement, { width: number; height: number }>()
+      if (deferImageDecoding) {
+        const plannable = localImages.filter(
+          (image): image is LocalExportImage & { width: number; height: number } =>
+            image.width !== null && image.height !== null,
+        )
+        const plan = planExportImageMemory(
+          plannable.map((image) => ({
+            width: image.width,
+            height: image.height,
+            displayWidth: image.displayWidth,
+          })),
+          {
+            documentHeight: Math.max(pm.scrollHeight, pm.getBoundingClientRect().height),
+          },
+        )
+        plan.images.forEach((dimensions, index) => {
+          plannedDimensions.set(plannable[index].image, dimensions)
+        })
+
+        if (plan.overBudget) {
+          const estimatedMb = Math.ceil(plan.estimatedPeakBytes / (1024 * 1024))
+          const proceed = await desktop.confirm(
+            getLang() === 'en'
+              ? `This image-heavy export may use about ${estimatedMb} MB of memory. Images will be optimized to their visible export size. Continue?`
+              : `此多图文档预计导出峰值约 ${estimatedMb} MB。图片会按导出可见尺寸自动优化，是否继续？`,
+            getLang() === 'en' ? 'Large export' : '大型导出任务',
+            getLang() === 'en' ? 'Continue' : '继续导出',
+            getLang() === 'en' ? 'Cancel' : '取消',
+          )
+          if (!proceed) return null
         }
-        throw failure instanceof Error ? failure : new Error(`无法读取导出图片：${paths[0]}`)
-      })
+      }
+
+      await mapWithConcurrencyLimit(
+        localImages,
+        deferImageDecoding ? EXPORT_RESIZE_CONCURRENCY : EXPORT_WORK_CONCURRENCY,
+        async (localImage) => {
+          const target = plannedDimensions.get(localImage.image)
+          let output = localImage.blob
+          if (
+            target &&
+            localImage.width !== null &&
+            localImage.height !== null &&
+            (target.width < localImage.width || target.height < localImage.height)
+          ) {
+            output = await resizeImageBlob(
+              localImage.blob,
+              { width: localImage.width, height: localImage.height },
+              target,
+            )
+          }
+          if (deferImageDecoding) {
+            const objectUrl = URL.createObjectURL(output)
+            localImage.image.setAttribute('src', objectUrl)
+            localImage.image.setAttribute(exportOwnedObjectUrlAttribute(), objectUrl)
+          } else {
+            localImage.image.setAttribute('src', await blobToDataUrl(output))
+          }
+        },
+      )
+
       // Keep every source in the export document, but defer decoding so the
       // isolated renderer can load images one at a time.
       if (deferImageDecoding) {
         imgs.forEach((img) => {
           const source = img.getAttribute('src')
           if (!source) return
+          // Export frames are positioned far off-screen. WebKit will not load
+          // lazy images there, so make deferred export images explicitly eager.
+          img.setAttribute('loading', 'eager')
+          img.setAttribute('decoding', 'sync')
           img.setAttribute('data-xmd-export-src', source)
           img.removeAttribute('src')
         })
