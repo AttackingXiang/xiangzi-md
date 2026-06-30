@@ -1,21 +1,45 @@
-# Xiangzi MD 1.1
+# Xiangzi MD
 
-Xiangzi MD 1.1 是基于 Tauri 2、Rust、React 和 Milkdown 的本地优先 Markdown 编辑器。Electron 旧版保存在仓库的 `electron-legacy-v0.1` 分支；`main` 维护 Tauri 版本。
+> 写 Markdown，不该像在调试格式。
 
-编辑器、工作区、搜索、设置、菜单、单实例、退出保护以及 HTML/PDF/PNG/JPG 导出已经迁移。1.1 新增签名自动更新（GitHub 优先、Gitee 回退）、可冲突检测的自定义快捷键和分类设置页。PDF 当前采用分页位图，完整文档可导出；可选择文字和可点击链接仍在原生导出适配计划中。详细完成度见 [功能对照表](docs/FEATURE_PARITY.md)。
+Xiangzi MD 是一款开源、本地优先的所见即所得 Markdown 编辑器，支持 macOS 和 Windows。
 
-## 技术基线
+我喜欢 Typora 那种“光标走到哪儿，文字就在哪里成形”的感觉，但日常写文档时，我还经常要在一个文件夹里来回切换、全局找一句话、让图片乖乖待在约定目录，最后再把整篇内容连图复制给同事。Xiangzi MD 就是沿着这些小麻烦，一点点长出来的。
 
-- Tauri 2 + Rust
-- React 18 + TypeScript + Vite
-- Milkdown/Crepe、CodeMirror、Mermaid 暂时锁定为旧项目实际安装版本
-- npm 与 Cargo lockfile 必须提交，CI 只允许 `npm ci` 和 `cargo --locked`
+如果你正在找一个更自由的 Typora 替代，它值得试一圈：不用注册账号，不接管你的文件，也没有私有文档格式。不喜欢就关掉，原来的 `.md` 还安安稳稳待在原处。
 
-正式应用标识为 `com.guoxiangzi.xiangzimd`。
+[下载最新版](https://github.com/AttackingXiang/xiangzi-md/releases/latest) · [使用说明](docs/USER_GUIDE.md) · [提交问题或建议](https://github.com/AttackingXiang/xiangzi-md/issues)
+
+![Xiangzi MD 工作区与所见即所得编辑](docs/images/user-guide/01-workspace.png)
+
+## 它哪里顺手
+
+- **文件永远是你的**：直接读写本地 `.md` 文件，可继续用 Typora、Obsidian、VS Code 或 Git 管理。
+- **写作和源码随时切换**：所见即所得与源码模式编辑的是同一份 Markdown，不需要来回导入导出。
+- **不只会开一个文件**：文件夹工作区、多标签页、会话恢复、文件夹全文搜索和命令面板都内置好了。
+- **技术文档直接写**：支持 GFM 表格、代码高亮、Mermaid、KaTeX、任务列表和脚注。
+- **图片不再到处乱跑**：支持粘贴、拖入、预览，以及五种附件归档规则；整篇内容连同图片可直接复制到 Word、飞书或邮件。
+- **交付方式够多**：可导出完整 HTML、多页 PDF、PNG 或 JPEG 长图，并保留当前主题、代码、公式和图表效果。
+- **细节可以自己定**：专注模式、打字机模式、中英文界面、自定义 CSS，以及会检查冲突的自定义快捷键。
+
+![Mermaid、KaTeX 与代码高亮](docs/images/user-guide/02-rich-rendering.png)
+
+## 和 Typora 相比
+
+Xiangzi MD 保留了原地渲染的写作体验，同时把我自己经常缺的东西补了进来：多标签页、工作区全文搜索、命令面板、可拖拽重排的大纲、更细的图片目录规则，以及 PNG/JPEG 长图导出。
+
+它也还不完美。目前 PDF 为了保持排版一致，采用分页位图，文字不能选择或搜索；源码模式支持查找但暂不支持替换；Linux 安装包也还没准备好。项目仍在持续更新，遇到别扭的地方，欢迎直接提 [Issue](https://github.com/AttackingXiang/xiangzi-md/issues)。
+
+## 下载与安装
+
+- macOS：下载 Universal DMG，同时支持 Apple Silicon 和 Intel Mac。
+- Windows：下载 x64 安装程序。
+
+安装包都在 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/latest)。如果 GitHub 访问不方便，也可以使用 [Gitee Releases](https://gitee.com/tlqgyx/xiangzi-md/releases)。应用支持签名自动更新，更新检查会优先访问 GitHub，失败后回退到 Gitee。
 
 ## 本地开发
 
-先安装 Node 22 和 Rust stable。macOS 还需要 Xcode Command Line Tools；其他平台见 Tauri 官方前置条件。
+项目基于 Tauri 2、Rust、React 18、TypeScript 和 Milkdown。先准备 Node 22、npm 10 和 Rust stable；macOS 还需要 Xcode Command Line Tools。
 
 ```bash
 npm ci
@@ -28,29 +52,23 @@ npm run rust:check
 npm run tauri:build
 ```
 
-也可直接使用仓库的 `mise.toml` 安装并切换到 Node 22 / Rust stable：
+也可以使用仓库里的 `mise.toml`：
 
 ```bash
 mise install
 mise run check
 ```
 
-## 文档入口
+更多资料：
 
-- [使用说明](docs/USER_GUIDE.md)
 - [渲染效果示例](docs/RENDERING_SHOWCASE.md)
+- [功能与平台验收状态](docs/FEATURE_PARITY.md)
 - [架构说明](docs/ARCHITECTURE.md)
-- [迁移计划](docs/MIGRATION_PLAN.md)
-- [功能对照表](docs/FEATURE_PARITY.md)
-- [工程约束](docs/ENGINEERING_CONSTRAINTS.md)
+- [工程与体验审计](audit/ENGINEERING_UX_AUDIT.md)
 - [更新签名与发布](docs/UPDATE_SIGNING.md)
-- [1.1 工程与体验审计](audit/ENGINEERING_UX_AUDIT.md)
-- [扫描与体积基线](docs/BASELINE.md)
-- [macOS 验收记录](docs/QA_MACOS_2026-06-27.md)
-- [导出能力技术决策](docs/adr/0001-export-parity-spike.md)
 
-## 自动发布
+## English
 
-版本号变更推送到 `main` 后，GitHub Actions 会为该版本自动创建 GitHub Release，并分别构建 macOS Universal DMG 与 Windows x64 NSIS。发布成功后会自动同步安装包、更新签名和 `latest.json` 到 Gitee；普通代码提交仍只运行 CI 和源码镜像，避免重复发布同一版本。
+Xiangzi MD is an open-source, local-first WYSIWYG Markdown editor for macOS and Windows. It edits ordinary `.md` files and combines in-place rendering with workspace folders, tabs, full-text search, a command palette, Mermaid and KaTeX support, flexible local image handling, and HTML/PDF/PNG/JPEG export. Built with Tauri 2, Rust, React, and Milkdown. Licensed under MIT.
 
-发布前必须在 GitHub Actions 配置 `TAURI_SIGNING_PRIVATE_KEY`。私钥不得提交仓库，配置和轮换步骤见 [更新签名与发布](docs/UPDATE_SIGNING.md)。
+If Xiangzi MD saves you a little friction, a star helps more people find it. Bug reports and honest feedback are equally welcome.
