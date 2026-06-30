@@ -24,6 +24,10 @@ import Lightbox from './components/Lightbox'
 import ContextMenu, { type MenuItem } from './components/ContextMenu'
 import InputDialog from './components/InputDialog'
 import ExportCompleteDialog from './components/ExportCompleteDialog'
+import UnsavedChangesDialog, {
+  type CloseDecision,
+  type CloseReason,
+} from './components/UnsavedChangesDialog'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette, { type Command } from './components/CommandPalette'
 import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
@@ -31,6 +35,7 @@ import { escapeHtmlText, serializeStyleSheets } from './lib/exportStyles'
 import { getLang, t } from './lib/i18n'
 import { baseName, dirName } from './lib/path'
 import { replaceMovedPath } from './lib/treeDrag'
+import { imageMimeType, xmdAssetPaths } from './lib/asset'
 import {
   Bold,
   Italic,
@@ -49,13 +54,14 @@ import {
   TextSelect,
 } from 'lucide-react'
 import { parseOutline } from './lib/outline'
-import type { Folder } from './types'
+import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
 import { useFileOps } from './hooks/useFileOps'
 import { useTreeOps } from './hooks/useTreeOps'
 import { useUpdater } from './hooks/useUpdater'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
 import { isShortcutAction, type ShortcutAction } from './lib/shortcuts'
+import { copyImageElement } from './lib/richClipboard'
 import type { SettingsSection } from './components/Settings'
 
 interface FileEntry {
@@ -77,6 +83,36 @@ export default function App(): JSX.Element {
   } = useSettings()
 
   const lang = settings?.language ?? 'zh'
+
+  // ── Unsaved changes confirmation ─────────────────────────────────────────
+  const closeRequestRef = useRef<{
+    tabs: Tab[]
+    reason: CloseReason
+    resolve: (decision: CloseDecision) => void
+  } | null>(null)
+  const [unsavedCloseRequest, setUnsavedCloseRequest] = useState<{
+    tabs: Tab[]
+    reason: CloseReason
+  } | null>(null)
+  const requestCloseDecision = useCallback(
+    (dirtyTabs: Tab[], reason: CloseReason = 'close'): Promise<CloseDecision> =>
+      new Promise((resolve) => {
+        // 模态框打开期间拒绝叠加第二个关闭请求，避免覆盖前一个 Promise。
+        if (closeRequestRef.current) {
+          resolve('cancel')
+          return
+        }
+        closeRequestRef.current = { tabs: dirtyTabs, reason, resolve }
+        setUnsavedCloseRequest({ tabs: dirtyTabs, reason })
+      }),
+    [],
+  )
+  const resolveCloseDecision = useCallback((decision: CloseDecision): void => {
+    const request = closeRequestRef.current
+    closeRequestRef.current = null
+    setUnsavedCloseRequest(null)
+    request?.resolve(decision)
+  }, [])
 
   // ── Folder state ───────────────────────────────────────────────────────────
   const [folder, setFolder] = useState<Folder | null>(null)
@@ -105,10 +141,22 @@ export default function App(): JSX.Element {
     closeRight,
     updateContent,
     restoreSession,
-    hasDirtyTabs,
-  } = useFileOps({ pushRecentFile, lang })
+  } = useFileOps({ pushRecentFile, lang, requestCloseDecision })
 
   const activeDocDir = activeTab ? (dirName(activeTab.path) ?? folder?.root ?? null) : null
+  // 编辑器会在标签切换时卸载；滚动位置按“标签 + 编辑模式”独立保存。
+  // 使用 ref 避免滚动过程中触发整棵应用树重渲染。
+  const wysiwygScrollPositions = useRef(new Map<string, number>())
+  const sourceScrollPositions = useRef(new Map<string, number>())
+  useEffect(() => {
+    const openIds = new Set(tabs.map((tab) => tab.id))
+    for (const id of wysiwygScrollPositions.current.keys()) {
+      if (!openIds.has(id)) wysiwygScrollPositions.current.delete(id)
+    }
+    for (const id of sourceScrollPositions.current.keys()) {
+      if (!openIds.has(id)) sourceScrollPositions.current.delete(id)
+    }
+  }, [tabs])
   // ── Panel widths (drag-to-resize) ──────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [outlineWidth, setOutlineWidth] = useState(240)
@@ -330,22 +378,35 @@ export default function App(): JSX.Element {
       const list = stateRef.current.tabs
       const idx = list.findIndex((tb) => tb.id === id)
       const items: MenuItem[] = [
-        { label: t('关闭'), onClick: () => closeTab(id) },
-        { label: t('关闭其他'), onClick: () => closeOthers(id) },
+        { label: t('关闭'), onClick: () => void closeTab(id) },
+        { label: t('关闭其他'), onClick: () => void closeOthers(id) },
       ]
-      if (idx > 0) items.push({ label: t('关闭左侧全部'), onClick: () => closeLeft(id) })
+      if (idx > 0) items.push({ label: t('关闭左侧全部'), onClick: () => void closeLeft(id) })
       if (idx >= 0 && idx < list.length - 1)
-        items.push({ label: t('关闭右侧全部'), onClick: () => closeRight(id) })
-      items.push({ label: t('关闭全部'), onClick: closeAllTabs, separatorBefore: true })
+        items.push({ label: t('关闭右侧全部'), onClick: () => void closeRight(id) })
+      items.push({
+        label: t('关闭全部'),
+        onClick: () => void closeAllTabs(),
+        separatorBefore: true,
+      })
       setCtxMenu({ x, y, items })
     },
     [closeTab, closeOthers, closeLeft, closeRight, closeAllTabs],
   )
 
   // ── Editor right-click menu ────────────────────────────────────────────────
-  const openEditorContext = useCallback((x: number, y: number) => {
+  const openEditorContext = useCallback((x: number, y: number, image?: HTMLImageElement) => {
     const sz = 15
     const items: MenuItem[] = [
+      ...(image
+        ? [
+            {
+              label: t('复制图片'),
+              icon: <Copy size={sz} />,
+              onClick: () => void copyImageElement(image),
+            },
+          ]
+        : []),
       { label: t('剪切'), icon: <Scissors size={sz} />, hint: '⌘X', onClick: clipboardCmd.cut },
       { label: t('复制'), icon: <Copy size={sz} />, hint: '⌘C', onClick: clipboardCmd.copy },
       {
@@ -569,19 +630,38 @@ export default function App(): JSX.Element {
       await Promise.all(
         imgs.map(async (img) => {
           const src = img.getAttribute('src') ?? ''
-          if (!src.startsWith('xmd://')) return
-          try {
-            const res = await fetch(src)
-            const blob = await res.blob()
-            const b64 = await new Promise<string>((resolve) => {
-              const reader = new FileReader()
-              reader.onload = () => resolve(reader.result as string)
-              reader.readAsDataURL(blob)
-            })
-            img.setAttribute('src', b64)
-          } catch {
-            /* leave original src */
+          const paths = xmdAssetPaths(src)
+          if (paths.length === 0) return
+
+          let failure: unknown
+          for (const path of paths) {
+            try {
+              const bytes = Uint8Array.from(await desktop.readBinaryFile(path))
+              const blob = new Blob([bytes.buffer], { type: imageMimeType(path) })
+              const dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader()
+                reader.addEventListener(
+                  'load',
+                  () => {
+                    if (typeof reader.result === 'string') resolve(reader.result)
+                    else reject(new Error('图片转换结果无效'))
+                  },
+                  { once: true },
+                )
+                reader.addEventListener(
+                  'error',
+                  () => reject(reader.error ?? new Error('图片转换失败')),
+                  { once: true },
+                )
+                reader.readAsDataURL(blob)
+              })
+              img.setAttribute('src', dataUrl)
+              return
+            } catch (error) {
+              failure = error
+            }
           }
+          throw failure instanceof Error ? failure : new Error(`无法读取导出图片：${paths[0]}`)
         }),
       )
 
@@ -777,7 +857,7 @@ ${liveStyles}
           if (id) void saveAsTab(id)
           break
         case 'close-tab':
-          if (id) closeTab(id)
+          if (id) void closeTab(id)
           break
         case 'find':
           setShowFind(true)
@@ -785,6 +865,9 @@ ${liveStyles}
         case 'search-in-folder':
           setSidebarVisible(true)
           setSearchView(true)
+          break
+        case 'select-all':
+          clipboardCmd.selectAll()
           break
         case 'command-palette':
           setShowPalette(true)
@@ -877,23 +960,22 @@ ${liveStyles}
           void updater.checkNow(true)
           break
         case 'query-dirty': {
-          const dirty = hasDirtyTabs()
-          if (!dirty) {
+          const dirtyTabs = stateRef.current.tabs.filter((tab) => tab.dirty)
+          if (dirtyTabs.length === 0) {
             desktop.notifyQuitOk()
             break
           }
           if (quitPromptOpenRef.current) break
           quitPromptOpenRef.current = true
-          const english = getLang() === 'en'
-          void desktop
-            .confirm(
-              english ? 'You have unsaved changes. Quit anyway?' : '还有未保存的文件，确定退出？',
-              english ? 'Unsaved changes' : '未保存的修改',
-              english ? 'Quit' : '退出',
-              english ? 'Cancel' : '取消',
-            )
-            .then((proceed) => {
-              if (proceed) desktop.notifyQuitOk()
+          void requestCloseDecision(dirtyTabs, 'quit')
+            .then(async (decision) => {
+              if (decision === 'cancel') return
+              if (decision === 'save') {
+                for (const tab of dirtyTabs) {
+                  if (!(await saveTab(tab.id))) return
+                }
+              }
+              desktop.notifyQuitOk()
             })
             .finally(() => {
               quitPromptOpenRef.current = false
@@ -902,7 +984,16 @@ ${liveStyles}
         }
       }
     })
-  }, [dispatchShortcut, exportHTML, exportPDF, exportImage, hasDirtyTabs, updater.checkNow])
+  }, [
+    dispatchShortcut,
+    exportHTML,
+    exportPDF,
+    exportImage,
+    requestCloseDecision,
+    saveTab,
+    stateRef,
+    updater.checkNow,
+  ])
 
   // Keep web links outside the editor webview. Relative/local links continue
   // through the editor so wiki-style and document navigation remain intact.
@@ -989,6 +1080,7 @@ ${liveStyles}
 
         <div
           className="editor-area"
+          onMouseDownCapture={() => window.dispatchEvent(new Event('xmd-clear-select-all'))}
           onDoubleClickCapture={(event) => {
             if (!(event.target instanceof Element)) return
             const target = event.target
@@ -1005,7 +1097,14 @@ ${liveStyles}
           onContextMenu={(e) => {
             if (!activeTab) return
             e.preventDefault()
-            openEditorContext(e.clientX, e.clientY)
+            const target = e.target instanceof Element ? e.target : null
+            const image =
+              target instanceof HTMLImageElement
+                ? target
+                : target
+                    ?.closest('.image-wrapper, .milkdown-image-inline')
+                    ?.querySelector<HTMLImageElement>('img')
+            openEditorContext(e.clientX, e.clientY, image ?? undefined)
           }}
         >
           {activeTab ? (
@@ -1013,6 +1112,10 @@ ${liveStyles}
               <SourceEditor
                 key={activeTab.id + '-src'}
                 content={activeTab.content}
+                initialScrollTop={sourceScrollPositions.current.get(activeTab.id) ?? 0}
+                onScrollTopChange={(scrollTop) =>
+                  sourceScrollPositions.current.set(activeTab.id, scrollTop)
+                }
                 onChange={(c) => updateContent(activeTab.id, c)}
               />
             ) : (
@@ -1028,6 +1131,10 @@ ${liveStyles}
                   theme={resolvedTheme}
                   focusMode={focusMode}
                   typewriterMode={typewriterMode}
+                  initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
+                  onScrollTopChange={(scrollTop) =>
+                    wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
+                  }
                   onChange={(c) => updateContent(activeTab.id, c)}
                 />
               </Suspense>
@@ -1102,6 +1209,14 @@ ${liveStyles}
           confirmText={inputDialog.confirmText}
           onSubmit={inputDialog.onSubmit}
           onClose={() => setInputDialog(null)}
+        />
+      )}
+
+      {unsavedCloseRequest && (
+        <UnsavedChangesDialog
+          tabs={unsavedCloseRequest.tabs}
+          reason={unsavedCloseRequest.reason}
+          onDecision={resolveCloseDecision}
         />
       )}
 

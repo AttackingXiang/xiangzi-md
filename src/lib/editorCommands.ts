@@ -38,11 +38,13 @@ export const clipboardCmd = {
   cut: () => document.execCommand('cut'),
   paste: () => document.execCommand('paste'),
   selectAll: () => {
-    const view = editorBridge.get()
-    if (view) {
-      view.focus()
-      document.execCommand('selectAll')
-    } else {
+    const request = new Event('xmd-select-all', { cancelable: true })
+    if (!window.dispatchEvent(request)) return
+    if (
+      document.activeElement instanceof HTMLInputElement ||
+      document.activeElement instanceof HTMLTextAreaElement ||
+      document.activeElement?.getAttribute('contenteditable') === 'true'
+    ) {
       document.execCommand('selectAll')
     }
   },

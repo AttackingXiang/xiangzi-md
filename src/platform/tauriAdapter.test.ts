@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { writeFile } from '@tauri-apps/plugin-fs'
+import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { check } from '@tauri-apps/plugin-updater'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderDocumentImage, renderDocumentPdf } from '../lib/exportDocument'
@@ -9,8 +10,15 @@ import { tauriDesktopAdapter, tauriUpdaterAdapter } from './tauriAdapter'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }))
+const { imageFromBytesMock } = vi.hoisted(() => ({ imageFromBytesMock: vi.fn() }))
+
+vi.mock('@tauri-apps/api/image', () => ({ Image: { fromBytes: imageFromBytesMock } }))
+vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
+  writeHtml: vi.fn(),
+  writeImage: vi.fn(),
+}))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ ask: vi.fn(), open: vi.fn(), save: vi.fn() }))
-vi.mock('@tauri-apps/plugin-fs', () => ({ writeFile: vi.fn() }))
+vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: vi.fn(), writeFile: vi.fn() }))
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(), revealItemInDir: vi.fn() }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }))
 vi.mock('@tauri-apps/plugin-updater', () => ({ check: vi.fn() }))
@@ -22,8 +30,11 @@ vi.mock('../lib/exportDocument', () => ({
 
 const invokeMock = vi.mocked(invoke)
 const listenMock = vi.mocked(listen)
+const writeHtmlMock = vi.mocked(writeHtml)
+const writeImageMock = vi.mocked(writeImage)
 const openMock = vi.mocked(open)
 const saveMock = vi.mocked(save)
+const readFileMock = vi.mocked(readFile)
 const writeFileMock = vi.mocked(writeFile)
 const checkMock = vi.mocked(check)
 const renderDocumentImageMock = vi.mocked(renderDocumentImage)
@@ -33,8 +44,12 @@ describe('tauriDesktopAdapter', () => {
   beforeEach(() => {
     invokeMock.mockReset()
     listenMock.mockReset()
+    imageFromBytesMock.mockReset()
+    writeHtmlMock.mockReset()
+    writeImageMock.mockReset()
     openMock.mockReset()
     saveMock.mockReset()
+    readFileMock.mockReset()
     writeFileMock.mockReset()
     renderDocumentImageMock.mockReset()
     renderDocumentPdfMock.mockReset()
@@ -47,6 +62,14 @@ describe('tauriDesktopAdapter', () => {
 
     await expect(tauriDesktopAdapter.readFile(file.path)).resolves.toEqual(file)
     expect(invokeMock).toHaveBeenCalledWith('read_file', { path: file.path })
+  })
+
+  it('reads binary files through the scoped file-system plugin', async () => {
+    const bytes = new Uint8Array([137, 80, 78, 71])
+    readFileMock.mockResolvedValueOnce(bytes)
+
+    await expect(tauriDesktopAdapter.readBinaryFile('/notes/a.png')).resolves.toEqual(bytes)
+    expect(readFileMock).toHaveBeenCalledWith('/notes/a.png')
   })
 
   it('authorizes selected folders recursively before loading the workspace tree', async () => {
@@ -96,6 +119,20 @@ describe('tauriDesktopAdapter', () => {
       fileName: 'demo.png',
       data: [1, 2, 3],
     })
+  })
+
+  it('writes rich HTML and PNG images through the native clipboard', async () => {
+    const close = vi.fn().mockResolvedValue(undefined)
+    const image = { close }
+    imageFromBytesMock.mockResolvedValueOnce(image)
+
+    await tauriDesktopAdapter.writeClipboardHtml('<p>A</p>', 'A')
+    await tauriDesktopAdapter.writeClipboardImage(new Uint8Array([137, 80, 78, 71]))
+
+    expect(writeHtmlMock).toHaveBeenCalledWith('<p>A</p>', 'A')
+    expect(imageFromBytesMock).toHaveBeenCalledWith(new Uint8Array([137, 80, 78, 71]))
+    expect(writeImageMock).toHaveBeenCalledWith(image)
+    expect(close).toHaveBeenCalledOnce()
   })
 
   it('renders and writes PDF bytes only after the user chooses a destination', async () => {

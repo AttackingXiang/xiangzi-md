@@ -9,6 +9,7 @@ export type ShortcutAction =
   | 'close-tab'
   | 'find'
   | 'search-in-folder'
+  | 'select-all'
   | 'command-palette'
   | 'toggle-sidebar'
   | 'toggle-outline'
@@ -84,6 +85,13 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     labelZh: '在文件夹中搜索',
     labelEn: 'Search in Folder',
     defaultBinding: 'Mod+Shift+F',
+  },
+  {
+    id: 'select-all',
+    category: 'navigation',
+    labelZh: '全选文章',
+    labelEn: 'Select All Document',
+    defaultBinding: 'Mod+A',
   },
   {
     id: 'command-palette',

@@ -171,6 +171,12 @@ fn edit_menu(
         tr(language, "在文件夹中搜索", "Search in Folder"),
         accelerator(shortcuts, "search-in-folder", "Mod+Shift+F"),
     )?;
+    let select_all = action(
+        app,
+        "select-all",
+        tr(language, "全选", "Select All"),
+        accelerator(shortcuts, "select-all", "Mod+A"),
+    )?;
 
     SubmenuBuilder::new(app, tr(language, "编辑", "Edit"))
         .undo_with_text(tr(language, "撤销", "Undo"))
@@ -179,7 +185,7 @@ fn edit_menu(
         .cut_with_text(tr(language, "剪切", "Cut"))
         .copy_with_text(tr(language, "复制", "Copy"))
         .paste_with_text(tr(language, "粘贴", "Paste"))
-        .select_all_with_text(tr(language, "全选", "Select All"))
+        .item(&select_all)
         .separator()
         .item(&find)
         .item(&search)

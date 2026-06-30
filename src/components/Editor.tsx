@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import { desktop } from '../platform'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import { editorViewCtx } from '@milkdown/kit/core'
+import { AllSelection } from '@milkdown/kit/prose/state'
+import type { EditorView } from '@milkdown/kit/prose/view'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { resolveAssetURL } from '../lib/asset'
@@ -14,6 +16,7 @@ import { editorBridge } from '../lib/editorBridge'
 import { renderMermaid } from '../lib/mermaidPreview'
 import { t } from '../lib/i18n'
 import { typewriterScrollDelta } from '../lib/typewriterScroll'
+import { setupRichClipboard } from '../lib/richClipboard'
 
 interface Props {
   content: string
@@ -30,6 +33,8 @@ interface Props {
   theme: 'light' | 'dark'
   focusMode: boolean
   typewriterMode: boolean
+  initialScrollTop?: number
+  onScrollTopChange?: (scrollTop: number) => void
   onChange: (markdown: string) => void
 }
 
@@ -50,11 +55,17 @@ export default function Editor({
   theme,
   focusMode,
   typewriterMode,
+  initialScrollTop = 0,
+  onScrollTopChange,
   onChange,
 }: Props): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const contentRef = useRef(content)
+  contentRef.current = content
+  const onScrollTopChangeRef = useRef(onScrollTopChange)
+  onScrollTopChangeRef.current = onScrollTopChange
   // docDir 可能在保存后变化（同一标签重命名/落盘），用 ref 保证回调读到最新值
   const docDirRef = useRef(docDir)
   docDirRef.current = docDir
@@ -152,14 +163,16 @@ export default function Editor({
     crepe.editor.use(searchPlugin)
     crepe.editor.use(headingFoldPlugin)
 
+    let ready = false
+    let userEdited = false
+    let baselineMarkdown = content
     crepe.on((listener) => {
-      // Skip the very first markdownUpdated after mount — Milkdown normalizes
-      // the content on initialization (trailing newline, whitespace, etc.) which
-      // would mark the tab dirty even though the user hasn't typed anything.
-      let mounted = false
       listener.markdownUpdated((_ctx, markdown) => {
-        if (!mounted) {
-          mounted = true
+        // 初始化阶段 Milkdown 会规范化 Markdown；以 create 完成后的内容为基线，
+        // 只有真实输入/编辑操作发生后才提交，避免异步初始化把刚打开的文件标脏。
+        if (!ready || destroyed) return
+        if (!userEdited) {
+          baselineMarkdown = markdown
           return
         }
         onChangeRef.current(markdown)
@@ -167,7 +180,55 @@ export default function Editor({
     })
 
     let destroyed = false
+    let editorView: EditorView | undefined
     let disposeTableResize: (() => void) | undefined
+    const disposeRichClipboard = setupRichClipboard(root)
+    const clearSelectAllVisual = (): void => {
+      if (!root.classList.contains('select-all-active')) return
+      root.classList.remove('select-all-active')
+      window.getSelection()?.removeAllRanges()
+    }
+    const clearSelectAllOnKey = (event: KeyboardEvent): void => {
+      const keepSelection =
+        (event.metaKey || event.ctrlKey) && ['a', 'c'].includes(event.key.toLowerCase())
+      const editingShortcut =
+        (event.metaKey || event.ctrlKey) &&
+        ['0', '1', '2', '3', '4', '5', '6', 'b', 'i'].includes(event.key.toLowerCase())
+      if (editingShortcut) userEdited = true
+      if (!keepSelection) clearSelectAllVisual()
+    }
+    const markEditorControl = (event: PointerEvent): void => {
+      if (!(event.target instanceof Element)) return
+      if (
+        event.target.closest(
+          '.milkdown-toolbar button, .milkdown-block-handle button, .milkdown-slash-menu button, [role="menuitem"]',
+        )
+      ) {
+        userEdited = true
+      }
+    }
+    const onSelectAllRequest = (event: Event): void => {
+      if (!editorView) return
+      event.preventDefault()
+      editorView.dispatch(editorView.state.tr.setSelection(new AllSelection(editorView.state.doc)))
+      editorView.focus()
+      root.classList.add('select-all-active')
+    }
+    window.addEventListener('xmd-select-all', onSelectAllRequest)
+    window.addEventListener('xmd-clear-select-all', clearSelectAllVisual)
+    document.addEventListener('pointerdown', clearSelectAllVisual, true)
+    root.addEventListener('pointerdown', clearSelectAllVisual, true)
+    root.addEventListener('pointerdown', markEditorControl, true)
+    root.addEventListener('keydown', clearSelectAllOnKey, true)
+    const reportScroll = (): void => onScrollTopChangeRef.current?.(root.scrollTop)
+    const markUserEdited = (): void => {
+      userEdited = true
+    }
+    root.addEventListener('scroll', reportScroll, { passive: true })
+    root.addEventListener('beforeinput', markUserEdited)
+    root.addEventListener('paste', markUserEdited)
+    root.addEventListener('cut', markUserEdited)
+    root.addEventListener('drop', markUserEdited)
     void crepe
       .create()
       .then(() => {
@@ -177,14 +238,47 @@ export default function Editor({
         }
         disposeTableResize = setupTableResize(root)
         // 暴露 ProseMirror 视图给查找/替换
-        crepe.editor.action((ctx) => editorBridge.set(ctx.get(editorViewCtx)))
+        crepe.editor.action((ctx) => {
+          editorView = ctx.get(editorViewCtx)
+          editorBridge.set(editorView)
+        })
+        baselineMarkdown = crepe.getMarkdown()
+        ready = true
+        requestAnimationFrame(() => {
+          if (!destroyed) root.scrollTop = initialScrollTop
+        })
       })
       .catch((error: unknown) => console.error('Editor initialization failed', error))
 
     return () => {
       destroyed = true
       disposeTableResize?.()
-      editorBridge.set(null)
+      disposeRichClipboard()
+      window.removeEventListener('xmd-select-all', onSelectAllRequest)
+      window.removeEventListener('xmd-clear-select-all', clearSelectAllVisual)
+      document.removeEventListener('pointerdown', clearSelectAllVisual, true)
+      root.removeEventListener('pointerdown', clearSelectAllVisual, true)
+      root.removeEventListener('pointerdown', markEditorControl, true)
+      root.removeEventListener('keydown', clearSelectAllOnKey, true)
+      root.removeEventListener('scroll', reportScroll)
+      root.removeEventListener('beforeinput', markUserEdited)
+      root.removeEventListener('paste', markUserEdited)
+      root.removeEventListener('cut', markUserEdited)
+      root.removeEventListener('drop', markUserEdited)
+      reportScroll()
+      clearSelectAllVisual()
+      if (ready && userEdited) {
+        try {
+          const latestMarkdown = crepe.getMarkdown()
+          if (latestMarkdown !== baselineMarkdown && latestMarkdown !== contentRef.current) {
+            onChangeRef.current(latestMarkdown)
+          }
+        } catch {
+          // 编辑器已进入销毁流程时，不再读取状态。
+        }
+      }
+      if (editorBridge.get() === editorView) editorBridge.set(null)
+      editorView = undefined
       void crepe.destroy()
     }
     // 仅在挂载时创建；内容更新由 Crepe 内部维护

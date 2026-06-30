@@ -74,6 +74,8 @@ export interface Tab {
   path: string | null
   name: string
   content: string
+  /** 最近一次成功保存/读取的内容，用于判断脏状态和展示关闭前差异 */
+  savedContent: string
   /** 是否有未保存的修改 */
   dirty: boolean
 }
