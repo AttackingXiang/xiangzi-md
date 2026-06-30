@@ -5,7 +5,15 @@ use crate::{
     },
     infrastructure::workspace::ensure_allowed,
 };
-use std::{ffi::OsStr, fs, path::Path};
+use std::{
+    ffi::OsStr,
+    fs,
+    path::Path,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+};
 use tauri::AppHandle;
 use walkdir::WalkDir;
 
@@ -14,6 +22,36 @@ const MAX_RESULTS: usize = 400;
 const MAX_MATCHES_PER_FILE: usize = 20;
 const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const IGNORED_DIRECTORIES: &[&str] = &[".git", "node_modules", ".obsidian", ".vscode"];
+
+#[derive(Clone, Default)]
+pub struct SearchCancellation {
+    generation: Arc<AtomicU64>,
+}
+
+pub struct SearchToken {
+    generation: u64,
+    current: Arc<AtomicU64>,
+}
+
+impl SearchCancellation {
+    pub fn begin(&self) -> SearchToken {
+        let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
+        SearchToken {
+            generation,
+            current: Arc::clone(&self.generation),
+        }
+    }
+
+    pub fn cancel(&self) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+impl SearchToken {
+    fn is_cancelled(&self) -> bool {
+        self.current.load(Ordering::Acquire) != self.generation
+    }
+}
 
 fn is_markdown(path: &Path) -> bool {
     path.extension()
@@ -25,7 +63,12 @@ fn is_markdown(path: &Path) -> bool {
         })
 }
 
-pub fn search_in_folder(app: &AppHandle, root: &Path, query: &str) -> AppResult<Vec<SearchResult>> {
+pub fn search_in_folder(
+    app: &AppHandle,
+    root: &Path,
+    query: &str,
+    cancellation: &SearchToken,
+) -> AppResult<Vec<SearchResult>> {
     ensure_allowed(app, root)?;
     let trimmed = query.trim();
     if trimmed.is_empty() {
@@ -47,6 +90,9 @@ pub fn search_in_folder(app: &AppHandle, root: &Path, query: &str) -> AppResult<
         })
         .filter_map(Result::ok)
     {
+        if cancellation.is_cancelled() {
+            return Ok(Vec::new());
+        }
         if match_count >= MAX_RESULTS || file_count >= MAX_FILES {
             break;
         }
@@ -69,6 +115,9 @@ pub fn search_in_folder(app: &AppHandle, root: &Path, query: &str) -> AppResult<
 
         let mut matches = Vec::new();
         for (index, line) in content.lines().enumerate() {
+            if cancellation.is_cancelled() {
+                return Ok(Vec::new());
+            }
             if line.to_lowercase().contains(&needle) {
                 matches.push(SearchMatch {
                     line_number: index + 1,
@@ -93,7 +142,7 @@ pub fn search_in_folder(app: &AppHandle, root: &Path, query: &str) -> AppResult<
 
 #[cfg(test)]
 mod tests {
-    use super::is_markdown;
+    use super::{is_markdown, SearchCancellation};
     use std::path::Path;
 
     #[test]
@@ -101,5 +150,19 @@ mod tests {
         assert!(is_markdown(Path::new("README.MD")));
         assert!(is_markdown(Path::new("page.markdown")));
         assert!(!is_markdown(Path::new("page.html")));
+    }
+
+    #[test]
+    fn starting_or_cancelling_a_search_invalidates_the_previous_token() {
+        let cancellation = SearchCancellation::default();
+        let first = cancellation.begin();
+        assert!(!first.is_cancelled());
+
+        let second = cancellation.begin();
+        assert!(first.is_cancelled());
+        assert!(!second.is_cancelled());
+
+        cancellation.cancel();
+        assert!(second.is_cancelled());
     }
 }

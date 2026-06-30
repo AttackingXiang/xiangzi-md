@@ -28,6 +28,7 @@ const SHORTCUT_ACTIONS: &[&str] = &[
     "close-tab",
     "find",
     "search-in-folder",
+    "select-all",
     "command-palette",
     "toggle-sidebar",
     "toggle-outline",
@@ -183,16 +184,18 @@ impl SettingsStore {
 
 fn load_settings(app: &AppHandle) -> AppResult<AppSettings> {
     let settings_path = settings_file(app)?;
-    let (mut settings, imported) = if settings_path.is_file() {
-        (read_settings(&settings_path)?, false)
+    let (mut settings, source_schema_version, imported) = if settings_path.is_file() {
+        let loaded = read_settings(&settings_path)?;
+        (loaded.settings, loaded.schema_version, false)
     } else if let Some(legacy) = legacy_settings_file().filter(|path| path.is_file()) {
-        (read_settings(&legacy)?, true)
+        let loaded = read_settings(&legacy)?;
+        (loaded.settings, loaded.schema_version, true)
     } else {
-        (AppSettings::default(), true)
+        (AppSettings::default(), SETTINGS_SCHEMA_VERSION, true)
     };
+    migrate_settings(&mut settings, source_schema_version)?;
     sanitize_loaded_settings(&mut settings);
-    if imported || settings.schema_version != SETTINGS_SCHEMA_VERSION {
-        settings.schema_version = SETTINGS_SCHEMA_VERSION;
+    if imported || source_schema_version < SETTINGS_SCHEMA_VERSION {
         write_settings(&settings_path, &settings)?;
     }
     Ok(settings)
@@ -209,10 +212,70 @@ fn legacy_settings_file() -> Option<PathBuf> {
     dirs::data_dir().map(|directory| directory.join("Xiangzi MD").join("settings.json"))
 }
 
-fn read_settings(path: &Path) -> AppResult<AppSettings> {
+struct LoadedSettings {
+    settings: AppSettings,
+    schema_version: u32,
+}
+
+fn read_settings(path: &Path) -> AppResult<LoadedSettings> {
     let raw = fs::read_to_string(path).map_err(|error| AppError::io("读取设置失败", error))?;
-    serde_json::from_str(&raw)
-        .map_err(|error| AppError::new("settings_invalid", format!("设置格式无效：{error}")))
+    parse_settings(&raw)
+}
+
+fn parse_settings(raw: &str) -> AppResult<LoadedSettings> {
+    let value: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|error| AppError::new("settings_invalid", format!("设置格式无效：{error}")))?;
+    let schema_version = match value.get("schemaVersion") {
+        None => 0,
+        Some(value) => value
+            .as_u64()
+            .and_then(|version| u32::try_from(version).ok())
+            .ok_or_else(|| AppError::new("settings_invalid", "设置版本号无效"))?,
+    };
+    let mut settings: AppSettings = serde_json::from_value(value)
+        .map_err(|error| AppError::new("settings_invalid", format!("设置格式无效：{error}")))?;
+    settings.schema_version = schema_version;
+    Ok(LoadedSettings {
+        settings,
+        schema_version,
+    })
+}
+
+fn migrate_settings(settings: &mut AppSettings, source_version: u32) -> AppResult<()> {
+    if source_version > SETTINGS_SCHEMA_VERSION {
+        return Err(AppError::new(
+            "settings_version_unsupported",
+            format!(
+                "设置来自更高版本（schema {source_version}），当前仅支持 schema {SETTINGS_SCHEMA_VERSION}"
+            ),
+        ));
+    }
+
+    let mut version = source_version;
+    while version < SETTINGS_SCHEMA_VERSION {
+        match version {
+            0 => migrate_v0_to_v1(settings),
+            1 => migrate_v1_to_v2(settings),
+            _ => {
+                return Err(AppError::new(
+                    "settings_migration_missing",
+                    format!("缺少从 schema {version} 开始的设置迁移"),
+                ));
+            }
+        }
+        version += 1;
+        settings.schema_version = version;
+    }
+    Ok(())
+}
+
+fn migrate_v0_to_v1(_settings: &mut AppSettings) {
+    // Legacy settings did not carry a schema version. Serde has already supplied
+    // the defaults introduced by schema 1.
+}
+
+fn migrate_v1_to_v2(_settings: &mut AppSettings) {
+    // Schema 2 only added fields with backward-compatible defaults.
 }
 
 fn sanitize_loaded_settings(settings: &mut AppSettings) {
@@ -403,17 +466,33 @@ fn authorize_settings_paths(app: &AppHandle, settings: &AppSettings) {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_patch, validate_settings, AppSettings, SettingsPatch, SETTINGS_SCHEMA_VERSION,
+        apply_patch, migrate_settings, parse_settings, validate_settings, AppSettings,
+        SettingsPatch, SETTINGS_SCHEMA_VERSION,
     };
 
     #[test]
     fn legacy_settings_receive_current_defaults() {
-        let settings: AppSettings = serde_json::from_str(r#"{"language":"en"}"#)
-            .expect("legacy settings should remain readable");
+        let loaded =
+            parse_settings(r#"{"language":"en"}"#).expect("legacy settings should remain readable");
+        assert_eq!(loaded.schema_version, 0);
+        let mut settings = loaded.settings;
+        migrate_settings(&mut settings, loaded.schema_version).expect("legacy migration");
         assert_eq!(settings.schema_version, SETTINGS_SCHEMA_VERSION);
         assert_eq!(settings.language, "en");
         assert_eq!(settings.attachment_folder, "assets");
         assert!(settings.check_updates_on_startup);
+    }
+
+    #[test]
+    fn rejects_settings_from_a_newer_schema_without_downgrading_them() {
+        let future = SETTINGS_SCHEMA_VERSION + 1;
+        let loaded = parse_settings(&format!(r#"{{"schemaVersion":{future},"language":"en"}}"#))
+            .expect("future settings should parse before migration validation");
+        let mut settings = loaded.settings;
+        let error = migrate_settings(&mut settings, loaded.schema_version)
+            .expect_err("future settings must not be rewritten by an older app");
+        assert_eq!(error.code, "settings_version_unsupported");
+        assert_eq!(settings.schema_version, future);
     }
 
     #[test]
@@ -444,5 +523,14 @@ mod tests {
         settings.shortcuts.clear();
         settings.shortcuts.insert("save".into(), "S".into());
         assert!(validate_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn accepts_the_select_all_shortcut_exposed_by_the_frontend() {
+        let mut settings = AppSettings::default();
+        settings
+            .shortcuts
+            .insert("select-all".into(), "Mod+A".into());
+        assert!(validate_settings(&settings).is_ok());
     }
 }

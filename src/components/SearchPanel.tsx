@@ -39,6 +39,7 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const reqId = useRef(0)
 
@@ -48,20 +49,36 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
 
   // 防抖搜索
   useEffect(() => {
+    const id = ++reqId.current
+    setError(null)
     if (!query.trim()) {
       setResults([])
+      setLoading(false)
+      void desktop.cancelSearch()
       return
     }
-    const id = ++reqId.current
     setLoading(true)
-    const timer = setTimeout(async () => {
-      const res = await desktop.searchInFolder(root, query)
-      if (id === reqId.current) {
-        setResults(res)
-        setLoading(false)
-      }
+    const timer = setTimeout(() => {
+      void desktop
+        .searchInFolder(root, query)
+        .then((res) => {
+          if (id === reqId.current) setResults(res)
+        })
+        .catch(() => {
+          if (id === reqId.current) {
+            setResults([])
+            setError(getLang() === 'en' ? 'Search failed. Try again.' : '搜索失败，请重试。')
+          }
+        })
+        .finally(() => {
+          if (id === reqId.current) setLoading(false)
+        })
     }, 250)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      if (reqId.current === id) reqId.current += 1
+      void desktop.cancelSearch()
+    }
   }, [query, root])
 
   const totalMatches = results.reduce((n, r) => n + r.matches.length, 0)
@@ -88,13 +105,14 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
       </div>
 
       <div className="search-meta">
-        {loading
-          ? t('搜索中…')
-          : query.trim()
-            ? getLang() === 'en'
-              ? `${results.length} files, ${totalMatches} matches`
-              : `${results.length} 个文件，${totalMatches} 处匹配`
-            : ''}
+        {error ??
+          (loading
+            ? t('搜索中…')
+            : query.trim()
+              ? getLang() === 'en'
+                ? `${results.length} files, ${totalMatches} matches`
+                : `${results.length} 个文件，${totalMatches} 处匹配`
+              : '')}
       </div>
 
       <div className="sidebar-body">

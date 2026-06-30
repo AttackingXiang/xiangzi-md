@@ -113,6 +113,7 @@ export const tauriDesktopAdapter: DesktopPort = {
   openExternal: (url) => openUrl(url),
   moveItem: (sourcePath, targetDirPath) => invoke('move_item', { sourcePath, targetDirPath }),
   searchInFolder: (root, query) => invoke<SearchResult[]>('search_in_folder', { root, query }),
+  cancelSearch: () => invoke('cancel_search'),
   saveAttachment: (docDir, docName, vaultRoot, fileName, data) =>
     invoke('save_attachment', { docDir, docName, vaultRoot, fileName, data: Array.from(data) }),
   writeClipboardHtml: (html, altText) => writeHtml(html, altText),

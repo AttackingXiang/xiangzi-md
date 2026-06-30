@@ -141,6 +141,8 @@ export default function App(): JSX.Element {
     closeRight,
     updateContent,
     restoreSession,
+    confirmCloseTabs,
+    closeTabsWithoutPrompt,
   } = useFileOps({ pushRecentFile, lang, requestCloseDecision })
 
   const activeDocDir = activeTab ? (dirName(activeTab.path) ?? folder?.root ?? null) : null
@@ -337,7 +339,8 @@ export default function App(): JSX.Element {
     folder,
     setFolder: setFolderUpdater,
     openPath,
-    closeTab,
+    confirmCloseTabs,
+    closeTabsWithoutPrompt,
     tabs,
     setTabs,
     setCtxMenu,

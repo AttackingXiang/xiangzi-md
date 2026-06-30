@@ -121,6 +121,14 @@ describe('tauriDesktopAdapter', () => {
     })
   })
 
+  it('cancels an active folder search through the Rust command contract', async () => {
+    invokeMock.mockResolvedValueOnce(undefined)
+
+    await tauriDesktopAdapter.cancelSearch()
+
+    expect(invokeMock).toHaveBeenCalledWith('cancel_search')
+  })
+
   it('writes rich HTML and PNG images through the native clipboard', async () => {
     const close = vi.fn().mockResolvedValue(undefined)
     const image = { close }

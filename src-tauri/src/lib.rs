@@ -2,6 +2,7 @@ mod commands;
 mod domain;
 mod infrastructure;
 
+use infrastructure::search::SearchCancellation;
 use infrastructure::settings::SettingsStore;
 use infrastructure::{lifecycle::LifecycleState, menu};
 use tauri::{Emitter, Manager};
@@ -21,6 +22,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(SettingsStore::default())
+        .manage(SearchCancellation::default())
         .manage(LifecycleState::default())
         .register_uri_scheme_protocol("xmd", infrastructure::protocol::handle_xmd)
         .setup(|app| {
@@ -57,6 +59,7 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::set_settings,
             commands::search::search_in_folder,
+            commands::search::cancel_search,
             commands::attachment::save_attachment,
         ])
         .build(tauri::generate_context!())
