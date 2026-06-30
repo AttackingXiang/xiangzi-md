@@ -44,18 +44,21 @@ function waitForFrameLoad(frame: HTMLIFrameElement, html: string): Promise<void>
 
 async function waitForAssets(doc: Document): Promise<void> {
   if (doc.fonts) await doc.fonts.ready
-  await Promise.all(
-    Array.from(doc.images).map(async (image) => {
-      if (image.complete) {
-        await image.decode().catch(() => undefined)
-        return
-      }
-      await new Promise<void>((resolve) => {
-        image.addEventListener('load', () => resolve(), { once: true })
-        image.addEventListener('error', () => resolve(), { once: true })
-      })
-    }),
-  )
+  for (const image of Array.from(doc.images)) {
+    const deferredSource = image.getAttribute('data-xmd-export-src')
+    if (deferredSource) {
+      image.setAttribute('src', deferredSource)
+      image.removeAttribute('data-xmd-export-src')
+    }
+    if (image.complete) {
+      await image.decode().catch(() => undefined)
+      continue
+    }
+    await new Promise<void>((resolve) => {
+      image.addEventListener('load', () => resolve(), { once: true })
+      image.addEventListener('error', () => resolve(), { once: true })
+    })
+  }
 }
 
 function documentHeight(doc: Document): number {

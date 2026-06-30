@@ -35,7 +35,7 @@ import { escapeHtmlText, serializeStyleSheets } from './lib/exportStyles'
 import { getLang, t } from './lib/i18n'
 import { baseName, dirName } from './lib/path'
 import { replaceMovedPath } from './lib/treeDrag'
-import { imageMimeType, xmdAssetPaths } from './lib/asset'
+import { blobPartFromBytes, imageMimeType, xmdAssetPaths } from './lib/asset'
 import {
   Bold,
   Italic,
@@ -62,6 +62,7 @@ import { useUpdater } from './hooks/useUpdater'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
 import { isShortcutAction, type ShortcutAction } from './lib/shortcuts'
 import { copyImageElement } from './lib/richClipboard'
+import { mapWithConcurrencyLimit } from './lib/asyncPool'
 import type { SettingsSection } from './components/Settings'
 
 interface FileEntry {
@@ -70,6 +71,11 @@ interface FileEntry {
 }
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
+const EXPORT_WORK_CONCURRENCY = 2
+const MAX_EXPORT_IMAGE_BYTES = 32 * 1024 * 1024
+const MAX_EXPORT_EMBEDDED_BYTES = 64 * 1024 * 1024
+
+class ExportMemoryBudgetError extends Error {}
 
 export default function App(): JSX.Element {
   // ── Settings (theme, width, i18n, CSS side-effects all live here) ──────────
@@ -258,6 +264,7 @@ export default function App(): JSX.Element {
     onSubmit: (value: string) => void
   } | null>(null)
   const [exportResultPath, setExportResultPath] = useState<string | null>(null)
+  const exportInProgressRef = useRef(false)
 
   const deferredOutlineContent = useDeferredValue(
     outlineVisible && activeTab ? activeTab.content : '',
@@ -496,7 +503,11 @@ export default function App(): JSX.Element {
   // ── Export ────────────────────────────────────────────────────────────────
   /** Build a self-contained HTML string that renders identically to the app view */
   const generateExportHTML = useCallback(
-    async (title: string, mdContent?: string): Promise<string | null> => {
+    async (
+      title: string,
+      mdContent?: string,
+      deferImageDecoding = false,
+    ): Promise<string | null> => {
       const pm =
         document.querySelector<HTMLElement>('.milkdown .ProseMirror') ??
         document.querySelector<HTMLElement>('.milkdown [contenteditable="true"]') ??
@@ -522,8 +533,10 @@ export default function App(): JSX.Element {
 
       // Replace editor-only CodeMirror DOM with deterministic reading-view HTML.
       // This also covers lazy/off-screen blocks by falling back to Markdown source.
-      const blockRenders = await Promise.all(
-        liveBlocks.map(async (block, i) => {
+      const blockRenders = await mapWithConcurrencyLimit(
+        liveBlocks,
+        EXPORT_WORK_CONCURRENCY,
+        async (block, i) => {
           // Already rendered? extract the SVG from the live preview panel.
           const mermaidPreviewEl = block.querySelector<HTMLElement>(
             '.preview-panel .preview .mermaid-preview',
@@ -569,7 +582,7 @@ export default function App(): JSX.Element {
               language: lang,
             }
           }
-        }),
+        },
       )
 
       // ── Clone and clean ───────────────────────────────────────────────────
@@ -630,43 +643,59 @@ export default function App(): JSX.Element {
 
       // Inline xmd:// images as base64 so the HTML is fully self-contained.
       const imgs = Array.from(clone.querySelectorAll<HTMLImageElement>('img[src]'))
-      await Promise.all(
-        imgs.map(async (img) => {
-          const src = img.getAttribute('src') ?? ''
-          const paths = xmdAssetPaths(src)
-          if (paths.length === 0) return
+      let embeddedBytes = 0
+      await mapWithConcurrencyLimit(imgs, EXPORT_WORK_CONCURRENCY, async (img) => {
+        const src = img.getAttribute('src') ?? ''
+        const paths = xmdAssetPaths(src)
+        if (paths.length === 0) return
 
-          let failure: unknown
-          for (const path of paths) {
-            try {
-              const bytes = Uint8Array.from(await desktop.readBinaryFile(path))
-              const blob = new Blob([bytes.buffer], { type: imageMimeType(path) })
-              const dataUrl = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader()
-                reader.addEventListener(
-                  'load',
-                  () => {
-                    if (typeof reader.result === 'string') resolve(reader.result)
-                    else reject(new Error('图片转换结果无效'))
-                  },
-                  { once: true },
-                )
-                reader.addEventListener(
-                  'error',
-                  () => reject(reader.error ?? new Error('图片转换失败')),
-                  { once: true },
-                )
-                reader.readAsDataURL(blob)
-              })
-              img.setAttribute('src', dataUrl)
-              return
-            } catch (error) {
-              failure = error
+        let failure: unknown
+        for (const path of paths) {
+          try {
+            const bytes = await desktop.readBinaryFile(path, MAX_EXPORT_IMAGE_BYTES)
+            if (embeddedBytes + bytes.byteLength > MAX_EXPORT_EMBEDDED_BYTES) {
+              throw new ExportMemoryBudgetError(
+                '导出图片总大小超过 64 MB，请减少图片数量或压缩图片后重试',
+              )
             }
+            embeddedBytes += bytes.byteLength
+            const blob = new Blob([blobPartFromBytes(bytes)], { type: imageMimeType(path) })
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.addEventListener(
+                'load',
+                () => {
+                  if (typeof reader.result === 'string') resolve(reader.result)
+                  else reject(new Error('图片转换结果无效'))
+                },
+                { once: true },
+              )
+              reader.addEventListener(
+                'error',
+                () => reject(reader.error ?? new Error('图片转换失败')),
+                { once: true },
+              )
+              reader.readAsDataURL(blob)
+            })
+            img.setAttribute('src', dataUrl)
+            return
+          } catch (error) {
+            if (error instanceof ExportMemoryBudgetError) throw error
+            failure = error
           }
-          throw failure instanceof Error ? failure : new Error(`无法读取导出图片：${paths[0]}`)
-        }),
-      )
+        }
+        throw failure instanceof Error ? failure : new Error(`无法读取导出图片：${paths[0]}`)
+      })
+      // Keep every source in the export document, but defer decoding so the
+      // isolated renderer can load images one at a time.
+      if (deferImageDecoding) {
+        imgs.forEach((img) => {
+          const source = img.getAttribute('src')
+          if (!source) return
+          img.setAttribute('data-xmd-export-src', source)
+          img.removeAttribute('src')
+        })
+      }
 
       // Production CSS is emitted as <link rel="stylesheet"> by Vite, while
       // custom themes and some editor features use <style>. Reading cssRules
@@ -703,6 +732,8 @@ ${liveStyles}
   )
 
   const exportHTML = useCallback(async () => {
+    if (exportInProgressRef.current) return
+    exportInProgressRef.current = true
     try {
       const { activeId: id } = stateRef.current
       if (!id) return
@@ -716,15 +747,19 @@ ${liveStyles}
         (getLang() === 'en' ? 'HTML export failed:\n' : 'HTML 导出失败：\n') +
           (error as Error).message,
       )
+    } finally {
+      exportInProgressRef.current = false
     }
   }, [generateExportHTML])
 
   const exportPDF = useCallback(async () => {
+    if (exportInProgressRef.current) return
+    exportInProgressRef.current = true
     try {
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
+      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, true)
       if (!html) return
       const res = await desktop.exportPDF(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
@@ -733,15 +768,19 @@ ${liveStyles}
         (getLang() === 'en' ? 'PDF export failed:\n' : 'PDF 导出失败：\n') +
           (error as Error).message,
       )
+    } finally {
+      exportInProgressRef.current = false
     }
   }, [generateExportHTML])
 
   const exportImage = useCallback(async () => {
+    if (exportInProgressRef.current) return
+    exportInProgressRef.current = true
     try {
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
+      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, true)
       if (!html) return
       const res = await desktop.exportImage(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
@@ -750,6 +789,8 @@ ${liveStyles}
         (getLang() === 'en' ? 'Image export failed:\n' : '图片导出失败：\n') +
           (error as Error).message,
       )
+    } finally {
+      exportInProgressRef.current = false
     }
   }, [generateExportHTML])
 

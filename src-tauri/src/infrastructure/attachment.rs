@@ -10,6 +10,16 @@ use tauri::AppHandle;
 
 const MAX_ATTACHMENT_BYTES: usize = 20 * 1024 * 1024;
 
+pub fn validate_attachment_size(size: usize) -> AppResult<()> {
+    if size > MAX_ATTACHMENT_BYTES {
+        return Err(AppError::new(
+            "attachment_too_large",
+            "单个附件不能超过 20 MB",
+        ));
+    }
+    Ok(())
+}
+
 pub fn save_attachment(
     app: &AppHandle,
     settings: &AppSettings,
@@ -19,12 +29,7 @@ pub fn save_attachment(
     file_name: &str,
     data: &[u8],
 ) -> AppResult<String> {
-    if data.len() > MAX_ATTACHMENT_BYTES {
-        return Err(AppError::new(
-            "attachment_too_large",
-            "单个附件不能超过 20 MB",
-        ));
-    }
+    validate_attachment_size(data.len())?;
     ensure_allowed(app, doc_dir)?;
     if let Some(root) = vault_root {
         ensure_allowed(app, root)?;
@@ -96,7 +101,7 @@ fn unique_attachment_path(directory: &Path, file_name: &str) -> std::path::PathB
 
 #[cfg(test)]
 mod tests {
-    use super::unique_attachment_path;
+    use super::{unique_attachment_path, validate_attachment_size, MAX_ATTACHMENT_BYTES};
     use std::fs;
     use tempfile::tempdir;
 
@@ -115,5 +120,11 @@ mod tests {
             second.file_name().and_then(|name| name.to_str()),
             Some("a_b_-1.png")
         );
+    }
+
+    #[test]
+    fn rejects_attachment_bodies_above_the_memory_budget() {
+        assert!(validate_attachment_size(MAX_ATTACHMENT_BYTES).is_ok());
+        assert!(validate_attachment_size(MAX_ATTACHMENT_BYTES + 1).is_err());
     }
 }

@@ -18,6 +18,7 @@ const MAX_SESSION_FILES: usize = 12;
 const MAX_ASSET_SEARCH_PATHS: usize = 32;
 const MAX_SHORTCUT_OVERRIDES: usize = 64;
 const MAX_PATH_LENGTH: usize = 4096;
+const MAX_SETTINGS_BYTES: u64 = 1024 * 1024;
 
 const SHORTCUT_ACTIONS: &[&str] = &[
     "new-file",
@@ -218,6 +219,13 @@ struct LoadedSettings {
 }
 
 fn read_settings(path: &Path) -> AppResult<LoadedSettings> {
+    let metadata = fs::metadata(path).map_err(|error| AppError::io("读取设置失败", error))?;
+    if metadata.len() > MAX_SETTINGS_BYTES {
+        return Err(AppError::new(
+            "settings_too_large",
+            "设置文件超过 1 MB，已停止读取",
+        ));
+    }
     let raw = fs::read_to_string(path).map_err(|error| AppError::io("读取设置失败", error))?;
     parse_settings(&raw)
 }

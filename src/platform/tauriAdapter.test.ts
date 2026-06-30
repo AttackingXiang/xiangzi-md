@@ -66,9 +66,14 @@ describe('tauriDesktopAdapter', () => {
 
   it('reads binary files through the scoped file-system plugin', async () => {
     const bytes = new Uint8Array([137, 80, 78, 71])
+    invokeMock.mockResolvedValueOnce(bytes.byteLength)
     readFileMock.mockResolvedValueOnce(bytes)
 
     await expect(tauriDesktopAdapter.readBinaryFile('/notes/a.png')).resolves.toEqual(bytes)
+    expect(invokeMock).toHaveBeenCalledWith('check_binary_file', {
+      path: '/notes/a.png',
+      maxBytes: 32 * 1024 * 1024,
+    })
     expect(readFileMock).toHaveBeenCalledWith('/notes/a.png')
   })
 
@@ -101,23 +106,23 @@ describe('tauriDesktopAdapter', () => {
     expect(unlisten).toHaveBeenCalledOnce()
   })
 
-  it('serializes attachment bytes as a command-safe array', async () => {
+  it('sends attachment bytes as a raw IPC body with metadata in a header', async () => {
     invokeMock.mockResolvedValueOnce({ relPath: 'assets/demo.png' })
+    const data = new Uint8Array([1, 2, 3])
 
-    await tauriDesktopAdapter.saveAttachment(
-      '/notes',
-      'a.md',
-      '/notes',
-      'demo.png',
-      new Uint8Array([1, 2, 3]),
-    )
+    await tauriDesktopAdapter.saveAttachment('/notes', 'a.md', '/notes', 'demo.png', data)
 
-    expect(invokeMock).toHaveBeenCalledWith('save_attachment', {
-      docDir: '/notes',
-      docName: 'a.md',
-      vaultRoot: '/notes',
-      fileName: 'demo.png',
-      data: [1, 2, 3],
+    expect(invokeMock).toHaveBeenCalledWith('save_attachment', data, {
+      headers: {
+        'x-xmd-attachment': encodeURIComponent(
+          JSON.stringify({
+            docDir: '/notes',
+            docName: 'a.md',
+            vaultRoot: '/notes',
+            fileName: 'demo.png',
+          }),
+        ),
+      },
     })
   })
 

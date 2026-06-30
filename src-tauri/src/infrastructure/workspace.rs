@@ -17,6 +17,7 @@ const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx"];
 const IGNORED_DIRECTORIES: &[&str] = &[".git", "node_modules", ".DS_Store", ".obsidian", ".vscode"];
 const MAX_LISTED_FILES: usize = 8_000;
 const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
+const MAX_BINARY_READ_BYTES: u64 = 64 * 1024 * 1024;
 
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
@@ -161,6 +162,26 @@ pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
     })
 }
 
+fn validate_binary_size(size: u64, requested_limit: u64) -> AppResult<u64> {
+    let limit = requested_limit.clamp(1, MAX_BINARY_READ_BYTES);
+    if size > limit {
+        return Err(AppError::new(
+            "binary_file_too_large",
+            format!("资源超过读取上限（{} MB）", limit / (1024 * 1024)),
+        ));
+    }
+    Ok(size)
+}
+
+pub fn check_binary_file(app: &AppHandle, path: &Path, max_bytes: u64) -> AppResult<u64> {
+    ensure_allowed(app, path)?;
+    let metadata = fs::metadata(path).map_err(|error| AppError::io("读取资源信息失败", error))?;
+    if !metadata.is_file() {
+        return Err(AppError::new("invalid_file", "目标不是文件"));
+    }
+    validate_binary_size(metadata.len(), max_bytes)
+}
+
 pub fn write_file(app: &AppHandle, path: &Path, content: &str) -> AppResult<PathResult> {
     ensure_write_allowed(app, path)?;
     if content.len() as u64 > MAX_DOCUMENT_BYTES {
@@ -293,7 +314,7 @@ pub fn trash_item(app: &AppHandle, target: &Path) -> AppResult<PathResult> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_ignored, is_visible_text_file, validate_item_name};
+    use super::{is_ignored, is_visible_text_file, validate_binary_size, validate_item_name};
     use std::path::Path;
 
     #[test]
@@ -317,5 +338,15 @@ mod tests {
         assert!(!is_visible_text_file(Path::new("photo.png")));
         assert!(is_ignored(Path::new("node_modules")));
         assert!(!is_ignored(Path::new("notes")));
+    }
+
+    #[test]
+    fn bounds_binary_reads_by_the_requested_budget() {
+        assert_eq!(
+            validate_binary_size(1024, 2048).expect("within budget"),
+            1024
+        );
+        assert!(validate_binary_size(4096, 2048).is_err());
+        assert!(validate_binary_size(1, 0).is_ok());
     }
 }

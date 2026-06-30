@@ -12,6 +12,12 @@ export interface ContentDiffSummary {
 }
 
 const MAX_MATRIX_CELLS = 80_000
+const MAX_DETAILED_DIFF_CHARS = 4 * 1024 * 1024
+const MAX_PREVIEW_LINE_CHARS = 400
+
+function previewText(text: string): string {
+  return text.length > MAX_PREVIEW_LINE_CHARS ? `${text.slice(0, MAX_PREVIEW_LINE_CHARS)}…` : text
+}
 
 function linesOf(content: string): string[] {
   if (!content) return []
@@ -43,7 +49,12 @@ function summarizeSingleSide(
     if (lineEnd > lineStart && content[lineEnd - 1] === '\r') lineEnd -= 1
     count += 1
     if (preview.length < previewLimit) {
-      preview.push({ type, text: content.slice(lineStart, lineEnd), lineNumber: count })
+      const previewEnd = Math.min(lineEnd, lineStart + MAX_PREVIEW_LINE_CHARS + 1)
+      preview.push({
+        type,
+        text: previewText(content.slice(lineStart, previewEnd)),
+        lineNumber: count,
+      })
     }
     lineStart = index + 1
   }
@@ -65,8 +76,26 @@ export function summarizeContentDiff(
   currentContent: string,
   previewLimit = 14,
 ): ContentDiffSummary {
+  if (savedContent === currentContent) {
+    return { added: 0, removed: 0, preview: [], truncated: false }
+  }
   if (!savedContent) return summarizeSingleSide(currentContent, 'added', previewLimit)
   if (!currentContent) return summarizeSingleSide(savedContent, 'removed', previewLimit)
+  if (savedContent.length + currentContent.length > MAX_DETAILED_DIFF_CHARS) {
+    const removedPreviewLimit = Math.ceil(previewLimit / 2)
+    const removed = summarizeSingleSide(savedContent, 'removed', removedPreviewLimit)
+    const added = summarizeSingleSide(
+      currentContent,
+      'added',
+      Math.max(0, previewLimit - removedPreviewLimit),
+    )
+    return {
+      added: added.added,
+      removed: removed.removed,
+      preview: [...removed.preview, ...added.preview],
+      truncated: added.added + removed.removed > previewLimit,
+    }
+  }
 
   const before = linesOf(savedContent)
   const after = linesOf(currentContent)
@@ -92,18 +121,18 @@ export function summarizeContentDiff(
   const record = (type: ContentDiffLine['type'], text: string, lineNumber: number): void => {
     if (type === 'added') added += 1
     else removed += 1
-    if (preview.length < previewLimit) preview.push({ type, text, lineNumber })
+    if (preview.length < previewLimit) preview.push({ type, text: previewText(text), lineNumber })
   }
 
   if (oldLines.length === 0) {
     added = newLines.length
     newLines.slice(0, previewLimit).forEach((text, index) => {
-      preview.push({ type: 'added', text, lineNumber: prefix + index + 1 })
+      preview.push({ type: 'added', text: previewText(text), lineNumber: prefix + index + 1 })
     })
   } else if (newLines.length === 0) {
     removed = oldLines.length
     oldLines.slice(0, previewLimit).forEach((text, index) => {
-      preview.push({ type: 'removed', text, lineNumber: prefix + index + 1 })
+      preview.push({ type: 'removed', text: previewText(text), lineNumber: prefix + index + 1 })
     })
   } else if (oldLines.length * newLines.length <= MAX_MATRIX_CELLS) {
     const columns = newLines.length + 1
@@ -144,10 +173,18 @@ export function summarizeContentDiff(
     removed = oldLines.length
     added = newLines.length
     for (let index = 0; index < oldLines.length && preview.length < previewLimit; index += 1) {
-      preview.push({ type: 'removed', text: oldLines[index], lineNumber: prefix + index + 1 })
+      preview.push({
+        type: 'removed',
+        text: previewText(oldLines[index]),
+        lineNumber: prefix + index + 1,
+      })
     }
     for (let index = 0; index < newLines.length && preview.length < previewLimit; index += 1) {
-      preview.push({ type: 'added', text: newLines[index], lineNumber: prefix + index + 1 })
+      preview.push({
+        type: 'added',
+        text: previewText(newLines[index]),
+        lineNumber: prefix + index + 1,
+      })
     }
   }
 
