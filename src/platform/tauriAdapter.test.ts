@@ -72,7 +72,7 @@ describe('tauriDesktopAdapter', () => {
     await expect(tauriDesktopAdapter.readBinaryFile('/notes/a.png')).resolves.toEqual(bytes)
     expect(invokeMock).toHaveBeenCalledWith('check_binary_file', {
       path: '/notes/a.png',
-      maxBytes: 32 * 1024 * 1024,
+      maxBytes: 64 * 1024 * 1024,
     })
     expect(readFileMock).toHaveBeenCalledWith('/notes/a.png')
   })

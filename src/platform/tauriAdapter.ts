@@ -18,8 +18,9 @@ import type {
   SearchResult,
   UpdaterPort,
 } from './contracts'
+import { releaseExportObjectUrls } from '../lib/exportImageAsset'
 
-const MAX_BINARY_READ_BYTES = 32 * 1024 * 1024
+const MAX_BINARY_READ_BYTES = 64 * 1024 * 1024
 
 function binaryReadLimit(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return MAX_BINARY_READ_BYTES
@@ -179,27 +180,35 @@ export const tauriDesktopAdapter: DesktopPort = {
     return { path }
   },
   exportPDF: async (html, suggestedName) => {
-    const path = await save({
-      defaultPath: suggestedName.replace(/\.md$/i, '') + '.pdf',
-      filters: [{ name: 'PDF', extensions: ['pdf'] }],
-    })
-    if (!path) return null
-    const { renderDocumentPdf } = await import('../lib/exportDocument')
-    await writeBinaryFile(path, await renderDocumentPdf(html))
-    return { path }
+    try {
+      const path = await save({
+        defaultPath: suggestedName.replace(/\.md$/i, '') + '.pdf',
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      })
+      if (!path) return null
+      const { renderDocumentPdf } = await import('../lib/exportDocument')
+      await writeBinaryFile(path, await renderDocumentPdf(html))
+      return { path }
+    } finally {
+      releaseExportObjectUrls(html)
+    }
   },
   exportImage: async (html, suggestedName) => {
-    const path = await save({
-      defaultPath: suggestedName.replace(/\.md$/i, '') + '.png',
-      filters: [
-        { name: 'PNG 图片', extensions: ['png'] },
-        { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
-      ],
-    })
-    if (!path) return null
-    const { renderDocumentImage } = await import('../lib/exportDocument')
-    await writeBinaryFile(path, await renderDocumentImage(html, imageFormatForPath(path)))
-    return { path }
+    try {
+      const path = await save({
+        defaultPath: suggestedName.replace(/\.md$/i, '') + '.png',
+        filters: [
+          { name: 'PNG 图片', extensions: ['png'] },
+          { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
+        ],
+      })
+      if (!path) return null
+      const { renderDocumentImage } = await import('../lib/exportDocument')
+      await writeBinaryFile(path, await renderDocumentImage(html, imageFormatForPath(path)))
+      return { path }
+    } finally {
+      releaseExportObjectUrls(html)
+    }
   },
   pickCss: async () => {
     const path = await open({

@@ -4,6 +4,8 @@ const RENDER_CHUNK_HEIGHT = 4_000
 const PDF_PAGE_WIDTH_PT = 595.28
 const PDF_PAGE_HEIGHT_PT = 841.89
 const PDF_RENDER_SCALE = 1.5
+const EXPORT_IMAGE_LOAD_TIMEOUT_MS = 15_000
+const EXPORT_FONT_LOAD_TIMEOUT_MS = 5_000
 
 export type ExportImageFormat = 'png' | 'jpeg'
 
@@ -42,22 +44,61 @@ function waitForFrameLoad(frame: HTMLIFrameElement, html: string): Promise<void>
   })
 }
 
-async function waitForAssets(doc: Document): Promise<void> {
-  if (doc.fonts) await doc.fonts.ready
-  for (const image of Array.from(doc.images)) {
-    const deferredSource = image.getAttribute('data-xmd-export-src')
+function waitForImage(image: HTMLImageElement, index: number): Promise<void> {
+  const deferredSource = image.getAttribute('data-xmd-export-src')
+  image.loading = 'eager'
+
+  if (!deferredSource && image.complete) return Promise.resolve()
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false
+    const finish = (error?: Error): void => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      image.removeEventListener('load', loaded)
+      image.removeEventListener('error', failed)
+      if (error) reject(error)
+      else resolve()
+    }
+    const loaded = (): void => finish()
+    const failed = (): void => finish()
+    const timeout = window.setTimeout(
+      () => finish(new Error(`导出图片加载超时（第 ${index + 1} 张）`)),
+      EXPORT_IMAGE_LOAD_TIMEOUT_MS,
+    )
+
+    // Register handlers before restoring the source: data URLs can complete in
+    // the same event-loop turn, especially in WebKit.
+    image.addEventListener('load', loaded, { once: true })
+    image.addEventListener('error', failed, { once: true })
     if (deferredSource) {
       image.setAttribute('src', deferredSource)
       image.removeAttribute('data-xmd-export-src')
     }
-    if (image.complete) {
-      await image.decode().catch(() => undefined)
-      continue
+    if (image.complete && image.naturalWidth > 0) queueMicrotask(loaded)
+  })
+}
+
+async function waitForFonts(doc: Document): Promise<void> {
+  if (!doc.fonts) return
+  await new Promise<void>((resolve) => {
+    let settled = false
+    const finish = (): void => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      resolve()
     }
-    await new Promise<void>((resolve) => {
-      image.addEventListener('load', () => resolve(), { once: true })
-      image.addEventListener('error', () => resolve(), { once: true })
-    })
+    const timeout = window.setTimeout(finish, EXPORT_FONT_LOAD_TIMEOUT_MS)
+    void doc.fonts.ready.then(finish, finish)
+  })
+}
+
+async function waitForAssets(doc: Document): Promise<void> {
+  await waitForFonts(doc)
+  for (const [index, image] of Array.from(doc.images).entries()) {
+    await waitForImage(image, index)
   }
 }
 
