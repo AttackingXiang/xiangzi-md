@@ -75,7 +75,7 @@ export interface DesktopPort {
   openFolderPath(root: string): Promise<Folder | null>
   openFile(): Promise<OpenedFile | null>
   readFile(path: string): Promise<OpenedFile>
-  readBinaryFile(path: string): Promise<Uint8Array>
+  readBinaryFile(path: string, maxBytes?: number): Promise<Uint8Array>
   writeFile(path: string, content: string): Promise<{ path: string }>
   saveAs(content: string, suggestedName?: string): Promise<Pick<OpenedFile, 'path' | 'name'> | null>
   readDir(path: string): Promise<FileNode[]>

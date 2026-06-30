@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 
 const SUPPORTED_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx", "txt"];
+const MAX_PENDING_OPEN_PATHS: usize = 32;
 
 pub struct LifecycleState {
     frontend_ready: AtomicBool,
@@ -53,7 +54,7 @@ impl LifecycleState {
         if self.frontend_ready.load(Ordering::Acquire) {
             let _ = app.emit("open-path", path);
         } else if let Ok(mut pending) = self.pending_open_paths.lock() {
-            if !pending.contains(&path) {
+            if pending.len() < MAX_PENDING_OPEN_PATHS && !pending.contains(&path) {
                 pending.push(path);
             }
         }

@@ -20,6 +20,11 @@ pub async fn read_file(app: AppHandle, path: String) -> AppResult<OpenedFile> {
 }
 
 #[tauri::command]
+pub async fn check_binary_file(app: AppHandle, path: String, max_bytes: u64) -> AppResult<u64> {
+    blocking(move || workspace::check_binary_file(&app, &PathBuf::from(path), max_bytes)).await
+}
+
+#[tauri::command]
 pub async fn write_file(app: AppHandle, path: String, content: String) -> AppResult<PathResult> {
     blocking(move || workspace::write_file(&app, &PathBuf::from(path), &content)).await
 }

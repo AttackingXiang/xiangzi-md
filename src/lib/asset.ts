@@ -40,6 +40,17 @@ export function imageMimeType(path: string): string {
   return 'image/png'
 }
 
+/** Reuse an owned ArrayBuffer when possible and copy only shared or sliced views. */
+export function blobPartFromBytes(bytes: Uint8Array): ArrayBuffer {
+  if (bytes.buffer instanceof ArrayBuffer) {
+    if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) return bytes.buffer
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  }
+  const owned = new Uint8Array(bytes.byteLength)
+  owned.set(bytes)
+  return owned.buffer
+}
+
 /**
  * 把 Markdown 中的图片/资源 src 解析成可在渲染层显示的 URL。
  * - http(s)/data/blob/xmd：原样返回

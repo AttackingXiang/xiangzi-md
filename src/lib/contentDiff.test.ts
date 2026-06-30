@@ -42,4 +42,15 @@ describe('summarizeContentDiff', () => {
     expect(result.preview).toHaveLength(5)
     expect(result.truncated).toBe(true)
   })
+
+  it('uses a bounded coarse summary when both document versions are very large', () => {
+    const before = `${'a'.repeat(2_200_000)}\nold`
+    const after = `${'b'.repeat(2_200_000)}\nnew`
+    const result = summarizeContentDiff(before, after, 4)
+
+    expect(result.removed).toBe(2)
+    expect(result.added).toBe(2)
+    expect(result.preview).toHaveLength(4)
+    expect(result.preview.every((line) => line.text.length <= 401)).toBe(true)
+  })
 })

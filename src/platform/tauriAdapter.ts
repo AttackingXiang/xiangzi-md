@@ -19,6 +19,13 @@ import type {
   UpdaterPort,
 } from './contracts'
 
+const MAX_BINARY_READ_BYTES = 32 * 1024 * 1024
+
+function binaryReadLimit(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return MAX_BINARY_READ_BYTES
+  return Math.min(MAX_BINARY_READ_BYTES, Math.max(1, Math.floor(value)))
+}
+
 function subscribe<T>(
   event: string,
   callback: (payload: T) => void,
@@ -92,7 +99,13 @@ export const tauriDesktopAdapter: DesktopPort = {
     return path ? invoke<OpenedFile>('read_file', { path }) : null
   },
   readFile: (path) => invoke<OpenedFile>('read_file', { path }),
-  readBinaryFile,
+  readBinaryFile: async (path, maxBytes = MAX_BINARY_READ_BYTES) => {
+    const limit = binaryReadLimit(maxBytes)
+    await invoke('check_binary_file', { path, maxBytes: limit })
+    const bytes = await readBinaryFile(path)
+    if (bytes.byteLength > limit) throw new Error(`资源超过读取上限（${limit} bytes）`)
+    return bytes
+  },
   writeFile: (path, content) => invoke('write_file', { path, content }),
   saveAs: async (content, suggestedName) => {
     const path = await save({
@@ -115,7 +128,13 @@ export const tauriDesktopAdapter: DesktopPort = {
   searchInFolder: (root, query) => invoke<SearchResult[]>('search_in_folder', { root, query }),
   cancelSearch: () => invoke('cancel_search'),
   saveAttachment: (docDir, docName, vaultRoot, fileName, data) =>
-    invoke('save_attachment', { docDir, docName, vaultRoot, fileName, data: Array.from(data) }),
+    invoke('save_attachment', data, {
+      headers: {
+        'x-xmd-attachment': encodeURIComponent(
+          JSON.stringify({ docDir, docName, vaultRoot, fileName }),
+        ),
+      },
+    }),
   writeClipboardHtml: (html, altText) => writeHtml(html, altText),
   writeClipboardImage: async (png) => {
     const image = await Image.fromBytes(png)

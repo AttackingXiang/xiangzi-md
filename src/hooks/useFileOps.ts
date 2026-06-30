@@ -1,11 +1,14 @@
 import { useCallback, useRef, useState } from 'react'
 import { desktop } from '../platform'
 import { getLang } from '../lib/i18n'
+import { createTaskQueue, mapWithConcurrencyLimit } from '../lib/asyncPool'
+import { InFlightCache } from '../lib/inFlightCache'
 import type { Tab } from '../types'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 
 let tabSeq = 0
 const MAX_RESTORED_TABS = 12
+const RESTORE_CONCURRENCY = 2
 const newTabId = (): string => `tab-${Date.now()}-${tabSeq++}`
 
 /** Returns a unique "Untitled" name that doesn't conflict with open tabs. */
@@ -32,6 +35,8 @@ interface Deps {
 export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps) {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const openQueueRef = useRef(createTaskQueue(2))
+  const openTasksRef = useRef(new InFlightCache<string, void>())
 
   // Always-fresh ref for use inside callbacks
   const stateRef = useRef({ tabs, activeId })
@@ -41,33 +46,43 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
 
   // ── Open ───────────────────────────────────────────────────────────────────
   const openPath = useCallback(
-    async (path: string, name?: string) => {
+    (path: string, name?: string): Promise<void> => {
       const existing = stateRef.current.tabs.find((t) => t.path === path)
       if (existing) {
         setActiveId(existing.id)
-        return
+        return Promise.resolve()
       }
-      let file
-      try {
-        file = await desktop.readFile(path)
-      } catch {
-        window.alert(
-          (getLang() === 'en' ? 'File not found or cannot open:\n' : '文件不存在或无法打开：\n') +
-            path,
-        )
-        return
-      }
-      const tab: Tab = {
-        id: newTabId(),
-        path: file.path,
-        name: name ?? file.name,
-        content: file.content,
-        savedContent: file.content,
-        dirty: false,
-      }
-      setTabs((prev) => [...prev, tab])
-      setActiveId(tab.id)
-      pushRecentFile(file.path)
+      return openTasksRef.current.getOrCreate(path, () =>
+        openQueueRef.current.run(async () => {
+          const openedWhileQueued = stateRef.current.tabs.find((tab) => tab.path === path)
+          if (openedWhileQueued) {
+            setActiveId(openedWhileQueued.id)
+            return
+          }
+          let file
+          try {
+            file = await desktop.readFile(path)
+          } catch {
+            window.alert(
+              (getLang() === 'en'
+                ? 'File not found or cannot open:\n'
+                : '文件不存在或无法打开：\n') + path,
+            )
+            return
+          }
+          const tab: Tab = {
+            id: newTabId(),
+            path: file.path,
+            name: name ?? file.name,
+            content: file.content,
+            savedContent: file.content,
+            dirty: false,
+          }
+          setTabs((prev) => [...prev, tab])
+          setActiveId(tab.id)
+          pushRecentFile(file.path)
+        }),
+      )
     },
     [pushRecentFile],
   )
@@ -290,8 +305,10 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
   // ── Session restore ────────────────────────────────────────────────────────
   const restoreSession = useCallback(async (openFiles: string[], activePath: string | null) => {
     const restored = (
-      await Promise.all(
-        openFiles.slice(0, MAX_RESTORED_TABS).map(async (path): Promise<Tab | null> => {
+      await mapWithConcurrencyLimit(
+        openFiles.slice(0, MAX_RESTORED_TABS),
+        RESTORE_CONCURRENCY,
+        async (path): Promise<Tab | null> => {
           try {
             const file = await desktop.readFile(path)
             return {
@@ -305,7 +322,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
           } catch {
             return null
           }
-        }),
+        },
       )
     ).filter((tab): tab is Tab => tab !== null)
     if (restored.length) {

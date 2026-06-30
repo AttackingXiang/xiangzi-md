@@ -1,5 +1,8 @@
 import { desktop } from '../platform'
-import { imageMimeType, xmdAssetPaths } from './asset'
+import { createTaskQueue } from './asyncPool'
+import { blobPartFromBytes, imageMimeType, xmdAssetPaths } from './asset'
+import { fitImageDimensions } from './imageBudget'
+import { InFlightCache } from './inFlightCache'
 
 interface CachedClipboardImage {
   dataUrl: string
@@ -21,11 +24,22 @@ interface ClipboardSnapshot {
 const PLACEHOLDER_PREFIX = 'xmd-copy-image-'
 const MAX_CACHE_ENTRIES = 12
 const MAX_CACHE_BYTES = 64 * 1024 * 1024
-const imagePromises = new Map<string, Promise<CachedClipboardImage>>()
+const MAX_CLIPBOARD_IMAGE_BYTES = 32 * 1024 * 1024
+const MAX_CLIPBOARD_IMAGE_PIXELS = 16_000_000
+const MAX_IN_FLIGHT_IMAGES = 16
+const imagePromises = new InFlightCache<string, CachedClipboardImage>()
 const resolvedImages = new Map<string, CachedClipboardImage>()
+const imageTaskQueue = createTaskQueue(2)
 
 function cacheSize(image: CachedClipboardImage): number {
   return image.dataUrl.length * 2 + image.png.size
+}
+
+function ensureBlobWithinBudget(blob: Blob): Blob {
+  if (blob.size > MAX_CLIPBOARD_IMAGE_BYTES) {
+    throw new Error('图片超过 32 MB，已停止预加载')
+  }
+  return blob
 }
 
 function putResolved(source: string, image: CachedClipboardImage): void {
@@ -97,9 +111,8 @@ function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 async function toPng(blob: Blob): Promise<Blob> {
-  if (blob.type === 'image/png') return blob
-
   const url = URL.createObjectURL(blob)
+  let canvas: HTMLCanvasElement | undefined
   try {
     const image = new Image()
     image.decoding = 'async'
@@ -108,14 +121,30 @@ async function toPng(blob: Blob): Promise<Blob> {
       image.addEventListener('error', () => reject(new Error('图片解码失败')), { once: true })
       image.src = url
     })
-    const canvas = document.createElement('canvas')
-    canvas.width = image.naturalWidth
-    canvas.height = image.naturalHeight
+    const dimensions = fitImageDimensions(
+      image.naturalWidth,
+      image.naturalHeight,
+      MAX_CLIPBOARD_IMAGE_PIXELS,
+    )
+    if (
+      blob.type === 'image/png' &&
+      dimensions.width === image.naturalWidth &&
+      dimensions.height === image.naturalHeight
+    ) {
+      return blob
+    }
+    canvas = document.createElement('canvas')
+    canvas.width = dimensions.width
+    canvas.height = dimensions.height
     const context = canvas.getContext('2d')
     if (!context) throw new Error('无法创建图片画布')
-    context.drawImage(image, 0, 0)
+    context.drawImage(image, 0, 0, dimensions.width, dimensions.height)
     return await canvasToPng(canvas)
   } finally {
+    if (canvas) {
+      canvas.width = 1
+      canvas.height = 1
+    }
     URL.revokeObjectURL(url)
   }
 }
@@ -135,13 +164,19 @@ function cacheRenderedImage(image: HTMLImageElement): CachedClipboardImage | nul
   const existing = getResolved(source)
   if (existing) return existing
   if (!source || !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return null
+  let canvas: HTMLCanvasElement | undefined
   try {
-    const canvas = document.createElement('canvas')
-    canvas.width = image.naturalWidth
-    canvas.height = image.naturalHeight
+    const dimensions = fitImageDimensions(
+      image.naturalWidth,
+      image.naturalHeight,
+      MAX_CLIPBOARD_IMAGE_PIXELS,
+    )
+    canvas = document.createElement('canvas')
+    canvas.width = dimensions.width
+    canvas.height = dimensions.height
     const context = canvas.getContext('2d')
     if (!context) return null
-    context.drawImage(image, 0, 0)
+    context.drawImage(image, 0, 0, dimensions.width, dimensions.height)
     const dataUrl = canvas.toDataURL('image/png')
     const cached = { dataUrl, png: dataUrlToBlob(dataUrl) }
     putResolved(source, cached)
@@ -149,6 +184,11 @@ function cacheRenderedImage(image: HTMLImageElement): CachedClipboardImage | nul
   } catch {
     // 跨域图片可能污染 canvas，后续由 fetch 异步路径继续尝试。
     return null
+  } finally {
+    if (canvas) {
+      canvas.width = 1
+      canvas.height = 1
+    }
   }
 }
 
@@ -157,31 +197,32 @@ function warmImage(image: HTMLImageElement): Promise<CachedClipboardImage> | nul
   if (!source) return null
   const existing = imagePromises.get(source)
   if (existing) return existing
+  if (imagePromises.size >= MAX_IN_FLIGHT_IMAGES) return null
 
   const localPaths = xmdAssetPaths(source)
-  const blobPromise = localPaths.length
-    ? readLocalImage(localPaths).then(({ bytes, path }) => {
-        const owned = Uint8Array.from(bytes)
-        return new Blob([owned.buffer], { type: imageMimeType(path) })
-      })
-    : fetch(source).then(async (response) => {
-        if (!response.ok) throw new Error(`图片读取失败：${response.status}`)
-        return response.blob()
-      })
-
-  const promise = blobPromise
-    .then(async (blob) => {
-      const [dataUrl, png] = await Promise.all([blobToDataUrl(blob), toPng(blob)])
+  return imagePromises.getOrCreate(source, () =>
+    imageTaskQueue.run(async () => {
+      const blob = localPaths.length
+        ? await readLocalImage(localPaths).then(({ bytes, path }) =>
+            ensureBlobWithinBudget(
+              new Blob([blobPartFromBytes(bytes)], { type: imageMimeType(path) }),
+            ),
+          )
+        : await fetch(source).then(async (response) => {
+            if (!response.ok) throw new Error(`图片读取失败：${response.status}`)
+            const declaredSize = Number(response.headers.get('content-length') ?? 0)
+            if (declaredSize > MAX_CLIPBOARD_IMAGE_BYTES) {
+              throw new Error('图片超过 32 MB，已停止预加载')
+            }
+            return ensureBlobWithinBudget(await response.blob())
+          })
+      const dataUrl = await blobToDataUrl(blob)
+      const png = await toPng(blob)
       const cached = { dataUrl, png }
       putResolved(source, cached)
       return cached
-    })
-    .catch((error: unknown) => {
-      imagePromises.delete(source)
-      throw error
-    })
-  imagePromises.set(source, promise)
-  return promise
+    }),
+  )
 }
 
 function cloneSingleImage(image: HTMLImageElement): HTMLElement {
@@ -414,11 +455,12 @@ export function setupRichClipboard(root: HTMLElement): () => void {
           })
         })
   const observeImages = (): void => {
-    if (!intersection) return
     root.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
       if (observedImages.has(image)) return
       observedImages.add(image)
-      intersection.observe(image)
+      image.loading = 'lazy'
+      image.decoding = 'async'
+      intersection?.observe(image)
     })
   }
   observeImages()

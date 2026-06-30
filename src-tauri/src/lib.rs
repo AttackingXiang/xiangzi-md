@@ -48,6 +48,7 @@ pub fn run() {
             commands::app::quit_confirmed,
             commands::workspace::open_folder_path,
             commands::workspace::read_file,
+            commands::workspace::check_binary_file,
             commands::workspace::write_file,
             commands::workspace::read_dir,
             commands::workspace::list_files,
