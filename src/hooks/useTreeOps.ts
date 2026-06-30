@@ -4,6 +4,7 @@ import { getLang, t } from '../lib/i18n'
 import { revealLocationKey } from '../lib/platform'
 import { baseName } from '../lib/path'
 import { replaceMovedPath } from '../lib/treeDrag'
+import { removeWorkspacePath } from '../lib/workspaceRemoval'
 import type { FileNode, Folder, Tab } from '../types'
 import type { MenuItem } from '../components/ContextMenu'
 
@@ -11,7 +12,8 @@ interface Deps {
   folder: Folder | null
   setFolder: (updater: (prev: Folder | null) => Folder | null) => void
   openPath: (path: string, name?: string) => Promise<void>
-  closeTab: (id: string) => void
+  confirmCloseTabs: (ids: readonly string[]) => Promise<boolean>
+  closeTabsWithoutPrompt: (ids: readonly string[]) => void
   tabs: Tab[]
   setTabs: Dispatch<SetStateAction<Tab[]>>
   setCtxMenu: (menu: { x: number; y: number; items: MenuItem[] } | null) => void
@@ -32,7 +34,8 @@ export function useTreeOps({
   folder,
   setFolder,
   openPath,
-  closeTab,
+  confirmCloseTabs,
+  closeTabsWithoutPrompt,
   tabs,
   setTabs,
   setCtxMenu,
@@ -128,19 +131,17 @@ export function useTreeOps({
           : `确定要删除「${node.name}」吗？将移入废纸篓。`
       if (!window.confirm(msg)) return
       try {
-        await desktop.trash(node.path)
-        // Close any tabs that opened this path (or children)
-        const affected = tabs.filter(
-          (tab) =>
-            tab.path && replaceMovedPath(tab.path, node.path, `${node.path}.deleted`) !== tab.path,
-        )
-        affected.forEach((tab) => void closeTab(tab.id))
-        await refreshTree()
+        await removeWorkspacePath(node.path, tabs, {
+          confirmCloseTabs,
+          trash: (path) => desktop.trash(path),
+          closeTabsWithoutPrompt,
+          refreshTree,
+        })
       } catch {
         window.alert(t('删除失败'))
       }
     },
-    [tabs, closeTab, refreshTree],
+    [tabs, confirmCloseTabs, closeTabsWithoutPrompt, refreshTree],
   )
 
   // ── Context menus ──────────────────────────────────────────────────────────

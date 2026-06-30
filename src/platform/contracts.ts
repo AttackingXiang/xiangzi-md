@@ -88,6 +88,7 @@ export interface DesktopPort {
   openExternal(url: string): Promise<void>
   moveItem(sourcePath: string, targetDirPath: string): Promise<{ path: string; name: string }>
   searchInFolder(root: string, query: string): Promise<SearchResult[]>
+  cancelSearch(): Promise<void>
   saveAttachment(
     docDir: string,
     docName: string,

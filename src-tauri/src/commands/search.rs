@@ -1,16 +1,23 @@
 use super::blocking;
 use crate::{
     domain::{error::AppResult, models::SearchResult},
-    infrastructure::search,
+    infrastructure::search::{self, SearchCancellation},
 };
 use std::path::PathBuf;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn search_in_folder(
     app: AppHandle,
+    cancellation: State<'_, SearchCancellation>,
     root: String,
     query: String,
 ) -> AppResult<Vec<SearchResult>> {
-    blocking(move || search::search_in_folder(&app, &PathBuf::from(root), &query)).await
+    let token = cancellation.begin();
+    blocking(move || search::search_in_folder(&app, &PathBuf::from(root), &query, &token)).await
+}
+
+#[tauri::command]
+pub fn cancel_search(cancellation: State<'_, SearchCancellation>) {
+    cancellation.cancel();
 }

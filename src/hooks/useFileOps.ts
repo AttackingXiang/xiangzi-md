@@ -205,21 +205,38 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     [requestCloseDecision, saveTab],
   )
 
+  const confirmCloseTabs = useCallback(
+    (ids: readonly string[]): Promise<boolean> => {
+      const targets = new Set(ids)
+      return confirmCloseTargets(stateRef.current.tabs.filter((tab) => targets.has(tab.id)))
+    },
+    [confirmCloseTargets],
+  )
+
+  const closeTabsWithoutPrompt = useCallback((ids: readonly string[]): void => {
+    const targets = new Set(ids)
+    if (targets.size === 0) return
+    const snapshot = stateRef.current.tabs
+    setTabs((previous) => previous.filter((tab) => !targets.has(tab.id)))
+    setActiveId((current) => {
+      if (!current || !targets.has(current)) return current
+      const currentIndex = snapshot.findIndex((tab) => tab.id === current)
+      const nextTab = snapshot.slice(currentIndex + 1).find((tab) => !targets.has(tab.id))
+      const previousTab = snapshot
+        .slice(0, currentIndex)
+        .reverse()
+        .find((tab) => !targets.has(tab.id))
+      return nextTab?.id ?? previousTab?.id ?? null
+    })
+  }, [])
+
   const closeTab = useCallback(
     async (id: string) => {
       const tab = stateRef.current.tabs.find((item) => item.id === id)
       if (!tab || !(await confirmCloseTargets([tab]))) return
-      setTabs((prev) => {
-        const index = prev.findIndex((item) => item.id === id)
-        const next = prev.filter((item) => item.id !== id)
-        setActiveId((current) => {
-          if (current !== id) return current
-          return next[Math.min(index, next.length - 1)]?.id ?? null
-        })
-        return next
-      })
+      closeTabsWithoutPrompt([id])
     },
-    [confirmCloseTargets],
+    [closeTabsWithoutPrompt, confirmCloseTargets],
   )
 
   const closeOthers = useCallback(
@@ -321,5 +338,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     updateContent,
     restoreSession,
     hasDirtyTabs,
+    confirmCloseTabs,
+    closeTabsWithoutPrompt,
   }
 }
