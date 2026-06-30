@@ -134,7 +134,7 @@ export function useTreeOps({
           (tab) =>
             tab.path && replaceMovedPath(tab.path, node.path, `${node.path}.deleted`) !== tab.path,
         )
-        affected.forEach((tab) => closeTab(tab.id))
+        affected.forEach((tab) => void closeTab(tab.id))
         await refreshTree()
       } catch {
         window.alert(t('删除失败'))

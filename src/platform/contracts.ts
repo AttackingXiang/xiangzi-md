@@ -75,6 +75,7 @@ export interface DesktopPort {
   openFolderPath(root: string): Promise<Folder | null>
   openFile(): Promise<OpenedFile | null>
   readFile(path: string): Promise<OpenedFile>
+  readBinaryFile(path: string): Promise<Uint8Array>
   writeFile(path: string, content: string): Promise<{ path: string }>
   saveAs(content: string, suggestedName?: string): Promise<Pick<OpenedFile, 'path' | 'name'> | null>
   readDir(path: string): Promise<FileNode[]>
@@ -94,6 +95,8 @@ export interface DesktopPort {
     fileName: string,
     data: Uint8Array,
   ): Promise<{ relPath: string }>
+  writeClipboardHtml(html: string, altText: string): Promise<void>
+  writeClipboardImage(png: Uint8Array): Promise<void>
   getSettings(): Promise<AppSettings>
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>
   findInPage(text: string, forward?: boolean, findNext?: boolean): Promise<void>

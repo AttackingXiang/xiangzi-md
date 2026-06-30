@@ -1,7 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { Image } from '@tauri-apps/api/image'
+import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { ask, open, save } from '@tauri-apps/plugin-dialog'
-import { writeFile as writeBinaryFile } from '@tauri-apps/plugin-fs'
+import { readFile as readBinaryFile, writeFile as writeBinaryFile } from '@tauri-apps/plugin-fs'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, type Update } from '@tauri-apps/plugin-updater'
@@ -90,6 +92,7 @@ export const tauriDesktopAdapter: DesktopPort = {
     return path ? invoke<OpenedFile>('read_file', { path }) : null
   },
   readFile: (path) => invoke<OpenedFile>('read_file', { path }),
+  readBinaryFile,
   writeFile: (path, content) => invoke('write_file', { path, content }),
   saveAs: async (content, suggestedName) => {
     const path = await save({
@@ -112,6 +115,15 @@ export const tauriDesktopAdapter: DesktopPort = {
   searchInFolder: (root, query) => invoke<SearchResult[]>('search_in_folder', { root, query }),
   saveAttachment: (docDir, docName, vaultRoot, fileName, data) =>
     invoke('save_attachment', { docDir, docName, vaultRoot, fileName, data: Array.from(data) }),
+  writeClipboardHtml: (html, altText) => writeHtml(html, altText),
+  writeClipboardImage: async (png) => {
+    const image = await Image.fromBytes(png)
+    try {
+      await writeImage(image)
+    } finally {
+      await image.close()
+    }
+  },
   getSettings: () => invoke<AppSettings>('get_settings'),
   setSettings: (patch) => invoke<AppSettings>('set_settings', { patch }),
   findInPage: (text, forward = true, findNext = false) => {

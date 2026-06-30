@@ -115,6 +115,7 @@ const EN: Record<string, string> = {
   // Editor context menu
   剪切: 'Cut',
   复制: 'Copy',
+  复制图片: 'Copy Image',
   粘贴: 'Paste',
   加粗: 'Bold',
   斜体: 'Italic',
@@ -145,6 +146,12 @@ const EN: Record<string, string> = {
   导出完成: 'Export complete',
   '文件已保存到：': 'Saved to:',
   打开所在文件夹: 'Open containing folder',
+  尚未保存修改: 'Unsaved changes',
+  未保存的文档: 'Unsaved documents',
+  未保存的修改预览: 'Unsaved changes preview',
+  行变更: 'line changes',
+  内容格式发生了变化: 'Content formatting changed',
+  '仅显示部分变更…': 'Showing a partial preview…',
   // Alerts / misc
   '请先保存文档，再插入本地图片。': 'Please save the document before inserting a local image.',
   '单个附件不能超过 20 MB。': 'An attachment cannot exceed 20 MB.',

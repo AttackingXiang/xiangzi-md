@@ -1,7 +1,7 @@
 {
   "name": "xiangzi-md",
   "private": true,
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "Xiangzi MD — 一个本地优先、所见即所得的 Markdown 编辑器",
   "author": "guoxiangzi",
   "license": "MIT",
@@ -44,6 +44,7 @@
     "@milkdown/kit": "7.21.2",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-process": "^2.3.1",

@@ -37,6 +37,8 @@ mise run check
 
 ## 文档入口
 
+- [使用说明](docs/USER_GUIDE.md)
+- [渲染效果示例](docs/RENDERING_SHOWCASE.md)
 - [架构说明](docs/ARCHITECTURE.md)
 - [迁移计划](docs/MIGRATION_PLAN.md)
 - [功能对照表](docs/FEATURE_PARITY.md)

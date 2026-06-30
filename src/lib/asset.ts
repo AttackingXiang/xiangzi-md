@@ -15,6 +15,31 @@ function isAbsolute(src: string): boolean {
   return src.startsWith('/') || /^[A-Za-z]:[\\/]/.test(src) || src.startsWith('\\\\')
 }
 
+/** 解析 xmd:// 地址中的主路径和备用路径，顺序与 Rust 协议处理器一致。 */
+export function xmdAssetPaths(source: string): string[] {
+  try {
+    const url = new URL(source)
+    if (url.protocol !== 'xmd:') return []
+    const primary = decodeURIComponent(url.pathname.slice(1))
+    const alternatives = (url.searchParams.get('alts') ?? '')
+      .split('\n')
+      .map((path) => path.trim())
+      .filter(Boolean)
+    return [...new Set([primary, ...alternatives].filter(Boolean))]
+  } catch {
+    return []
+  }
+}
+
+export function imageMimeType(path: string): string {
+  const cleanPath = path.split(/[?#]/, 1)[0]
+  if (/\.jpe?g$/i.test(cleanPath)) return 'image/jpeg'
+  if (/\.gif$/i.test(cleanPath)) return 'image/gif'
+  if (/\.webp$/i.test(cleanPath)) return 'image/webp'
+  if (/\.svg$/i.test(cleanPath)) return 'image/svg+xml'
+  return 'image/png'
+}
+
 /**
  * 把 Markdown 中的图片/资源 src 解析成可在渲染层显示的 URL。
  * - http(s)/data/blob/xmd：原样返回

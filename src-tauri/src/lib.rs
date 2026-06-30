@@ -14,6 +14,7 @@ pub fn run() {
             infrastructure::lifecycle::reveal_main_window(app);
         }))
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_persisted_scope::init())
