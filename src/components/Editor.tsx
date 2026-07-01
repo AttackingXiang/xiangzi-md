@@ -2,13 +2,13 @@ import { useEffect, useRef } from 'react'
 import { desktop } from '../platform'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import { editorViewCtx } from '@milkdown/kit/core'
-import { AllSelection } from '@milkdown/kit/prose/state'
+import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import { resolveAssetURL } from '../lib/asset'
 import { codeMirrorTheme } from '../lib/codeTheme'
-import { setupTableResize } from '../lib/tableResize'
+import { resizableTableView, tableColumnResizingPlugin } from '../lib/resizableTable'
 import { focusPlugin } from '../lib/focusPlugin'
 import { searchPlugin } from '../lib/searchPlugin'
 import { headingFoldPlugin } from '../lib/headingFold'
@@ -162,10 +162,15 @@ export default function Editor({
     crepe.editor.use(focusPlugin)
     crepe.editor.use(searchPlugin)
     crepe.editor.use(headingFoldPlugin)
+    crepe.editor.use(tableColumnResizingPlugin)
+    // 放在 Crepe 自带 tableBlockView 之后注册，同一节点类型由最后注册的视图接管。
+    crepe.editor.use(resizableTableView)
 
     let ready = false
     let userEdited = false
     let baselineMarkdown = content
+    let scrollRestoreFrame: number | null = null
+    let restoringScroll = true
     crepe.on((listener) => {
       listener.markdownUpdated((_ctx, markdown) => {
         // 初始化阶段 Milkdown 会规范化 Markdown；以 create 完成后的内容为基线，
@@ -181,7 +186,6 @@ export default function Editor({
 
     let destroyed = false
     let editorView: EditorView | undefined
-    let disposeTableResize: (() => void) | undefined
     const disposeRichClipboard = setupRichClipboard(root)
     const clearSelectAllVisual = (): void => {
       if (!root.classList.contains('select-all-active')) return
@@ -207,6 +211,42 @@ export default function Editor({
         userEdited = true
       }
     }
+    const markTableResize = (event: MouseEvent): void => {
+      if (!(event.target instanceof Element)) return
+      if (event.target.closest('td, th') && root.querySelector('.ProseMirror.resize-cursor')) {
+        userEdited = true
+      }
+    }
+    const focusEditorFromBlankArea = (event: PointerEvent): void => {
+      if (event.button !== 0 || !editorView || !(event.target instanceof Element)) return
+      if (event.target.closest('.ProseMirror')) return
+
+      const clickedRoot = event.target === root
+      const clickedMilkdownBackground = event.target.classList.contains('milkdown')
+      if (!clickedRoot && !clickedMilkdownBackground) return
+
+      const editorRect = editorView.dom.getBoundingClientRect()
+      const horizontalInset = Math.min(2, editorRect.width / 2)
+      const verticalInset = Math.min(2, editorRect.height / 2)
+      const left = Math.min(
+        Math.max(event.clientX, editorRect.left + horizontalInset),
+        editorRect.right - horizontalInset,
+      )
+      const top = Math.min(
+        Math.max(event.clientY, editorRect.top + verticalInset),
+        editorRect.bottom - verticalInset,
+      )
+      const mapped = editorView.posAtCoords({ left, top })
+      const selection = mapped
+        ? TextSelection.near(editorView.state.doc.resolve(mapped.pos))
+        : event.clientY < editorRect.top
+          ? TextSelection.atStart(editorView.state.doc)
+          : TextSelection.atEnd(editorView.state.doc)
+
+      event.preventDefault()
+      editorView.dispatch(editorView.state.tr.setSelection(selection).scrollIntoView())
+      editorView.focus()
+    }
     const onSelectAllRequest = (event: Event): void => {
       if (!editorView) return
       event.preventDefault()
@@ -219,12 +259,48 @@ export default function Editor({
     document.addEventListener('pointerdown', clearSelectAllVisual, true)
     root.addEventListener('pointerdown', clearSelectAllVisual, true)
     root.addEventListener('pointerdown', markEditorControl, true)
+    root.addEventListener('mousedown', markTableResize, true)
+    root.addEventListener('pointerdown', focusEditorFromBlankArea)
     root.addEventListener('keydown', clearSelectAllOnKey, true)
-    const reportScroll = (): void => onScrollTopChangeRef.current?.(root.scrollTop)
+    const cancelScrollRestore = (): void => {
+      restoringScroll = false
+      if (scrollRestoreFrame !== null) {
+        cancelAnimationFrame(scrollRestoreFrame)
+        scrollRestoreFrame = null
+      }
+    }
+    const reportScroll = (): void => {
+      if (!restoringScroll) onScrollTopChangeRef.current?.(root.scrollTop)
+    }
+    const restoreScroll = (): void => {
+      let attempts = 0
+      let stableFrames = 0
+      const apply = (): void => {
+        if (destroyed || !restoringScroll) return
+        root.scrollTop = initialScrollTop
+        attempts += 1
+        const reached = Math.abs(root.scrollTop - initialScrollTop) <= 1
+        stableFrames = reached ? stableFrames + 1 : 0
+        // Milkdown node views and local images finish layout asynchronously.
+        // Keep the requested position stable for about one second so a late
+        // selection/layout update cannot pull a restored tab back to the top.
+        if (stableFrames >= 60 || attempts >= 180) {
+          restoringScroll = false
+          scrollRestoreFrame = null
+          onScrollTopChangeRef.current?.(root.scrollTop)
+          return
+        }
+        scrollRestoreFrame = requestAnimationFrame(apply)
+      }
+      scrollRestoreFrame = requestAnimationFrame(apply)
+    }
     const markUserEdited = (): void => {
       userEdited = true
     }
     root.addEventListener('scroll', reportScroll, { passive: true })
+    root.addEventListener('wheel', cancelScrollRestore, { passive: true })
+    root.addEventListener('touchstart', cancelScrollRestore, { passive: true })
+    root.addEventListener('pointerdown', cancelScrollRestore, true)
     root.addEventListener('beforeinput', markUserEdited)
     root.addEventListener('paste', markUserEdited)
     root.addEventListener('cut', markUserEdited)
@@ -236,36 +312,40 @@ export default function Editor({
           void crepe.destroy()
           return
         }
-        disposeTableResize = setupTableResize(root)
         // 暴露 ProseMirror 视图给查找/替换
         crepe.editor.action((ctx) => {
           editorView = ctx.get(editorViewCtx)
-          editorBridge.set(editorView)
+          editorBridge.set(editorView, markUserEdited)
         })
         baselineMarkdown = crepe.getMarkdown()
         ready = true
-        requestAnimationFrame(() => {
-          if (!destroyed) root.scrollTop = initialScrollTop
-        })
+        restoreScroll()
       })
       .catch((error: unknown) => console.error('Editor initialization failed', error))
 
     return () => {
       destroyed = true
-      disposeTableResize?.()
       disposeRichClipboard()
       window.removeEventListener('xmd-select-all', onSelectAllRequest)
       window.removeEventListener('xmd-clear-select-all', clearSelectAllVisual)
       document.removeEventListener('pointerdown', clearSelectAllVisual, true)
       root.removeEventListener('pointerdown', clearSelectAllVisual, true)
       root.removeEventListener('pointerdown', markEditorControl, true)
+      root.removeEventListener('mousedown', markTableResize, true)
+      root.removeEventListener('pointerdown', focusEditorFromBlankArea)
       root.removeEventListener('keydown', clearSelectAllOnKey, true)
       root.removeEventListener('scroll', reportScroll)
+      root.removeEventListener('wheel', cancelScrollRestore)
+      root.removeEventListener('touchstart', cancelScrollRestore)
+      root.removeEventListener('pointerdown', cancelScrollRestore, true)
       root.removeEventListener('beforeinput', markUserEdited)
       root.removeEventListener('paste', markUserEdited)
       root.removeEventListener('cut', markUserEdited)
       root.removeEventListener('drop', markUserEdited)
-      reportScroll()
+      if (scrollRestoreFrame !== null) cancelAnimationFrame(scrollRestoreFrame)
+      // Do not persist from passive-effect cleanup. React may already have
+      // detached this keyed editor from layout, at which point WebKit reports
+      // scrollTop as 0 and would overwrite the position captured on pointerdown.
       clearSelectAllVisual()
       if (ready && userEdited) {
         try {

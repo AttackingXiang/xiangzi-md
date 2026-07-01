@@ -3,7 +3,7 @@ import { desktop } from '../platform'
 import { getLang } from '../lib/i18n'
 import { createTaskQueue, mapWithConcurrencyLimit } from '../lib/asyncPool'
 import { InFlightCache } from '../lib/inFlightCache'
-import type { Tab } from '../types'
+import type { Draft, Tab } from '../types'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 
 let tabSeq = 0
@@ -20,6 +20,13 @@ function newUntitledName(tabs: Tab[], lang: 'zh' | 'en'): string {
   let i = 2
   while (names.has(`${base} ${i}${ext}`)) i++
   return `${base} ${i}${ext}`
+}
+
+function recoveredDraftName(name: string, lang: 'zh' | 'en'): string {
+  const suffix = lang === 'en' ? ' (Recovered)' : '（已恢复）'
+  if (name.includes(suffix)) return name
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? `${name.slice(0, dot)}${suffix}${name.slice(dot)}` : `${name}${suffix}`
 }
 
 interface Deps {
@@ -77,6 +84,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
             content: file.content,
             savedContent: file.content,
             dirty: false,
+            revision: 0,
           }
           setTabs((prev) => [...prev, tab])
           setActiveId(tab.id)
@@ -102,6 +110,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
       content: file.content,
       savedContent: file.content,
       dirty: false,
+      revision: 0,
     }
     setTabs((prev) => [...prev, tab])
     setActiveId(tab.id)
@@ -117,10 +126,34 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
       content: '',
       savedContent: '',
       dirty: false,
+      revision: 0,
     }
     setTabs((prev) => [...prev, tab])
     setActiveId(tab.id)
   }, [lang])
+
+  const recoverDraft = useCallback(
+    (draft: Draft): void => {
+      const existing = stateRef.current.tabs.find((tab) => tab.id === draft.id)
+      if (existing) {
+        setActiveId(existing.id)
+        return
+      }
+      const tab: Tab = {
+        id: draft.id,
+        path: null,
+        recoverySourcePath: draft.path,
+        name: recoveredDraftName(draft.name, lang),
+        content: draft.content,
+        savedContent: '',
+        dirty: true,
+        revision: 1,
+      }
+      setTabs((previous) => [...previous, tab])
+      setActiveId(tab.id)
+    },
+    [lang],
+  )
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const saveTab = useCallback(
@@ -143,6 +176,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
                   ? {
                       ...t,
                       path: result.path,
+                      recoverySourcePath: null,
                       name: result.name,
                       savedContent: tab.content,
                       dirty: false,
@@ -180,6 +214,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
                 ? {
                     ...t,
                     path: result.path,
+                    recoverySourcePath: null,
                     name: result.name,
                     savedContent: tab.content,
                     dirty: false,
@@ -199,7 +234,16 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
   // ── Content update ─────────────────────────────────────────────────────────
   const updateContent = useCallback((id: string, content: string) => {
     setTabs((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, content, dirty: content !== t.savedContent } : t)),
+      prev.map((t) =>
+        t.id === id && content !== t.content
+          ? {
+              ...t,
+              content,
+              dirty: content !== t.savedContent,
+              revision: t.revision + 1,
+            }
+          : t,
+      ),
     )
   }, [])
 
@@ -318,6 +362,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
               content: file.content,
               savedContent: file.content,
               dirty: false,
+              revision: 0,
             }
           } catch {
             return null
@@ -345,6 +390,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     openPath,
     openFile,
     newFile,
+    recoverDraft,
     saveTab,
     saveAsTab,
     closeTab,

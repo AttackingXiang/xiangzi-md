@@ -1,5 +1,6 @@
 pub mod app;
 pub mod attachment;
+pub mod drafts;
 pub mod search;
 pub mod settings;
 pub mod workspace;

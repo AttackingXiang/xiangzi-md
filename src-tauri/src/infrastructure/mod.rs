@@ -1,4 +1,5 @@
 pub mod attachment;
+pub mod drafts;
 pub mod lifecycle;
 pub mod menu;
 pub mod protocol;

@@ -87,6 +87,54 @@ describe('tauriDesktopAdapter', () => {
     expect(invokeMock).toHaveBeenCalledWith('open_folder_path', { root: '/notes' })
   })
 
+  it('starts folder navigation from the currently opened directory', async () => {
+    openMock.mockResolvedValueOnce('/notes/archive')
+    invokeMock.mockResolvedValueOnce({ root: '/notes/archive', name: 'archive', tree: [] })
+
+    await tauriDesktopAdapter.openFolder('/notes/current')
+
+    expect(openMock).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      recursive: true,
+      defaultPath: '/notes/current',
+    })
+    expect(invokeMock).toHaveBeenCalledWith('open_folder_path', { root: '/notes/archive' })
+  })
+
+  it('uses scoped commands for parent and containing-folder navigation', async () => {
+    invokeMock.mockResolvedValue(null)
+
+    await tauriDesktopAdapter.openParentFolder('/notes/current')
+    await tauriDesktopAdapter.openContainingFolder('/outside/a.md')
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, 'open_parent_folder', {
+      root: '/notes/current',
+    })
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'open_containing_folder', {
+      filePath: '/outside/a.md',
+    })
+  })
+
+  it('maps bounded draft recovery operations to Rust commands', async () => {
+    invokeMock.mockResolvedValue(undefined)
+
+    await tauriDesktopAdapter.listDrafts()
+    await tauriDesktopAdapter.readDraft('tab-1')
+    await tauriDesktopAdapter.saveDraft('tab-1', '/notes/a.md', 'a.md', 'draft')
+    await tauriDesktopAdapter.deleteDraft('tab-1')
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, 'list_drafts')
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'read_draft', { id: 'tab-1' })
+    expect(invokeMock).toHaveBeenNthCalledWith(3, 'save_draft', {
+      id: 'tab-1',
+      path: '/notes/a.md',
+      name: 'a.md',
+      content: 'draft',
+    })
+    expect(invokeMock).toHaveBeenNthCalledWith(4, 'delete_draft', { id: 'tab-1' })
+  })
+
   it('declares the frontend ready only after the open-path listener is registered', async () => {
     const unlisten = vi.fn()
     let finishListening: ((stop: () => void) => void) | undefined

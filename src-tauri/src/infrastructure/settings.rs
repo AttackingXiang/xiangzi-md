@@ -11,13 +11,14 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_fs::FsExt;
 use tempfile::NamedTempFile;
 
-const SETTINGS_SCHEMA_VERSION: u32 = 2;
+const SETTINGS_SCHEMA_VERSION: u32 = 3;
 const MAX_RECENT_ITEMS: usize = 15;
 const MAX_FAVORITES: usize = 32;
 const MAX_SESSION_FILES: usize = 12;
 const MAX_ASSET_SEARCH_PATHS: usize = 32;
 const MAX_SHORTCUT_OVERRIDES: usize = 64;
 const MAX_PATH_LENGTH: usize = 4096;
+const MAX_FAVORITE_LABEL_CHARS: usize = 80;
 const MAX_SETTINGS_BYTES: u64 = 1024 * 1024;
 
 const SHORTCUT_ACTIONS: &[&str] = &[
@@ -80,6 +81,8 @@ pub struct AppSettings {
     pub recent_files: Vec<String>,
     pub recent_folders: Vec<String>,
     pub favorites: Vec<String>,
+    pub favorites_collapsed: bool,
+    pub favorite_labels: BTreeMap<String, String>,
     pub session: SessionSettings,
     pub hide_attachment_folders: bool,
     pub asset_search_paths: Vec<String>,
@@ -103,6 +106,8 @@ impl Default for AppSettings {
             recent_files: Vec::new(),
             recent_folders: Vec::new(),
             favorites: Vec::new(),
+            favorites_collapsed: false,
+            favorite_labels: BTreeMap::new(),
             session: SessionSettings::default(),
             hide_attachment_folders: false,
             asset_search_paths: Vec::new(),
@@ -127,6 +132,8 @@ pub struct SettingsPatch {
     pub recent_files: Option<Vec<String>>,
     pub recent_folders: Option<Vec<String>>,
     pub favorites: Option<Vec<String>>,
+    pub favorites_collapsed: Option<bool>,
+    pub favorite_labels: Option<BTreeMap<String, String>>,
     pub session: Option<SessionSettings>,
     pub hide_attachment_folders: Option<bool>,
     pub asset_search_paths: Option<Vec<String>>,
@@ -264,6 +271,7 @@ fn migrate_settings(settings: &mut AppSettings, source_version: u32) -> AppResul
         match version {
             0 => migrate_v0_to_v1(settings),
             1 => migrate_v1_to_v2(settings),
+            2 => migrate_v2_to_v3(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -284,6 +292,11 @@ fn migrate_v0_to_v1(_settings: &mut AppSettings) {
 
 fn migrate_v1_to_v2(_settings: &mut AppSettings) {
     // Schema 2 only added fields with backward-compatible defaults.
+}
+
+fn migrate_v2_to_v3(_settings: &mut AppSettings) {
+    // Schema 3 adds persisted favorite presentation preferences. Serde has
+    // already supplied their backward-compatible defaults.
 }
 
 fn sanitize_loaded_settings(settings: &mut AppSettings) {
@@ -312,6 +325,12 @@ fn sanitize_loaded_settings(settings: &mut AppSettings) {
             && valid_shortcut_binding(binding)
             && seen_shortcuts.insert(binding.clone())
     });
+    for label in settings.favorite_labels.values_mut() {
+        *label = label.trim().to_owned();
+    }
+    settings
+        .favorite_labels
+        .retain(|_, label| valid_favorite_label(label));
     limit_collections(settings);
 }
 
@@ -348,12 +367,20 @@ fn validate_settings(settings: &AppSettings) -> AppResult<()> {
             .chain(settings.recent_files.iter())
             .chain(settings.recent_folders.iter())
             .chain(settings.favorites.iter())
+            .chain(settings.favorite_labels.keys())
             .chain(settings.session.open_files.iter())
             .chain(settings.session.folder.iter())
             .chain(settings.session.active_path.iter())
             .any(|path| path.len() > MAX_PATH_LENGTH)
     {
         return Err(AppError::new("settings_invalid", "设置中的路径过长"));
+    }
+    if settings
+        .favorite_labels
+        .values()
+        .any(|label| !valid_favorite_label(label))
+    {
+        return Err(AppError::new("settings_invalid", "收藏目录名称无效"));
     }
     Ok(())
 }
@@ -383,10 +410,21 @@ fn valid_shortcut_binding(binding: &str) -> bool {
             .any(|part| matches!(*part, "Mod" | "Control" | "Alt"))
 }
 
+fn valid_favorite_label(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed.chars().count() <= MAX_FAVORITE_LABEL_CHARS
+        && !trimmed.chars().any(char::is_control)
+}
+
 fn limit_collections(settings: &mut AppSettings) {
     settings.recent_files.truncate(MAX_RECENT_ITEMS);
     settings.recent_folders.truncate(MAX_RECENT_ITEMS);
     settings.favorites.truncate(MAX_FAVORITES);
+    let favorites = settings.favorites.iter().cloned().collect::<BTreeSet<_>>();
+    settings
+        .favorite_labels
+        .retain(|path, _| favorites.contains(path));
     settings.session.open_files.truncate(MAX_SESSION_FILES);
     settings.asset_search_paths.truncate(MAX_ASSET_SEARCH_PATHS);
 }
@@ -436,6 +474,8 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(recent_files);
     replace_if_some!(recent_folders);
     replace_if_some!(favorites);
+    replace_if_some!(favorites_collapsed);
+    replace_if_some!(favorite_labels);
     replace_if_some!(session);
     replace_if_some!(hide_attachment_folders);
     replace_if_some!(asset_search_paths);
@@ -489,6 +529,8 @@ mod tests {
         assert_eq!(settings.language, "en");
         assert_eq!(settings.attachment_folder, "assets");
         assert!(settings.check_updates_on_startup);
+        assert!(!settings.favorites_collapsed);
+        assert!(settings.favorite_labels.is_empty());
     }
 
     #[test]
@@ -540,5 +582,20 @@ mod tests {
             .shortcuts
             .insert("select-all".into(), "Mod+A".into());
         assert!(validate_settings(&settings).is_ok());
+    }
+
+    #[test]
+    fn validates_favorite_display_labels_without_touching_folder_names() {
+        let mut settings = AppSettings::default();
+        settings.favorites.push("/notes/work".into());
+        settings
+            .favorite_labels
+            .insert("/notes/work".into(), "工作资料".into());
+        assert!(validate_settings(&settings).is_ok());
+
+        settings
+            .favorite_labels
+            .insert("/notes/work".into(), "\n".into());
+        assert!(validate_settings(&settings).is_err());
     }
 }

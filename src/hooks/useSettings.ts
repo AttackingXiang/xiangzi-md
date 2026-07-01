@@ -130,10 +130,36 @@ export function useSettings() {
       if (!prev) return prev
       const has = prev.favorites.includes(p)
       const favorites = has ? prev.favorites.filter((x) => x !== p) : [...prev.favorites, p]
+      const favoriteLabels = { ...prev.favoriteLabels }
+      if (has) delete favoriteLabels[p]
       void desktop
-        .setSettings({ favorites })
+        .setSettings({ favorites, favoriteLabels })
         .catch((error: unknown) => console.error('Favorites persistence failed', error))
-      return { ...prev, favorites }
+      return { ...prev, favorites, favoriteLabels }
+    })
+  }, [])
+
+  const setFavoritesCollapsed = useCallback((favoritesCollapsed: boolean) => {
+    setSettings((prev) => {
+      if (!prev || prev.favoritesCollapsed === favoritesCollapsed) return prev
+      void desktop
+        .setSettings({ favoritesCollapsed })
+        .catch((error: unknown) => console.error('Favorites state persistence failed', error))
+      return { ...prev, favoritesCollapsed }
+    })
+  }, [])
+
+  const setFavoriteLabel = useCallback((p: string, value: string) => {
+    setSettings((prev) => {
+      if (!prev || !prev.favorites.includes(p)) return prev
+      const label = Array.from(value.trim()).slice(0, 80).join('')
+      const favoriteLabels = { ...prev.favoriteLabels }
+      if (label) favoriteLabels[p] = label
+      else delete favoriteLabels[p]
+      void desktop
+        .setSettings({ favoriteLabels })
+        .catch((error: unknown) => console.error('Favorite label persistence failed', error))
+      return { ...prev, favoriteLabels }
     })
   }, [])
 
@@ -144,5 +170,7 @@ export function useSettings() {
     pushRecentFile,
     pushRecentFolder,
     toggleFavorite,
+    setFavoritesCollapsed,
+    setFavoriteLabel,
   }
 }

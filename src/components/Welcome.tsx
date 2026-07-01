@@ -1,4 +1,4 @@
-import { FilePlus2, FolderOpen, FileText, Clock, Folder } from 'lucide-react'
+import { FilePlus2, FolderOpen, FileText, Clock, Folder, RotateCcw } from 'lucide-react'
 import { t } from '../lib/i18n'
 import { baseName, dirName } from '../lib/path'
 
@@ -10,6 +10,8 @@ interface Props {
   onNewFile: () => void
   onOpenRecentFile: (path: string) => void
   onOpenRecentFolder: (path: string) => void
+  draftCount?: number
+  onOpenDrafts?: () => void
 }
 
 function parentDir(p: string): string {
@@ -24,6 +26,8 @@ export default function Welcome({
   onNewFile,
   onOpenRecentFile,
   onOpenRecentFolder,
+  draftCount = 0,
+  onOpenDrafts,
 }: Props): JSX.Element {
   return (
     <div className="welcome">
@@ -50,6 +54,14 @@ export default function Welcome({
             <span>{t('打开文件夹')}</span>
           </button>
         </div>
+
+        {draftCount > 0 && onOpenDrafts && (
+          <button className="draft-recovery-banner" onClick={onOpenDrafts}>
+            <RotateCcw size={16} />
+            <span>{t('有可恢复的草稿')}</span>
+            <strong>{draftCount}</strong>
+          </button>
+        )}
 
         <div className="welcome-recents">
           {recentFiles.length > 0 && (

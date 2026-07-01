@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { OutlineItem } from '../types'
 import { t } from '../lib/i18n'
@@ -19,32 +19,73 @@ export default function Outline({
   onClose,
   width,
 }: Props): JSX.Element {
-  const dragSrc = useRef<number | null>(null)
   const [dropTarget, setDropTarget] = useState<number | null>(null)
+  const dragCleanupRef = useRef<(() => void) | null>(null)
+  const suppressClickRef = useRef(false)
 
-  const handleDragStart = (e: React.DragEvent, i: number): void => {
-    dragSrc.current = i
-    e.dataTransfer.effectAllowed = 'move'
-  }
+  useEffect(
+    () => () => {
+      dragCleanupRef.current?.()
+    },
+    [],
+  )
 
-  const handleDragOver = (e: React.DragEvent, i: number): void => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDropTarget(i)
-  }
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>, fromIndex: number): void => {
+    if (event.button !== 0) return
+    dragCleanupRef.current?.()
+    const startX = event.clientX
+    const startY = event.clientY
+    let dragging = false
+    let targetIndex: number | null = null
 
-  const handleDrop = (e: React.DragEvent, i: number): void => {
-    e.preventDefault()
-    setDropTarget(null)
-    const from = dragSrc.current
-    if (from === null || from === i) return
-    dragSrc.current = null
-    onReorder(from, i)
-  }
+    const cleanup = (): void => {
+      window.removeEventListener('pointermove', handlePointerMove, true)
+      window.removeEventListener('pointerup', handlePointerUp, true)
+      window.removeEventListener('pointercancel', handlePointerCancel, true)
+      window.removeEventListener('blur', handlePointerCancel, true)
+      document.body.classList.remove('outline-pointer-dragging')
+      setDropTarget(null)
+      dragCleanupRef.current = null
+    }
 
-  const handleDragEnd = (): void => {
-    dragSrc.current = null
-    setDropTarget(null)
+    const handlePointerMove = (moveEvent: PointerEvent): void => {
+      if (!dragging && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) {
+        return
+      }
+      if (!dragging) {
+        dragging = true
+        document.body.classList.add('outline-pointer-dragging')
+        window.getSelection()?.removeAllRanges()
+      }
+      moveEvent.preventDefault()
+      const candidate = document
+        .elementFromPoint(moveEvent.clientX, moveEvent.clientY)
+        ?.closest<HTMLElement>('.outline-item[data-outline-index]')
+      const parsed = candidate ? Number(candidate.dataset.outlineIndex) : Number.NaN
+      targetIndex = Number.isInteger(parsed) ? parsed : null
+      setDropTarget(targetIndex)
+    }
+
+    const handlePointerUp = (upEvent: PointerEvent): void => {
+      const target = targetIndex
+      if (dragging) {
+        upEvent.preventDefault()
+        suppressClickRef.current = true
+        window.setTimeout(() => {
+          suppressClickRef.current = false
+        }, 0)
+      }
+      cleanup()
+      if (dragging && target !== null && target !== fromIndex) onReorder(fromIndex, target)
+    }
+
+    const handlePointerCancel = (): void => cleanup()
+
+    window.addEventListener('pointermove', handlePointerMove, true)
+    window.addEventListener('pointerup', handlePointerUp, true)
+    window.addEventListener('pointercancel', handlePointerCancel, true)
+    window.addEventListener('blur', handlePointerCancel, true)
+    dragCleanupRef.current = cleanup
   }
 
   return (
@@ -63,13 +104,16 @@ export default function Outline({
             <div
               key={it.index}
               className={`outline-item${dropTarget === i ? ' drop-target' : ''}`}
+              data-outline-index={i}
               style={{ paddingLeft: `${(it.level - 1) * 10 + 4}px` }}
-              draggable
-              onDragStart={(e) => handleDragStart(e, i)}
-              onDragOver={(e) => handleDragOver(e, i)}
-              onDrop={(e) => handleDrop(e, i)}
-              onDragEnd={handleDragEnd}
-              onClick={() => onSelect(it.index)}
+              onPointerDown={(event) => startDrag(event, i)}
+              onClick={() => {
+                if (suppressClickRef.current) {
+                  suppressClickRef.current = false
+                  return
+                }
+                onSelect(it.index)
+              }}
               title={it.text}
             >
               <span className="outline-drag-handle" aria-hidden>

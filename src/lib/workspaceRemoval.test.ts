@@ -10,6 +10,7 @@ const tabs: Tab[] = [
     content: 'changed',
     savedContent: '',
     dirty: true,
+    revision: 1,
   },
   {
     id: 'outside',
@@ -18,6 +19,7 @@ const tabs: Tab[] = [
     content: '',
     savedContent: '',
     dirty: false,
+    revision: 0,
   },
 ]
 

@@ -24,6 +24,7 @@ import Lightbox from './components/Lightbox'
 import ContextMenu, { type MenuItem } from './components/ContextMenu'
 import InputDialog from './components/InputDialog'
 import ExportCompleteDialog from './components/ExportCompleteDialog'
+import DraftRecoveryDialog from './components/DraftRecoveryDialog'
 import UnsavedChangesDialog, {
   type CloseDecision,
   type CloseReason,
@@ -34,6 +35,7 @@ import { editorCmd, clipboardCmd, hasWysiwyg } from './lib/editorCommands'
 import { escapeHtmlText, serializeStyleSheets } from './lib/exportStyles'
 import { getLang, t } from './lib/i18n'
 import { baseName, dirName } from './lib/path'
+import { revealLocationKey } from './lib/platform'
 import { replaceMovedPath } from './lib/treeDrag'
 import { blobPartFromBytes, imageMimeType, xmdAssetPaths } from './lib/asset'
 import {
@@ -45,6 +47,7 @@ import {
   Heading3,
   List,
   ListOrdered,
+  ListTodo,
   Quote,
   SquareCode,
   Pilcrow,
@@ -52,6 +55,9 @@ import {
   Scissors,
   ClipboardPaste,
   TextSelect,
+  Rows3,
+  Columns3,
+  Table2,
 } from 'lucide-react'
 import { parseOutline } from './lib/outline'
 import type { Folder, Tab } from './types'
@@ -60,6 +66,7 @@ import { useFileOps } from './hooks/useFileOps'
 import { useTreeOps } from './hooks/useTreeOps'
 import { useUpdater } from './hooks/useUpdater'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
+import { useDraftRecovery } from './hooks/useDraftRecovery'
 import { isShortcutAction, type ShortcutAction } from './lib/shortcuts'
 import { copyImageElement } from './lib/richClipboard'
 import { mapWithConcurrencyLimit } from './lib/asyncPool'
@@ -99,6 +106,8 @@ export default function App(): JSX.Element {
     pushRecentFile,
     pushRecentFolder,
     toggleFavorite,
+    setFavoritesCollapsed,
+    setFavoriteLabel,
   } = useSettings()
 
   const lang = settings?.language ?? 'zh'
@@ -151,6 +160,7 @@ export default function App(): JSX.Element {
     openPath,
     openFile,
     newFile,
+    recoverDraft,
     saveTab,
     saveAsTab,
     closeTab,
@@ -164,7 +174,19 @@ export default function App(): JSX.Element {
     closeTabsWithoutPrompt,
   } = useFileOps({ pushRecentFile, lang, requestCloseDecision })
 
-  const activeDocDir = activeTab ? (dirName(activeTab.path) ?? folder?.root ?? null) : null
+  const getCurrentTabs = useCallback((): Tab[] => stateRef.current.tabs, [stateRef])
+  const {
+    drafts: draftSummaries,
+    isOpen: draftRecoveryOpen,
+    setOpen: setDraftRecoveryOpen,
+    recover: recoverDraftSummary,
+    deleteDrafts,
+    clearRuntimeDrafts,
+  } = useDraftRecovery({ tabs, getCurrentTabs, openRecoveredDraft: recoverDraft })
+
+  const activeDocDir = activeTab
+    ? (dirName(activeTab.path ?? activeTab.recoverySourcePath ?? null) ?? folder?.root ?? null)
+    : null
   // 编辑器会在标签切换时卸载；滚动位置按“标签 + 编辑模式”独立保存。
   // 使用 ref 避免滚动过程中触发整棵应用树重渲染。
   const wysiwygScrollPositions = useRef(new Map<string, number>())
@@ -178,6 +200,7 @@ export default function App(): JSX.Element {
       if (!openIds.has(id)) sourceScrollPositions.current.delete(id)
     }
   }, [tabs])
+
   // ── Panel widths (drag-to-resize) ──────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [outlineWidth, setOutlineWidth] = useState(240)
@@ -216,16 +239,52 @@ export default function App(): JSX.Element {
   }, [])
 
   // ── Reveal active file in sidebar ──────────────────────────────────────────
-  const [revealPath, setRevealPath] = useState<string | null>(null)
+  const [revealRequest, setRevealRequest] = useState<{ path: string; id: number } | null>(null)
+  const revealRequestCounterRef = useRef(0)
+  const revealCompleteTimerRef = useRef<number | null>(null)
   const folderRef = useRef(folder)
   folderRef.current = folder
 
-  // Auto-clear reveal highlight after 2 s (enough time for the tree to scroll)
+  const revealPath = revealRequest?.path ?? null
+  const revealRequestId = revealRequest?.id ?? null
+
+  const requestReveal = useCallback((path: string): void => {
+    if (revealCompleteTimerRef.current !== null) {
+      window.clearTimeout(revealCompleteTimerRef.current)
+      revealCompleteTimerRef.current = null
+    }
+    revealRequestCounterRef.current += 1
+    setRevealRequest({ path, id: revealRequestCounterRef.current })
+  }, [])
+
+  // Keep the request alive while lazy ancestor folders load. A long fallback
+  // only clears targets that disappeared or are hidden from the tree.
   useEffect(() => {
-    if (!revealPath) return
-    const t = setTimeout(() => setRevealPath(null), 2000)
-    return () => clearTimeout(t)
-  }, [revealPath])
+    if (revealRequestId === null) return undefined
+    const timer = window.setTimeout(() => {
+      setRevealRequest((current) => (current?.id === revealRequestId ? null : current))
+    }, 30_000)
+    return () => window.clearTimeout(timer)
+  }, [revealRequestId])
+
+  useEffect(
+    () => () => {
+      if (revealCompleteTimerRef.current !== null) {
+        window.clearTimeout(revealCompleteTimerRef.current)
+      }
+    },
+    [],
+  )
+
+  const handleRevealComplete = useCallback((requestId: number): void => {
+    if (revealCompleteTimerRef.current !== null) {
+      window.clearTimeout(revealCompleteTimerRef.current)
+    }
+    revealCompleteTimerRef.current = window.setTimeout(() => {
+      setRevealRequest((current) => (current?.id === requestId ? null : current))
+      revealCompleteTimerRef.current = null
+    }, 1800)
+  }, [])
 
   const revealActiveFile = useCallback(async () => {
     const { tabs, activeId: aid } = stateRef.current
@@ -240,20 +299,48 @@ export default function App(): JSX.Element {
       currentFolder?.root &&
       (tab.path.startsWith(currentFolder.root + '/') ||
         tab.path.startsWith(currentFolder.root + '\\'))
-    if (!isUnderFolder) {
-      const result = await desktop.openFolderPath(fileParent)
-      if (result) {
+    try {
+      if (!isUnderFolder) {
+        const result = await desktop.openContainingFolder(tab.path)
+        if (!result) return
         setFolder(result)
         pushRecentFolder(result.root)
       }
+      requestReveal(tab.path)
+    } catch (error) {
+      console.error('Reveal active file failed', error)
+      window.alert(t('无法定位文件所在目录'))
     }
-    setRevealPath(tab.path)
-  }, [pushRecentFolder])
+  }, [pushRecentFolder, requestReveal])
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [outlineVisible, setOutlineVisible] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
+  const captureActiveScroll = useCallback((): void => {
+    if (!activeId) return
+    if (sourceMode) {
+      const editor = document.querySelector<HTMLTextAreaElement>('.source-editor')
+      if (editor) sourceScrollPositions.current.set(activeId, editor.scrollTop)
+    } else {
+      const editor = document.querySelector<HTMLElement>('.wysiwyg-editor')
+      if (editor) wysiwygScrollPositions.current.set(activeId, editor.scrollTop)
+    }
+  }, [activeId, sourceMode])
+
+  const selectTab = useCallback(
+    (id: string): void => {
+      if (id === activeId) return
+      captureActiveScroll()
+      setActiveId(id)
+    },
+    [activeId, captureActiveScroll, setActiveId],
+  )
+
+  const showWelcome = useCallback((): void => {
+    captureActiveScroll()
+    setActiveId(null)
+  }, [captureActiveScroll, setActiveId])
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null)
   const [showFind, setShowFind] = useState(false)
   const [findInitial, setFindInitial] = useState('')
@@ -354,19 +441,6 @@ export default function App(): JSX.Element {
     return () => clearTimeout(timer)
   }, [folder?.root, tabPathsKey, activeTab?.path, sessionRestored])
 
-  // ── File tree ops ──────────────────────────────────────────────────────────
-  const { treeKey, refreshTree, openNodeContext, openRootContext } = useTreeOps({
-    folder,
-    setFolder: setFolderUpdater,
-    openPath,
-    confirmCloseTabs,
-    closeTabsWithoutPrompt,
-    tabs,
-    setTabs,
-    setCtxMenu,
-    setInputDialog,
-  })
-
   // ── Folder open ────────────────────────────────────────────────────────────
   const openFolder = useCallback(async () => {
     const result = await desktop.openFolder()
@@ -375,6 +449,17 @@ export default function App(): JSX.Element {
       pushRecentFolder(result.root)
     }
   }, [pushRecentFolder])
+
+  const chooseFolderFrom = useCallback(
+    async (initialPath: string) => {
+      const result = await desktop.openFolder(initialPath)
+      if (result) {
+        setFolder(result)
+        pushRecentFolder(result.root)
+      }
+    },
+    [pushRecentFolder],
+  )
 
   const openFolderByPath = useCallback(
     async (root: string) => {
@@ -388,6 +473,74 @@ export default function App(): JSX.Element {
     },
     [pushRecentFolder],
   )
+
+  const openParentFolder = useCallback(
+    async (root: string) => {
+      try {
+        const result = await desktop.openParentFolder(root)
+        if (result) {
+          setFolder(result)
+          pushRecentFolder(result.root)
+        }
+      } catch (error) {
+        console.error('Open parent folder failed', error)
+        window.alert(t('无法打开上级文件夹'))
+      }
+    },
+    [pushRecentFolder],
+  )
+
+  const openFavoriteContext = useCallback(
+    (path: string, x: number, y: number) => {
+      const currentLabel = settings?.favoriteLabels[path]?.trim() ?? ''
+      const items: MenuItem[] = [
+        {
+          label: t('自定义收藏名称'),
+          onClick: () =>
+            setInputDialog({
+              title: t('收藏名称'),
+              initial: currentLabel || baseName(path),
+              confirmText: t('确定'),
+              onSubmit: (value) => setFavoriteLabel(path, value),
+            }),
+        },
+      ]
+      if (currentLabel) {
+        items.push({
+          label: t('恢复默认名称'),
+          onClick: () => setFavoriteLabel(path, ''),
+        })
+      }
+      items.push({
+        label: t(revealLocationKey()),
+        onClick: () => void desktop.reveal(path),
+        separatorBefore: true,
+      })
+      items.push({
+        label: t('取消收藏'),
+        onClick: () => toggleFavorite(path),
+        danger: true,
+        separatorBefore: true,
+      })
+      setCtxMenu({ x, y, items })
+    },
+    [settings?.favoriteLabels, setFavoriteLabel, toggleFavorite],
+  )
+
+  // ── File tree ops ──────────────────────────────────────────────────────────
+  const { treeKey, refreshTree, openNodeContext, openRootContext } = useTreeOps({
+    folder,
+    setFolder: setFolderUpdater,
+    openPath,
+    confirmCloseTabs,
+    closeTabsWithoutPrompt,
+    tabs,
+    setTabs,
+    openParentFolder,
+    chooseFolderFrom,
+    setCtxMenu,
+    setInputDialog,
+  })
 
   // ── System open-path (file association / double-click) ────────────────────
   useEffect(() => {
@@ -418,72 +571,178 @@ export default function App(): JSX.Element {
   )
 
   // ── Editor right-click menu ────────────────────────────────────────────────
-  const openEditorContext = useCallback((x: number, y: number, image?: HTMLImageElement) => {
-    const sz = 15
-    const items: MenuItem[] = [
-      ...(image
-        ? [
+  const openEditorContext = useCallback(
+    (x: number, y: number, image?: HTMLImageElement, inTable = false) => {
+      const sz = 15
+      const items: MenuItem[] = [
+        ...(image
+          ? [
+              {
+                label: t('复制图片'),
+                icon: <Copy size={sz} />,
+                onClick: () => void copyImageElement(image),
+              },
+            ]
+          : []),
+        { label: t('剪切'), icon: <Scissors size={sz} />, hint: '⌘X', onClick: clipboardCmd.cut },
+        { label: t('复制'), icon: <Copy size={sz} />, hint: '⌘C', onClick: clipboardCmd.copy },
+        {
+          label: t('粘贴'),
+          icon: <ClipboardPaste size={sz} />,
+          hint: '⌘V',
+          onClick: clipboardCmd.paste,
+        },
+      ]
+      if (hasWysiwyg()) {
+        items.push(
+          {
+            label: t('加粗'),
+            icon: <Bold size={sz} />,
+            hint: '⌘B',
+            onClick: editorCmd.bold,
+            separatorBefore: true,
+            compactGroup: 'inline-format',
+          },
+          {
+            label: t('斜体'),
+            icon: <Italic size={sz} />,
+            hint: '⌘I',
+            onClick: editorCmd.italic,
+            compactGroup: 'inline-format',
+          },
+          {
+            label: t('行内代码'),
+            icon: <Code size={sz} />,
+            hint: '⌘E',
+            onClick: editorCmd.inlineCode,
+            compactGroup: 'inline-format',
+          },
+          {
+            label: t('标题 1'),
+            icon: <Heading1 size={sz} />,
+            onClick: () => editorCmd.heading(1),
+            separatorBefore: true,
+            compactGroup: 'block-style',
+          },
+          {
+            label: t('标题 2'),
+            icon: <Heading2 size={sz} />,
+            onClick: () => editorCmd.heading(2),
+            compactGroup: 'block-style',
+          },
+          {
+            label: t('标题 3'),
+            icon: <Heading3 size={sz} />,
+            onClick: () => editorCmd.heading(3),
+            compactGroup: 'block-style',
+          },
+          {
+            label: t('正文'),
+            icon: <Pilcrow size={sz} />,
+            onClick: editorCmd.paragraph,
+            compactGroup: 'block-style',
+          },
+          {
+            label: t('无序列表'),
+            icon: <List size={sz} />,
+            onClick: editorCmd.bulletList,
+            separatorBefore: true,
+            compactGroup: 'block-format',
+          },
+          {
+            label: t('有序列表'),
+            icon: <ListOrdered size={sz} />,
+            onClick: editorCmd.orderedList,
+            compactGroup: 'block-format',
+          },
+          {
+            label: t('任务列表'),
+            icon: <ListTodo size={sz} />,
+            onClick: editorCmd.taskList,
+            compactGroup: 'block-format',
+          },
+          {
+            label: t('引用'),
+            icon: <Quote size={sz} />,
+            onClick: editorCmd.quote,
+            compactGroup: 'block-format',
+          },
+          {
+            label: t('代码块'),
+            icon: <SquareCode size={sz} />,
+            onClick: editorCmd.codeBlock,
+            compactGroup: 'block-format',
+          },
+        )
+        if (!inTable) {
+          items.push({
+            label: t('插入表格'),
+            icon: <Table2 size={sz} />,
+            onClick: editorCmd.insertTable,
+            separatorBefore: true,
+          })
+        }
+        if (inTable) {
+          items.push(
             {
-              label: t('复制图片'),
-              icon: <Copy size={sz} />,
-              onClick: () => void copyImageElement(image),
+              label: t('在上方插入行'),
+              icon: <Rows3 size={sz} />,
+              onClick: editorCmd.addRowBefore,
+              separatorBefore: true,
+              compactGroup: 'table-insert',
             },
-          ]
-        : []),
-      { label: t('剪切'), icon: <Scissors size={sz} />, hint: '⌘X', onClick: clipboardCmd.cut },
-      { label: t('复制'), icon: <Copy size={sz} />, hint: '⌘C', onClick: clipboardCmd.copy },
-      {
-        label: t('粘贴'),
-        icon: <ClipboardPaste size={sz} />,
-        hint: '⌘V',
-        onClick: clipboardCmd.paste,
-      },
-    ]
-    if (hasWysiwyg()) {
-      items.push(
-        {
-          label: t('加粗'),
-          icon: <Bold size={sz} />,
-          hint: '⌘B',
-          onClick: editorCmd.bold,
-          separatorBefore: true,
-        },
-        { label: t('斜体'), icon: <Italic size={sz} />, hint: '⌘I', onClick: editorCmd.italic },
-        {
-          label: t('行内代码'),
-          icon: <Code size={sz} />,
-          hint: '⌘E',
-          onClick: editorCmd.inlineCode,
-        },
-        {
-          label: t('标题 1'),
-          icon: <Heading1 size={sz} />,
-          onClick: () => editorCmd.heading(1),
-          separatorBefore: true,
-        },
-        { label: t('标题 2'), icon: <Heading2 size={sz} />, onClick: () => editorCmd.heading(2) },
-        { label: t('标题 3'), icon: <Heading3 size={sz} />, onClick: () => editorCmd.heading(3) },
-        { label: t('正文'), icon: <Pilcrow size={sz} />, onClick: editorCmd.paragraph },
-        {
-          label: t('无序列表'),
-          icon: <List size={sz} />,
-          onClick: editorCmd.bulletList,
-          separatorBefore: true,
-        },
-        { label: t('有序列表'), icon: <ListOrdered size={sz} />, onClick: editorCmd.orderedList },
-        { label: t('引用'), icon: <Quote size={sz} />, onClick: editorCmd.quote },
-        { label: t('代码块'), icon: <SquareCode size={sz} />, onClick: editorCmd.codeBlock },
-      )
-    }
-    items.push({
-      label: t('全选'),
-      icon: <TextSelect size={sz} />,
-      hint: '⌘A',
-      onClick: clipboardCmd.selectAll,
-      separatorBefore: true,
-    })
-    setCtxMenu({ x, y, items, preserveSelection: true })
-  }, [])
+            {
+              label: t('在下方插入行'),
+              icon: <Rows3 size={sz} />,
+              onClick: editorCmd.addRowAfter,
+              compactGroup: 'table-insert',
+            },
+            {
+              label: t('在左侧插入列'),
+              icon: <Columns3 size={sz} />,
+              onClick: editorCmd.addColumnBefore,
+              compactGroup: 'table-insert',
+            },
+            {
+              label: t('在右侧插入列'),
+              icon: <Columns3 size={sz} />,
+              onClick: editorCmd.addColumnAfter,
+              compactGroup: 'table-insert',
+            },
+            {
+              label: t('删除当前行'),
+              icon: <Rows3 size={sz} />,
+              onClick: editorCmd.deleteRow,
+              separatorBefore: true,
+              compactGroup: 'table-delete',
+            },
+            {
+              label: t('删除当前列'),
+              icon: <Columns3 size={sz} />,
+              onClick: editorCmd.deleteColumn,
+              compactGroup: 'table-delete',
+            },
+            {
+              label: t('删除表格'),
+              icon: <Table2 size={sz} />,
+              onClick: editorCmd.deleteTable,
+              danger: true,
+              compactGroup: 'table-delete',
+            },
+          )
+        }
+      }
+      items.push({
+        label: t('全选'),
+        icon: <TextSelect size={sz} />,
+        hint: '⌘A',
+        onClick: clipboardCmd.selectAll,
+        separatorBefore: true,
+      })
+      setCtxMenu({ x, y, items, preserveSelection: true })
+    },
+    [],
+  )
 
   // ── Search ─────────────────────────────────────────────────────────────────
   const openSearchResult = useCallback(
@@ -889,14 +1148,14 @@ ${liveStyles}
           }),
         )
         await refreshTree()
-        setRevealPath(res.path)
+        requestReveal(res.path)
       } catch (err) {
         window.alert(
           (getLang() === 'en' ? 'Move failed:\n' : '移动失败：\n') + (err as Error).message,
         )
       }
     },
-    [refreshTree, setTabs],
+    [refreshTree, requestReveal, setTabs],
   )
 
   // ── Palette files (background scan) ───────────────────────────────────────
@@ -1085,7 +1344,7 @@ ${liveStyles}
         case 'query-dirty': {
           const dirtyTabs = stateRef.current.tabs.filter((tab) => tab.dirty)
           if (dirtyTabs.length === 0) {
-            desktop.notifyQuitOk()
+            void clearRuntimeDrafts().finally(() => desktop.notifyQuitOk())
             break
           }
           if (quitPromptOpenRef.current) break
@@ -1098,6 +1357,7 @@ ${liveStyles}
                   if (!(await saveTab(tab.id))) return
                 }
               }
+              await deleteDrafts(dirtyTabs.map((tab) => tab.id))
               desktop.notifyQuitOk()
             })
             .finally(() => {
@@ -1112,6 +1372,8 @@ ${liveStyles}
     exportHTML,
     exportPDF,
     exportImage,
+    clearRuntimeDrafts,
+    deleteDrafts,
     requestCloseDecision,
     saveTab,
     stateRef,
@@ -1149,8 +1411,12 @@ ${liveStyles}
             folder={folder}
             activePath={activeTab?.path ?? null}
             favorites={settings.favorites}
+            favoritesCollapsed={settings.favoritesCollapsed}
+            favoriteLabels={settings.favoriteLabels}
             recentFiles={settings.recentFiles}
             revealPath={revealPath}
+            revealRequestId={revealRequestId}
+            onRevealComplete={handleRevealComplete}
             hideAttachmentFolders={settings.hideAttachmentFolders ?? false}
             attachmentFolder={settings.attachmentFolder || 'assets'}
             onOpenFolder={openFolder}
@@ -1159,6 +1425,8 @@ ${liveStyles}
             onOpenSettings={() => setSettingsSection('appearance')}
             onOpenSearch={() => setSearchView(true)}
             onToggleFavorite={toggleFavorite}
+            onFavoritesCollapsedChange={setFavoritesCollapsed}
+            onFavoriteContext={openFavoriteContext}
             onRefresh={refreshTree}
             onNodeContext={openNodeContext}
             onRootContext={openRootContext}
@@ -1176,10 +1444,10 @@ ${liveStyles}
         <TabBar
           tabs={tabs}
           activeId={activeId}
-          onSelect={setActiveId}
+          onSelect={selectTab}
           onClose={closeTab}
           onTabContext={openTabContext}
-          onShowWelcome={() => setActiveId(null)}
+          onShowWelcome={showWelcome}
           sourceMode={sourceMode}
           outlineVisible={outlineVisible}
           onToggleSource={() => setSourceMode((v) => !v)}
@@ -1227,7 +1495,7 @@ ${liveStyles}
                 : target
                     ?.closest('.image-wrapper, .milkdown-image-inline')
                     ?.querySelector<HTMLImageElement>('img')
-            openEditorContext(e.clientX, e.clientY, image ?? undefined)
+            openEditorContext(e.clientX, e.clientY, image ?? undefined, !!target?.closest('td, th'))
           }}
         >
           {activeTab ? (
@@ -1271,6 +1539,8 @@ ${liveStyles}
               onNewFile={newFile}
               onOpenRecentFile={(p) => openPath(p, baseName(p))}
               onOpenRecentFolder={openFolderByPath}
+              draftCount={draftSummaries.length}
+              onOpenDrafts={() => setDraftRecoveryOpen(true)}
             />
           )}
 
@@ -1340,6 +1610,22 @@ ${liveStyles}
           tabs={unsavedCloseRequest.tabs}
           reason={unsavedCloseRequest.reason}
           onDecision={resolveCloseDecision}
+        />
+      )}
+
+      {draftRecoveryOpen && draftSummaries.length > 0 && (
+        <DraftRecoveryDialog
+          drafts={draftSummaries}
+          onRecover={(draft) => void recoverDraftSummary(draft)}
+          onDelete={(draft) => void deleteDrafts([draft.id])}
+          onDeleteAll={() => {
+            const ids = draftSummaries.map((draft) => draft.id)
+            if (ids.length === 0) return
+            if (window.confirm(t('确定删除全部草稿吗？'))) {
+              void deleteDrafts(ids).then(() => setDraftRecoveryOpen(false))
+            }
+          }}
+          onClose={() => setDraftRecoveryOpen(false)}
         />
       )}
 
