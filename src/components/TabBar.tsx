@@ -81,7 +81,16 @@ export default function TabBar({
             key={tab.id}
             ref={tab.id === activeId ? activeRef : undefined}
             className={`tab${tab.id === activeId ? ' active' : ''}${tab.dirty ? ' dirty' : ''}`}
-            onClick={() => onSelect(tab.id)}
+            onPointerDown={(event) => {
+              // Capture the outgoing editor's scroll position before the
+              // pointer changes focus. ProseMirror may scroll its old caret
+              // into view during blur, which is too late for an onClick save.
+              if (event.button === 0) onSelect(tab.id)
+            }}
+            onClick={(event) => {
+              // Keyboard activation has no pointerdown and reports detail 0.
+              if (event.detail === 0) onSelect(tab.id)
+            }}
             onContextMenu={(e) => {
               e.preventDefault()
               onTabContext(tab.id, e.clientX, e.clientY)
@@ -98,6 +107,7 @@ export default function TabBar({
             <span className="tab-name">{tab.name}</span>
             <button
               className="tab-close"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation()
                 onClose(tab.id)

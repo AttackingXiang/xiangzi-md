@@ -183,12 +183,30 @@ button {
 }
 
 .section-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 4px 6px;
+}
+
+.favorite-section-toggle {
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.favorite-section-toggle:hover {
+  color: var(--text-2);
+  background: var(--bg-hover);
 }
 
 .fav-row {
@@ -734,6 +752,41 @@ button {
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-bottom: 36px;
+}
+
+.draft-recovery-banner {
+  width: 100%;
+  margin: -18px 0 28px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+.draft-recovery-banner:hover {
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-elevated));
+}
+
+.draft-recovery-banner span {
+  flex: 1;
+  text-align: left;
+}
+
+.draft-recovery-banner strong {
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-size: 12px;
 }
 
 .action-card {
@@ -1723,6 +1776,13 @@ kbd {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 让空文档和短文档的整页空白都属于可点击编辑区。 */
+.wysiwyg-editor:not(.export-view) .milkdown,
+.wysiwyg-editor:not(.export-view) .milkdown .ProseMirror {
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
 /* Typora / GitHub 风格的正文节奏：系统无衬线、克制标题、清晰段落层级。 */
 .wysiwyg-editor .milkdown .ProseMirror {
   position: relative;
@@ -2193,6 +2253,15 @@ kbd {
   border-collapse: collapse;
 }
 
+.milkdown .milkdown-table-block .table-wrapper {
+  position: relative;
+  overflow-x: auto;
+}
+
+.milkdown .milkdown-table-block {
+  position: relative;
+}
+
 .milkdown .milkdown-table-block th,
 .milkdown .milkdown-table-block td,
 .milkdown th,
@@ -2212,26 +2281,68 @@ kbd {
 
 .ctx-menu {
   position: fixed;
-  min-width: 200px;
+  width: 216px;
   max-height: 80vh;
   overflow-y: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   box-shadow: var(--shadow);
-  padding: 5px;
-  font-size: 13px;
+  padding: 4px;
+  font-size: 12.5px;
   user-select: none;
 }
 
 .ctx-item {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: 7px;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   color: var(--text);
+}
+
+.ctx-compact-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 1px;
+}
+
+.ctx-compact-item {
+  height: 30px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ctx-compact-item:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.ctx-compact-item.danger {
+  color: #e5484d;
+}
+
+.ctx-compact-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
 }
 
 .ctx-item:hover {
@@ -2274,7 +2385,7 @@ kbd {
 .ctx-sep {
   height: 1px;
   background: var(--border);
-  margin: 5px 4px;
+  margin: 3px 4px;
 }
 
 /* ---------- 命令面板 ---------- */
@@ -2446,6 +2557,112 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+}
+
+/* ---------- 草稿恢复 ---------- */
+.draft-recovery-dialog {
+  width: min(760px, 92vw);
+  max-height: min(720px, 86vh);
+}
+
+.draft-recovery-header {
+  align-items: flex-start;
+}
+
+.draft-recovery-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.draft-recovery-header p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.draft-recovery-list {
+  min-height: 0;
+  padding: 10px 14px;
+  overflow-y: auto;
+}
+
+.draft-recovery-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.draft-recovery-item + .draft-recovery-item {
+  margin-top: 8px;
+}
+
+.draft-recovery-icon {
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+
+.draft-recovery-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.draft-recovery-copy strong,
+.draft-recovery-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-recovery-meta,
+.draft-recovery-path {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.draft-recovery-copy p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.draft-recovery-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.draft-recovery-item-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.draft-recovery-actions {
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .draft-recovery-item {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .draft-recovery-item-actions {
+    grid-column: 2;
+    justify-content: flex-end;
+  }
 }
 
 /* ---------- 斜杠 / 命令菜单（覆盖 Crepe 默认样式，更简洁、适配主题） ---------- */
@@ -2630,6 +2847,12 @@ kbd {
 }
 .outline-item.drop-target {
   border-top: 2px solid var(--accent);
+}
+
+body.outline-pointer-dragging,
+body.outline-pointer-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 /* ── File tree reveal flash ───────────────────────────────────────────────── */

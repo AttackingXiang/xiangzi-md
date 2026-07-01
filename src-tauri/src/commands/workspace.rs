@@ -15,6 +15,19 @@ pub async fn open_folder_path(app: AppHandle, root: String) -> AppResult<Option<
 }
 
 #[tauri::command]
+pub async fn open_parent_folder(app: AppHandle, root: String) -> AppResult<Option<Folder>> {
+    blocking(move || workspace::open_parent_folder(&app, &PathBuf::from(root))).await
+}
+
+#[tauri::command]
+pub async fn open_containing_folder(
+    app: AppHandle,
+    file_path: String,
+) -> AppResult<Option<Folder>> {
+    blocking(move || workspace::open_containing_folder(&app, &PathBuf::from(file_path))).await
+}
+
+#[tauri::command]
 pub async fn read_file(app: AppHandle, path: String) -> AppResult<OpenedFile> {
     blocking(move || workspace::read_file(&app, &PathBuf::from(path))).await
 }

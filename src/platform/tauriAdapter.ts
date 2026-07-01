@@ -87,11 +87,18 @@ export const tauriUpdaterAdapter: UpdaterPort = {
 
 export const tauriDesktopAdapter: DesktopPort = {
   getAppInfo: () => invoke<AppInfo>('get_app_info'),
-  openFolder: async () => {
-    const root = await open({ directory: true, multiple: false, recursive: true })
+  openFolder: async (initialPath) => {
+    const root = await open({
+      directory: true,
+      multiple: false,
+      recursive: true,
+      ...(initialPath ? { defaultPath: initialPath } : {}),
+    })
     return root ? invoke<Folder | null>('open_folder_path', { root }) : null
   },
   openFolderPath: (root) => invoke<Folder | null>('open_folder_path', { root }),
+  openParentFolder: (root) => invoke<Folder | null>('open_parent_folder', { root }),
+  openContainingFolder: (filePath) => invoke<Folder | null>('open_containing_folder', { filePath }),
   openFile: async () => {
     const path = await open({
       multiple: false,
@@ -123,6 +130,10 @@ export const tauriDesktopAdapter: DesktopPort = {
   createDir: (dirPath, name) => invoke('create_dir', { dirPath, name }),
   rename: (oldPath, newName) => invoke('rename_item', { oldPath, newName }),
   trash: (targetPath) => invoke('trash_item', { targetPath }),
+  listDrafts: () => invoke('list_drafts'),
+  readDraft: (id) => invoke('read_draft', { id }),
+  saveDraft: (id, path, name, content) => invoke('save_draft', { id, path, name, content }),
+  deleteDraft: (id) => invoke('delete_draft', { id }),
   reveal: (targetPath) => revealItemInDir(targetPath),
   openExternal: (url) => openUrl(url),
   moveItem: (sourcePath, targetDirPath) => invoke('move_item', { sourcePath, targetDirPath }),

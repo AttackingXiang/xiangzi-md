@@ -42,6 +42,10 @@ export interface AppSettings {
   recentFolders: string[]
   /** 收藏的常用目录 */
   favorites: string[]
+  /** 收藏目录是否收起 */
+  favoritesCollapsed: boolean
+  /** 收藏目录的展示名称；键为实际路径，不会修改磁盘名称 */
+  favoriteLabels: Record<string, string>
   /** 上次会话 */
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
   /** 在文件树中隐藏附件文件夹（按 attachmentFolder 名称匹配） */
@@ -61,6 +65,23 @@ export interface SearchResult {
   matches: SearchMatch[]
 }
 
+export interface DraftSummary {
+  id: string
+  path: string | null
+  name: string
+  preview: string
+  sizeBytes: number
+  updatedAt: number
+}
+
+export interface Draft {
+  id: string
+  path: string | null
+  name: string
+  content: string
+  updatedAt: number
+}
+
 export interface OutlineItem {
   level: number
   text: string
@@ -72,10 +93,14 @@ export interface Tab {
   id: string
   /** 已保存文件的绝对路径；新建未保存文件为 null */
   path: string | null
+  /** 恢复草稿的原文件路径，仅用于解析相对资源，不会作为保存目标 */
+  recoverySourcePath?: string | null
   name: string
   content: string
   /** 最近一次成功保存/读取的内容，用于判断脏状态和展示关闭前差异 */
   savedContent: string
   /** 是否有未保存的修改 */
   dirty: boolean
+  /** 内容变化序号，用于避免重复写入相同草稿快照 */
+  revision: number
 }

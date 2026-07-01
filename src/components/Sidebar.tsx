@@ -1,4 +1,13 @@
-import { FolderOpen, RefreshCw, Search, Settings as SettingsIcon, Star, Folder } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
+  RefreshCw,
+  Search,
+  Settings as SettingsIcon,
+  Star,
+  Folder,
+} from 'lucide-react'
 import FileTree from './FileTree'
 import type { FileNode, Folder as FolderType } from '../types'
 import { t } from '../lib/i18n'
@@ -8,9 +17,13 @@ interface Props {
   folder: FolderType | null
   activePath: string | null
   favorites: string[]
+  favoritesCollapsed: boolean
+  favoriteLabels: Record<string, string>
   recentFiles: string[]
   /** 当前需要在文件树中定位的绝对路径；null 时不触发 */
   revealPath: string | null
+  revealRequestId: number | null
+  onRevealComplete: (requestId: number) => void
   /** 是否在文件树中隐藏与 attachmentFolder 同名的目录 */
   hideAttachmentFolders: boolean
   attachmentFolder: string
@@ -20,6 +33,8 @@ interface Props {
   onOpenSettings: () => void
   onOpenSearch: () => void
   onToggleFavorite: (path: string) => void
+  onFavoritesCollapsedChange: (collapsed: boolean) => void
+  onFavoriteContext: (path: string, x: number, y: number) => void
   onRefresh: () => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onRootContext: (x: number, y: number) => void
@@ -32,7 +47,11 @@ export default function Sidebar({
   folder,
   activePath,
   favorites,
+  favoritesCollapsed,
+  favoriteLabels,
   revealPath,
+  revealRequestId,
+  onRevealComplete,
   hideAttachmentFolders,
   attachmentFolder,
   onOpenFolder,
@@ -41,6 +60,8 @@ export default function Sidebar({
   onOpenSettings,
   onOpenSearch,
   onToggleFavorite,
+  onFavoritesCollapsedChange,
+  onFavoriteContext,
   onRefresh,
   onNodeContext,
   onRootContext,
@@ -75,7 +96,7 @@ export default function Sidebar({
               <Search size={15} />
             </button>
           )}
-          <button className="icon-btn sm" title={t('打开文件夹')} onClick={onOpenFolder}>
+          <button className="icon-btn sm" title={t('打开文件夹')} onClick={() => onOpenFolder()}>
             <FolderOpen size={15} />
           </button>
           <button className="icon-btn sm" title={t('设置')} onClick={onOpenSettings}>
@@ -86,25 +107,40 @@ export default function Sidebar({
 
       {favorites.length > 0 && (
         <div className="sidebar-section">
-          <div className="section-label">{t('收藏目录')}</div>
-          {favorites.map((fav) => (
-            <div
-              key={fav}
-              className={`fav-row${folder?.root === fav ? ' active' : ''}`}
-              title={fav}
-              onClick={() => onOpenFolderPath(fav)}
-            >
-              <Folder size={14} />
-              <span className="fav-name">{baseName(fav)}</span>
-            </div>
-          ))}
+          <button
+            className="section-label favorite-section-toggle"
+            title={t(favoritesCollapsed ? '展开收藏目录' : '收起收藏目录')}
+            aria-expanded={!favoritesCollapsed}
+            onClick={() => onFavoritesCollapsedChange(!favoritesCollapsed)}
+          >
+            {favoritesCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+            <span>{t('收藏目录')}</span>
+          </button>
+          {!favoritesCollapsed &&
+            favorites.map((fav) => (
+              <div
+                key={fav}
+                className={`fav-row${folder?.root === fav ? ' active' : ''}`}
+                title={fav}
+                onClick={() => onOpenFolderPath(fav)}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onFavoriteContext(fav, event.clientX, event.clientY)
+                }}
+              >
+                <Folder size={14} />
+                <span className="fav-name">{favoriteLabels[fav]?.trim() || baseName(fav)}</span>
+              </div>
+            ))}
         </div>
       )}
 
       <div
         className="sidebar-body"
         onContextMenu={(e) => {
-          if (folder && e.target === e.currentTarget) {
+          const target = e.target
+          if (folder && target instanceof Element && !target.closest('.tree-row')) {
             e.preventDefault()
             onRootContext(e.clientX, e.clientY)
           }
@@ -116,6 +152,8 @@ export default function Sidebar({
             nodes={folder.tree}
             activePath={activePath}
             revealPath={revealPath}
+            revealRequestId={revealRequestId}
+            onRevealComplete={onRevealComplete}
             hideFolderNames={hideFolderNames}
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}
@@ -125,7 +163,7 @@ export default function Sidebar({
         ) : (
           <div className="sidebar-empty">
             <p>{t('尚未打开文件夹')}</p>
-            <button className="primary-btn" onClick={onOpenFolder}>
+            <button className="primary-btn" onClick={() => onOpenFolder()}>
               {t('打开文件夹')}
             </button>
           </div>

@@ -37,6 +37,7 @@ export function reorderHeadingSections(fromIndex: number, toIndex: number): void
   if (fromIndex === toIndex) return
   const view = editorBridge.get()
   if (!view) return
+  editorBridge.markUserEdit()
 
   const { state } = view
   const headings = collectHeadings(state.doc)

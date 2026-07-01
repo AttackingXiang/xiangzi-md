@@ -7,6 +7,31 @@ export interface MenuItem {
   hint?: string
   danger?: boolean
   separatorBefore?: boolean
+  /** 相邻且同组的项目显示为一行紧凑按钮。 */
+  compactGroup?: string
+}
+
+interface MenuLayoutEntry {
+  key: string
+  items: MenuItem[]
+  compact: boolean
+}
+
+function layoutItems(items: MenuItem[]): MenuLayoutEntry[] {
+  const result: MenuLayoutEntry[] = []
+  for (const [index, item] of items.entries()) {
+    const previous = result.at(-1)
+    if (item.compactGroup && previous?.key === item.compactGroup && previous.compact) {
+      previous.items.push(item)
+    } else {
+      result.push({
+        key: item.compactGroup ?? `item-${index}`,
+        items: [item],
+        compact: !!item.compactGroup,
+      })
+    }
+  }
+  return result
 }
 
 interface Props {
@@ -33,7 +58,8 @@ export default function ContextMenu({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const estHeight = items.length * 32 + 12
+  const entries = layoutItems(items)
+  const estHeight = entries.length * 34 + 12
   const style: React.CSSProperties = {
     left: Math.min(x, window.innerWidth - 220),
     top: Math.min(y, window.innerHeight - estHeight - 8),
@@ -58,23 +84,55 @@ export default function ContextMenu({
         onClick={(e) => e.stopPropagation()}
         onMouseDown={guard}
       >
-        {items.map((it, i) => (
-          <div key={`${it.label}-${i}`}>
-            {it.separatorBefore && <div className="ctx-sep" />}
-            <div
-              className={`ctx-item${it.danger ? ' danger' : ''}`}
-              onMouseDown={guard}
-              onClick={() => {
-                it.onClick()
-                onClose()
-              }}
-            >
-              {it.icon && <span className="ctx-icon">{it.icon}</span>}
-              <span className="ctx-item-label">{it.label}</span>
-              {it.hint && <span className="ctx-hint">{it.hint}</span>}
+        {entries.map((entry, entryIndex) => {
+          const separator = entry.items.some((item) => item.separatorBefore)
+          if (entry.compact) {
+            return (
+              <div key={`${entry.key}-${entryIndex}`}>
+                {separator && <div className="ctx-sep" />}
+                <div className="ctx-compact-row" role="group">
+                  {entry.items.map((item, itemIndex) => (
+                    <button
+                      key={`${item.label}-${itemIndex}`}
+                      type="button"
+                      className={`ctx-compact-item${item.danger ? ' danger' : ''}`}
+                      title={item.hint ? `${item.label}  ${item.hint}` : item.label}
+                      aria-label={item.label}
+                      onMouseDown={guard}
+                      onClick={() => {
+                        item.onClick()
+                        onClose()
+                      }}
+                    >
+                      {item.icon ?? <span className="ctx-compact-text">{item.label}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          }
+
+          const item = entry.items[0]
+          if (!item) return null
+          return (
+            <div key={`${entry.key}-${entryIndex}`}>
+              {separator && <div className="ctx-sep" />}
+              <button
+                type="button"
+                className={`ctx-item${item.danger ? ' danger' : ''}`}
+                onMouseDown={guard}
+                onClick={() => {
+                  item.onClick()
+                  onClose()
+                }}
+              >
+                {item.icon && <span className="ctx-icon">{item.icon}</span>}
+                <span className="ctx-item-label">{item.label}</span>
+                {item.hint && <span className="ctx-hint">{item.hint}</span>}
+              </button>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

@@ -5668,7 +5668,7 @@ dependencies = [
 
 [[package]]
 name = "xiangzi-md"
-version = "1.1.9"
+version = "1.2.0"
 dependencies = [
  "dirs",
  "mime_guess",

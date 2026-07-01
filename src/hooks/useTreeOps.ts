@@ -2,7 +2,7 @@ import { useCallback, useState, type Dispatch, type SetStateAction } from 'react
 import { desktop } from '../platform'
 import { getLang, t } from '../lib/i18n'
 import { revealLocationKey } from '../lib/platform'
-import { baseName } from '../lib/path'
+import { baseName, dirName } from '../lib/path'
 import { replaceMovedPath } from '../lib/treeDrag'
 import { removeWorkspacePath } from '../lib/workspaceRemoval'
 import type { FileNode, Folder, Tab } from '../types'
@@ -16,6 +16,8 @@ interface Deps {
   closeTabsWithoutPrompt: (ids: readonly string[]) => void
   tabs: Tab[]
   setTabs: Dispatch<SetStateAction<Tab[]>>
+  openParentFolder: (root: string) => void
+  chooseFolderFrom: (root: string) => void
   setCtxMenu: (menu: { x: number; y: number; items: MenuItem[] } | null) => void
   setInputDialog: (
     dialog: {
@@ -38,6 +40,8 @@ export function useTreeOps({
   closeTabsWithoutPrompt,
   tabs,
   setTabs,
+  openParentFolder,
+  chooseFolderFrom,
   setCtxMenu,
   setInputDialog,
 }: Deps) {
@@ -170,17 +174,43 @@ export function useTreeOps({
   const openRootContext = useCallback(
     (x: number, y: number) => {
       if (!folder) return
+      const items: MenuItem[] = [
+        { label: t('新建文件'), onClick: () => createFileIn(folder.root) },
+        { label: t('新建文件夹'), onClick: () => createFolderIn(folder.root) },
+      ]
+      const parent = dirName(folder.root)
+      if (parent && parent !== folder.root) {
+        items.push({
+          label: t('打开上级文件夹'),
+          onClick: () => openParentFolder(folder.root),
+          separatorBefore: true,
+        })
+      }
+      items.push({
+        label: t('选择其他文件夹'),
+        onClick: () => chooseFolderFrom(folder.root),
+        separatorBefore: !parent || parent === folder.root,
+      })
+      items.push({
+        label: t(revealLocationKey()),
+        onClick: () => void desktop.reveal(folder.root),
+      })
+      items.push({ label: t('刷新'), onClick: refreshTree, separatorBefore: true })
       setCtxMenu({
         x,
         y,
-        items: [
-          { label: t('新建文件'), onClick: () => createFileIn(folder.root) },
-          { label: t('新建文件夹'), onClick: () => createFolderIn(folder.root) },
-          { label: t('刷新'), onClick: refreshTree, separatorBefore: true },
-        ],
+        items,
       })
     },
-    [folder, createFileIn, createFolderIn, refreshTree, setCtxMenu],
+    [
+      folder,
+      createFileIn,
+      createFolderIn,
+      openParentFolder,
+      chooseFolderFrom,
+      refreshTree,
+      setCtxMenu,
+    ],
   )
 
   return {

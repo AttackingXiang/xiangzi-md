@@ -10,6 +10,9 @@ interface Props {
   activePath: string | null
   /** 当设置后，文件树自动展开祖先目录并滚动到目标文件 */
   revealPath: string | null
+  /** 区分连续定位同一个文件的请求 */
+  revealRequestId: number | null
+  onRevealComplete: (requestId: number) => void
   /** 需要从文件树中隐藏的目录名（完整名称匹配，所有层级） */
   hideFolderNames: string[]
   onOpenFile: (path: string, name?: string) => void
@@ -22,6 +25,8 @@ export default function FileTree({
   nodes,
   activePath,
   revealPath,
+  revealRequestId,
+  onRevealComplete,
   hideFolderNames,
   onOpenFile,
   onNodeContext,
@@ -41,6 +46,8 @@ export default function FileTree({
           node={node}
           activePath={activePath}
           revealPath={revealPath}
+          revealRequestId={revealRequestId}
+          onRevealComplete={onRevealComplete}
           hideFolderNames={hideFolderNames}
           onOpenFile={onOpenFile}
           onNodeContext={onNodeContext}
@@ -56,6 +63,8 @@ const TreeNode = memo(function TreeNode({
   node,
   activePath,
   revealPath,
+  revealRequestId,
+  onRevealComplete,
   hideFolderNames,
   onOpenFile,
   onNodeContext,
@@ -65,6 +74,8 @@ const TreeNode = memo(function TreeNode({
   node: FileNode
   activePath: string | null
   revealPath: string | null
+  revealRequestId: number | null
+  onRevealComplete: (requestId: number) => void
   hideFolderNames: string[]
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
@@ -89,7 +100,7 @@ const TreeNode = memo(function TreeNode({
     revealPath !== null &&
     (revealPath.startsWith(node.path + '/') || revealPath.startsWith(node.path + '\\'))
 
-  const isRevealed = !node.isDir && revealPath === node.path
+  const isRevealed = revealPath === node.path
 
   const loadChildren = useCallback(async (): Promise<void> => {
     if (children !== null || loadingRef.current) return
@@ -113,9 +124,10 @@ const TreeNode = memo(function TreeNode({
   }, [isAncestor, loadChildren])
 
   useEffect(() => {
-    if (!isRevealed || !nodeRef.current) return
+    if (!isRevealed || revealRequestId === null || !nodeRef.current) return
     nodeRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [isRevealed])
+    onRevealComplete(revealRequestId)
+  }, [isRevealed, onRevealComplete, revealRequestId])
 
   useEffect(() => {
     mountedRef.current = true
@@ -224,7 +236,8 @@ const TreeNode = memo(function TreeNode({
     return (
       <li>
         <div
-          className={`tree-row dir${isDragging ? ' dragging' : ''}`}
+          ref={nodeRef}
+          className={`tree-row dir${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
           style={indent}
           data-tree-path={node.path}
           aria-grabbed={isDragging}
@@ -257,6 +270,8 @@ const TreeNode = memo(function TreeNode({
             nodes={children}
             activePath={activePath}
             revealPath={revealPath}
+            revealRequestId={revealRequestId}
+            onRevealComplete={onRevealComplete}
             hideFolderNames={hideFolderNames}
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}

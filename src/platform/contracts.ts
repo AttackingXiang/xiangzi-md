@@ -33,6 +33,8 @@ export interface AppSettings {
   recentFiles: string[]
   recentFolders: string[]
   favorites: string[]
+  favoritesCollapsed: boolean
+  favoriteLabels: Record<string, string>
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
   hideAttachmentFolders: boolean
   assetSearchPaths: string[]
@@ -48,6 +50,23 @@ export interface SearchResult {
   path: string
   name: string
   matches: Array<{ lineNumber: number; text: string }>
+}
+
+export interface DraftSummary {
+  id: string
+  path: string | null
+  name: string
+  preview: string
+  sizeBytes: number
+  updatedAt: number
+}
+
+export interface Draft {
+  id: string
+  path: string | null
+  name: string
+  content: string
+  updatedAt: number
 }
 
 export type UpdateDownloadEvent =
@@ -71,8 +90,10 @@ export interface UpdaterPort {
 
 export interface DesktopPort {
   getAppInfo(): Promise<AppInfo>
-  openFolder(): Promise<Folder | null>
+  openFolder(initialPath?: string): Promise<Folder | null>
   openFolderPath(root: string): Promise<Folder | null>
+  openParentFolder(root: string): Promise<Folder | null>
+  openContainingFolder(filePath: string): Promise<Folder | null>
   openFile(): Promise<OpenedFile | null>
   readFile(path: string): Promise<OpenedFile>
   readBinaryFile(path: string, maxBytes?: number): Promise<Uint8Array>
@@ -84,6 +105,10 @@ export interface DesktopPort {
   createDir(dirPath: string, name: string): Promise<{ path: string; name: string }>
   rename(oldPath: string, newName: string): Promise<{ path: string; name: string }>
   trash(targetPath: string): Promise<{ path: string }>
+  listDrafts(): Promise<DraftSummary[]>
+  readDraft(id: string): Promise<Draft>
+  saveDraft(id: string, path: string | null, name: string, content: string): Promise<DraftSummary>
+  deleteDraft(id: string): Promise<void>
   reveal(targetPath: string): Promise<void>
   openExternal(url: string): Promise<void>
   moveItem(sourcePath: string, targetDirPath: string): Promise<{ path: string; name: string }>

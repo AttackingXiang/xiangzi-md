@@ -132,17 +132,49 @@ pub fn open_folder_path(app: &AppHandle, root: &Path) -> AppResult<Option<Folder
         return Ok(None);
     }
     ensure_allowed(app, root)?;
+    authorize_directory(app, root)?;
+    Ok(Some(Folder {
+        root: path_string(root),
+        name: file_name(root),
+        tree: read_dir_tree(app, root)?,
+    }))
+}
+
+fn authorize_directory(app: &AppHandle, root: &Path) -> AppResult<()> {
     app.fs_scope()
         .allow_directory(root, true)
         .map_err(|error| AppError::new("scope_failed", error.to_string()))?;
     app.asset_protocol_scope()
         .allow_directory(root, true)
         .map_err(|error| AppError::new("scope_failed", error.to_string()))?;
-    Ok(Some(Folder {
-        root: path_string(root),
-        name: file_name(root),
-        tree: read_dir_tree(app, root)?,
-    }))
+    Ok(())
+}
+
+pub fn open_parent_folder(app: &AppHandle, root: &Path) -> AppResult<Option<Folder>> {
+    ensure_allowed(app, root)?;
+    if !root.is_dir() {
+        return Ok(None);
+    }
+    let Some(parent) = root.parent().filter(|parent| *parent != root) else {
+        return Ok(None);
+    };
+    authorize_directory(app, parent)?;
+    open_folder_path(app, parent)
+}
+
+pub fn open_containing_folder(app: &AppHandle, file_path: &Path) -> AppResult<Option<Folder>> {
+    // The native file picker grants access to the selected file, not to all of
+    // its siblings. Escalate only to that file's direct parent after proving
+    // the selected file is already inside the persisted Tauri scope.
+    ensure_allowed(app, file_path)?;
+    if !file_path.is_file() {
+        return Ok(None);
+    }
+    let parent = file_path
+        .parent()
+        .ok_or_else(|| AppError::new("invalid_path", "文件路径没有父目录"))?;
+    authorize_directory(app, parent)?;
+    open_folder_path(app, parent)
 }
 
 pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {

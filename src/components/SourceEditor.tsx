@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 
 interface Props {
   content: string
@@ -23,14 +23,13 @@ export default function SourceEditor({
   onScrollTopChangeRef.current = onScrollTopChange
 
   // 初始化内容（受控成本高，这里用非受控 + 初值，避免大文档卡顿）
-  useEffect(() => {
+  useLayoutEffect(() => {
     const editor = ref.current
     if (!editor) return
     if (editor.value !== content) editor.value = content
     editor.scrollTop = initialScrollTop
 
     return () => {
-      onScrollTopChangeRef.current?.(editor.scrollTop)
       // 输入事件与标签切换落在同一帧时，卸载前再提交一次当前草稿。
       if (editor.value !== contentRef.current) onChangeRef.current(editor.value)
     }
