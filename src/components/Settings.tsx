@@ -8,12 +8,7 @@ import Shortcuts from './Shortcuts'
 import { getLang, t } from '../lib/i18n'
 
 export type SettingsSection =
-  | 'appearance'
-  | 'editor'
-  | 'attachments'
-  | 'shortcuts'
-  | 'updates'
-  | 'about'
+  'appearance' | 'editor' | 'attachments' | 'shortcuts' | 'updates' | 'about'
 
 interface Props {
   settings: AppSettings
