@@ -91,6 +91,41 @@ interface LocalExportImage {
   displayWidth: number
 }
 
+type HeadingRunKind = 'cjk' | 'latin' | 'space' | 'neutral'
+
+function exportHeadingRuns(text: string): Array<{ kind: HeadingRunKind; text: string }> {
+  const runs: Array<{ kind: HeadingRunKind; text: string }> = []
+  for (const character of text) {
+    let kind: HeadingRunKind
+    if (/\s/u.test(character)) kind = 'space'
+    else if (/\p{Script=Han}/u.test(character)) kind = 'cjk'
+    else if (/[A-Za-z0-9]/u.test(character)) kind = 'latin'
+    else kind = runs.at(-1)?.kind ?? 'neutral'
+
+    const previous = runs.at(-1)
+    if (previous?.kind === kind) previous.text += character
+    else runs.push({ kind, text: character })
+  }
+  return runs
+}
+
+function normalizeExportHeadings(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6').forEach((heading) => {
+    // Preserve non-text heading content instead of flattening images/formulas.
+    if (heading.querySelector('img, svg, math')) return
+    const text = heading.textContent ?? ''
+    heading.replaceChildren(
+      ...exportHeadingRuns(text).map(({ kind, text: runText }) => {
+        const span = document.createElement('span')
+        span.className = `xmd-export-heading-run xmd-export-heading-${kind}`
+        span.textContent = runText
+        return span
+      }),
+    )
+    heading.classList.add('xmd-export-heading')
+  })
+}
+
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 const EXPORT_WORK_CONCURRENCY = 2
 const EXPORT_RESIZE_CONCURRENCY = 1
@@ -890,6 +925,10 @@ export default function App(): JSX.Element {
       clone.querySelectorAll('[spellcheck]').forEach((el) => {
         el.removeAttribute('spellcheck')
       })
+      // html2canvas/WebKit can calculate different baselines for Latin and CJK
+      // glyph runs inside the same heading. Materialize those runs as flex
+      // items so their visual alignment is deterministic in image exports.
+      normalizeExportHeadings(clone)
 
       // Reading-view code block processing.
       const cloneBlocks = Array.from(clone.querySelectorAll<HTMLElement>('.milkdown-code-block'))
@@ -1059,6 +1098,14 @@ ${liveStyles}
   html,body{margin:0;padding:0;background:var(--bg,#fff)}
   .milkdown{padding:0;background:var(--bg,#fff)}
   .ProseMirror.export-content{max-width:800px;margin:0 auto;padding:48px 40px 80px;outline:none}
+  .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content :is(h1,h2,h3,h4,h5,h6){font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei UI','Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif!important}
+  .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content :is(h1,h2,h3,h4,h5,h6) *{font-family:inherit!important;line-height:inherit}
+  .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content :is(h1,h2,h3,h4,h5,h6) strong{font-weight:inherit}
+  .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading{display:flex!important;align-items:center!important;flex-wrap:wrap}
+  .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading::before{align-self:center;flex:none}
+  .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading-run{display:inline-block;flex:none;line-height:1!important;font-weight:inherit!important;white-space:pre}
+  .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading-latin{transform:translateY(-0.28em)}
+  html[data-heading-number='on'] .export-view .milkdown :is(h1,h2,h3,h4,h5,h6)::before{color:inherit;font-family:inherit;font-size:inherit;font-weight:inherit;line-height:inherit;letter-spacing:inherit}
   .mermaid-export svg{max-width:100%;height:auto}
   ${EXPORT_CODE_STYLES}
 </style>
