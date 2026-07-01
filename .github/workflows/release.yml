@@ -137,7 +137,7 @@ jobs:
         run: npm run check
 
       - name: Build and publish GitHub Release assets
-        uses: tauri-apps/tauri-action@v0.6.2
+        uses: tauri-apps/tauri-action@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: '-'
