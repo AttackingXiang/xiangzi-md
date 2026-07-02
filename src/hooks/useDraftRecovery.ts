@@ -108,8 +108,11 @@ export function useDraftRecovery({ tabs, getCurrentTabs, openRecoveredDraft }: D
         const draft = await desktop.readDraft(summary.id)
         managedIdsRef.current.add(draft.id)
         openRecoveredDraft(draft)
-        setDrafts((current) => current.filter((item) => item.id !== draft.id))
-        setOpen(false)
+        setDrafts((current) => {
+          const remaining = current.filter((item) => item.id !== draft.id)
+          if (remaining.length === 0) setOpen(false)
+          return remaining
+        })
       } catch (error) {
         console.error('Draft recovery failed', error)
         window.alert(t('草稿恢复失败'))

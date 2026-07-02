@@ -37,6 +37,8 @@ import { baseName, dirName } from './lib/path'
 import { revealLocationKey } from './lib/platform'
 import { replaceMovedPath } from './lib/treeDrag'
 import { parseOutline } from './lib/outline'
+import { editorBridge } from './lib/editorBridge'
+import { TextSelection } from '@milkdown/kit/prose/state'
 import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
 import { useFileOps } from './hooks/useFileOps'
@@ -50,6 +52,59 @@ import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
+
+// Guards against two navigations animating at once: a newer call bumps the
+// token so the older rAF loop sees a mismatch and bows out.
+let activeScrollToken = 0
+
+/**
+ * Glide `container` so `el` sits at the top of its viewport over a fixed
+ * duration (a far heading arrives no slower than a near one).
+ *
+ * The target is recomputed every frame from `el`'s live position, so a reflow
+ * during the glide is tracked without dragging out the arrival. Any real user
+ * gesture aborts immediately so we never fight manual scrolling. Holding the
+ * heading steady against reflow that lands *after* arrival is handled by the
+ * editor's scroll anchoring, not here. rAF also runs after event-handler
+ * dispatch, so each frame overrides ProseMirror's resetScrollPos.
+ */
+function smoothScrollTo(container: HTMLElement, el: HTMLElement): void {
+  const token = ++activeScrollToken
+  const glideMs = 340
+  const t0 = performance.now()
+  const from = container.scrollTop
+  let cancelled = false
+
+  const cancel = (): void => {
+    cancelled = true
+  }
+  const cleanup = (): void => {
+    window.removeEventListener('wheel', cancel, { capture: true })
+    window.removeEventListener('touchstart', cancel, { capture: true })
+    window.removeEventListener('pointerdown', cancel, { capture: true })
+    window.removeEventListener('keydown', cancel, { capture: true })
+  }
+  window.addEventListener('wheel', cancel, { passive: true, capture: true })
+  window.addEventListener('touchstart', cancel, { passive: true, capture: true })
+  window.addEventListener('pointerdown', cancel, { capture: true })
+  window.addEventListener('keydown', cancel, { capture: true })
+
+  const step = (now: number): void => {
+    if (cancelled || token !== activeScrollToken) {
+      cleanup()
+      return
+    }
+    const elapsed = now - t0
+    const elTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top
+    const target = container.scrollTop + elTop
+    const p = Math.min(elapsed / glideMs, 1)
+    const ease = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p
+    container.scrollTop = from + (target - from) * ease
+    if (p < 1) requestAnimationFrame(step)
+    else cleanup()
+  }
+  requestAnimationFrame(step)
+}
 
 export default function App(): JSX.Element {
   // ── Settings (theme, width, i18n, CSS side-effects all live here) ──────────
@@ -118,6 +173,8 @@ export default function App(): JSX.Element {
     recoverDraft,
     saveTab,
     saveAsTab,
+    moveTab,
+    toggleTabLock,
     closeTab,
     closeOthers,
     closeAllTabs,
@@ -305,6 +362,7 @@ export default function App(): JSX.Element {
   const [showPalette, setShowPalette] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
+  const [readingMode, setReadingMode] = useState(false)
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{
     x: number
@@ -516,10 +574,16 @@ export default function App(): JSX.Element {
     (id: string, x: number, y: number) => {
       const list = stateRef.current.tabs
       const idx = list.findIndex((tb) => tb.id === id)
+      const tab = list[idx]
       const items: MenuItem[] = [
-        { label: t('关闭'), onClick: () => void closeTab(id) },
-        { label: t('关闭其他'), onClick: () => void closeOthers(id) },
+        {
+          label: tab?.locked ? t('取消固定') : t('固定标签'),
+          onClick: () => toggleTabLock(id),
+        },
       ]
+      if (!tab?.locked)
+        items.push({ label: t('关闭'), onClick: () => void closeTab(id), separatorBefore: true })
+      items.push({ label: t('关闭其他'), onClick: () => void closeOthers(id), separatorBefore: !tab?.locked })
       if (idx > 0) items.push({ label: t('关闭左侧全部'), onClick: () => void closeLeft(id) })
       if (idx >= 0 && idx < list.length - 1)
         items.push({ label: t('关闭右侧全部'), onClick: () => void closeRight(id) })
@@ -530,7 +594,7 @@ export default function App(): JSX.Element {
       })
       setCtxMenu({ x, y, items })
     },
-    [closeTab, closeOthers, closeLeft, closeRight, closeAllTabs],
+    [toggleTabLock, closeTab, closeOthers, closeLeft, closeRight, closeAllTabs],
   )
 
   // ── Search ─────────────────────────────────────────────────────────────────
@@ -550,7 +614,37 @@ export default function App(): JSX.Element {
     const els = document.querySelectorAll(
       '.milkdown h1, .milkdown h2, .milkdown h3, .milkdown h4, .milkdown h5, .milkdown h6',
     )
-    ;(els[index] as HTMLElement | undefined)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const el = els[index] as HTMLElement | undefined
+    if (!el) return
+    const container = el.closest<HTMLElement>('.wysiwyg-editor')
+    if (!container) return
+    // Cancel editor scroll-restoration and suppress typewriter re-centering.
+    window.dispatchEvent(new Event('xmd-navigate'))
+    // Move the caret into the target heading. Outline items are not focusable,
+    // so clicking one leaves the editor focused with its caret at the old,
+    // now off-screen position. WebKit (and ProseMirror's scrollToSelection)
+    // then asynchronously reveal that caret a moment after we settle — this is
+    // the intermittent "slides down after navigation" bug. Placing the caret at
+    // the heading makes any later scroll-to-caret target the heading we already
+    // scrolled to, so it becomes a no-op. Dispatch WITHOUT scrollIntoView() so
+    // ProseMirror stays in "preserve" mode and does not fight the animation
+    // below (a plain setSelection only writes the DOM selection, which does not
+    // itself scroll in WebKit).
+    const view = editorBridge.get()
+    if (view) {
+      try {
+        const pos = view.posAtDOM(el, 0)
+        view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos))))
+      } catch {
+        // posAtDOM can throw while the DOM is mid-update; fall back to scroll-only.
+      }
+    }
+    // Use a rAF-based animation instead of scrollIntoView({ behavior: 'smooth' }).
+    // ProseMirror's resetScrollPos mechanism saves/restores scrollTop on every
+    // transaction; any direct scrollTop assignment cancels a CSS smooth-scroll
+    // animation. Our rAF runs in the rendering phase, after event-handler
+    // dispatches, so it overrides any mid-frame interference each tick.
+    smoothScrollTo(container, el)
   }, [])
 
   const reorderSection = useCallback((fromIndex: number, toIndex: number) => {
@@ -686,13 +780,16 @@ export default function App(): JSX.Element {
           activeId={activeId}
           onSelect={selectTab}
           onClose={closeTab}
+          onMoveTab={moveTab}
           onTabContext={openTabContext}
           onShowWelcome={showWelcome}
           sourceMode={sourceMode}
           outlineVisible={outlineVisible}
+          readingMode={readingMode}
           onToggleSource={() => setSourceMode((v) => !v)}
           onToggleSidebar={() => setSidebarVisible((v) => !v)}
           onToggleOutline={() => setOutlineVisible((v) => !v)}
+          onToggleReading={() => setReadingMode((v) => !v)}
           onRevealFile={revealActiveFile}
           activeHasPath={!!activeTab?.path}
         />
@@ -745,6 +842,7 @@ export default function App(): JSX.Element {
               <SourceEditor
                 key={activeTab.id + '-src'}
                 content={activeTab.content}
+                readingMode={readingMode}
                 initialScrollTop={sourceScrollPositions.current.get(activeTab.id) ?? 0}
                 onScrollTopChange={(scrollTop) =>
                   sourceScrollPositions.current.set(activeTab.id, scrollTop)
@@ -765,6 +863,7 @@ export default function App(): JSX.Element {
                   theme={resolvedTheme}
                   focusMode={focusMode}
                   typewriterMode={typewriterMode}
+                  readingMode={readingMode}
                   initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
                   onScrollTopChange={(scrollTop) =>
                     wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
@@ -801,7 +900,13 @@ export default function App(): JSX.Element {
           )}
         </div>
 
-        <StatusBar tab={activeTab} sourceMode={sourceMode} autoSave={settings.autoSave} />
+        <StatusBar
+          tab={activeTab}
+          sourceMode={sourceMode}
+          focusMode={focusMode}
+          typewriterMode={typewriterMode}
+          autoSave={settings.autoSave}
+        />
       </div>
 
       {settingsSection && (

@@ -61,7 +61,7 @@ const darkTheme = EditorView.theme(
 )
 
 function selectionTheme(mode: 'light' | 'dark'): Extension {
-  const sel = mode === 'dark' ? 'rgba(125,175,255,0.2)' : '#bfdbfe'
+  const sel = mode === 'dark' ? 'rgba(180,180,180,0.18)' : '#d9d9d9'
   return EditorView.theme(
     {
       '.cm-selectionLayer .cm-selectionBackground': { backgroundColor: sel },
