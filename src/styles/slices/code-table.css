@@ -1,0 +1,223 @@
+/* ---------- 代码块 ---------- */
+.milkdown .cm-editor {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+[data-theme='dark'] .milkdown .cm-editor {
+  /* oneDark 自带深色背景，容器保持中性边框 */
+  border-color: var(--border-strong);
+}
+
+.milkdown .cm-editor .cm-scroller {
+  padding: 4px 2px;
+}
+
+/* 代码块选中配色：明确覆盖 CodeMirror 注入主题，浅色用淡蓝、深色用低亮度蓝 */
+.milkdown .cm-editor .cm-selectionLayer .cm-selectionBackground,
+.milkdown .cm-editor.cm-focused .cm-selectionLayer .cm-selectionBackground,
+.milkdown .cm-editor .cm-selectionBackground {
+  background: #eaf1ff !important;
+}
+
+.milkdown .cm-editor .cm-content ::selection,
+.milkdown .cm-editor .cm-line::selection {
+  background: #eaf1ff !important;
+}
+
+[data-theme='dark'] .milkdown .cm-editor .cm-selectionLayer .cm-selectionBackground,
+[data-theme='dark'] .milkdown .cm-editor.cm-focused .cm-selectionLayer .cm-selectionBackground,
+[data-theme='dark'] .milkdown .cm-editor .cm-selectionBackground {
+  background: rgba(125, 175, 255, 0.2) !important;
+}
+
+[data-theme='dark'] .milkdown .cm-editor .cm-content ::selection,
+[data-theme='dark'] .milkdown .cm-editor .cm-line::selection {
+  background: rgba(125, 175, 255, 0.2) !important;
+}
+
+.milkdown .cm-editor.cm-focused {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.milkdown .cm-gutters {
+  font-size: 12px;
+}
+
+/* 代码块容器：背景交给内部 .cm-editor 卡片承载 */
+.milkdown .milkdown-code-block {
+  background: transparent !important;
+  padding: 2px 0 8px !important;
+}
+
+.milkdown .milkdown-code-block .tools {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+}
+
+/* —— 左上角语言选择器：简洁常显的小标签 —— */
+.milkdown .milkdown-code-block .tools .language-button {
+  opacity: 1 !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  padding: 3px 5px 3px 9px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  margin-bottom: 8px !important;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+
+.milkdown .milkdown-code-block .tools .language-button:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.milkdown .milkdown-code-block .tools .language-button .expand-icon svg {
+  color: var(--text-muted) !important;
+}
+
+/* —— 右上角复制/预览按钮：与语言标签风格统一 —— */
+.milkdown .milkdown-code-block .tools .tools-button-group button {
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border-radius: 7px !important;
+  font-weight: 500 !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group button:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text) !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group button:first-child,
+.milkdown .milkdown-code-block .tools .tools-button-group button:last-child {
+  border-radius: 7px !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group button svg {
+  fill: currentColor !important;
+}
+
+/* 预览/源码切换按钮：始终可见，使用描边图标 */
+.milkdown .milkdown-code-block .tools .tools-button-group .preview-toggle-button {
+  opacity: 1 !important;
+}
+
+.milkdown .milkdown-code-block .tools .tools-button-group .preview-toggle-button svg {
+  fill: none !important;
+  stroke: currentColor !important;
+  width: 15px;
+  height: 15px;
+}
+
+/* —— 语言下拉面板 —— */
+.milkdown .milkdown-code-block .list-wrapper {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow) !important;
+  width: 216px !important;
+  padding-top: 8px !important;
+  overflow: hidden;
+}
+
+.milkdown .milkdown-code-block .language-list {
+  height: auto !important;
+  max-height: 280px !important;
+  padding-bottom: 6px !important;
+}
+
+.milkdown .milkdown-code-block .language-list-item {
+  padding: 6px 14px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--text-2) !important;
+}
+
+.milkdown .milkdown-code-block .language-list-item:hover,
+.milkdown .milkdown-code-block .language-list-item:focus-visible {
+  background: var(--bg-hover) !important;
+  color: var(--text) !important;
+}
+
+.milkdown .milkdown-code-block .language-list-item .leading,
+.milkdown .milkdown-code-block .language-list-item .leading svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* —— 下拉里的搜索框 —— */
+.milkdown .milkdown-code-block .search-box {
+  margin: 0 10px 8px !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  outline: none !important;
+  border: 1px solid var(--border-strong) !important;
+  background: var(--bg) !important;
+}
+
+.milkdown .milkdown-code-block .search-box:has(input:focus) {
+  outline: none !important;
+  border-color: var(--accent) !important;
+}
+
+.milkdown .milkdown-code-block .search-box .search-input,
+.milkdown .milkdown-code-block .search-box input {
+  color: var(--text) !important;
+  font-size: 13px !important;
+}
+
+.milkdown .milkdown-code-block .search-box .clear-icon svg {
+  color: var(--text-muted) !important;
+  fill: var(--text-muted) !important;
+}
+
+/* 行内代码 */
+.milkdown code:not(.cm-editor code) {
+  background: var(--bg-hover);
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 0.88em;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* ---------- 表格 ---------- */
+/* 编译后的 Crepe 主题缺失了 ProseMirror 表格的核心布局规则，这里补全：
+   固定布局让列宽稳定、内容自动换行不被裁剪，表格始终撑满容器宽度 */
+.milkdown .milkdown-table-block table,
+.milkdown table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.milkdown .milkdown-table-block .table-wrapper {
+  position: relative;
+  overflow-x: auto;
+}
+
+.milkdown .milkdown-table-block {
+  position: relative;
+}
+
+.milkdown .milkdown-table-block th,
+.milkdown .milkdown-table-block td,
+.milkdown th,
+.milkdown td {
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+

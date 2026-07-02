@@ -9,8 +9,9 @@ const tabs: Tab[] = [
     name: 'a.md',
     content: 'changed',
     savedContent: '',
-    dirty: true,
-    revision: 1,
+  dirty: true,
+  revision: 1,
+  version: null,
   },
   {
     id: 'outside',
@@ -18,8 +19,9 @@ const tabs: Tab[] = [
     name: 'b.md',
     content: '',
     savedContent: '',
-    dirty: false,
-    revision: 0,
+  dirty: false,
+  revision: 0,
+  version: null,
   },
 ]
 

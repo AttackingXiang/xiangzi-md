@@ -8,6 +8,8 @@ pub type AppResult<T> = Result<T, AppError>;
 pub struct AppError {
     pub code: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
     pub retryable: bool,
 }
 
@@ -16,6 +18,7 @@ impl AppError {
         Self {
             code: code.into(),
             message: message.into(),
+            details: None,
             retryable: false,
         }
     }
@@ -24,6 +27,7 @@ impl AppError {
         Self {
             code: "io_error".into(),
             message: format!("{context}: {error}"),
+            details: None,
             retryable: matches!(
                 error.kind(),
                 io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
@@ -40,6 +44,19 @@ impl AppError {
 
     pub fn task(message: impl Into<String>) -> Self {
         Self::new("background_task_failed", message)
+    }
+
+    pub fn with_details(mut self, details: serde_json::Value) -> Self {
+        self.details = Some(details);
+        self
+    }
+
+    pub fn conflict(path: &std::path::Path) -> Self {
+        Self::new(
+            "file_conflict",
+            "文件已被其他程序修改，请重新加载、比较差异或确认覆盖",
+        )
+        .with_details(serde_json::json!({ "path": path.to_string_lossy() }))
     }
 }
 

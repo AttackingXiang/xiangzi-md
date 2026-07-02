@@ -1,0 +1,120 @@
+:root {
+  /* 浅色（默认） */
+  --bg: #ffffff;
+  --bg-sidebar: #fafafa;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f0f0f0;
+  --bg-active: #eef2ff;
+  --border: #ececec;
+  --border-strong: #dcdcdc;
+  --text: #1f2328;
+  --text-2: #57606a;
+  --text-muted: #9ca3af;
+  --accent: #4f46e5;
+  --accent-text: #4f46e5;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+  --radius: 8px;
+
+  font-size: 14.5px;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #1a1b1e;
+  --bg-sidebar: #1f2023;
+  --bg-elevated: #25262a;
+  --bg-hover: #2a2c31;
+  --bg-active: #2d2f50;
+  --border: #2c2e33;
+  --border-strong: #3a3d44;
+  --text: #e6e7ea;
+  --text-2: #b4b8c0;
+  --text-muted: #757a85;
+  --accent: #818cf8;
+  --accent-text: #a5b4fc;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Auto-hide scrollbars: transparent by default, appear when hovering the container */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted) !important;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* ---------- 通用图标按钮 ---------- */
+.icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.icon-btn.sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.icon-btn.active {
+  color: var(--accent-text);
+  background: var(--bg-active);
+}
+

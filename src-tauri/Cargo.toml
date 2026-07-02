@@ -37,3 +37,8 @@ url = "2"
 walkdir = "2"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
+blake3 = "1"
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "rustls-no-provider"] }
+
+[target.'cfg(unix)'.dependencies]
+xattr = "1"

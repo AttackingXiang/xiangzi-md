@@ -3,7 +3,7 @@ import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import type { Node } from '@milkdown/kit/prose/model'
 
-export const headingFoldKey = new PluginKey<Set<number>>('xmd-heading-fold')
+const headingFoldKey = new PluginKey<Set<number>>('xmd-heading-fold')
 
 /** Returns the document position just past the section owned by this heading. */
 function getSectionEnd(doc: Node, headingPos: number, level: number): number {

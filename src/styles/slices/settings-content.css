@@ -1,0 +1,275 @@
+
+.settings-path-list {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.settings-empty-text {
+  margin: 0;
+  padding: 10px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+}
+
+.settings-path-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-section-intro {
+  align-items: flex-start;
+  margin-bottom: 22px;
+}
+
+.settings-section-intro .secondary-btn {
+  flex: 0 0 auto;
+}
+
+.update-settings-row p,
+.about-description {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.update-settings-row {
+  min-height: 76px;
+}
+
+.update-settings-row strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.about-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.about-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.about-card h2,
+.about-card p {
+  margin: 0;
+}
+
+.about-card h2 {
+  font-size: 19px;
+}
+
+.about-card p {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.about-description {
+  padding: 14px 0;
+}
+
+.shortcut-group {
+  margin-bottom: 22px;
+}
+
+.shortcut-group > h3 {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.shortcut-list {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 210px 30px;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.shortcut-row:last-child {
+  border-bottom: 0;
+}
+
+.shortcut-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13.5px;
+}
+
+.shortcut-label small {
+  color: var(--accent-text);
+  font-size: 10px;
+}
+
+.shortcut-recorder {
+  min-height: 32px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.shortcut-recorder:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.shortcut-recorder.recording {
+  border-color: var(--accent);
+  background: var(--bg-active);
+}
+
+.shortcut-recording-label {
+  color: var(--accent-text);
+  font-size: 12px;
+}
+
+.settings-inline-error {
+  margin: -8px 0 16px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, #d33 35%, transparent);
+  border-radius: 8px;
+  color: #c33;
+  background: color-mix(in srgb, #d33 7%, var(--bg));
+  font-size: 12px;
+}
+
+.update-modal {
+  width: min(520px, 92vw);
+}
+
+.update-backdrop {
+  z-index: 120;
+}
+
+.update-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 22px 22px 16px;
+}
+
+.update-icon {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  color: var(--accent-text);
+  background: var(--bg-active);
+}
+
+.update-copy {
+  min-width: 0;
+}
+
+.update-copy h2 {
+  margin: 1px 0 4px;
+  font-size: 17px;
+}
+
+.update-meta,
+.update-notes {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.update-meta {
+  margin: 0;
+}
+
+.update-notes {
+  max-height: 140px;
+  margin-top: 12px;
+  overflow-y: auto;
+}
+
+.update-notes h3 {
+  margin: 0 0 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.update-notes ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.update-notes li + li {
+  margin-top: 3px;
+}
+
+.update-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px 22px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.update-progress progress {
+  flex: 1;
+  height: 7px;
+  accent-color: var(--accent);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+

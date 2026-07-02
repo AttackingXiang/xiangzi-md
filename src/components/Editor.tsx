@@ -6,7 +6,12 @@ import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
-import { resolveAssetURL } from '../lib/asset'
+import {
+  BLOCKED_REMOTE_IMAGE,
+  blobPartFromBytes,
+  imageMimeType,
+  resolveAssetURL,
+} from '../lib/asset'
 import { codeMirrorTheme } from '../lib/codeTheme'
 import { resizableTableView, tableColumnResizingPlugin } from '../lib/resizableTable'
 import { focusPlugin } from '../lib/focusPlugin'
@@ -28,6 +33,8 @@ interface Props {
   vaultRoot: string | null
   /** 额外图片搜索目录，解析失败时依序尝试 */
   assetSearchPaths: string[]
+  /** 是否允许编辑器向远程图片主机发起网络请求 */
+  allowRemoteImages: boolean
   imageMaxWidth: number
   /** 已解析的主题，用于代码块语法高亮配色 */
   theme: 'light' | 'dark'
@@ -51,6 +58,7 @@ export default function Editor({
   docName,
   vaultRoot,
   assetSearchPaths,
+  allowRemoteImages,
   imageMaxWidth,
   theme,
   focusMode,
@@ -75,6 +83,8 @@ export default function Editor({
   vaultRootRef.current = vaultRoot
   const assetSearchPathsRef = useRef(assetSearchPaths)
   assetSearchPathsRef.current = assetSearchPaths
+  const allowRemoteImagesRef = useRef(allowRemoteImages)
+  allowRemoteImagesRef.current = allowRemoteImages
 
   useEffect(() => {
     const root = rootRef.current
@@ -101,18 +111,37 @@ export default function Editor({
       return relPath
     }
 
+    let destroyed = false
+    const remoteObjectUrls = new Set<string>()
     const crepe = new Crepe({
       root,
       defaultValue: content,
       featureConfigs: {
         [CrepeFeature.ImageBlock]: {
-          proxyDomURL: (url: string) =>
-            resolveAssetURL(
+          proxyDomURL: async (url: string) => {
+            if (/^https?:/i.test(url)) {
+              if (!allowRemoteImagesRef.current || !/^https:/i.test(url)) {
+                return BLOCKED_REMOTE_IMAGE
+              }
+              try {
+                const bytes = await desktop.readRemoteImage(url)
+                if (destroyed) return BLOCKED_REMOTE_IMAGE
+                const objectUrl = URL.createObjectURL(
+                  new Blob([blobPartFromBytes(bytes)], { type: imageMimeType(url) }),
+                )
+                remoteObjectUrls.add(objectUrl)
+                return objectUrl
+              } catch {
+                return BLOCKED_REMOTE_IMAGE
+              }
+            }
+            return resolveAssetURL(
               docDirRef.current,
               url,
               vaultRootRef.current,
               assetSearchPathsRef.current,
-            ),
+            )
+          },
           onUpload: upload,
           blockOnUpload: upload,
           inlineOnUpload: upload,
@@ -184,7 +213,6 @@ export default function Editor({
       })
     })
 
-    let destroyed = false
     let editorView: EditorView | undefined
     const disposeRichClipboard = setupRichClipboard(root)
     const clearSelectAllVisual = (): void => {
@@ -325,6 +353,8 @@ export default function Editor({
 
     return () => {
       destroyed = true
+      for (const url of remoteObjectUrls) URL.revokeObjectURL(url)
+      remoteObjectUrls.clear()
       disposeRichClipboard()
       window.removeEventListener('xmd-select-all', onSelectAllRequest)
       window.removeEventListener('xmd-clear-select-all', clearSelectAllVisual)

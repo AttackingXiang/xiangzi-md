@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -6,8 +6,17 @@ pub struct FileNode {
     pub name: String,
     pub path: String,
     pub is_dir: bool,
+    pub openable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<FileNode>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileVersion {
+    pub size_bytes: u64,
+    pub modified_nanos: u64,
+    pub content_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -24,6 +33,7 @@ pub struct OpenedFile {
     pub path: String,
     pub name: String,
     pub content: String,
+    pub version: FileVersion,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -31,6 +41,13 @@ pub struct OpenedFile {
 pub struct NamedPath {
     pub path: String,
     pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteResult {
+    pub path: String,
+    pub version: FileVersion,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -43,6 +60,8 @@ pub struct PathResult {
 #[serde(rename_all = "camelCase")]
 pub struct SearchMatch {
     pub line_number: usize,
+    /// Zero-based occurrence index for deterministic navigation in the editor.
+    pub match_index: usize,
     pub text: String,
 }
 
@@ -52,4 +71,15 @@ pub struct SearchResult {
     pub path: String,
     pub name: String,
     pub matches: Vec<SearchMatch>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResponse {
+    pub items: Vec<SearchResult>,
+    pub scanned_files: usize,
+    pub total_matches: usize,
+    pub truncated: bool,
+    pub reason: Option<String>,
+    pub cancelled: bool,
 }

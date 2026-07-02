@@ -1,7 +1,7 @@
 use crate::{
     domain::{
         error::AppResult,
-        models::{SearchMatch, SearchResult},
+        models::{SearchMatch, SearchResponse, SearchResult},
     },
     infrastructure::workspace::ensure_allowed,
 };
@@ -68,16 +68,25 @@ pub fn search_in_folder(
     root: &Path,
     query: &str,
     cancellation: &SearchToken,
-) -> AppResult<Vec<SearchResult>> {
+) -> AppResult<SearchResponse> {
     ensure_allowed(app, root)?;
     let trimmed = query.trim();
     if trimmed.is_empty() {
-        return Ok(Vec::new());
+        return Ok(SearchResponse {
+            items: Vec::new(),
+            scanned_files: 0,
+            total_matches: 0,
+            truncated: false,
+            reason: None,
+            cancelled: false,
+        });
     }
     let needle = trimmed.to_lowercase();
     let mut results = Vec::new();
     let mut file_count = 0usize;
     let mut match_count = 0usize;
+    let mut truncated = false;
+    let mut reason = None;
 
     for entry in WalkDir::new(root)
         .follow_links(false)
@@ -91,9 +100,23 @@ pub fn search_in_folder(
         .filter_map(Result::ok)
     {
         if cancellation.is_cancelled() {
-            return Ok(Vec::new());
+            return Ok(SearchResponse {
+                items: Vec::new(),
+                scanned_files: file_count,
+                total_matches: match_count,
+                truncated: false,
+                reason: None,
+                cancelled: true,
+            });
         }
-        if match_count >= MAX_RESULTS || file_count >= MAX_FILES {
+        if match_count >= MAX_RESULTS {
+            truncated = true;
+            reason = Some("match_limit".to_owned());
+            break;
+        }
+        if file_count >= MAX_FILES {
+            truncated = true;
+            reason = Some("file_limit".to_owned());
             break;
         }
         if !entry.file_type().is_file() || !is_markdown(entry.path()) {
@@ -114,20 +137,36 @@ pub fn search_in_folder(
         }
 
         let mut matches = Vec::new();
+        let mut occurrence_index = 0usize;
         for (index, line) in content.lines().enumerate() {
             if cancellation.is_cancelled() {
-                return Ok(Vec::new());
+                return Ok(SearchResponse {
+                    items: Vec::new(),
+                    scanned_files: file_count,
+                    total_matches: match_count,
+                    truncated: false,
+                    reason: None,
+                    cancelled: true,
+                });
             }
-            if line.to_lowercase().contains(&needle) {
+            let lower_line = line.to_lowercase();
+            let line_occurrences = lower_line.match_indices(&needle).count();
+            if line_occurrences > 0 {
                 matches.push(SearchMatch {
                     line_number: index + 1,
+                    match_index: occurrence_index,
                     text: line.trim().chars().take(200).collect(),
                 });
                 match_count += 1;
                 if matches.len() >= MAX_MATCHES_PER_FILE || match_count >= MAX_RESULTS {
+                    if matches.len() >= MAX_MATCHES_PER_FILE {
+                        truncated = true;
+                        reason.get_or_insert_with(|| "per_file_limit".to_owned());
+                    }
                     break;
                 }
             }
+            occurrence_index += line_occurrences;
         }
         if !matches.is_empty() {
             results.push(SearchResult {
@@ -137,7 +176,14 @@ pub fn search_in_folder(
             });
         }
     }
-    Ok(results)
+    Ok(SearchResponse {
+        items: results,
+        scanned_files: file_count,
+        total_matches: match_count,
+        truncated,
+        reason,
+        cancelled: false,
+    })
 }
 
 #[cfg(test)]

@@ -8,10 +8,11 @@
     "dialog:default",
     "clipboard-manager:allow-write-html",
     "clipboard-manager:allow-write-image",
-    "opener:default",
-    "fs:default",
-    "fs:allow-read-file",
-    "fs:allow-write-file",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://*" }]
+    },
+    "opener:allow-reveal-item-in-dir",
     "updater:default",
     "process:allow-restart"
   ]

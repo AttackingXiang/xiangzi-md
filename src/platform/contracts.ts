@@ -8,7 +8,14 @@ export interface FileNode {
   name: string
   path: string
   isDir: boolean
+  openable: boolean
   children?: FileNode[]
+}
+
+export interface FileVersion {
+  sizeBytes: number
+  modifiedNanos: number
+  contentHash: string
 }
 
 export interface Folder {
@@ -38,18 +45,36 @@ export interface AppSettings {
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
   hideAttachmentFolders: boolean
   assetSearchPaths: string[]
+  showAllFiles: boolean
+  hiddenWorkspacePaths: string[]
+  allowRemoteImages: boolean
 }
 
 export interface OpenedFile {
   path: string
   name: string
   content: string
+  version: FileVersion
+}
+
+export interface WriteResult {
+  path: string
+  version: FileVersion
 }
 
 export interface SearchResult {
   path: string
   name: string
-  matches: Array<{ lineNumber: number; text: string }>
+  matches: Array<{ lineNumber: number; matchIndex: number; text: string }>
+}
+
+export interface SearchResponse {
+  items: SearchResult[]
+  scannedFiles: number
+  totalMatches: number
+  truncated: boolean
+  reason: 'file_limit' | 'match_limit' | 'per_file_limit' | null
+  cancelled: boolean
 }
 
 export interface DraftSummary {
@@ -91,14 +116,24 @@ export interface UpdaterPort {
 export interface DesktopPort {
   getAppInfo(): Promise<AppInfo>
   openFolder(initialPath?: string): Promise<Folder | null>
+  pickFolder(): Promise<{ path: string } | null>
   openFolderPath(root: string): Promise<Folder | null>
   openParentFolder(root: string): Promise<Folder | null>
   openContainingFolder(filePath: string): Promise<Folder | null>
   openFile(): Promise<OpenedFile | null>
   readFile(path: string): Promise<OpenedFile>
   readBinaryFile(path: string, maxBytes?: number): Promise<Uint8Array>
-  writeFile(path: string, content: string): Promise<{ path: string }>
-  saveAs(content: string, suggestedName?: string): Promise<Pick<OpenedFile, 'path' | 'name'> | null>
+  readRemoteImage(url: string): Promise<Uint8Array>
+  writeFile(
+    path: string,
+    content: string,
+    expectedVersion: FileVersion | null,
+    force?: boolean,
+  ): Promise<WriteResult>
+  saveAs(
+    content: string,
+    suggestedName?: string,
+  ): Promise<Pick<OpenedFile, 'path' | 'name' | 'version'> | null>
   readDir(path: string): Promise<FileNode[]>
   listFiles(root: string): Promise<Array<{ path: string; name: string }>>
   createFile(dirPath: string, fileName: string): Promise<{ path: string; name: string }>
@@ -112,7 +147,7 @@ export interface DesktopPort {
   reveal(targetPath: string): Promise<void>
   openExternal(url: string): Promise<void>
   moveItem(sourcePath: string, targetDirPath: string): Promise<{ path: string; name: string }>
-  searchInFolder(root: string, query: string): Promise<SearchResult[]>
+  searchInFolder(root: string, query: string): Promise<SearchResponse>
   cancelSearch(): Promise<void>
   saveAttachment(
     docDir: string,

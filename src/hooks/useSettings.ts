@@ -11,6 +11,7 @@ import type { AppSettings } from '../types'
 export function useSettings() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [settingsReady, setSettingsReady] = useState(false)
+  const [customCssError, setCustomCssError] = useState(false)
 
   useEffect(() => {
     void desktop
@@ -72,8 +73,10 @@ export function useSettings() {
     if (!settings) return undefined
     const id = 'custom-theme-style'
     let el = document.getElementById(id) as HTMLStyleElement | null
+    el?.remove()
+    el = null
+    setCustomCssError(false)
     if (!settings.customCssPath) {
-      el?.remove()
       return undefined
     }
     let cancelled = false
@@ -89,7 +92,7 @@ export function useSettings() {
         el.textContent = res.content
       })
       .catch(() => {
-        /* file gone */
+        if (!cancelled) setCustomCssError(true)
       })
     return () => {
       cancelled = true
@@ -166,6 +169,7 @@ export function useSettings() {
   return {
     settings,
     settingsReady,
+    customCssError,
     saveSettings,
     pushRecentFile,
     pushRecentFolder,

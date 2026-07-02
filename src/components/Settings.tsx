@@ -1,4 +1,14 @@
-import { FileImage, Info, Keyboard, Palette, PenLine, RefreshCw, X } from 'lucide-react'
+import {
+  FileImage,
+  Files,
+  Info,
+  Keyboard,
+  Palette,
+  PenLine,
+  RefreshCw,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { desktop } from '../platform'
@@ -10,6 +20,7 @@ import { getLang, t } from '../lib/i18n'
 export type SettingsSection =
   | 'appearance'
   | 'editor'
+  | 'files'
   | 'attachments'
   | 'shortcuts'
   | 'updates'
@@ -18,6 +29,7 @@ export type SettingsSection =
 interface Props {
   settings: AppSettings
   updater: UpdaterController
+  customCssError?: boolean
   initialSection?: SettingsSection
   onChange: (patch: Partial<AppSettings>) => void
   onClose: () => void
@@ -26,6 +38,7 @@ interface Props {
 export default function Settings({
   settings,
   updater,
+  customCssError = false,
   initialSection = 'appearance',
   onChange,
   onClose,
@@ -60,6 +73,7 @@ export default function Settings({
   }> = [
     { id: 'appearance', label: en ? 'Appearance' : '外观', icon: Palette },
     { id: 'editor', label: en ? 'Editor' : '编辑器', icon: PenLine },
+    { id: 'files', label: en ? 'Files' : '文件', icon: Files },
     { id: 'attachments', label: en ? 'Images' : '图片与附件', icon: FileImage },
     { id: 'shortcuts', label: en ? 'Shortcuts' : '快捷键', icon: Keyboard },
     { id: 'updates', label: en ? 'Updates' : '软件更新', icon: RefreshCw },
@@ -175,6 +189,13 @@ export default function Settings({
                       </button>
                     </span>
                   </div>
+                  {customCssError && (
+                    <p className="settings-error" role="alert">
+                      {en
+                        ? 'The selected CSS file could not be read. The previous custom theme was removed.'
+                        : '无法读取所选 CSS，旧的自定义主题已移除。'}
+                    </p>
+                  )}
                 </SettingsCard>
               </SettingsPage>
             )}
@@ -203,6 +224,88 @@ export default function Settings({
                     checked={settings.autoSave}
                     onChange={(checked) => onChange({ autoSave: checked })}
                   />
+                </SettingsCard>
+              </SettingsPage>
+            )}
+
+            {section === 'files' && (
+              <SettingsPage
+                title={en ? 'Files' : '文件'}
+                description={
+                  en
+                    ? 'Control what the workspace tree displays.'
+                    : '控制工作区文件树显示哪些内容。'
+                }
+              >
+                <SettingsCard>
+                  <ToggleRow
+                    label={en ? 'Show all files' : '显示全部文件'}
+                    description={
+                      en
+                        ? 'Unsupported files are visible but cannot be opened in the editor.'
+                        : '不支持的文件会显示在文件树中，但不能在编辑器中打开。'
+                    }
+                    checked={settings.showAllFiles}
+                    onChange={(checked) => onChange({ showAllFiles: checked })}
+                  />
+                  <ToggleRow
+                    label={en ? 'Load remote images' : '加载远程图片'}
+                    description={
+                      en
+                        ? 'Disabled by default to avoid leaking your IP address to image hosts.'
+                        : '默认关闭，避免向图片服务器泄露 IP 地址等访问信息。'
+                    }
+                    checked={settings.allowRemoteImages}
+                    onChange={(checked) => onChange({ allowRemoteImages: checked })}
+                  />
+                </SettingsCard>
+                <SettingsCard title={en ? 'Hidden folders' : '手动隐藏的文件夹'}>
+                  <p className="settings-hint">
+                    {en
+                      ? 'Selected folders and all descendants are omitted from the workspace tree.'
+                      : '选中的文件夹及其全部子项不会出现在工作区文件树中。'}
+                  </p>
+                  <div className="settings-path-list">
+                    {settings.hiddenWorkspacePaths.length === 0 && (
+                      <p className="settings-empty-text">
+                        {en ? 'No folders are hidden.' : '尚未隐藏任何文件夹。'}
+                      </p>
+                    )}
+                    {settings.hiddenWorkspacePaths.map((path) => (
+                      <div className="settings-path-row" key={path}>
+                        <span title={path}>{path}</span>
+                        <button
+                          className="icon-btn sm"
+                          aria-label={en ? `Show ${path}` : `取消隐藏 ${path}`}
+                          onClick={() =>
+                            onChange({
+                              hiddenWorkspacePaths: settings.hiddenWorkspacePaths.filter(
+                                (item) => item !== path,
+                              ),
+                            })
+                          }
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className="secondary-btn"
+                    disabled={settings.hiddenWorkspacePaths.length >= 64}
+                    onClick={async () => {
+                      const result = await desktop.pickFolder()
+                      if (!result || settings.hiddenWorkspacePaths.includes(result.path)) return
+                      onChange({
+                        hiddenWorkspacePaths: [
+                          ...settings.hiddenWorkspacePaths,
+                          result.path,
+                        ].slice(0, 64),
+                      })
+                    }}
+                  >
+                    {en ? 'Choose folder…' : '选择文件夹…'}
+                  </button>
                 </SettingsCard>
               </SettingsPage>
             )}

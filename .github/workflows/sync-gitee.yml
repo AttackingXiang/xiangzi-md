@@ -20,20 +20,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Configure Gitee SSH key
         env:
           GITEE_PRIVATE_KEY: ${{ secrets.GITEE_PRIVATE_KEY }}
+          GITEE_KNOWN_HOSTS: ${{ secrets.GITEE_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           test -n "${GITEE_PRIVATE_KEY}"
           install -d -m 700 ~/.ssh
           printf '%s\n' "${GITEE_PRIVATE_KEY}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H gitee.com >> ~/.ssh/known_hosts
+          test -n "${GITEE_KNOWN_HOSTS}"
+          printf '%s\n' "${GITEE_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -F gitee.com -f ~/.ssh/known_hosts >/dev/null
 
       - name: Mirror main, Electron legacy branch and tags
         env:
@@ -45,6 +49,6 @@ jobs:
             +refs/heads/main:refs/remotes/origin/main \
             +refs/heads/electron-legacy-v0.1:refs/remotes/origin/electron-legacy-v0.1 \
             +refs/tags/*:refs/tags/*
-          git push --force gitee refs/remotes/origin/main:refs/heads/main
-          git push --force gitee refs/remotes/origin/electron-legacy-v0.1:refs/heads/electron-legacy-v0.1
-          git push --force gitee --tags
+          git push gitee refs/remotes/origin/main:refs/heads/main
+          git push gitee refs/remotes/origin/electron-legacy-v0.1:refs/heads/electron-legacy-v0.1
+          git push gitee --tags

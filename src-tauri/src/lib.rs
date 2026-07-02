@@ -24,6 +24,7 @@ pub fn run() {
         .manage(SettingsStore::default())
         .manage(SearchCancellation::default())
         .manage(LifecycleState::default())
+        .manage(infrastructure::workspace::DocumentWriteCoordinator::default())
         .register_uri_scheme_protocol("xmd", infrastructure::protocol::handle_xmd)
         .setup(|app| {
             let handle = app.handle().clone();
@@ -46,12 +47,13 @@ pub fn run() {
             commands::app::get_app_info,
             commands::app::frontend_ready,
             commands::app::quit_confirmed,
+            commands::assets::read_remote_image,
             commands::workspace::open_folder_path,
-            commands::workspace::open_parent_folder,
             commands::workspace::open_containing_folder,
             commands::workspace::read_file,
-            commands::workspace::check_binary_file,
+            commands::workspace::read_binary_file,
             commands::workspace::write_file,
+            commands::workspace::write_binary_file,
             commands::workspace::read_dir,
             commands::workspace::list_files,
             commands::workspace::create_file,

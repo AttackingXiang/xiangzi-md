@@ -19,9 +19,21 @@ pub fn set_settings(
     patch: SettingsPatch,
 ) -> AppResult<AppSettings> {
     let affects_menu = patch.affects_menu();
-    let settings = store.set(&app, patch)?;
-    if affects_menu {
-        menu::install(&app, &settings.language, &settings.shortcuts)?;
-    }
-    Ok(settings)
+    let apply_app = app.clone();
+    let rollback_app = app.clone();
+    store.set_transactional(
+        &app,
+        patch,
+        move |settings| {
+            if affects_menu {
+                menu::install(&apply_app, &settings.language, &settings.shortcuts)?;
+            }
+            Ok(())
+        },
+        move |previous| {
+            if affects_menu {
+                let _ = menu::install(&rollback_app, &previous.language, &previous.shortcuts);
+            }
+        },
+    )
 }

@@ -6,7 +6,7 @@ import { t, getLang } from '../lib/i18n'
 
 interface Props {
   root: string
-  onOpenResult: (path: string, query: string, lineNumber?: number) => void
+  onOpenResult: (path: string, query: string, lineNumber?: number, matchIndex?: number) => void
   onBack: () => void
 }
 
@@ -38,6 +38,11 @@ function highlight(text: string, query: string): JSX.Element {
 export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.Element {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
+  const [searchMeta, setSearchMeta] = useState({
+    scannedFiles: 0,
+    totalMatches: 0,
+    truncated: false,
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -53,6 +58,7 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
     setError(null)
     if (!query.trim()) {
       setResults([])
+      setSearchMeta({ scannedFiles: 0, totalMatches: 0, truncated: false })
       setLoading(false)
       void desktop.cancelSearch()
       return
@@ -61,12 +67,20 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
     const timer = setTimeout(() => {
       void desktop
         .searchInFolder(root, query)
-        .then((res) => {
-          if (id === reqId.current) setResults(res)
+        .then((response) => {
+          if (id === reqId.current && !response.cancelled) {
+            setResults(response.items)
+            setSearchMeta({
+              scannedFiles: response.scannedFiles,
+              totalMatches: response.totalMatches,
+              truncated: response.truncated,
+            })
+          }
         })
         .catch(() => {
           if (id === reqId.current) {
             setResults([])
+            setSearchMeta({ scannedFiles: 0, totalMatches: 0, truncated: false })
             setError(getLang() === 'en' ? 'Search failed. Try again.' : '搜索失败，请重试。')
           }
         })
@@ -80,8 +94,6 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
       void desktop.cancelSearch()
     }
   }, [query, root])
-
-  const totalMatches = results.reduce((n, r) => n + r.matches.length, 0)
 
   return (
     <aside className="sidebar search-panel">
@@ -110,8 +122,8 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
             ? t('搜索中…')
             : query.trim()
               ? getLang() === 'en'
-                ? `${results.length} files, ${totalMatches} matches`
-                : `${results.length} 个文件，${totalMatches} 处匹配`
+                ? `${results.length} files, ${searchMeta.totalMatches} matches${searchMeta.truncated ? ` (truncated after ${searchMeta.scannedFiles} files)` : ''}`
+                : `${results.length} 个文件，${searchMeta.totalMatches} 处匹配${searchMeta.truncated ? `（扫描 ${searchMeta.scannedFiles} 个文件后已截断）` : ''}`
               : '')}
       </div>
 
@@ -127,7 +139,7 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
               <div
                 key={i}
                 className="search-match"
-                onClick={() => onOpenResult(r.path, query, m.lineNumber)}
+                onClick={() => onOpenResult(r.path, query, m.lineNumber, m.matchIndex)}
                 title={getLang() === 'en' ? `Line ${m.lineNumber}` : `第 ${m.lineNumber} 行`}
               >
                 {highlight(m.text, query)}
