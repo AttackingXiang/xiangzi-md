@@ -12,16 +12,16 @@ import {
   imageMimeType,
   resolveAssetURL,
 } from '../lib/asset'
-import { codeMirrorTheme } from '../lib/codeTheme'
 import { resizableTableView, tableColumnResizingPlugin } from '../lib/resizableTable'
 import { focusPlugin } from '../lib/focusPlugin'
 import { searchPlugin } from '../lib/searchPlugin'
 import { headingFoldPlugin } from '../lib/headingFold'
 import { editorBridge } from '../lib/editorBridge'
-import { renderMermaid } from '../lib/mermaidPreview'
 import { t } from '../lib/i18n'
 import { typewriterScrollDelta } from '../lib/typewriterScroll'
 import { setupRichClipboard } from '../lib/richClipboard'
+import { codeBlockView, codeHighlightPlugin, setCodeBlockTheme } from '../lib/staticCodeBlock'
+import { codeMirrorTheme } from '../lib/codeTheme'
 
 interface Props {
   content: string
@@ -40,6 +40,8 @@ interface Props {
   theme: 'light' | 'dark'
   focusMode: boolean
   typewriterMode: boolean
+  /** 阅读模式：编辑器只读，尝试编辑时提示先关闭 */
+  readingMode: boolean
   initialScrollTop?: number
   onScrollTopChange?: (scrollTop: number) => void
   onChange: (markdown: string) => void
@@ -63,11 +65,15 @@ export default function Editor({
   theme,
   focusMode,
   typewriterMode,
+  readingMode,
   initialScrollTop = 0,
   onScrollTopChange,
   onChange,
 }: Props): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
+  const crepeRef = useRef<Crepe | null>(null)
+  const readingModeRef = useRef(readingMode)
+  readingModeRef.current = readingMode
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const contentRef = useRef(content)
@@ -111,12 +117,16 @@ export default function Editor({
       return relPath
     }
 
+    setCodeBlockTheme(theme)
     let destroyed = false
     const remoteObjectUrls = new Set<string>()
     const crepe = new Crepe({
       root,
       defaultValue: content,
       featureConfigs: {
+        [CrepeFeature.CodeMirror]: {
+          theme: codeMirrorTheme(theme),
+        },
         [CrepeFeature.ImageBlock]: {
           proxyDomURL: async (url: string) => {
             if (/^https?:/i.test(url)) {
@@ -174,18 +184,10 @@ export default function Editor({
             math: { label: t('公式') },
           },
         },
-        [CrepeFeature.CodeMirror]: {
-          theme: codeMirrorTheme(theme),
-          renderPreview: renderMermaid(theme),
-          // 有预览的代码块（如 mermaid）默认显示渲染结果，右上角按钮可切回源码
-          previewOnlyByDefault: true,
-          previewToggleButton: (previewOnlyMode: boolean) =>
-            previewOnlyMode
-              ? '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>'
-              : '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
-        },
       },
     })
+
+    crepeRef.current = crepe
 
     // 注入标题快捷键（⌘1~6 / ⌘0）、专注模式装饰、查找替换
     crepe.editor.use(focusPlugin)
@@ -194,6 +196,10 @@ export default function Editor({
     crepe.editor.use(tableColumnResizingPlugin)
     // 放在 Crepe 自带 tableBlockView 之后注册，同一节点类型由最后注册的视图接管。
     crepe.editor.use(resizableTableView)
+    // 静态代码块：取代 CodeMirror NodeView，消除异步高度回流导致的页面漂移。
+    // codeBlockView 注册在所有 Crepe 特性之后，确保接管 code_block 节点的渲染。
+    crepe.editor.use(codeHighlightPlugin)
+    crepe.editor.use(codeBlockView)
 
     let ready = false
     let userEdited = false
@@ -214,6 +220,65 @@ export default function Editor({
     })
 
     let editorView: EditorView | undefined
+
+    // ── Scroll anchoring ──────────────────────────────────────────────────
+    // WebKit/WKWebView does not implement CSS scroll anchoring, so when content
+    // above the viewport changes height after initial layout — CodeMirror code
+    // blocks re-measuring, tables, images, async node views — the text the user
+    // is reading visibly slides even though scrollTop never changes. We emulate
+    // scroll anchoring: remember the top-level block currently at the top of the
+    // viewport and its offset, and whenever the content resizes, nudge scrollTop
+    // so that block stays put. Adjusting scrollTop does not change content size,
+    // so this cannot feed back into the ResizeObserver.
+    //
+    // Anchoring stands down entirely during programmatic navigation (outline
+    // click / restore), because there scrollTop is being animated on purpose and
+    // compensating would fight the animation. `navigating` is armed by the
+    // xmd-navigate event and disarmed once the scroll settles.
+    let anchorEl: Element | null = null
+    let anchorOffset = 0
+    let anchorAdjusting = false
+    let navigating = false
+    let navSettleTimer: number | null = null
+    const pickAnchor = (): void => {
+      const dom = editorView?.dom
+      if (!dom) return
+      const rect = root.getBoundingClientRect()
+      const x = rect.left + Math.min(40, rect.width / 2)
+      const el = document.elementFromPoint(x, rect.top + 2)
+      if (!el || !dom.contains(el)) {
+        anchorEl = null
+        return
+      }
+      let block: Element | null = el
+      while (block && block.parentElement !== dom) block = block.parentElement
+      if (!block) {
+        anchorEl = null
+        return
+      }
+      anchorEl = block
+      anchorOffset = block.getBoundingClientRect().top - rect.top
+    }
+    const applyAnchor = (): void => {
+      const dom = editorView?.dom
+      if (navigating || restoringScroll || !dom || !anchorEl || !dom.contains(anchorEl)) {
+        if (!navigating && !restoringScroll) pickAnchor()
+        return
+      }
+      const containerTop = root.getBoundingClientRect().top
+      const delta = anchorEl.getBoundingClientRect().top - containerTop - anchorOffset
+      if (Math.abs(delta) >= 1) {
+        anchorAdjusting = true
+        root.scrollTop += delta
+        anchorAdjusting = false
+      }
+    }
+    const onScrollRepick = (): void => {
+      // A real user scroll redefines what should stay anchored; our own anchor
+      // correction and any in-flight navigation animation must not.
+      if (!anchorAdjusting && !restoringScroll && !navigating) pickAnchor()
+    }
+
     const disposeRichClipboard = setupRichClipboard(root)
     const clearSelectAllVisual = (): void => {
       if (!root.classList.contains('select-all-active')) return
@@ -297,6 +362,7 @@ export default function Editor({
         scrollRestoreFrame = null
       }
     }
+    root.addEventListener('scroll', onScrollRepick, { passive: true })
     const reportScroll = (): void => {
       if (!restoringScroll) onScrollTopChangeRef.current?.(root.scrollTop)
     }
@@ -325,6 +391,27 @@ export default function Editor({
     const markUserEdited = (): void => {
       userEdited = true
     }
+    // Arm the anchoring stand-down for the duration of a navigation. The glide
+    // fires scroll events; each one pushes the disarm out by 200ms, so anchoring
+    // resumes only once the animation has actually settled — at which point the
+    // next reportScroll/onScrollRepick re-picks the anchor at the landing spot.
+    const disarmNavigating = (): void => {
+      if (navSettleTimer !== null) clearTimeout(navSettleTimer)
+      navSettleTimer = window.setTimeout(() => {
+        navigating = false
+        navSettleTimer = null
+        pickAnchor()
+      }, 200)
+    }
+    const onNavigateRequest = (): void => {
+      cancelScrollRestore()
+      navigating = true
+      disarmNavigating()
+    }
+    const onNavScroll = (): void => {
+      if (navigating) disarmNavigating()
+    }
+    root.addEventListener('scroll', onNavScroll, { passive: true })
     root.addEventListener('scroll', reportScroll, { passive: true })
     root.addEventListener('wheel', cancelScrollRestore, { passive: true })
     root.addEventListener('touchstart', cancelScrollRestore, { passive: true })
@@ -333,6 +420,11 @@ export default function Editor({
     root.addEventListener('paste', markUserEdited)
     root.addEventListener('cut', markUserEdited)
     root.addEventListener('drop', markUserEdited)
+    window.addEventListener('xmd-navigate', onNavigateRequest)
+    // Emulated scroll anchoring: when the content's height changes (images,
+    // mermaid SVGs loading), hold the block the reader is looking at in place
+    // by compensating scrollTop.
+    let resizeObserver: ResizeObserver | null = null
     void crepe
       .create()
       .then(() => {
@@ -347,7 +439,13 @@ export default function Editor({
         })
         baselineMarkdown = crepe.getMarkdown()
         ready = true
+        crepe.setReadonly(readingModeRef.current)
         restoreScroll()
+        const contentEl = editorView?.dom
+        if (!contentEl) return
+        pickAnchor()
+        resizeObserver = new ResizeObserver(() => applyAnchor())
+        resizeObserver.observe(contentEl)
       })
       .catch((error: unknown) => console.error('Editor initialization failed', error))
 
@@ -364,6 +462,8 @@ export default function Editor({
       root.removeEventListener('mousedown', markTableResize, true)
       root.removeEventListener('pointerdown', focusEditorFromBlankArea)
       root.removeEventListener('keydown', clearSelectAllOnKey, true)
+      root.removeEventListener('scroll', onScrollRepick)
+      root.removeEventListener('scroll', onNavScroll)
       root.removeEventListener('scroll', reportScroll)
       root.removeEventListener('wheel', cancelScrollRestore)
       root.removeEventListener('touchstart', cancelScrollRestore)
@@ -372,6 +472,9 @@ export default function Editor({
       root.removeEventListener('paste', markUserEdited)
       root.removeEventListener('cut', markUserEdited)
       root.removeEventListener('drop', markUserEdited)
+      window.removeEventListener('xmd-navigate', onNavigateRequest)
+      resizeObserver?.disconnect()
+      if (navSettleTimer !== null) clearTimeout(navSettleTimer)
       if (scrollRestoreFrame !== null) cancelAnimationFrame(scrollRestoreFrame)
       // Do not persist from passive-effect cleanup. React may already have
       // detached this keyed editor from layout, at which point WebKit reports
@@ -389,10 +492,62 @@ export default function Editor({
       }
       if (editorBridge.get() === editorView) editorBridge.set(null)
       editorView = undefined
+      crepeRef.current = null
       void crepe.destroy()
     }
     // 仅在挂载时创建；内容更新由 Crepe 内部维护
   }, [])
+
+  // 阅读模式：切换编辑器只读态；尝试编辑时提示先关闭
+  useEffect(() => {
+    crepeRef.current?.setReadonly(readingMode)
+    const root = rootRef.current
+    if (!root) return
+    root.classList.toggle('reading-mode', readingMode)
+    if (!readingMode) return
+
+    let toastEl: HTMLElement | null = null
+    let toastTimer: number | null = null
+    const showHint = (): void => {
+      if (toastEl) return
+      const el = document.createElement('div')
+      el.className = 'reading-mode-toast'
+      el.textContent = t('请先关闭阅读模式')
+      root.appendChild(el)
+      toastEl = el
+      toastTimer = window.setTimeout(() => {
+        el.remove()
+        if (toastEl === el) toastEl = null
+        toastTimer = null
+      }, 1600)
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      // Let navigation, selection and shortcuts (copy, find, …) through; only
+      // intercept keys that would mutate the document.
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const mutates =
+        event.key.length === 1 || ['Enter', 'Backspace', 'Delete', 'Tab'].includes(event.key)
+      if (!mutates) return
+      event.preventDefault()
+      showHint()
+    }
+    const onEditEvent = (event: Event): void => {
+      event.preventDefault()
+      showHint()
+    }
+    root.addEventListener('keydown', onKeyDown, true)
+    root.addEventListener('paste', onEditEvent, true)
+    root.addEventListener('cut', onEditEvent, true)
+    root.addEventListener('drop', onEditEvent, true)
+    return () => {
+      root.removeEventListener('keydown', onKeyDown, true)
+      root.removeEventListener('paste', onEditEvent, true)
+      root.removeEventListener('cut', onEditEvent, true)
+      root.removeEventListener('drop', onEditEvent, true)
+      if (toastTimer !== null) clearTimeout(toastTimer)
+      toastEl?.remove()
+    }
+  }, [readingMode])
 
   // 打字机模式：保持光标垂直居中
   useEffect(() => {
@@ -400,6 +555,8 @@ export default function Editor({
     const scroller = rootRef.current
     if (!scroller) return
     let pointerSelecting = false
+    let navigating = false
+    let navScrollEnd: number | null = null
 
     const onPointerDown = (event: PointerEvent): void => {
       if (event.button === 0) pointerSelecting = true
@@ -408,6 +565,7 @@ export default function Editor({
       pointerSelecting = false
     }
     const onSel = (): void => {
+      if (navigating) return
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0) return
       const range = sel.getRangeAt(0)
@@ -417,15 +575,34 @@ export default function Editor({
       const delta = typewriterScrollDelta(sel.isCollapsed, pointerSelecting, rect, sRect)
       if (delta !== null) scroller.scrollBy({ top: delta })
     }
+    // Suppress typewriter re-centering while the smooth scroll from outline navigation
+    // is in progress. The 'xmd-navigate' event arms the guard; the guard is cleared
+    // 150 ms after the last scroll event fires (i.e. after the animation settles).
+    const onNavigateStart = (): void => {
+      navigating = true
+    }
+    const onScrollDuringNav = (): void => {
+      if (!navigating) return
+      if (navScrollEnd !== null) clearTimeout(navScrollEnd)
+      navScrollEnd = window.setTimeout(() => {
+        navigating = false
+        navScrollEnd = null
+      }, 150)
+    }
     scroller.addEventListener('pointerdown', onPointerDown, true)
     window.addEventListener('pointerup', onPointerUp, true)
     window.addEventListener('pointercancel', onPointerUp, true)
     document.addEventListener('selectionchange', onSel)
+    window.addEventListener('xmd-navigate', onNavigateStart)
+    scroller.addEventListener('scroll', onScrollDuringNav, { passive: true })
     return () => {
       scroller.removeEventListener('pointerdown', onPointerDown, true)
       window.removeEventListener('pointerup', onPointerUp, true)
       window.removeEventListener('pointercancel', onPointerUp, true)
       document.removeEventListener('selectionchange', onSel)
+      window.removeEventListener('xmd-navigate', onNavigateStart)
+      scroller.removeEventListener('scroll', onScrollDuringNav)
+      if (navScrollEnd !== null) clearTimeout(navScrollEnd)
     }
   }, [typewriterMode])
 
