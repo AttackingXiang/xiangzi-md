@@ -33,4 +33,6 @@ export interface Tab {
   revision: number
   /** Rust 返回的磁盘版本，用于保存时检测外部修改。 */
   version: FileVersion | null
+  /** 锁定后无法被关闭（close / close-others / close-all 均跳过） */
+  locked?: boolean
 }

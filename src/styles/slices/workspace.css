@@ -101,6 +101,148 @@
   flex: 0 0 auto;
 }
 
+/* 拖拽中的标签：半透明 */
+.tab.tab-dragging {
+  opacity: 0.4;
+}
+
+/* 拖拽放置指示线（左/右） */
+.tab.drop-left {
+  box-shadow: -2px 0 0 var(--accent);
+}
+
+.tab.drop-right {
+  box-shadow: 2px 0 0 var(--accent);
+}
+
+/* 固定标签区（不随右侧滚动） */
+.tabs-pinned {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 100%;
+}
+
+/* 固定标签样式：不显示关闭按钮，左侧小图钉 */
+.tab.tab-pinned {
+  padding: 0 10px 0 8px;
+  gap: 5px;
+  max-width: 160px;
+}
+
+.tab-pin-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.tab.tab-pinned.active .tab-pin-icon {
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+/* 固定区右侧分隔线 */
+.tabs-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-strong);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* dirty dot on pinned tab (no close btn, show dot floating) */
+.dot-pinned {
+  flex-shrink: 0;
+}
+
+/* 溢出菜单包装（保持相对定位供面板绝对定位使用） */
+.tab-overflow-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* 溢出列表面板 */
+.tab-overflow-panel {
+  position: fixed;
+  z-index: 200;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+}
+
+.tab-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+}
+
+.tab-overflow-item.active {
+  background: var(--bg-hover);
+}
+
+.tab-overflow-item:hover {
+  background: var(--bg-hover);
+}
+
+.tab-overflow-select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.tab-overflow-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-overflow-lock {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.tab-overflow-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px;
+}
+
+.tab-overflow-close:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tab-overflow-close:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 /* ---------- 查找条 ---------- */
 .findbar {
   display: flex;
@@ -211,6 +353,40 @@
   overflow-y: auto;
 }
 
+/* 阅读模式：转成文本选择光标，弱化编辑态视觉 */
+.wysiwyg-editor.reading-mode .ProseMirror {
+  cursor: default;
+}
+
+/* 尝试编辑时的临时提示 */
+.reading-mode-toast {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 88%, transparent);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  animation: reading-toast-in 0.14s ease-out;
+}
+
+@keyframes reading-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 .editor-loading {
   flex: 1;
   background: var(--bg);
@@ -282,4 +458,3 @@
   background: var(--bg-hover);
   color: var(--text);
 }
-
