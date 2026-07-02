@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { desktop } from '../platform'
-import { getLang } from '../lib/i18n'
+import { getLang, t } from '../lib/i18n'
+import { ErrorCode } from '../lib/errorCodes'
 import { createTaskQueue, mapWithConcurrencyLimit } from '../lib/asyncPool'
 import { InFlightCache } from '../lib/inFlightCache'
 import { LatestTaskQueue } from '../lib/latestTask'
@@ -74,11 +75,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
           try {
             file = await desktop.readFile(path)
           } catch {
-            window.alert(
-              (getLang() === 'en'
-                ? 'File not found or cannot open:\n'
-                : '文件不存在或无法打开：\n') + path,
-            )
+            await desktop.notify(t('文件不存在或无法打开：\n') + path)
             return
           }
           const tab: Tab = {
@@ -182,14 +179,14 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
               typeof error === 'object' && error !== null && 'code' in error
                 ? String(error.code)
                 : ''
-            if (code !== 'file_conflict') throw error
+            if (code !== ErrorCode.FILE_CONFLICT) throw error
             const overwrite = await desktop.confirm(
               getLang() === 'en'
-                ? `“${tab.name}” changed on disk. Overwrite the external changes?`
+                ? `”${tab.name}” changed on disk. Overwrite the external changes?`
                 : `「${tab.name}」已被其他程序修改，是否覆盖外部更改？`,
-              getLang() === 'en' ? 'File conflict' : '文件冲突',
-              getLang() === 'en' ? 'Overwrite' : '仍然覆盖',
-              getLang() === 'en' ? 'Cancel' : '取消',
+              t('文件冲突'),
+              t('仍然覆盖'),
+              t('取消'),
             )
             if (!overwrite) return false
             result = await desktop.writeFile(
@@ -228,7 +225,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
           return false
         }
       } catch {
-        window.alert(
+        await desktop.notify(
           getLang() === 'en'
             ? `Failed to save "${tab.name}". Check disk space or permissions.`
             : `保存「${tab.name}」失败，请检查磁盘空间或权限。`,
@@ -267,7 +264,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
           pushRecentFile(result.path)
         }
       } catch {
-        window.alert(getLang() === 'en' ? 'Save As failed.' : '另存为失败。')
+        await desktop.notify(t('另存为失败。'))
       }
     },
     [pushRecentFile],

@@ -36,10 +36,15 @@ impl WorkspaceVisibility {
     pub fn from_settings(settings: &AppSettings) -> Self {
         Self {
             show_all_files: settings.show_all_files,
+            // Canonicalize once at construction time to avoid repeated syscalls per entry.
             hidden_paths: settings
                 .hidden_workspace_paths
                 .iter()
-                .map(PathBuf::from)
+                .map(|p| {
+                    let path = PathBuf::from(p);
+                    path.canonicalize()
+                        .unwrap_or_else(|_| path.components().collect())
+                })
                 .collect(),
         }
     }
@@ -48,12 +53,10 @@ impl WorkspaceVisibility {
         let candidate = path
             .canonicalize()
             .unwrap_or_else(|_| path.components().collect::<PathBuf>());
-        self.hidden_paths.iter().any(|hidden| {
-            let hidden = hidden
-                .canonicalize()
-                .unwrap_or_else(|_| hidden.components().collect::<PathBuf>());
-            candidate == hidden || candidate.starts_with(hidden)
-        })
+        // hidden_paths are pre-canonicalized in from_settings
+        self.hidden_paths
+            .iter()
+            .any(|hidden| candidate == *hidden || candidate.starts_with(hidden))
     }
 }
 
