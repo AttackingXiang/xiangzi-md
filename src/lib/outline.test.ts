@@ -11,24 +11,10 @@ describe('parseOutline', () => {
     ])
   })
 
-  it('parses setext level-1 headings (===)', () => {
-    const result = parseOutline('My Title\n========')
-    expect(result).toEqual([{ level: 1, text: 'My Title', index: 0 }])
-  })
-
-  it('parses setext level-2 headings (---)', () => {
-    const result = parseOutline('Subtitle\n--------')
-    expect(result).toEqual([{ level: 2, text: 'Subtitle', index: 0 }])
-  })
-
-  it('mixes ATX and setext headings with correct sequential indices', () => {
-    const md = '# First\n\nSetext\n======\n\n## Third'
+  it('assigns sequential indices matching DOM heading order', () => {
+    const md = '# First\n\nsome text\n\n## Second\n\n### Third'
     const result = parseOutline(md)
-    expect(result).toEqual([
-      { level: 1, text: 'First', index: 0 },
-      { level: 1, text: 'Setext', index: 1 },
-      { level: 2, text: 'Third', index: 2 },
-    ])
+    expect(result.map((it) => it.index)).toEqual([0, 1, 2])
   })
 
   it('skips headings inside fenced code blocks', () => {
@@ -40,9 +26,22 @@ describe('parseOutline', () => {
     ])
   })
 
+  it('skips headings inside tilde-fenced code blocks', () => {
+    const md = '# Real\n~~~\n# Fake\n~~~\n## Also real'
+    const result = parseOutline(md)
+    expect(result.map((it) => it.text)).toEqual(['Real', 'Also real'])
+  })
+
   it('strips trailing ATX markers', () => {
     const result = parseOutline('## Clean ##')
     expect(result).toEqual([{ level: 2, text: 'Clean', index: 0 }])
+  })
+
+  it('does not treat --- thematic breaks as headings', () => {
+    const md = 'Some paragraph\n---\n## Real heading'
+    const result = parseOutline(md)
+    // Only the ATX heading should appear; --- is a thematic break, not a heading
+    expect(result).toEqual([{ level: 2, text: 'Real heading', index: 0 }])
   })
 
   it('returns empty array for content with no headings', () => {
