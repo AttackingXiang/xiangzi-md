@@ -166,6 +166,7 @@ export interface DesktopPort {
   exportPDF(html: string, suggestedName: string): Promise<{ path: string } | null>
   exportImage(html: string, suggestedName: string): Promise<{ path: string } | null>
   pickCss(): Promise<{ path: string } | null>
+  notify(message: string, title?: string): Promise<void>
   confirm(message: string, title: string, okLabel: string, cancelLabel: string): Promise<boolean>
   onMenuAction(callback: (action: string) => void): () => void
   onOpenPath(callback: (path: string) => void): () => void

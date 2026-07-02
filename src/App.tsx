@@ -31,7 +31,8 @@ import UnsavedChangesDialog, {
 } from './components/UnsavedChangesDialog'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette from './components/CommandPalette'
-import { getLang, t } from './lib/i18n'
+import { t } from './lib/i18n'
+import { ErrorCode } from './lib/errorCodes'
 import { baseName, dirName } from './lib/path'
 import { revealLocationKey } from './lib/platform'
 import { replaceMovedPath } from './lib/treeDrag'
@@ -263,7 +264,7 @@ export default function App(): JSX.Element {
       requestReveal(tab.path)
     } catch (error) {
       console.error('Reveal active file failed', error)
-      window.alert(t('无法定位文件所在目录'))
+      void desktop.notify(t('无法定位文件所在目录'))
     }
   }, [pushRecentFolder, requestReveal])
 
@@ -422,7 +423,7 @@ export default function App(): JSX.Element {
         setFolder(result)
         pushRecentFolder(result.root)
       } else {
-        window.alert((getLang() === 'en' ? 'Folder not found:\n' : '文件夹不存在：\n') + root)
+        void desktop.notify(t('文件夹不存在：\n') + root)
       }
     },
     [pushRecentFolder],
@@ -438,7 +439,7 @@ export default function App(): JSX.Element {
         }
       } catch (error) {
         console.error('Open parent folder failed', error)
-        window.alert(t('无法打开上级文件夹'))
+        void desktop.notify(t('无法打开上级文件夹'))
       }
     },
     [pushRecentFolder],
@@ -580,9 +581,7 @@ export default function App(): JSX.Element {
         await refreshTree()
         requestReveal(res.path)
       } catch (err) {
-        window.alert(
-          (getLang() === 'en' ? 'Move failed:\n' : '移动失败：\n') + (err as Error).message,
-        )
+        void desktop.notify(t('移动失败：\n') + (err as Error).message)
       }
     },
     [refreshTree, requestReveal, setTabs],
@@ -615,6 +614,8 @@ export default function App(): JSX.Element {
     setSettingsSection,
   })
   // ── Auto-save ─────────────────────────────────────────────────────────────
+  // Only the active tab participates; background dirty tabs are protected by
+  // useDraftRecovery snapshots, which fire independently every 1.2 s / 5 s.
   useEffect(() => {
     if (!settings?.autoSave || !activeTab?.path || !activeTab.dirty) return
     const id = setTimeout(() => void saveTab(activeTab.id), 1200)
@@ -817,15 +818,9 @@ export default function App(): JSX.Element {
                   typeof error === 'object' &&
                   error !== null &&
                   'code' in error &&
-                  error.code === 'settings_read_only'
-                window.alert(
-                  readOnly
-                    ? getLang() === 'en'
-                      ? 'These settings were created by a newer app version and are read-only.'
-                      : '这些设置来自更高版本，当前以只读模式运行。'
-                    : getLang() === 'en'
-                      ? 'Settings could not be saved.'
-                      : '设置保存失败。',
+                  error.code === ErrorCode.SETTINGS_READ_ONLY
+                void desktop.notify(
+                  readOnly ? t('这些设置来自更高版本，当前以只读模式运行。') : t('设置保存失败。'),
                 )
               })
             }}
@@ -881,9 +876,11 @@ export default function App(): JSX.Element {
           onDeleteAll={() => {
             const ids = draftSummaries.map((draft) => draft.id)
             if (ids.length === 0) return
-            if (window.confirm(t('确定删除全部草稿吗？'))) {
-              void deleteDrafts(ids).then(() => setDraftRecoveryOpen(false))
-            }
+            void desktop
+              .confirm(t('确定删除全部草稿吗？'), t('删除全部草稿'), t('删除'), t('取消'))
+              .then((confirmed) => {
+                if (confirmed) void deleteDrafts(ids).then(() => setDraftRecoveryOpen(false))
+              })
           }}
           onClose={() => setDraftRecoveryOpen(false)}
         />
@@ -897,10 +894,7 @@ export default function App(): JSX.Element {
             const path = exportResultPath
             setExportResultPath(null)
             void desktop.reveal(path).catch((error: unknown) => {
-              window.alert(
-                (getLang() === 'en' ? 'Reveal failed:\n' : '打开所在文件夹失败：\n') +
-                  (error as Error).message,
-              )
+              void desktop.notify(t('打开所在文件夹失败：\n') + (error as Error).message)
             })
           }}
         />

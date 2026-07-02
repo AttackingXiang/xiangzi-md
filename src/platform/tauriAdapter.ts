@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Image } from '@tauri-apps/api/image'
 import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
-import { ask, open, save } from '@tauri-apps/plugin-dialog'
+import { ask, message, open, save } from '@tauri-apps/plugin-dialog'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, type Update } from '@tauri-apps/plugin-updater'
@@ -174,8 +174,9 @@ export const tauriDesktopAdapter: DesktopPort = {
   findInPage: (text, forward = true, findNext = false) => {
     const editor = document.querySelector<HTMLTextAreaElement>('.source-editor')
     if (!editor || !text) return Promise.resolve()
-    const content = editor.value.toLocaleLowerCase()
-    const needle = text.toLocaleLowerCase()
+    // Use toLowerCase (not locale-specific) so indices remain stable for setSelectionRange.
+    const content = editor.value.toLowerCase()
+    const needle = text.toLowerCase()
     const start = findNext
       ? forward
         ? editor.selectionEnd
@@ -245,8 +246,9 @@ export const tauriDesktopAdapter: DesktopPort = {
     })
     return path ? { path } : null
   },
-  confirm: (message, title, okLabel, cancelLabel) =>
-    ask(message, {
+  notify: (msg, title) => message(msg, { title }).then(() => {}),
+  confirm: (msg, title, okLabel, cancelLabel) =>
+    ask(msg, {
       title,
       kind: 'warning',
       okLabel,

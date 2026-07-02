@@ -181,6 +181,16 @@ const EN: Record<string, string> = {
   内容格式发生了变化: 'Content formatting changed',
   '仅显示部分变更…': 'Showing a partial preview…',
   // Alerts / misc
+  '文件不存在或无法打开：\n': 'File not found or cannot be opened:\n',
+  '文件冲突': 'File conflict',
+  '仍然覆盖': 'Overwrite',
+  '另存为失败。': 'Save As failed.',
+  '文件夹不存在：\n': 'Folder not found:\n',
+  '移动失败：\n': 'Move failed:\n',
+  '这些设置来自更高版本，当前以只读模式运行。':
+    'These settings were created by a newer app version and are read-only.',
+  '设置保存失败。': 'Settings could not be saved.',
+  '打开所在文件夹失败：\n': 'Reveal failed:\n',
   '请先保存文档，再插入本地图片。': 'Please save the document before inserting a local image.',
   '单个附件不能超过 20 MB。': 'An attachment cannot exceed 20 MB.',
   请先保存文档后再插入图片: 'Please save the document before inserting an image.',

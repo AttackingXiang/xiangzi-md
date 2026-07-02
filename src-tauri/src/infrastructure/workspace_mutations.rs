@@ -4,7 +4,7 @@ use crate::domain::{
     models::{NamedPath, PathResult},
     safe_name::validate_item_name,
 };
-use std::{fs, fs::OpenOptions, path::Path};
+use std::{fs, fs::OpenOptions, io::ErrorKind, path::Path};
 use tauri::AppHandle;
 
 pub fn create_file(app: &AppHandle, directory: &Path, name: &str) -> AppResult<NamedPath> {
@@ -41,10 +41,18 @@ pub fn rename_item(app: &AppHandle, old_path: &Path, new_name: &str) -> AppResul
         .ok_or_else(|| AppError::new("invalid_path", "原路径没有父目录"))?;
     ensure_allowed(app, parent)?;
     let target = parent.join(new_name);
+    // Pre-check covers the common in-app duplicate-name case. We also map the
+    // OS AlreadyExists error from rename itself (Windows surfaces it natively).
     if target.exists() {
         return Err(AppError::new("already_exists", "目标名称已存在"));
     }
-    fs::rename(old_path, &target).map_err(|error| AppError::io("重命名失败", error))?;
+    fs::rename(old_path, &target).map_err(|error| {
+        if error.kind() == ErrorKind::AlreadyExists {
+            AppError::new("already_exists", "目标名称已存在")
+        } else {
+            AppError::io("重命名失败", error)
+        }
+    })?;
     Ok(NamedPath {
         path: path_string(&target),
         name: new_name.to_owned(),
@@ -68,7 +76,13 @@ pub fn move_item(app: &AppHandle, source: &Path, target_dir: &Path) -> AppResult
             format!("已存在同名项目：{name}"),
         ));
     }
-    fs::rename(source, &target).map_err(|error| AppError::io("移动失败", error))?;
+    fs::rename(source, &target).map_err(|error| {
+        if error.kind() == ErrorKind::AlreadyExists {
+            AppError::new("already_exists", format!("已存在同名项目：{name}"))
+        } else {
+            AppError::io("移动失败", error)
+        }
+    })?;
     Ok(NamedPath {
         path: path_string(&target),
         name,

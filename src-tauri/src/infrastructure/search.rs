@@ -132,13 +132,15 @@ pub fn search_in_folder(
         let Ok(content) = fs::read_to_string(entry.path()) else {
             continue;
         };
-        if !content.to_lowercase().contains(&needle) {
+        // Single allocation: lowercase the whole file once, then zip with original lines.
+        let content_lower = content.to_lowercase();
+        if !content_lower.contains(&needle) {
             continue;
         }
 
         let mut matches = Vec::new();
         let mut occurrence_index = 0usize;
-        for (index, line) in content.lines().enumerate() {
+        for (index, (line, lower_line)) in content.lines().zip(content_lower.lines()).enumerate() {
             if cancellation.is_cancelled() {
                 return Ok(SearchResponse {
                     items: Vec::new(),
@@ -149,7 +151,6 @@ pub fn search_in_folder(
                     cancelled: true,
                 });
             }
-            let lower_line = line.to_lowercase();
             let line_occurrences = lower_line.match_indices(&needle).count();
             if line_occurrences > 0 {
                 matches.push(SearchMatch {
