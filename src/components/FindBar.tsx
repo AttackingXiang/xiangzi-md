@@ -16,6 +16,8 @@ interface Props {
   initialQuery?: string
   /** Line number hint from full-text search; used to scroll to the match after open */
   initialLine?: number
+  /** Zero-based query occurrence returned by the folder search command. */
+  initialMatchIndex?: number
   onClose: () => void
 }
 
@@ -24,7 +26,12 @@ interface Props {
  * - 所见即所得模式走 prosemirror-search（编辑器内高亮 + 替换）
  * - 源码模式退回 Electron 原生 findInPage（仅查找）
  */
-export default function FindBar({ initialQuery = '', initialLine, onClose }: Props): JSX.Element {
+export default function FindBar({
+  initialQuery = '',
+  initialLine,
+  initialMatchIndex,
+  onClose,
+}: Props): JSX.Element {
   const [find, setFind] = useState(initialQuery)
   const [replace, setReplace] = useState('')
   const [showReplace, setShowReplace] = useState(false)
@@ -39,13 +46,8 @@ export default function FindBar({ initialQuery = '', initialLine, onClose }: Pro
       const timer = setTimeout(() => {
         if (hasEditor()) {
           searchFind(initialQuery, '')
-          // If we have a line hint, scroll to that match index
-          if (initialLine !== undefined && initialLine > 1) {
-            // Best-effort: scroll the nth match into view based on line number
-            const matches = document.querySelectorAll('.search-result-mark')
-            if (matches.length > 0) {
-              ;(matches[0] as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' })
-            }
+          if (initialMatchIndex !== undefined) {
+            for (let index = 0; index < initialMatchIndex; index += 1) searchNext()
           }
         } else {
           void desktop.findInPage(initialQuery, true, false)
@@ -61,7 +63,7 @@ export default function FindBar({ initialQuery = '', initialLine, onClose }: Pro
       searchClear()
       void desktop.stopFind()
     }
-  }, [initialQuery, initialLine])
+  }, [initialQuery, initialLine, initialMatchIndex])
 
   const runFind = (text: string): void => {
     if (!text) {

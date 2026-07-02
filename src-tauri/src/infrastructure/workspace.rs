@@ -1,29 +1,102 @@
 use crate::domain::{
     error::{AppError, AppResult},
-    models::{FileNode, Folder, NamedPath, OpenedFile, PathResult},
+    models::{FileNode, FileVersion, Folder, NamedPath, OpenedFile},
 };
+use crate::infrastructure::settings::AppSettings;
 use std::{
+    collections::HashMap,
     ffi::OsStr,
-    fs::{self, OpenOptions},
-    io::Write,
-    path::Path,
+    fs::{self, File},
+    io::Read,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, Weak},
+    time::UNIX_EPOCH,
 };
 use tauri::{AppHandle, Manager};
 use tauri_plugin_fs::FsExt;
-use tempfile::NamedTempFile;
 use walkdir::WalkDir;
+
+pub use super::workspace_mutations::{create_dir, create_file, move_item, rename_item, trash_item};
+pub use super::workspace_write::{write_binary_file, write_file};
 
 const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx"];
 const IGNORED_DIRECTORIES: &[&str] = &[".git", "node_modules", ".DS_Store", ".obsidian", ".vscode"];
 const MAX_LISTED_FILES: usize = 8_000;
-const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
+pub(super) const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_BINARY_READ_BYTES: u64 = 64 * 1024 * 1024;
+pub(super) const MAX_BINARY_WRITE_BYTES: u64 = 128 * 1024 * 1024;
 
-fn path_string(path: &Path) -> String {
+#[derive(Clone)]
+pub struct WorkspaceVisibility {
+    show_all_files: bool,
+    hidden_paths: Vec<PathBuf>,
+}
+
+impl WorkspaceVisibility {
+    pub fn from_settings(settings: &AppSettings) -> Self {
+        Self {
+            show_all_files: settings.show_all_files,
+            hidden_paths: settings
+                .hidden_workspace_paths
+                .iter()
+                .map(PathBuf::from)
+                .collect(),
+        }
+    }
+
+    fn is_hidden(&self, path: &Path) -> bool {
+        let candidate = path
+            .canonicalize()
+            .unwrap_or_else(|_| path.components().collect::<PathBuf>());
+        self.hidden_paths.iter().any(|hidden| {
+            let hidden = hidden
+                .canonicalize()
+                .unwrap_or_else(|_| hidden.components().collect::<PathBuf>());
+            candidate == hidden || candidate.starts_with(hidden)
+        })
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct DocumentWriteCoordinator {
+    locks: Arc<Mutex<HashMap<PathBuf, Weak<Mutex<()>>>>>,
+}
+
+impl DocumentWriteCoordinator {
+    pub fn with_path_lock<T>(
+        &self,
+        path: &Path,
+        task: impl FnOnce() -> AppResult<T>,
+    ) -> AppResult<T> {
+        let key = path
+            .canonicalize()
+            .unwrap_or_else(|_| path.components().collect::<PathBuf>());
+        let lock = {
+            let mut locks = self
+                .locks
+                .lock()
+                .map_err(|_| AppError::new("document_lock_failed", "文档保存锁不可用"))?;
+            locks.retain(|_, lock| lock.strong_count() > 0);
+            if let Some(lock) = locks.get(&key).and_then(Weak::upgrade) {
+                lock
+            } else {
+                let lock = Arc::new(Mutex::new(()));
+                locks.insert(key, Arc::downgrade(&lock));
+                lock
+            }
+        };
+        let _guard = lock
+            .lock()
+            .map_err(|_| AppError::new("document_lock_failed", "文档保存锁不可用"))?;
+        task()
+    }
+}
+
+pub(super) fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn file_name(path: &Path) -> String {
+pub(super) fn file_name(path: &Path) -> String {
     path.file_name()
         .and_then(OsStr::to_str)
         .unwrap_or_default()
@@ -46,6 +119,39 @@ fn is_visible_text_file(path: &Path) -> bool {
             .extension()
             .and_then(OsStr::to_str)
             .is_none_or(|extension| extension.eq_ignore_ascii_case("txt"))
+}
+
+fn modified_nanos(metadata: &fs::Metadata) -> u64 {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or_default()
+}
+
+pub(super) fn file_version(path: &Path, bytes: &[u8]) -> AppResult<FileVersion> {
+    let metadata = fs::metadata(path).map_err(|error| AppError::io("读取文件版本失败", error))?;
+    Ok(FileVersion {
+        size_bytes: bytes.len() as u64,
+        modified_nanos: modified_nanos(&metadata),
+        content_hash: blake3::hash(bytes).to_hex().to_string(),
+    })
+}
+
+pub(super) fn read_limited(path: &Path, limit: u64, context: &str) -> AppResult<Vec<u8>> {
+    let file = File::open(path).map_err(|error| AppError::io(context, error))?;
+    let mut bytes = Vec::with_capacity(limit.min(1024 * 1024) as usize);
+    file.take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|error| AppError::io(context, error))?;
+    if bytes.len() as u64 > limit {
+        return Err(AppError::new(
+            "file_too_large",
+            format!("文件超过读取上限（{} MB）", limit / (1024 * 1024)),
+        ));
+    }
+    Ok(bytes)
 }
 
 fn is_ignored(path: &Path) -> bool {
@@ -72,22 +178,11 @@ pub fn ensure_write_allowed(app: &AppHandle, path: &Path) -> AppResult<()> {
     ensure_allowed(app, parent)
 }
 
-fn validate_item_name(name: &str) -> AppResult<()> {
-    if name.trim().is_empty()
-        || matches!(name, "." | "..")
-        || name.contains('/')
-        || name.contains('\\')
-        || Path::new(name).is_absolute()
-    {
-        return Err(AppError::new(
-            "invalid_name",
-            "名称不能为空或包含路径分隔符",
-        ));
-    }
-    Ok(())
-}
-
-pub fn read_dir_tree(app: &AppHandle, directory: &Path) -> AppResult<Vec<FileNode>> {
+pub fn read_dir_tree(
+    app: &AppHandle,
+    directory: &Path,
+    visibility: &WorkspaceVisibility,
+) -> AppResult<Vec<FileNode>> {
     ensure_allowed(app, directory)?;
     let entries = fs::read_dir(directory).map_err(|error| AppError::io("读取目录失败", error))?;
     let mut nodes = Vec::new();
@@ -95,7 +190,7 @@ pub fn read_dir_tree(app: &AppHandle, directory: &Path) -> AppResult<Vec<FileNod
     for entry in entries {
         let entry = entry.map_err(|error| AppError::io("读取目录项失败", error))?;
         let path = entry.path();
-        if is_ignored(&path) {
+        if visibility.is_hidden(&path) || (!visibility.show_all_files && is_ignored(&path)) {
             continue;
         }
         let file_type = entry
@@ -106,13 +201,16 @@ pub fn read_dir_tree(app: &AppHandle, directory: &Path) -> AppResult<Vec<FileNod
                 name: file_name(&path),
                 path: path_string(&path),
                 is_dir: true,
+                openable: false,
                 children: None,
             });
-        } else if file_type.is_file() && is_visible_text_file(&path) {
+        } else if file_type.is_file() && (visibility.show_all_files || is_visible_text_file(&path))
+        {
             nodes.push(FileNode {
                 name: file_name(&path),
                 path: path_string(&path),
                 is_dir: false,
+                openable: is_visible_text_file(&path),
                 children: None,
             });
         }
@@ -127,7 +225,11 @@ pub fn read_dir_tree(app: &AppHandle, directory: &Path) -> AppResult<Vec<FileNod
     Ok(nodes)
 }
 
-pub fn open_folder_path(app: &AppHandle, root: &Path) -> AppResult<Option<Folder>> {
+pub fn open_folder_path(
+    app: &AppHandle,
+    root: &Path,
+    visibility: &WorkspaceVisibility,
+) -> AppResult<Option<Folder>> {
     if !root.is_dir() {
         return Ok(None);
     }
@@ -136,7 +238,7 @@ pub fn open_folder_path(app: &AppHandle, root: &Path) -> AppResult<Option<Folder
     Ok(Some(Folder {
         root: path_string(root),
         name: file_name(root),
-        tree: read_dir_tree(app, root)?,
+        tree: read_dir_tree(app, root, visibility)?,
     }))
 }
 
@@ -150,19 +252,11 @@ fn authorize_directory(app: &AppHandle, root: &Path) -> AppResult<()> {
     Ok(())
 }
 
-pub fn open_parent_folder(app: &AppHandle, root: &Path) -> AppResult<Option<Folder>> {
-    ensure_allowed(app, root)?;
-    if !root.is_dir() {
-        return Ok(None);
-    }
-    let Some(parent) = root.parent().filter(|parent| *parent != root) else {
-        return Ok(None);
-    };
-    authorize_directory(app, parent)?;
-    open_folder_path(app, parent)
-}
-
-pub fn open_containing_folder(app: &AppHandle, file_path: &Path) -> AppResult<Option<Folder>> {
+pub fn open_containing_folder(
+    app: &AppHandle,
+    file_path: &Path,
+    visibility: &WorkspaceVisibility,
+) -> AppResult<Option<Folder>> {
     // The native file picker grants access to the selected file, not to all of
     // its siblings. Escalate only to that file's direct parent after proving
     // the selected file is already inside the persisted Tauri scope.
@@ -174,23 +268,21 @@ pub fn open_containing_folder(app: &AppHandle, file_path: &Path) -> AppResult<Op
         .parent()
         .ok_or_else(|| AppError::new("invalid_path", "文件路径没有父目录"))?;
     authorize_directory(app, parent)?;
-    open_folder_path(app, parent)
+    open_folder_path(app, parent, visibility)
 }
 
 pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
     ensure_allowed(app, path)?;
-    let metadata = fs::metadata(path).map_err(|error| AppError::io("读取文件信息失败", error))?;
-    if metadata.len() > MAX_DOCUMENT_BYTES {
-        return Err(AppError::new(
-            "file_too_large",
-            "文件超过 20 MB，为避免内存占用过高已停止打开",
-        ));
-    }
-    let content = fs::read_to_string(path).map_err(|error| AppError::io("读取文件失败", error))?;
+    let bytes = read_limited(path, MAX_DOCUMENT_BYTES, "读取文件失败")?;
+    let content = String::from_utf8(bytes.clone()).map_err(|error| {
+        AppError::new("file_encoding_invalid", format!("文件不是 UTF-8：{error}"))
+    })?;
+    let version = file_version(path, &bytes)?;
     Ok(OpenedFile {
         path: path_string(path),
         name: file_name(path),
         content,
+        version,
     })
 }
 
@@ -205,44 +297,15 @@ fn validate_binary_size(size: u64, requested_limit: u64) -> AppResult<u64> {
     Ok(size)
 }
 
-pub fn check_binary_file(app: &AppHandle, path: &Path, max_bytes: u64) -> AppResult<u64> {
+pub fn read_binary_file(app: &AppHandle, path: &Path, max_bytes: u64) -> AppResult<Vec<u8>> {
     ensure_allowed(app, path)?;
-    let metadata = fs::metadata(path).map_err(|error| AppError::io("读取资源信息失败", error))?;
-    if !metadata.is_file() {
+    if !path.is_file() {
         return Err(AppError::new("invalid_file", "目标不是文件"));
     }
-    validate_binary_size(metadata.len(), max_bytes)
-}
-
-pub fn write_file(app: &AppHandle, path: &Path, content: &str) -> AppResult<PathResult> {
-    ensure_write_allowed(app, path)?;
-    if content.len() as u64 > MAX_DOCUMENT_BYTES {
-        return Err(AppError::new(
-            "file_too_large",
-            "文档超过 20 MB，为避免内存占用过高已停止保存",
-        ));
-    }
-    let parent = path
-        .parent()
-        .ok_or_else(|| AppError::new("invalid_path", "目标路径没有父目录"))?;
-    fs::create_dir_all(parent).map_err(|error| AppError::io("创建目标目录失败", error))?;
-
-    let mut temporary =
-        NamedTempFile::new_in(parent).map_err(|error| AppError::io("创建临时文件失败", error))?;
-    temporary
-        .write_all(content.as_bytes())
-        .map_err(|error| AppError::io("写入临时文件失败", error))?;
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|error| AppError::io("同步临时文件失败", error))?;
-    temporary
-        .persist(path)
-        .map_err(|error| AppError::io("替换目标文件失败", error.error))?;
-
-    Ok(PathResult {
-        path: path_string(path),
-    })
+    let limit = max_bytes.clamp(1, MAX_BINARY_READ_BYTES);
+    let bytes = read_limited(path, limit, "读取资源失败")?;
+    validate_binary_size(bytes.len() as u64, limit)?;
+    Ok(bytes)
 }
 
 pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<NamedPath>> {
@@ -268,85 +331,10 @@ pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<NamedPath>> {
     Ok(files)
 }
 
-pub fn create_file(app: &AppHandle, directory: &Path, name: &str) -> AppResult<NamedPath> {
-    validate_item_name(name)?;
-    ensure_allowed(app, directory)?;
-    let target = directory.join(name);
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&target)
-        .map_err(|error| AppError::io("新建文件失败", error))?;
-    Ok(NamedPath {
-        path: path_string(&target),
-        name: name.to_owned(),
-    })
-}
-
-pub fn create_dir(app: &AppHandle, directory: &Path, name: &str) -> AppResult<NamedPath> {
-    validate_item_name(name)?;
-    ensure_allowed(app, directory)?;
-    let target = directory.join(name);
-    fs::create_dir(&target).map_err(|error| AppError::io("新建文件夹失败", error))?;
-    Ok(NamedPath {
-        path: path_string(&target),
-        name: name.to_owned(),
-    })
-}
-
-pub fn rename_item(app: &AppHandle, old_path: &Path, new_name: &str) -> AppResult<NamedPath> {
-    validate_item_name(new_name)?;
-    ensure_allowed(app, old_path)?;
-    let parent = old_path
-        .parent()
-        .ok_or_else(|| AppError::new("invalid_path", "原路径没有父目录"))?;
-    ensure_allowed(app, parent)?;
-    let target = parent.join(new_name);
-    if target.exists() {
-        return Err(AppError::new("already_exists", "目标名称已存在"));
-    }
-    fs::rename(old_path, &target).map_err(|error| AppError::io("重命名失败", error))?;
-    Ok(NamedPath {
-        path: path_string(&target),
-        name: new_name.to_owned(),
-    })
-}
-
-pub fn move_item(app: &AppHandle, source: &Path, target_dir: &Path) -> AppResult<NamedPath> {
-    ensure_allowed(app, source)?;
-    ensure_allowed(app, target_dir)?;
-    let name = file_name(source);
-    if source.is_dir() && target_dir.starts_with(source) {
-        return Err(AppError::new(
-            "invalid_move",
-            "不能把文件夹移动到它自己的子目录中",
-        ));
-    }
-    let target = target_dir.join(&name);
-    if target.exists() {
-        return Err(AppError::new(
-            "already_exists",
-            format!("已存在同名项目：{name}"),
-        ));
-    }
-    fs::rename(source, &target).map_err(|error| AppError::io("移动失败", error))?;
-    Ok(NamedPath {
-        path: path_string(&target),
-        name,
-    })
-}
-
-pub fn trash_item(app: &AppHandle, target: &Path) -> AppResult<PathResult> {
-    ensure_allowed(app, target)?;
-    trash::delete(target).map_err(|error| AppError::new("trash_failed", error.to_string()))?;
-    Ok(PathResult {
-        path: path_string(target),
-    })
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{is_ignored, is_visible_text_file, validate_binary_size, validate_item_name};
+    use super::{is_ignored, is_visible_text_file, validate_binary_size};
+    use crate::domain::safe_name::validate_item_name;
     use std::path::Path;
 
     #[test]

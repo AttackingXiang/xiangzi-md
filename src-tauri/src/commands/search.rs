@@ -1,6 +1,6 @@
 use super::blocking;
 use crate::{
-    domain::{error::AppResult, models::SearchResult},
+    domain::{error::AppResult, models::SearchResponse},
     infrastructure::search::{self, SearchCancellation},
 };
 use std::path::PathBuf;
@@ -12,7 +12,7 @@ pub async fn search_in_folder(
     cancellation: State<'_, SearchCancellation>,
     root: String,
     query: String,
-) -> AppResult<Vec<SearchResult>> {
+) -> AppResult<SearchResponse> {
     let token = cancellation.begin();
     blocking(move || search::search_in_folder(&app, &PathBuf::from(root), &query, &token)).await
 }

@@ -155,7 +155,7 @@ export function useTreeOps({
       if (node.isDir) {
         items.push({ label: t('新建文件'), onClick: () => createFileIn(node.path) })
         items.push({ label: t('新建文件夹'), onClick: () => createFolderIn(node.path) })
-      } else {
+      } else if (node.openable) {
         items.push({ label: t('打开'), onClick: () => openPath(node.path, node.name) })
       }
       items.push({ label: t('重命名'), onClick: () => renameNode(node), separatorBefore: true })

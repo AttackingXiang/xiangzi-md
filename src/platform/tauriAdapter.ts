@@ -3,7 +3,6 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Image } from '@tauri-apps/api/image'
 import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { ask, open, save } from '@tauri-apps/plugin-dialog'
-import { readFile as readBinaryFile, writeFile as writeBinaryFile } from '@tauri-apps/plugin-fs'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, type Update } from '@tauri-apps/plugin-updater'
@@ -13,12 +12,15 @@ import type {
   AppSettings,
   DesktopPort,
   FileNode,
+  FileVersion,
   Folder,
   OpenedFile,
-  SearchResult,
+  SearchResponse,
   UpdaterPort,
 } from './contracts'
 import { releaseExportObjectUrls } from '../lib/exportImageAsset'
+import { imageFormatForPath } from '../lib/exportFormat'
+import { dirName } from '../lib/path'
 
 const MAX_BINARY_READ_BYTES = 64 * 1024 * 1024
 
@@ -47,10 +49,6 @@ function subscribe<T>(
     disposed = true
     unlisten?.()
   }
-}
-
-function imageFormatForPath(path: string): 'png' | 'jpeg' {
-  return /\.jpe?g$/i.test(path) ? 'jpeg' : 'png'
 }
 
 function updateSource(update: Update): 'github' | 'gitee' {
@@ -96,8 +94,17 @@ export const tauriDesktopAdapter: DesktopPort = {
     })
     return root ? invoke<Folder | null>('open_folder_path', { root }) : null
   },
+  pickFolder: async () => {
+    const path = await open({ directory: true, multiple: false, recursive: true })
+    return path ? { path } : null
+  },
   openFolderPath: (root) => invoke<Folder | null>('open_folder_path', { root }),
-  openParentFolder: (root) => invoke<Folder | null>('open_parent_folder', { root }),
+  openParentFolder: async (root) => {
+    const parent = dirName(root)
+    if (!parent) return null
+    const selected = await open({ directory: true, multiple: false, recursive: true, defaultPath: parent })
+    return selected ? invoke<Folder | null>('open_folder_path', { root: selected }) : null
+  },
   openContainingFolder: (filePath) => invoke<Folder | null>('open_containing_folder', { filePath }),
   openFile: async () => {
     const path = await open({
@@ -109,20 +116,26 @@ export const tauriDesktopAdapter: DesktopPort = {
   readFile: (path) => invoke<OpenedFile>('read_file', { path }),
   readBinaryFile: async (path, maxBytes = MAX_BINARY_READ_BYTES) => {
     const limit = binaryReadLimit(maxBytes)
-    await invoke('check_binary_file', { path, maxBytes: limit })
-    const bytes = await readBinaryFile(path)
-    if (bytes.byteLength > limit) throw new Error(`资源超过读取上限（${limit} bytes）`)
-    return bytes
+    return invoke<Uint8Array>('read_binary_file', { path, maxBytes: limit })
   },
-  writeFile: (path, content) => invoke('write_file', { path, content }),
+  readRemoteImage: (url) => invoke<Uint8Array>('read_remote_image', { url }),
+  writeFile: (path, content, expectedVersion, force = false) =>
+    invoke('write_file', { path, content, expectedVersion, force }),
   saveAs: async (content, suggestedName) => {
     const path = await save({
       defaultPath: suggestedName ?? 'untitled.md',
       filters: [{ name: 'Markdown', extensions: ['md'] }],
     })
     if (!path) return null
-    await invoke('write_file', { path, content })
-    return { path, name: path.split(/[\\/]/).pop() ?? suggestedName ?? 'untitled.md' }
+    const result = await invoke<{ path: string; version: FileVersion }>(
+      'write_file',
+      { path, content, expectedVersion: null, force: true },
+    )
+    return {
+      path,
+      name: path.split(/[\\/]/).pop() ?? suggestedName ?? 'untitled.md',
+      version: result.version,
+    }
   },
   readDir: (path) => invoke<FileNode[]>('read_dir', { path }),
   listFiles: (root) => invoke('list_files', { root }),
@@ -137,7 +150,7 @@ export const tauriDesktopAdapter: DesktopPort = {
   reveal: (targetPath) => revealItemInDir(targetPath),
   openExternal: (url) => openUrl(url),
   moveItem: (sourcePath, targetDirPath) => invoke('move_item', { sourcePath, targetDirPath }),
-  searchInFolder: (root, query) => invoke<SearchResult[]>('search_in_folder', { root, query }),
+  searchInFolder: (root, query) => invoke<SearchResponse>('search_in_folder', { root, query }),
   cancelSearch: () => invoke('cancel_search'),
   saveAttachment: (docDir, docName, vaultRoot, fileName, data) =>
     invoke('save_attachment', data, {
@@ -187,7 +200,7 @@ export const tauriDesktopAdapter: DesktopPort = {
       filters: [{ name: 'HTML', extensions: ['html'] }],
     })
     if (!path) return null
-    await invoke('write_file', { path, content: html })
+    await invoke('write_file', { path, content: html, expectedVersion: null, force: true })
     return { path }
   },
   exportPDF: async (html, suggestedName) => {
@@ -198,7 +211,9 @@ export const tauriDesktopAdapter: DesktopPort = {
       })
       if (!path) return null
       const { renderDocumentPdf } = await import('../lib/exportDocument')
-      await writeBinaryFile(path, await renderDocumentPdf(html))
+      await invoke('write_binary_file', await renderDocumentPdf(html), {
+        headers: { 'x-xmd-output-path': encodeURIComponent(path) },
+      })
       return { path }
     } finally {
       releaseExportObjectUrls(html)
@@ -215,7 +230,9 @@ export const tauriDesktopAdapter: DesktopPort = {
       })
       if (!path) return null
       const { renderDocumentImage } = await import('../lib/exportDocument')
-      await writeBinaryFile(path, await renderDocumentImage(html, imageFormatForPath(path)))
+      await invoke('write_binary_file', await renderDocumentImage(html, imageFormatForPath(path)), {
+        headers: { 'x-xmd-output-path': encodeURIComponent(path) },
+      })
       return { path }
     } finally {
       releaseExportObjectUrls(html)

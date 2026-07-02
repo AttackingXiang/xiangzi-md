@@ -292,13 +292,15 @@ const TreeNode = memo(function TreeNode({
     <li>
       <div
         ref={nodeRef}
-        className={`tree-row file${isActive ? ' active' : ''}${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
+        className={`tree-row file${node.openable ? '' : ' unsupported'}${isActive ? ' active' : ''}${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
         style={indent}
         data-tree-path={node.path}
         aria-grabbed={isDragging}
+        aria-disabled={!node.openable}
+        title={node.openable ? node.name : t('此文件类型不能在编辑器中打开')}
         onPointerDown={handlePointerDown}
         onClick={() => {
-          if (!consumeSuppressedClick()) onOpenFile(node.path, node.name)
+          if (!consumeSuppressedClick() && node.openable) onOpenFile(node.path, node.name)
         }}
         onContextMenu={(e) => {
           e.preventDefault()

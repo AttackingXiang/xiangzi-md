@@ -1,212 +1,181 @@
+use super::{
+    settings_model::SETTINGS_SCHEMA_VERSION,
+    settings_validation::{
+        limit_collections, migrate_settings, sanitize_loaded_settings, validate_settings,
+    },
+};
 use crate::domain::error::{AppError, AppResult};
-use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
     path::{Path, PathBuf},
     sync::Mutex,
 };
 use tauri::{AppHandle, Manager};
-use tauri_plugin_fs::FsExt;
 use tempfile::NamedTempFile;
 
-const SETTINGS_SCHEMA_VERSION: u32 = 3;
-const MAX_RECENT_ITEMS: usize = 15;
-const MAX_FAVORITES: usize = 32;
-const MAX_SESSION_FILES: usize = 12;
-const MAX_ASSET_SEARCH_PATHS: usize = 32;
-const MAX_SHORTCUT_OVERRIDES: usize = 64;
-const MAX_PATH_LENGTH: usize = 4096;
-const MAX_FAVORITE_LABEL_CHARS: usize = 80;
 const MAX_SETTINGS_BYTES: u64 = 1024 * 1024;
 
-const SHORTCUT_ACTIONS: &[&str] = &[
-    "new-file",
-    "open-file",
-    "open-folder",
-    "save",
-    "save-as",
-    "close-tab",
-    "find",
-    "search-in-folder",
-    "select-all",
-    "command-palette",
-    "toggle-sidebar",
-    "toggle-outline",
-    "toggle-source",
-    "toggle-focus",
-    "toggle-typewriter",
-    "open-settings",
-    "show-shortcuts",
-    "heading-1",
-    "heading-2",
-    "heading-3",
-    "heading-4",
-    "heading-5",
-    "heading-6",
-    "paragraph",
-    "bold",
-    "italic",
-    "inline-code",
-    "quote",
-    "code-block",
-    "bullet-list",
-    "ordered-list",
-];
+pub use super::settings_model::{AppSettings, SettingsPatch};
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionSettings {
-    pub folder: Option<String>,
-    pub open_files: Vec<String>,
-    pub active_path: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct AppSettings {
-    pub schema_version: u32,
-    pub attachment_mode: String,
-    pub attachment_folder: String,
-    pub image_max_width: u32,
-    pub language: String,
-    pub theme: String,
-    pub editor_width: String,
-    pub custom_css_path: String,
-    pub heading_number: bool,
-    pub auto_save: bool,
-    pub check_updates_on_startup: bool,
-    pub shortcuts: BTreeMap<String, String>,
-    pub recent_files: Vec<String>,
-    pub recent_folders: Vec<String>,
-    pub favorites: Vec<String>,
-    pub favorites_collapsed: bool,
-    pub favorite_labels: BTreeMap<String, String>,
-    pub session: SessionSettings,
-    pub hide_attachment_folders: bool,
-    pub asset_search_paths: Vec<String>,
-}
-
-impl Default for AppSettings {
-    fn default() -> Self {
-        Self {
-            schema_version: SETTINGS_SCHEMA_VERSION,
-            attachment_mode: "subfolder".into(),
-            attachment_folder: "assets".into(),
-            image_max_width: 800,
-            language: "zh".into(),
-            theme: "system".into(),
-            editor_width: "full".into(),
-            custom_css_path: String::new(),
-            heading_number: false,
-            auto_save: false,
-            check_updates_on_startup: true,
-            shortcuts: BTreeMap::new(),
-            recent_files: Vec::new(),
-            recent_folders: Vec::new(),
-            favorites: Vec::new(),
-            favorites_collapsed: false,
-            favorite_labels: BTreeMap::new(),
-            session: SessionSettings::default(),
-            hide_attachment_folders: false,
-            asset_search_paths: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SettingsPatch {
-    pub attachment_mode: Option<String>,
-    pub attachment_folder: Option<String>,
-    pub image_max_width: Option<u32>,
-    pub language: Option<String>,
-    pub theme: Option<String>,
-    pub editor_width: Option<String>,
-    pub custom_css_path: Option<String>,
-    pub heading_number: Option<bool>,
-    pub auto_save: Option<bool>,
-    pub check_updates_on_startup: Option<bool>,
-    pub shortcuts: Option<BTreeMap<String, String>>,
-    pub recent_files: Option<Vec<String>>,
-    pub recent_folders: Option<Vec<String>>,
-    pub favorites: Option<Vec<String>>,
-    pub favorites_collapsed: Option<bool>,
-    pub favorite_labels: Option<BTreeMap<String, String>>,
-    pub session: Option<SessionSettings>,
-    pub hide_attachment_folders: Option<bool>,
-    pub asset_search_paths: Option<Vec<String>>,
-}
-
-impl SettingsPatch {
-    pub fn affects_menu(&self) -> bool {
-        self.language.is_some() || self.shortcuts.is_some()
-    }
+#[derive(Default)]
+struct SettingsState {
+    cache: Option<AppSettings>,
+    read_only: bool,
 }
 
 #[derive(Default)]
 pub struct SettingsStore {
-    cache: Mutex<Option<AppSettings>>,
+    state: Mutex<SettingsState>,
 }
 
 impl SettingsStore {
     pub fn get(&self, app: &AppHandle) -> AppResult<AppSettings> {
         let mut guard = self
-            .cache
+            .state
             .lock()
             .map_err(|_| AppError::new("settings_lock_failed", "设置缓存不可用"))?;
-        if let Some(settings) = guard.as_ref() {
+        if let Some(settings) = guard.cache.as_ref() {
             return Ok(settings.clone());
         }
 
-        let settings = load_settings(app)?;
-        authorize_settings_paths(app, &settings);
-        *guard = Some(settings.clone());
+        let loaded = load_settings(app)?;
+        guard.cache = Some(loaded.settings.clone());
+        guard.read_only = loaded.read_only;
+        let settings = loaded.settings;
         Ok(settings)
     }
 
-    pub fn set(&self, app: &AppHandle, patch: SettingsPatch) -> AppResult<AppSettings> {
+    pub fn set_transactional<Apply, Rollback>(
+        &self,
+        app: &AppHandle,
+        patch: SettingsPatch,
+        apply: Apply,
+        rollback: Rollback,
+    ) -> AppResult<AppSettings>
+    where
+        Apply: FnOnce(&AppSettings) -> AppResult<()>,
+        Rollback: FnOnce(&AppSettings),
+    {
         // Keep the cache lock for the full read-modify-write transaction. Tauri
         // commands can run concurrently; releasing it between get and write
         // allowed unrelated patches (for example recents and session state) to
         // overwrite each other.
         let mut guard = self
-            .cache
+            .state
             .lock()
             .map_err(|_| AppError::new("settings_lock_failed", "设置缓存不可用"))?;
-        let mut settings = match guard.as_ref() {
+        let current = match guard.cache.as_ref() {
             Some(settings) => settings.clone(),
-            None => load_settings(app)?,
+            None => {
+                let loaded = load_settings(app)?;
+                guard.read_only = loaded.read_only;
+                loaded.settings
+            }
         };
+        if guard.read_only {
+            return Err(AppError::new(
+                "settings_read_only",
+                "设置来自更高版本，当前版本以只读兼容模式运行",
+            ));
+        }
+        let mut settings = current.clone();
         apply_patch(&mut settings, patch);
         validate_settings(&settings)?;
         limit_collections(&mut settings);
         settings.schema_version = SETTINGS_SCHEMA_VERSION;
-        write_settings(&settings_file(app)?, &settings)?;
-        authorize_settings_paths(app, &settings);
-        *guard = Some(settings.clone());
+        apply(&settings)?;
+        if let Err(error) = write_settings(&settings_file(app)?, &settings) {
+            rollback(&current);
+            return Err(error);
+        }
+        guard.cache = Some(settings.clone());
         Ok(settings)
     }
 }
 
-fn load_settings(app: &AppHandle) -> AppResult<AppSettings> {
+struct SettingsLoad {
+    settings: AppSettings,
+    read_only: bool,
+}
+
+fn load_settings(app: &AppHandle) -> AppResult<SettingsLoad> {
     let settings_path = settings_file(app)?;
-    let (mut settings, source_schema_version, imported) = if settings_path.is_file() {
-        let loaded = read_settings(&settings_path)?;
-        (loaded.settings, loaded.schema_version, false)
-    } else if let Some(legacy) = legacy_settings_file().filter(|path| path.is_file()) {
-        let loaded = read_settings(&legacy)?;
-        (loaded.settings, loaded.schema_version, true)
-    } else {
-        (AppSettings::default(), SETTINGS_SCHEMA_VERSION, true)
-    };
-    migrate_settings(&mut settings, source_schema_version)?;
-    sanitize_loaded_settings(&mut settings);
-    if imported || source_schema_version < SETTINGS_SCHEMA_VERSION {
-        write_settings(&settings_path, &settings)?;
+    let legacy = legacy_settings_file();
+    load_settings_paths(&settings_path, legacy.as_deref())
+}
+
+fn load_settings_paths(
+    settings_path: &Path,
+    legacy_path: Option<&Path>,
+) -> AppResult<SettingsLoad> {
+    if settings_path.is_file() {
+        match read_settings(settings_path) {
+            Ok(loaded) if loaded.schema_version > SETTINGS_SCHEMA_VERSION => {
+                let mut settings = loaded.settings;
+                sanitize_loaded_settings(&mut settings);
+                return Ok(SettingsLoad {
+                    settings,
+                    read_only: true,
+                });
+            }
+            Ok(loaded) => {
+                let source_version = loaded.schema_version;
+                let mut settings = loaded.settings;
+                migrate_settings(&mut settings, source_version)?;
+                sanitize_loaded_settings(&mut settings);
+                if source_version < SETTINGS_SCHEMA_VERSION {
+                    write_settings(settings_path, &settings)?;
+                }
+                return Ok(SettingsLoad {
+                    settings,
+                    read_only: false,
+                });
+            }
+            Err(error) => {
+                quarantine_invalid_settings(settings_path);
+                eprintln!("settings recovery: {}", error.code);
+                let settings = AppSettings::default();
+                write_settings(settings_path, &settings)?;
+                return Ok(SettingsLoad {
+                    settings,
+                    read_only: false,
+                });
+            }
+        }
     }
-    Ok(settings)
+
+    if let Some(legacy) = legacy_path.filter(|path| path.is_file()) {
+        if let Ok(loaded) = read_settings(legacy) {
+            if loaded.schema_version <= SETTINGS_SCHEMA_VERSION {
+                let source_version = loaded.schema_version;
+                let mut settings = loaded.settings;
+                migrate_settings(&mut settings, source_version)?;
+                sanitize_loaded_settings(&mut settings);
+                write_settings(settings_path, &settings)?;
+                return Ok(SettingsLoad {
+                    settings,
+                    read_only: false,
+                });
+            }
+        }
+    }
+
+    let settings = AppSettings::default();
+    write_settings(settings_path, &settings)?;
+    Ok(SettingsLoad {
+        settings,
+        read_only: false,
+    })
+}
+
+fn quarantine_invalid_settings(path: &Path) {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    let backup = path.with_file_name(format!("settings.invalid-{stamp}.json"));
+    let _ = fs::rename(path, backup);
 }
 
 fn settings_file(app: &AppHandle) -> AppResult<PathBuf> {
@@ -254,179 +223,6 @@ fn parse_settings(raw: &str) -> AppResult<LoadedSettings> {
         settings,
         schema_version,
     })
-}
-
-fn migrate_settings(settings: &mut AppSettings, source_version: u32) -> AppResult<()> {
-    if source_version > SETTINGS_SCHEMA_VERSION {
-        return Err(AppError::new(
-            "settings_version_unsupported",
-            format!(
-                "设置来自更高版本（schema {source_version}），当前仅支持 schema {SETTINGS_SCHEMA_VERSION}"
-            ),
-        ));
-    }
-
-    let mut version = source_version;
-    while version < SETTINGS_SCHEMA_VERSION {
-        match version {
-            0 => migrate_v0_to_v1(settings),
-            1 => migrate_v1_to_v2(settings),
-            2 => migrate_v2_to_v3(settings),
-            _ => {
-                return Err(AppError::new(
-                    "settings_migration_missing",
-                    format!("缺少从 schema {version} 开始的设置迁移"),
-                ));
-            }
-        }
-        version += 1;
-        settings.schema_version = version;
-    }
-    Ok(())
-}
-
-fn migrate_v0_to_v1(_settings: &mut AppSettings) {
-    // Legacy settings did not carry a schema version. Serde has already supplied
-    // the defaults introduced by schema 1.
-}
-
-fn migrate_v1_to_v2(_settings: &mut AppSettings) {
-    // Schema 2 only added fields with backward-compatible defaults.
-}
-
-fn migrate_v2_to_v3(_settings: &mut AppSettings) {
-    // Schema 3 adds persisted favorite presentation preferences. Serde has
-    // already supplied their backward-compatible defaults.
-}
-
-fn sanitize_loaded_settings(settings: &mut AppSettings) {
-    if !matches!(settings.language.as_str(), "zh" | "en") {
-        settings.language = "zh".into();
-    }
-    if !matches!(settings.theme.as_str(), "system" | "light" | "dark") {
-        settings.theme = "system".into();
-    }
-    if !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full") {
-        settings.editor_width = "full".into();
-    }
-    if !matches!(
-        settings.attachment_mode.as_str(),
-        "same" | "subfolder" | "docSubfolder" | "vault" | "vaultSubfolder"
-    ) {
-        settings.attachment_mode = "subfolder".into();
-    }
-    if !valid_folder_name(&settings.attachment_folder) {
-        settings.attachment_folder = "assets".into();
-    }
-    settings.image_max_width = settings.image_max_width.min(10_000);
-    let mut seen_shortcuts = BTreeSet::new();
-    settings.shortcuts.retain(|action, binding| {
-        SHORTCUT_ACTIONS.contains(&action.as_str())
-            && valid_shortcut_binding(binding)
-            && seen_shortcuts.insert(binding.clone())
-    });
-    for label in settings.favorite_labels.values_mut() {
-        *label = label.trim().to_owned();
-    }
-    settings
-        .favorite_labels
-        .retain(|_, label| valid_favorite_label(label));
-    limit_collections(settings);
-}
-
-fn validate_settings(settings: &AppSettings) -> AppResult<()> {
-    if !matches!(settings.language.as_str(), "zh" | "en")
-        || !matches!(settings.theme.as_str(), "system" | "light" | "dark")
-        || !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full")
-        || !matches!(
-            settings.attachment_mode.as_str(),
-            "same" | "subfolder" | "docSubfolder" | "vault" | "vaultSubfolder"
-        )
-    {
-        return Err(AppError::new("settings_invalid", "设置选项无效"));
-    }
-    if !valid_folder_name(&settings.attachment_folder) {
-        return Err(AppError::new("settings_invalid", "附件目录名称无效"));
-    }
-    if settings.image_max_width > 10_000 {
-        return Err(AppError::new("settings_invalid", "图片宽度设置过大"));
-    }
-    let unique_shortcuts = settings.shortcuts.values().collect::<BTreeSet<_>>();
-    if settings.shortcuts.len() > MAX_SHORTCUT_OVERRIDES
-        || unique_shortcuts.len() != settings.shortcuts.len()
-        || settings.shortcuts.iter().any(|(action, binding)| {
-            !SHORTCUT_ACTIONS.contains(&action.as_str()) || !valid_shortcut_binding(binding)
-        })
-    {
-        return Err(AppError::new("settings_invalid", "快捷键设置无效"));
-    }
-    if settings.custom_css_path.len() > MAX_PATH_LENGTH
-        || settings
-            .asset_search_paths
-            .iter()
-            .chain(settings.recent_files.iter())
-            .chain(settings.recent_folders.iter())
-            .chain(settings.favorites.iter())
-            .chain(settings.favorite_labels.keys())
-            .chain(settings.session.open_files.iter())
-            .chain(settings.session.folder.iter())
-            .chain(settings.session.active_path.iter())
-            .any(|path| path.len() > MAX_PATH_LENGTH)
-    {
-        return Err(AppError::new("settings_invalid", "设置中的路径过长"));
-    }
-    if settings
-        .favorite_labels
-        .values()
-        .any(|label| !valid_favorite_label(label))
-    {
-        return Err(AppError::new("settings_invalid", "收藏目录名称无效"));
-    }
-    Ok(())
-}
-
-fn valid_folder_name(value: &str) -> bool {
-    let trimmed = value.trim();
-    !trimmed.is_empty()
-        && trimmed.len() <= 64
-        && !matches!(trimmed, "." | "..")
-        && !trimmed.contains(['/', '\\'])
-}
-
-fn valid_shortcut_binding(binding: &str) -> bool {
-    if binding.is_empty() || binding.len() > 64 {
-        return false;
-    }
-    let parts = binding.split('+').collect::<Vec<_>>();
-    if parts.len() < 2 || parts.iter().any(|part| part.is_empty()) {
-        return false;
-    }
-    let modifiers = &parts[..parts.len() - 1];
-    modifiers
-        .iter()
-        .all(|part| matches!(*part, "Mod" | "Control" | "Alt" | "Shift"))
-        && modifiers
-            .iter()
-            .any(|part| matches!(*part, "Mod" | "Control" | "Alt"))
-}
-
-fn valid_favorite_label(value: &str) -> bool {
-    let trimmed = value.trim();
-    !trimmed.is_empty()
-        && trimmed.chars().count() <= MAX_FAVORITE_LABEL_CHARS
-        && !trimmed.chars().any(char::is_control)
-}
-
-fn limit_collections(settings: &mut AppSettings) {
-    settings.recent_files.truncate(MAX_RECENT_ITEMS);
-    settings.recent_folders.truncate(MAX_RECENT_ITEMS);
-    settings.favorites.truncate(MAX_FAVORITES);
-    let favorites = settings.favorites.iter().cloned().collect::<BTreeSet<_>>();
-    settings
-        .favorite_labels
-        .retain(|path, _| favorites.contains(path));
-    settings.session.open_files.truncate(MAX_SESSION_FILES);
-    settings.asset_search_paths.truncate(MAX_ASSET_SEARCH_PATHS);
 }
 
 fn write_settings(path: &Path, settings: &AppSettings) -> AppResult<()> {
@@ -479,123 +275,11 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(session);
     replace_if_some!(hide_attachment_folders);
     replace_if_some!(asset_search_paths);
-}
-
-fn authorize_settings_paths(app: &AppHandle, settings: &AppSettings) {
-    let fs_scope = app.fs_scope();
-    let asset_scope = app.asset_protocol_scope();
-
-    for folder in settings
-        .recent_folders
-        .iter()
-        .chain(settings.favorites.iter())
-        .chain(settings.session.folder.iter())
-        .chain(settings.asset_search_paths.iter())
-    {
-        if Path::new(folder).is_dir() {
-            let _ = fs_scope.allow_directory(folder, true);
-            let _ = asset_scope.allow_directory(folder, true);
-        }
-    }
-
-    for file in settings
-        .recent_files
-        .iter()
-        .chain(settings.session.open_files.iter())
-        .chain((!settings.custom_css_path.is_empty()).then_some(&settings.custom_css_path))
-    {
-        if Path::new(file).is_file() {
-            let _ = fs_scope.allow_file(file);
-            let _ = asset_scope.allow_file(file);
-        }
-    }
+    replace_if_some!(show_all_files);
+    replace_if_some!(hidden_workspace_paths);
+    replace_if_some!(allow_remote_images);
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        apply_patch, migrate_settings, parse_settings, validate_settings, AppSettings,
-        SettingsPatch, SETTINGS_SCHEMA_VERSION,
-    };
-
-    #[test]
-    fn legacy_settings_receive_current_defaults() {
-        let loaded =
-            parse_settings(r#"{"language":"en"}"#).expect("legacy settings should remain readable");
-        assert_eq!(loaded.schema_version, 0);
-        let mut settings = loaded.settings;
-        migrate_settings(&mut settings, loaded.schema_version).expect("legacy migration");
-        assert_eq!(settings.schema_version, SETTINGS_SCHEMA_VERSION);
-        assert_eq!(settings.language, "en");
-        assert_eq!(settings.attachment_folder, "assets");
-        assert!(settings.check_updates_on_startup);
-        assert!(!settings.favorites_collapsed);
-        assert!(settings.favorite_labels.is_empty());
-    }
-
-    #[test]
-    fn rejects_settings_from_a_newer_schema_without_downgrading_them() {
-        let future = SETTINGS_SCHEMA_VERSION + 1;
-        let loaded = parse_settings(&format!(r#"{{"schemaVersion":{future},"language":"en"}}"#))
-            .expect("future settings should parse before migration validation");
-        let mut settings = loaded.settings;
-        let error = migrate_settings(&mut settings, loaded.schema_version)
-            .expect_err("future settings must not be rewritten by an older app");
-        assert_eq!(error.code, "settings_version_unsupported");
-        assert_eq!(settings.schema_version, future);
-    }
-
-    #[test]
-    fn patch_only_changes_explicit_fields() {
-        let mut settings = AppSettings::default();
-        apply_patch(
-            &mut settings,
-            SettingsPatch {
-                language: Some("en".into()),
-                auto_save: Some(true),
-                ..SettingsPatch::default()
-            },
-        );
-        assert_eq!(settings.language, "en");
-        assert!(settings.auto_save);
-        assert_eq!(settings.theme, "system");
-    }
-
-    #[test]
-    fn rejects_conflicting_or_malformed_shortcuts() {
-        let mut settings = AppSettings::default();
-        settings.shortcuts.insert("save".into(), "Mod+Alt+S".into());
-        settings
-            .shortcuts
-            .insert("open-file".into(), "Mod+Alt+S".into());
-        assert!(validate_settings(&settings).is_err());
-
-        settings.shortcuts.clear();
-        settings.shortcuts.insert("save".into(), "S".into());
-        assert!(validate_settings(&settings).is_err());
-    }
-
-    #[test]
-    fn accepts_the_select_all_shortcut_exposed_by_the_frontend() {
-        let mut settings = AppSettings::default();
-        settings
-            .shortcuts
-            .insert("select-all".into(), "Mod+A".into());
-        assert!(validate_settings(&settings).is_ok());
-    }
-
-    #[test]
-    fn validates_favorite_display_labels_without_touching_folder_names() {
-        let mut settings = AppSettings::default();
-        settings.favorites.push("/notes/work".into());
-        settings
-            .favorite_labels
-            .insert("/notes/work".into(), "工作资料".into());
-        assert!(validate_settings(&settings).is_ok());
-
-        settings
-            .favorite_labels
-            .insert("/notes/work".into(), "\n".into());
-        assert!(validate_settings(&settings).is_err());
-    }
-}
+#[path = "settings_tests.rs"]
+mod tests;

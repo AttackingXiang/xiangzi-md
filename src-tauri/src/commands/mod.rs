@@ -1,4 +1,5 @@
 pub mod app;
+pub mod assets;
 pub mod attachment;
 pub mod drafts;
 pub mod search;

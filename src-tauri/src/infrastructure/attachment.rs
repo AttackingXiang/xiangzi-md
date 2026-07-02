@@ -5,7 +5,11 @@ use crate::{
         workspace::{ensure_allowed, ensure_write_allowed},
     },
 };
-use std::{fs, path::Path};
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+};
 use tauri::AppHandle;
 
 const MAX_ATTACHMENT_BYTES: usize = 20 * 1024 * 1024;
@@ -63,15 +67,13 @@ pub fn save_attachment(
     ensure_write_allowed(app, &target_dir)?;
     fs::create_dir_all(&target_dir).map_err(|error| AppError::io("创建附件目录失败", error))?;
 
-    let target = unique_attachment_path(&target_dir, file_name);
-    ensure_write_allowed(app, &target)?;
-    fs::write(&target, data).map_err(|error| AppError::io("写入附件失败", error))?;
+    let target = create_unique_attachment(&target_dir, file_name, data)?;
     let relative = pathdiff::diff_paths(&target, doc_dir)
         .ok_or_else(|| AppError::new("relative_path_failed", "无法生成附件相对路径"))?;
     Ok(relative.to_string_lossy().replace('\\', "/"))
 }
 
-fn unique_attachment_path(directory: &Path, file_name: &str) -> std::path::PathBuf {
+fn sanitized_attachment_parts(file_name: &str) -> (String, String) {
     // Sanitize before asking `Path` to parse the name. On Windows, an input such as
     // `a:b.png` is otherwise interpreted as a drive-prefixed path and loses `a:`.
     let sanitized = file_name.replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "_");
@@ -79,18 +81,71 @@ fn unique_attachment_path(directory: &Path, file_name: &str) -> std::path::PathB
     let extension = source
         .extension()
         .and_then(|value| value.to_str())
-        .unwrap_or("png");
+        .filter(|value| !value.is_empty())
+        .unwrap_or("png")
+        .trim_end_matches(['.', ' '])
+        .to_owned();
     let stem = source
         .file_stem()
         .and_then(|value| value.to_str())
-        .unwrap_or("image");
+        .filter(|value| !value.is_empty())
+        .unwrap_or("image")
+        .trim_end_matches(['.', ' '])
+        .to_owned();
+    (
+        if stem.is_empty() {
+            "image".into()
+        } else {
+            stem
+        },
+        if extension.is_empty() {
+            "png".into()
+        } else {
+            extension
+        },
+    )
+}
+
+fn attachment_name(file_name: &str, index: usize) -> String {
+    let (stem, extension) = sanitized_attachment_parts(file_name);
+    if index == 0 {
+        format!("{stem}.{extension}")
+    } else {
+        format!("{stem}-{index}.{extension}")
+    }
+}
+
+fn create_unique_attachment(directory: &Path, file_name: &str, data: &[u8]) -> AppResult<PathBuf> {
+    for index in 0..10_000usize {
+        let name = attachment_name(file_name, index);
+        let candidate = directory.join(name);
+        let mut file = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(AppError::io("创建附件失败", error)),
+        };
+        if let Err(error) = file.write_all(data).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = fs::remove_file(&candidate);
+            return Err(AppError::io("写入附件失败", error));
+        }
+        return Ok(candidate);
+    }
+    Err(AppError::new(
+        "attachment_name_exhausted",
+        "无法为附件分配唯一名称",
+    ))
+}
+
+#[cfg(test)]
+fn unique_attachment_path(directory: &Path, file_name: &str) -> PathBuf {
     let mut index = 0usize;
     loop {
-        let name = if index == 0 {
-            format!("{stem}.{extension}")
-        } else {
-            format!("{stem}-{index}.{extension}")
-        };
+        let name = attachment_name(file_name, index);
         let candidate = directory.join(name);
         if !candidate.exists() {
             return candidate;
@@ -101,8 +156,12 @@ fn unique_attachment_path(directory: &Path, file_name: &str) -> std::path::PathB
 
 #[cfg(test)]
 mod tests {
-    use super::{unique_attachment_path, validate_attachment_size, MAX_ATTACHMENT_BYTES};
+    use super::{
+        create_unique_attachment, unique_attachment_path, validate_attachment_size,
+        MAX_ATTACHMENT_BYTES,
+    };
     use std::fs;
+    use std::sync::{Arc, Barrier};
     use tempfile::tempdir;
 
     #[test]
@@ -126,5 +185,40 @@ mod tests {
     fn rejects_attachment_bodies_above_the_memory_budget() {
         assert!(validate_attachment_size(MAX_ATTACHMENT_BYTES).is_ok());
         assert!(validate_attachment_size(MAX_ATTACHMENT_BYTES + 1).is_err());
+    }
+
+    #[test]
+    fn concurrent_attachments_never_overwrite_each_other() {
+        let directory = tempdir().expect("temporary directory");
+        let root = Arc::new(directory.path().to_path_buf());
+        let barrier = Arc::new(Barrier::new(16));
+        let handles = (0_u8..16)
+            .map(|value| {
+                let root = Arc::clone(&root);
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    create_unique_attachment(&root, "same.png", &[value])
+                        .expect("attachment creation")
+                })
+            })
+            .collect::<Vec<_>>();
+        let paths = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("attachment thread"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paths
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            16
+        );
+        let mut values = paths
+            .iter()
+            .map(|path| fs::read(path).expect("attachment content")[0])
+            .collect::<Vec<_>>();
+        values.sort_unstable();
+        assert_eq!(values, (0_u8..16).collect::<Vec<_>>());
     }
 }

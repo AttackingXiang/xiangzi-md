@@ -51,9 +51,13 @@ export function blobPartFromBytes(bytes: Uint8Array): ArrayBuffer {
   return owned.buffer
 }
 
+export const BLOCKED_REMOTE_IMAGE =
+  'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%221%22 height=%221%22/%3E'
+
 /**
  * 把 Markdown 中的图片/资源 src 解析成可在渲染层显示的 URL。
- * - http(s)/data/blob/xmd：原样返回
+ * - http(s)：仅在用户明确允许远程图片时返回，否则替换为本地占位图
+ * - data/blob/xmd：原样返回
  * - file://、绝对路径、相对 docDir 的路径：转成 xmd:// 协议
  *
  * 当提供 vaultRoot / searchPaths 时，会在 xmd:// URL 中附加备用路径
@@ -66,9 +70,11 @@ export function resolveAssetURL(
   src: string,
   vaultRoot?: string | null,
   searchPaths?: string[],
+  allowRemoteImages = false,
 ): string {
   if (!src) return src
-  if (/^(https?|data|blob|xmd):/i.test(src)) return src
+  if (/^https?:/i.test(src)) return allowRemoteImages ? src : BLOCKED_REMOTE_IMAGE
+  if (/^(data|blob|xmd):/i.test(src)) return src
 
   let primary: string | null = null
 

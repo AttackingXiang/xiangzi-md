@@ -3,6 +3,8 @@ import { desktop } from '../platform'
 import { getLang } from '../lib/i18n'
 import { createTaskQueue, mapWithConcurrencyLimit } from '../lib/asyncPool'
 import { InFlightCache } from '../lib/inFlightCache'
+import { LatestTaskQueue } from '../lib/latestTask'
+import { completeSave } from '../lib/saveState'
 import type { Draft, Tab } from '../types'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 
@@ -44,6 +46,8 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
   const [activeId, setActiveId] = useState<string | null>(null)
   const openQueueRef = useRef(createTaskQueue(2))
   const openTasksRef = useRef(new InFlightCache<string, void>())
+  const saveQueuesRef = useRef(new LatestTaskQueue<string, boolean>())
+  const savedVersionsRef = useRef(new Map<string, Tab['version']>())
 
   // Always-fresh ref for use inside callbacks
   const stateRef = useRef({ tabs, activeId })
@@ -85,6 +89,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
             savedContent: file.content,
             dirty: false,
             revision: 0,
+            version: file.version,
           }
           setTabs((prev) => [...prev, tab])
           setActiveId(tab.id)
@@ -111,6 +116,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
       savedContent: file.content,
       dirty: false,
       revision: 0,
+      version: file.version,
     }
     setTabs((prev) => [...prev, tab])
     setActiveId(tab.id)
@@ -127,6 +133,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
       savedContent: '',
       dirty: false,
       revision: 0,
+      version: null,
     }
     setTabs((prev) => [...prev, tab])
     setActiveId(tab.id)
@@ -148,6 +155,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
         savedContent: '',
         dirty: true,
         revision: 1,
+        version: null,
       }
       setTabs((previous) => [...previous, tab])
       setActiveId(tab.id)
@@ -156,30 +164,60 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
   )
 
   // ── Save ───────────────────────────────────────────────────────────────────
-  const saveTab = useCallback(
-    async (id: string) => {
+  const performSave = useCallback(
+    async (id: string): Promise<boolean> => {
       const tab = stateRef.current.tabs.find((t) => t.id === id)
       if (!tab) return false
       try {
         if (tab.path) {
-          await desktop.writeFile(tab.path, tab.content)
+          let result
+          try {
+            result = await desktop.writeFile(
+              tab.path,
+              tab.content,
+              savedVersionsRef.current.get(id) ?? tab.version,
+            )
+          } catch (error) {
+            const code =
+              typeof error === 'object' && error !== null && 'code' in error
+                ? String(error.code)
+                : ''
+            if (code !== 'file_conflict') throw error
+            const overwrite = await desktop.confirm(
+              getLang() === 'en'
+                ? `“${tab.name}” changed on disk. Overwrite the external changes?`
+                : `「${tab.name}」已被其他程序修改，是否覆盖外部更改？`,
+              getLang() === 'en' ? 'File conflict' : '文件冲突',
+              getLang() === 'en' ? 'Overwrite' : '仍然覆盖',
+              getLang() === 'en' ? 'Cancel' : '取消',
+            )
+            if (!overwrite) return false
+            result = await desktop.writeFile(
+              tab.path,
+              tab.content,
+              savedVersionsRef.current.get(id) ?? tab.version,
+              true,
+            )
+          }
+          savedVersionsRef.current.set(id, result.version)
           setTabs((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, savedContent: tab.content, dirty: false } : t)),
+            prev.map((current) =>
+              current.id === id ? completeSave(current, tab, result.version) : current,
+            ),
           )
           return true
         } else {
           const result = await desktop.saveAs(tab.content, tab.name)
           if (result) {
+            savedVersionsRef.current.set(id, result.version)
             setTabs((prev) =>
               prev.map((t) =>
                 t.id === id
                   ? {
-                      ...t,
+                      ...completeSave(t, tab, result.version),
                       path: result.path,
                       recoverySourcePath: null,
                       name: result.name,
-                      savedContent: tab.content,
-                      dirty: false,
                     }
                   : t,
               ),
@@ -201,6 +239,11 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     [pushRecentFile],
   )
 
+  const saveTab = useCallback(
+    (id: string): Promise<boolean> => saveQueuesRef.current.run(id, () => performSave(id)),
+    [performSave],
+  )
+
   const saveAsTab = useCallback(
     async (id: string) => {
       const tab = stateRef.current.tabs.find((t) => t.id === id)
@@ -208,16 +251,15 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
       try {
         const result = await desktop.saveAs(tab.content, tab.name)
         if (result) {
+          savedVersionsRef.current.set(id, result.version)
           setTabs((prev) =>
             prev.map((t) =>
               t.id === id
                 ? {
-                    ...t,
+                    ...completeSave(t, tab, result.version),
                     path: result.path,
                     recoverySourcePath: null,
                     name: result.name,
-                    savedContent: tab.content,
-                    dirty: false,
                   }
                 : t,
             ),
@@ -258,6 +300,8 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
         for (const tab of dirty) {
           if (!(await saveTab(tab.id))) return false
         }
+        const targetIds = new Set(dirty.map((tab) => tab.id))
+        if (stateRef.current.tabs.some((tab) => targetIds.has(tab.id) && tab.dirty)) return false
       }
       return true
     },
@@ -363,6 +407,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
               savedContent: file.content,
               dirty: false,
               revision: 0,
+              version: file.version,
             }
           } catch {
             return null
@@ -371,14 +416,15 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
       )
     ).filter((tab): tab is Tab => tab !== null)
     if (restored.length) {
-      setTabs(restored)
       const act = restored.find((t) => t.path === activePath) ?? restored[0]
-      setActiveId(act.id)
+      setTabs((current) => {
+        if (current.length === 0) return restored
+        const existingPaths = new Set(current.flatMap((tab) => (tab.path ? [tab.path] : [])))
+        return [...current, ...restored.filter((tab) => !tab.path || !existingPaths.has(tab.path))]
+      })
+      setActiveId((current) => current ?? act.id)
     }
   }, [])
-
-  // ── Dirty check for window close ──────────────────────────────────────────
-  const hasDirtyTabs = useCallback((): boolean => stateRef.current.tabs.some((t) => t.dirty), [])
 
   return {
     tabs,
@@ -400,7 +446,6 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     closeRight,
     updateContent,
     restoreSession,
-    hasDirtyTabs,
     confirmCloseTabs,
     closeTabsWithoutPrompt,
   }

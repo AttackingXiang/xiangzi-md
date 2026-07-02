@@ -1,5 +1,5 @@
 use percent_encoding::percent_decode_str;
-use std::{fs, path::PathBuf};
+use std::{fs::File, io::Read, path::PathBuf};
 use tauri::{http, Manager, Runtime};
 
 const MAX_ASSET_BYTES: u64 = 64 * 1024 * 1024;
@@ -20,7 +20,7 @@ pub fn handle_xmd<R: Runtime>(
         .filter(|origin| {
             matches!(
                 *origin,
-                "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost" | "null"
+                "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost"
             )
         })
         .map(str::to_owned);
@@ -52,32 +52,30 @@ pub fn handle_xmd<R: Runtime>(
         {
             continue;
         }
-        let Ok(metadata) = fs::metadata(&path) else {
-            continue;
-        };
-        if !metadata.is_file() {
-            continue;
-        }
-        if !asset_size_allowed(metadata.len()) {
-            oversized = true;
-            continue;
-        }
-        if let Ok(bytes) = fs::read(&path) {
-            if !asset_size_allowed(bytes.len() as u64) {
-                oversized = true;
-                continue;
-            }
-            let mime = mime_guess::from_path(&path).first_or_octet_stream();
-            let mut builder = http::Response::builder()
-                .status(http::StatusCode::OK)
-                .header(http::header::CONTENT_TYPE, mime.essence_str())
-                .header("X-Content-Type-Options", "nosniff");
-            if let Some(origin) = cors_origin.as_deref() {
-                builder = builder.header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-            }
-            let response = builder.body(bytes);
-            if let Ok(response) = response {
-                return response;
+        if let Ok(file) = File::open(&path) {
+            let mut bytes = Vec::with_capacity(1024 * 1024);
+            if file
+                .take(MAX_ASSET_BYTES.saturating_add(1))
+                .read_to_end(&mut bytes)
+                .is_ok()
+            {
+                if !asset_size_allowed(bytes.len() as u64) {
+                    oversized = true;
+                    continue;
+                }
+                let mime = mime_guess::from_path(&path).first_or_octet_stream();
+                let mut builder = http::Response::builder()
+                    .status(http::StatusCode::OK)
+                    .header(http::header::CONTENT_TYPE, mime.essence_str())
+                    .header("X-Content-Type-Options", "nosniff")
+                    .header("Cache-Control", "no-store");
+                if let Some(origin) = cors_origin.as_deref() {
+                    builder = builder.header(http::header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+                }
+                let response = builder.body(bytes);
+                if let Ok(response) = response {
+                    return response;
+                }
             }
         }
     }

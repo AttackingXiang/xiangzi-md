@@ -7,7 +7,7 @@ const PDF_RENDER_SCALE = 1.5
 const EXPORT_IMAGE_LOAD_TIMEOUT_MS = 15_000
 const EXPORT_FONT_LOAD_TIMEOUT_MS = 5_000
 
-export type ExportImageFormat = 'png' | 'jpeg'
+export type { ExportImageFormat } from './exportFormat'
 
 export interface PdfBlockBoundary {
   top: number
@@ -197,9 +197,7 @@ async function renderRgba(exportFrame: ExportFrame): Promise<Uint8Array> {
   return pixels
 }
 
-export function imageFormatForPath(path: string): ExportImageFormat {
-  return /\.jpe?g$/i.test(path) ? 'jpeg' : 'png'
-}
+export { imageFormatForPath } from './exportFormat'
 
 export function planPdfPages(
   documentHeight: number,
@@ -312,3 +310,4 @@ export async function renderDocumentPdf(html: string): Promise<Uint8Array> {
     exportFrame.frame.remove()
   }
 }
+import type { ExportImageFormat } from './exportFormat'

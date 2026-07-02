@@ -2,7 +2,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { check } from '@tauri-apps/plugin-updater'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderDocumentImage, renderDocumentPdf } from '../lib/exportDocument'
@@ -18,7 +17,6 @@ vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
   writeImage: vi.fn(),
 }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ ask: vi.fn(), open: vi.fn(), save: vi.fn() }))
-vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: vi.fn(), writeFile: vi.fn() }))
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(), revealItemInDir: vi.fn() }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }))
 vi.mock('@tauri-apps/plugin-updater', () => ({ check: vi.fn() }))
@@ -34,8 +32,6 @@ const writeHtmlMock = vi.mocked(writeHtml)
 const writeImageMock = vi.mocked(writeImage)
 const openMock = vi.mocked(open)
 const saveMock = vi.mocked(save)
-const readFileMock = vi.mocked(readFile)
-const writeFileMock = vi.mocked(writeFile)
 const checkMock = vi.mocked(check)
 const renderDocumentImageMock = vi.mocked(renderDocumentImage)
 const renderDocumentPdfMock = vi.mocked(renderDocumentPdf)
@@ -49,8 +45,6 @@ describe('tauriDesktopAdapter', () => {
     writeImageMock.mockReset()
     openMock.mockReset()
     saveMock.mockReset()
-    readFileMock.mockReset()
-    writeFileMock.mockReset()
     renderDocumentImageMock.mockReset()
     renderDocumentPdfMock.mockReset()
     checkMock.mockReset()
@@ -64,17 +58,15 @@ describe('tauriDesktopAdapter', () => {
     expect(invokeMock).toHaveBeenCalledWith('read_file', { path: file.path })
   })
 
-  it('reads binary files through the scoped file-system plugin', async () => {
+  it('reads bounded binary files through the Rust command', async () => {
     const bytes = new Uint8Array([137, 80, 78, 71])
-    invokeMock.mockResolvedValueOnce(bytes.byteLength)
-    readFileMock.mockResolvedValueOnce(bytes)
+    invokeMock.mockResolvedValueOnce(bytes)
 
     await expect(tauriDesktopAdapter.readBinaryFile('/notes/a.png')).resolves.toEqual(bytes)
-    expect(invokeMock).toHaveBeenCalledWith('check_binary_file', {
+    expect(invokeMock).toHaveBeenCalledWith('read_binary_file', {
       path: '/notes/a.png',
       maxBytes: 64 * 1024 * 1024,
     })
-    expect(readFileMock).toHaveBeenCalledWith('/notes/a.png')
   })
 
   it('authorizes selected folders recursively before loading the workspace tree', async () => {
@@ -102,16 +94,21 @@ describe('tauriDesktopAdapter', () => {
     expect(invokeMock).toHaveBeenCalledWith('open_folder_path', { root: '/notes/archive' })
   })
 
-  it('uses scoped commands for parent and containing-folder navigation', async () => {
+  it('requires a native folder choice before parent navigation', async () => {
+    openMock.mockResolvedValueOnce(null)
     invokeMock.mockResolvedValue(null)
 
     await tauriDesktopAdapter.openParentFolder('/notes/current')
     await tauriDesktopAdapter.openContainingFolder('/outside/a.md')
 
-    expect(invokeMock).toHaveBeenNthCalledWith(1, 'open_parent_folder', {
-      root: '/notes/current',
+    expect(openMock).toHaveBeenCalledWith({
+      directory: true,
+      multiple: false,
+      recursive: true,
+      defaultPath: '/notes',
     })
-    expect(invokeMock).toHaveBeenNthCalledWith(2, 'open_containing_folder', {
+    expect(invokeMock).toHaveBeenCalledTimes(1)
+    expect(invokeMock).toHaveBeenCalledWith('open_containing_folder', {
       filePath: '/outside/a.md',
     })
   })
@@ -205,7 +202,9 @@ describe('tauriDesktopAdapter', () => {
       path: '/notes/a.pdf',
     })
     expect(renderDocumentPdfMock).toHaveBeenCalledWith('<h1>A</h1>')
-    expect(writeFileMock).toHaveBeenCalledWith('/notes/a.pdf', bytes)
+    expect(invokeMock).toHaveBeenCalledWith('write_binary_file', bytes, {
+      headers: { 'x-xmd-output-path': encodeURIComponent('/notes/a.pdf') },
+    })
   })
 
   it('writes the self-contained HTML through the scoped Rust command', async () => {
@@ -218,6 +217,8 @@ describe('tauriDesktopAdapter', () => {
     expect(invokeMock).toHaveBeenCalledWith('write_file', {
       path: '/notes/a.html',
       content: '<h1>A</h1>',
+      expectedVersion: null,
+      force: true,
     })
   })
 
@@ -230,7 +231,9 @@ describe('tauriDesktopAdapter', () => {
       path: '/notes/a.jpeg',
     })
     expect(renderDocumentImageMock).toHaveBeenCalledWith('<h1>A</h1>', 'jpeg')
-    expect(writeFileMock).toHaveBeenCalledWith('/notes/a.jpeg', bytes)
+    expect(invokeMock).toHaveBeenCalledWith('write_binary_file', bytes, {
+      headers: { 'x-xmd-output-path': encodeURIComponent('/notes/a.jpeg') },
+    })
   })
 
   it('does not render a PDF when the save dialog is cancelled', async () => {
@@ -238,7 +241,7 @@ describe('tauriDesktopAdapter', () => {
 
     await expect(tauriDesktopAdapter.exportPDF('<h1>A</h1>', 'a.md')).resolves.toBeNull()
     expect(renderDocumentPdfMock).not.toHaveBeenCalled()
-    expect(writeFileMock).not.toHaveBeenCalled()
+    expect(invokeMock).not.toHaveBeenCalled()
   })
 
   it('maps updater metadata without exposing the plugin object to React features', async () => {
