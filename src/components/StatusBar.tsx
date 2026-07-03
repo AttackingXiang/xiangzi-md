@@ -4,6 +4,8 @@ import { t } from '../lib/i18n'
 interface Props {
   tab: Tab | null
   sourceMode: boolean
+  focusMode: boolean
+  typewriterMode: boolean
   autoSave: boolean
 }
 
@@ -13,7 +15,13 @@ function countWords(text: string): number {
   return cjk + words
 }
 
-export default function StatusBar({ tab, sourceMode, autoSave }: Props): JSX.Element {
+export default function StatusBar({
+  tab,
+  sourceMode,
+  focusMode,
+  typewriterMode,
+  autoSave,
+}: Props): JSX.Element {
   return (
     <div className="statusbar">
       <span className="status-left">{tab ? (tab.path ?? t('未保存')) : t('就绪')}</span>
@@ -26,7 +34,9 @@ export default function StatusBar({ tab, sourceMode, autoSave }: Props): JSX.Ele
             <span>
               {tab.content.length} {t('字符')}
             </span>
-            <span>{sourceMode ? t('源码') : t('所见即所得')}</span>
+            {sourceMode && <span>{t('源码')}</span>}
+            {typewriterMode && <span>{t('打字机模式')}</span>}
+            {focusMode && <span>{t('专注模式')}</span>}
             {autoSave && <span>{t('自动保存')}</span>}
             {tab.dirty && <span className="status-dirty">●&nbsp;{t('未保存')}</span>}
           </>

@@ -1,0 +1,97 @@
+.editor-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 8px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 100ms, color 100ms;
+  flex-shrink: 0;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.07));
+  color: var(--text-primary, #333);
+}
+
+.toolbar-btn.is-active {
+  background: var(--accent-muted, rgba(99, 102, 241, 0.12));
+  color: var(--accent, #6366f1);
+}
+
+.toolbar-btn.is-active:hover {
+  background: var(--accent-muted-hover, rgba(99, 102, 241, 0.2));
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.toolbar-sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border-color, #e0e0e0);
+  flex-shrink: 0;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .editor-toolbar {
+    background: var(--bg-secondary, #1e1e1e);
+    border-bottom-color: var(--border-color, #333);
+  }
+
+  .toolbar-btn {
+    color: var(--text-secondary, #999);
+  }
+
+  .toolbar-btn:hover:not(:disabled) {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+    color: var(--text-primary, #e0e0e0);
+  }
+
+  .toolbar-sep {
+    background: var(--border-color, #333);
+  }
+}
+
+[data-theme='dark'] .editor-toolbar {
+  background: var(--bg-secondary, #1e1e1e);
+  border-bottom-color: var(--border-color, #333);
+}
+
+[data-theme='dark'] .toolbar-btn {
+  color: var(--text-secondary, #999);
+}
+
+[data-theme='dark'] .toolbar-btn:hover:not(:disabled) {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #e0e0e0);
+}
+
+[data-theme='dark'] .toolbar-sep {
+  background: var(--border-color, #333);
+}

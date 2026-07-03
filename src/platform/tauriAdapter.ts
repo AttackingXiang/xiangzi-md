@@ -102,7 +102,12 @@ export const tauriDesktopAdapter: DesktopPort = {
   openParentFolder: async (root) => {
     const parent = dirName(root)
     if (!parent) return null
-    const selected = await open({ directory: true, multiple: false, recursive: true, defaultPath: parent })
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      recursive: true,
+      defaultPath: parent,
+    })
     return selected ? invoke<Folder | null>('open_folder_path', { root: selected }) : null
   },
   openContainingFolder: (filePath) => invoke<Folder | null>('open_containing_folder', { filePath }),
@@ -127,10 +132,12 @@ export const tauriDesktopAdapter: DesktopPort = {
       filters: [{ name: 'Markdown', extensions: ['md'] }],
     })
     if (!path) return null
-    const result = await invoke<{ path: string; version: FileVersion }>(
-      'write_file',
-      { path, content, expectedVersion: null, force: true },
-    )
+    const result = await invoke<{ path: string; version: FileVersion }>('write_file', {
+      path,
+      content,
+      expectedVersion: null,
+      force: true,
+    })
     return {
       path,
       name: path.split(/[\\/]/).pop() ?? suggestedName ?? 'untitled.md',
@@ -149,6 +156,7 @@ export const tauriDesktopAdapter: DesktopPort = {
   deleteDraft: (id) => invoke('delete_draft', { id }),
   reveal: (targetPath) => revealItemInDir(targetPath),
   openExternal: (url) => openUrl(url),
+  openWithDefault: (path) => invoke('open_with_default', { path }),
   moveItem: (sourcePath, targetDirPath) => invoke('move_item', { sourcePath, targetDirPath }),
   searchInFolder: (root, query) => invoke<SearchResponse>('search_in_folder', { root, query }),
   cancelSearch: () => invoke('cancel_search'),

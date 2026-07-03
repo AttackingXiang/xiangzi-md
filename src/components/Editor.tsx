@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { desktop } from '../platform'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
-import { editorViewCtx } from '@milkdown/kit/core'
+import { commandsCtx, editorViewCtx } from '@milkdown/kit/core'
+import { clearTextInCurrentBlockCommand, hardbreakFilterNodes } from '@milkdown/kit/preset/commonmark'
+import { tablePickerBridge } from '../lib/tablePickerBridge'
+import { editorCmd } from '../lib/editorCommands'
 import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import '@milkdown/crepe/theme/common/style.css'
@@ -16,11 +19,13 @@ import { resizableTableView, tableColumnResizingPlugin } from '../lib/resizableT
 import { focusPlugin } from '../lib/focusPlugin'
 import { searchPlugin } from '../lib/searchPlugin'
 import { headingFoldPlugin } from '../lib/headingFold'
+import { toolbarStatePlugin } from '../lib/toolbarStatePlugin'
 import { editorBridge } from '../lib/editorBridge'
 import { t } from '../lib/i18n'
 import { typewriterScrollDelta } from '../lib/typewriterScroll'
 import { setupRichClipboard } from '../lib/richClipboard'
-import { codeBlockView, codeHighlightPlugin, setCodeBlockTheme } from '../lib/staticCodeBlock'
+import { codeHighlightPlugin } from '../lib/codeHighlight'
+import { codeBlockView, setCodeBlockTheme } from '../lib/staticCodeBlock'
 import { codeMirrorTheme } from '../lib/codeTheme'
 
 interface Props {
@@ -180,8 +185,25 @@ export default function Editor({
             label: t('高级'),
             image: { label: t('图片') },
             codeBlock: { label: t('代码块') },
-            table: { label: t('表格') },
+            table: null,
             math: { label: t('公式') },
+          },
+          buildMenu: (builder) => {
+            builder.getGroup('advanced').addItem('table', {
+              label: t('表格'),
+              icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M20 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H20C21.1 21 22 20.1 22 19V5C22 3.9 21.1 3 20 3ZM20 5V8H5V5H20ZM15 19H10V10H15V19ZM5 10H8V19H5V10ZM17 19V10H20V19H17Z"/></svg>`,
+              onRun: (ctx) => {
+                const view = ctx.get(editorViewCtx)
+                const { from } = view.state.selection
+                const coords = view.coordsAtPos(from)
+                ctx.get(commandsCtx).call(clearTextInCurrentBlockCommand.key)
+                tablePickerBridge.request(
+                  coords.left,
+                  coords.bottom + 8,
+                  (r, c) => editorCmd.insertTable(r, c),
+                )
+              },
+            })
           },
         },
       },
@@ -189,10 +211,18 @@ export default function Editor({
 
     crepeRef.current = crepe
 
+    // 允许在表格单元格内用 Shift+Enter 插入换行：去掉对 "table" 的拦截。
+    // Milkdown 的 hardbreakFilterPlugin 默认会过滤 table 和 code_block 内的
+    // hard_break 事务，这里通过覆盖上下文将 table 从禁止列表移除。
+    crepe.editor.config((ctx) => {
+      ctx.update(hardbreakFilterNodes.key, (nodes) => nodes.filter((n) => n !== 'table'))
+    })
+
     // 注入标题快捷键（⌘1~6 / ⌘0）、专注模式装饰、查找替换
     crepe.editor.use(focusPlugin)
     crepe.editor.use(searchPlugin)
     crepe.editor.use(headingFoldPlugin)
+    crepe.editor.use(toolbarStatePlugin)
     crepe.editor.use(tableColumnResizingPlugin)
     // 放在 Crepe 自带 tableBlockView 之后注册，同一节点类型由最后注册的视图接管。
     crepe.editor.use(resizableTableView)

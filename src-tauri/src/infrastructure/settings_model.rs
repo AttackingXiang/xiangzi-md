@@ -78,7 +78,10 @@ pub struct AppSettings {
     pub asset_search_paths: Vec<String>,
     pub show_all_files: bool,
     pub hidden_workspace_paths: Vec<String>,
+    /// Name patterns hidden when show_all_files is true (matches file or folder names exactly).
+    pub hidden_name_patterns: Vec<String>,
     pub allow_remote_images: bool,
+    pub show_toolbar: bool,
 }
 
 impl Default for AppSettings {
@@ -106,7 +109,17 @@ impl Default for AppSettings {
             asset_search_paths: Vec::new(),
             show_all_files: false,
             hidden_workspace_paths: Vec::new(),
+            hidden_name_patterns: vec![
+                ".git".into(),
+                "node_modules".into(),
+                ".obsidian".into(),
+                ".vscode".into(),
+                "dist".into(),
+                "build".into(),
+                ".DS_Store".into(),
+            ],
             allow_remote_images: false,
+            show_toolbar: false,
         }
     }
 }
@@ -135,7 +148,9 @@ pub struct SettingsPatch {
     pub asset_search_paths: Option<Vec<String>>,
     pub show_all_files: Option<bool>,
     pub hidden_workspace_paths: Option<Vec<String>>,
+    pub hidden_name_patterns: Option<Vec<String>>,
     pub allow_remote_images: Option<bool>,
+    pub show_toolbar: Option<bool>,
 }
 
 impl SettingsPatch {

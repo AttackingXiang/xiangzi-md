@@ -14,8 +14,19 @@ interface Props {
   onOpenDrafts?: () => void
 }
 
+/**
+ * The parent directory, shortened for display: when it has more than a couple
+ * of segments, the leading ones collapse to an ellipsis so only the closest
+ * folders (the useful, distinguishing part) stay visible. The full path is kept
+ * in the row's `title`.
+ */
 function parentDir(p: string): string {
-  return dirName(p) ?? ''
+  const dir = dirName(p) ?? ''
+  if (dir.length <= 36) return dir
+  const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/'
+  const segs = dir.split(/[\\/]/).filter(Boolean)
+  if (segs.length <= 2) return dir
+  return '…' + sep + segs.slice(-2).join(sep)
 }
 
 export default function Welcome({

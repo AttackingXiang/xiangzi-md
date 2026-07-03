@@ -47,6 +47,7 @@ pub fn run() {
             commands::app::get_app_info,
             commands::app::frontend_ready,
             commands::app::quit_confirmed,
+            commands::app::open_with_default,
             commands::assets::read_remote_image,
             commands::workspace::open_folder_path,
             commands::workspace::open_containing_folder,

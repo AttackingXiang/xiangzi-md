@@ -139,12 +139,13 @@
 .recent-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 6px;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 7px;
   cursor: pointer;
   color: var(--text-2);
   overflow: hidden;
+  transition: background 0.12s ease;
 }
 
 .recent-item:hover {
@@ -159,8 +160,9 @@
 
 .recent-name {
   font-size: 13px;
-  flex-shrink: 0;
-  max-width: 50%;
+  font-weight: 500;
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -169,10 +171,14 @@
 .recent-dir {
   font-size: 11px;
   color: var(--text-muted);
+  margin-left: auto;
+  padding-left: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 62%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;
 }
 
 .primary-btn {
@@ -252,4 +258,3 @@ kbd {
 .status-dirty {
   color: var(--accent-text);
 }
-

@@ -34,7 +34,7 @@ export function useExportActions(
       exportInProgressRef.current = false
     }
   }, [generateExportHTML])
-  
+
   const exportPDF = useCallback(async () => {
     if (exportInProgressRef.current) return
     exportInProgressRef.current = true
@@ -55,7 +55,7 @@ export function useExportActions(
       exportInProgressRef.current = false
     }
   }, [generateExportHTML])
-  
+
   const exportImage = useCallback(async () => {
     if (exportInProgressRef.current) return
     exportInProgressRef.current = true
@@ -76,6 +76,6 @@ export function useExportActions(
       exportInProgressRef.current = false
     }
   }, [generateExportHTML])
-  
+
   return { exportHTML, exportPDF, exportImage }
 }

@@ -48,7 +48,12 @@ fn check_version_conflict(path: &Path, expected_version: Option<&FileVersion>) -
         (Some(expected), true) => {
             let current =
                 super::workspace::read_limited(path, MAX_DOCUMENT_BYTES, "检查文件版本失败")?;
-            if &file_version(path, &current)? != expected {
+            // Compare content, not the whole version: a "conflict" means the
+            // bytes on disk differ from what our edits were based on. The
+            // modified-time (and thus the full FileVersion) can change without
+            // any content change — iCloud/Dropbox sync, backups, or a metadata
+            // touch on the file — and must not be reported as an external edit.
+            if file_version(path, &current)?.content_hash != expected.content_hash {
                 return Err(AppError::conflict(path));
             }
             Ok(())
@@ -171,6 +176,25 @@ mod tests {
         let stale = file_version(&path, b"original").expect("version");
         file.write_all(b" appended").expect("append");
         assert!(check_version_conflict(&path, Some(&stale)).is_err());
+    }
+
+    #[test]
+    fn no_conflict_when_only_modified_time_changes() {
+        use std::fs;
+        let file = NamedTempFile::new().expect("temp file");
+        let path = file.path().to_path_buf();
+        fs::write(&path, b"same content").expect("write");
+        let version = file_version(&path, b"same content").expect("version");
+        // Rewriting identical bytes bumps the file's modified time (as iCloud or
+        // a backup would) without changing content — this must not conflict.
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        fs::write(&path, b"same content").expect("rewrite");
+        assert_ne!(
+            file_version(&path, b"same content").expect("version2").modified_nanos,
+            version.modified_nanos,
+            "precondition: rewrite should change mtime",
+        );
+        assert!(check_version_conflict(&path, Some(&version)).is_ok());
     }
 
     #[test]

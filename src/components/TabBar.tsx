@@ -248,10 +248,10 @@ export default function TabBar({
             <div
               className="tab-overflow-panel"
               ref={overflowPanelRef}
-              style={(() => {
+              style={showOverflow ? (() => {
                 const rect = overflowBtnRef.current?.getBoundingClientRect()
                 return rect ? { top: rect.bottom + 4, right: window.innerWidth - rect.right } : {}
-              })()}
+              })() : undefined}
             >
               {tabs.map((tab) => (
                 <div

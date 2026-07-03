@@ -30,13 +30,14 @@ pub(super) const MAX_BINARY_WRITE_BYTES: u64 = 128 * 1024 * 1024;
 pub struct WorkspaceVisibility {
     show_all_files: bool,
     hidden_paths: Vec<PathBuf>,
+    /// Exact file/folder name matches hidden when show_all_files is true.
+    hidden_name_patterns: Vec<String>,
 }
 
 impl WorkspaceVisibility {
     pub fn from_settings(settings: &AppSettings) -> Self {
         Self {
             show_all_files: settings.show_all_files,
-            // Canonicalize once at construction time to avoid repeated syscalls per entry.
             hidden_paths: settings
                 .hidden_workspace_paths
                 .iter()
@@ -46,6 +47,7 @@ impl WorkspaceVisibility {
                         .unwrap_or_else(|_| path.components().collect())
                 })
                 .collect(),
+            hidden_name_patterns: settings.hidden_name_patterns.clone(),
         }
     }
 
@@ -53,10 +55,16 @@ impl WorkspaceVisibility {
         let candidate = path
             .canonicalize()
             .unwrap_or_else(|_| path.components().collect::<PathBuf>());
-        // hidden_paths are pre-canonicalized in from_settings
         self.hidden_paths
             .iter()
             .any(|hidden| candidate == *hidden || candidate.starts_with(hidden))
+    }
+
+    fn matches_name_pattern(&self, path: &Path) -> bool {
+        let name = path.file_name().and_then(OsStr::to_str).unwrap_or("");
+        self.hidden_name_patterns
+            .iter()
+            .any(|p| p == name)
     }
 }
 
@@ -117,6 +125,12 @@ fn is_markdown(path: &Path) -> bool {
 }
 
 fn is_visible_text_file(path: &Path) -> bool {
+    // Dotfiles (.gitignore, .env, etc.) are hidden by OS convention;
+    // the user opts in to seeing them via show_all_files.
+    let name = path.file_name().and_then(OsStr::to_str).unwrap_or("");
+    if name.starts_with('.') {
+        return false;
+    }
     is_markdown(path)
         || path
             .extension()
@@ -193,7 +207,16 @@ pub fn read_dir_tree(
     for entry in entries {
         let entry = entry.map_err(|error| AppError::io("读取目录项失败", error))?;
         let path = entry.path();
-        if visibility.is_hidden(&path) || (!visibility.show_all_files && is_ignored(&path)) {
+        // Always skip explicitly hidden absolute paths.
+        // In default mode, skip the hardcoded ignore list (node_modules, .git, etc.).
+        // In show-all-files mode, skip user-configured name patterns instead.
+        let skip = visibility.is_hidden(&path)
+            || if visibility.show_all_files {
+                visibility.matches_name_pattern(&path)
+            } else {
+                is_ignored(&path)
+            };
+        if skip {
             continue;
         }
         let file_type = entry
@@ -359,6 +382,8 @@ mod tests {
         assert!(is_visible_text_file(Path::new("README.MD")));
         assert!(is_visible_text_file(Path::new("notes.txt")));
         assert!(!is_visible_text_file(Path::new("photo.png")));
+        assert!(!is_visible_text_file(Path::new(".gitignore")));
+        assert!(!is_visible_text_file(Path::new(".env")));
         assert!(is_ignored(Path::new("node_modules")));
         assert!(!is_ignored(Path::new("notes")));
     }

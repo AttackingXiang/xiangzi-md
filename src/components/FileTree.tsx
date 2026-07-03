@@ -18,7 +18,12 @@ interface Props {
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
+  /** Workspace root, so items can be dragged out to the top level. */
+  rootPath: string
   depth: number
+  /** Set of currently expanded folder paths — used to restore state across remounts. */
+  expandedPaths: ReadonlySet<string>
+  onToggleExpanded: (path: string, expanded: boolean) => void
 }
 
 export default function FileTree({
@@ -31,7 +36,10 @@ export default function FileTree({
   onOpenFile,
   onNodeContext,
   onMove,
+  rootPath,
   depth,
+  expandedPaths,
+  onToggleExpanded,
 }: Props): JSX.Element {
   const visible =
     hideFolderNames.length > 0
@@ -52,7 +60,10 @@ export default function FileTree({
           onOpenFile={onOpenFile}
           onNodeContext={onNodeContext}
           onMove={onMove}
+          rootPath={rootPath}
           depth={depth}
+          expandedPaths={expandedPaths}
+          onToggleExpanded={onToggleExpanded}
         />
       ))}
     </ul>
@@ -69,7 +80,10 @@ const TreeNode = memo(function TreeNode({
   onOpenFile,
   onNodeContext,
   onMove,
+  rootPath,
   depth,
+  expandedPaths,
+  onToggleExpanded,
 }: {
   node: FileNode
   activePath: string | null
@@ -80,9 +94,13 @@ const TreeNode = memo(function TreeNode({
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
+  rootPath: string
   depth: number
+  expandedPaths: ReadonlySet<string>
+  onToggleExpanded: (path: string, expanded: boolean) => void
 }): JSX.Element {
-  const [expanded, setExpanded] = useState(false)
+  // Restore expansion from the persistent set (survives tree remounts on refresh/rename).
+  const [expanded, setExpanded] = useState(() => expandedPaths.has(node.path))
   const [children, setChildren] = useState<FileNode[] | null>(node.children ?? null)
   const [loading, setLoading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -117,11 +135,20 @@ const TreeNode = memo(function TreeNode({
     }
   }, [children, node.path])
 
+  // If restored as expanded (e.g. after a tree remount), trigger lazy load.
+  useEffect(() => {
+    if (expanded && children === null) void loadChildren()
+    // Run only on mount — expanded/loadChildren are intentionally excluded to
+    // avoid re-triggering when the user collapses/re-expands interactively.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     if (!isAncestor) return
     setExpanded(true)
+    onToggleExpanded(node.path, true)
     void loadChildren()
-  }, [isAncestor, loadChildren])
+  }, [isAncestor, loadChildren, node.path, onToggleExpanded])
 
   useEffect(() => {
     if (!isRevealed || revealRequestId === null || !nodeRef.current) return
@@ -140,6 +167,7 @@ const TreeNode = memo(function TreeNode({
   const toggle = async (): Promise<void> => {
     const next = !expanded
     setExpanded(next)
+    onToggleExpanded(node.path, next)
     if (next) await loadChildren()
   }
 
@@ -185,10 +213,14 @@ const TreeNode = memo(function TreeNode({
       }
 
       event.preventDefault()
-      const candidate = document
-        .elementFromPoint(event.clientX, event.clientY)
-        ?.closest<HTMLElement>('.tree-row.dir[data-tree-path]')
-      const candidatePath = candidate?.dataset.treePath ?? null
+      const under = document.elementFromPoint(event.clientX, event.clientY)
+      const dirRow = under?.closest<HTMLElement>('.tree-row.dir[data-tree-path]')
+      // Falling outside any folder row but still inside the tree body means
+      // "drop at the workspace root" — the way to move a nested item back out
+      // to the top level, which has no folder row of its own.
+      const rootZone = dirRow ? null : (under?.closest<HTMLElement>('.sidebar-body') ?? null)
+      const candidate = dirRow ?? rootZone
+      const candidatePath = dirRow ? (dirRow.dataset.treePath ?? null) : rootZone ? rootPath : null
 
       if (!candidate || !candidatePath || !canDropTreeItem(payload, candidatePath)) {
         clearDropTarget()
@@ -276,7 +308,10 @@ const TreeNode = memo(function TreeNode({
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}
             onMove={onMove}
+            rootPath={rootPath}
             depth={depth + 1}
+            expandedPaths={expandedPaths}
+            onToggleExpanded={onToggleExpanded}
           />
         )}
         {expanded && children?.length === 0 && !loading && (
@@ -296,11 +331,15 @@ const TreeNode = memo(function TreeNode({
         style={indent}
         data-tree-path={node.path}
         aria-grabbed={isDragging}
-        aria-disabled={!node.openable}
-        title={node.openable ? node.name : t('此文件类型不能在编辑器中打开')}
+        title={node.name}
         onPointerDown={handlePointerDown}
         onClick={() => {
-          if (!consumeSuppressedClick() && node.openable) onOpenFile(node.path, node.name)
+          if (consumeSuppressedClick()) return
+          if (node.openable) {
+            onOpenFile(node.path, node.name)
+          } else {
+            void desktop.openWithDefault(node.path)
+          }
         }}
         onContextMenu={(e) => {
           e.preventDefault()
