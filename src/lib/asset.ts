@@ -33,7 +33,9 @@ function xmdUrl(path: string): string {
 
 /** 是否为 xmd 协议地址（含 Windows 的 http://xmd.localhost 映射形式）。 */
 function isXmdUrl(url: URL): boolean {
-  return url.protocol === 'xmd:' || (/^https?:$/.test(url.protocol) && url.hostname === 'xmd.localhost')
+  return (
+    url.protocol === 'xmd:' || (/^https?:$/.test(url.protocol) && url.hostname === 'xmd.localhost')
+  )
 }
 
 /** 解析 xmd:// 地址中的主路径和备用路径，顺序与 Rust 协议处理器一致。 */
