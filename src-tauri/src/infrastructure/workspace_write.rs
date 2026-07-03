@@ -5,11 +5,11 @@ use crate::domain::{
     error::{AppError, AppResult},
     models::{FileVersion, PathResult, WriteResult},
 };
-use std::{
-    fs::{self, File},
-    io::Write,
-    path::Path,
-};
+use std::{fs, io::Write, path::Path};
+
+// File 仅在 unix 的目录 fsync 中使用；无条件导入会让 Windows 构建报 unused_imports。
+#[cfg(unix)]
+use std::fs::File;
 use tauri::AppHandle;
 use tempfile::NamedTempFile;
 
@@ -37,6 +37,10 @@ fn sync_parent_directory(parent: &Path) -> AppResult<()> {
     File::open(parent)
         .and_then(|directory| directory.sync_all())
         .map_err(|error| AppError::io("同步目标目录失败", error))?;
+    // Windows 没有等价的目录 fsync 语义（FlushFileBuffers 需要写句柄），
+    // 目录项持久化交给操作系统；显式消费参数避免 unused_variables 警告。
+    #[cfg(not(unix))]
+    let _ = parent;
     Ok(())
 }
 
