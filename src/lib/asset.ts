@@ -62,7 +62,10 @@ export function imageMimeType(path: string): string {
 }
 
 /** Reuse an owned ArrayBuffer when possible and copy only shared or sliced views. */
-export function blobPartFromBytes(bytes: Uint8Array): ArrayBuffer {
+export function blobPartFromBytes(bytes: Uint8Array | ArrayBuffer): ArrayBuffer {
+  // 防御 IPC 边界：tauri::ipc::Response 在前端是 ArrayBuffer，直接透传；
+  // 若误走 TypedArray 分支，set() 不会拷贝任何字节，产物会是全零数据。
+  if (bytes instanceof ArrayBuffer) return bytes
   if (bytes.buffer instanceof ArrayBuffer) {
     if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) return bytes.buffer
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
