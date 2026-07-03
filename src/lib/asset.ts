@@ -54,16 +54,56 @@ export function blobPartFromBytes(bytes: Uint8Array): ArrayBuffer {
 export const BLOCKED_REMOTE_IMAGE =
   'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%221%22 height=%221%22/%3E'
 
+/** 与 Rust 侧 MAX_ASSET_CANDIDATES 对齐：主路径 + 至多 32 个备选。 */
+const MAX_ALT_CANDIDATES = 32
+
+/** 无仓库根时向上探测的最大层数（避免一路爬到用户主目录产生噪声候选）。 */
+const MAX_ANCESTOR_LEVELS_WITHOUT_VAULT = 3
+
+/**
+ * docDir 的祖先目录序列（由近及远）。docDir 在 vaultRoot 之下时走到 vaultRoot
+ * 为止（含）；否则最多向上 MAX_ANCESTOR_LEVELS_WITHOUT_VAULT 层。
+ * 典型场景：Typora 用户把文档挪进子文件夹，图片还留在原层级的 assets/ 里，
+ * 相对路径于是指向文档的某个祖先目录而不是文档所在目录。
+ */
+function ancestorDirs(docDir: string, vaultRoot?: string | null): string[] {
+  const stop = vaultRoot ? normalize(vaultRoot) : null
+  const result: string[] = []
+  let current = normalize(docDir)
+  if (stop && current === stop) return result
+  for (let level = 0; ; level++) {
+    const cut = current.lastIndexOf('/')
+    if (cut <= 0) break
+    const parent = current.slice(0, cut)
+    // Windows 盘符根（如 "C:"）或 POSIX 根不再继续
+    if (parent === '' || /^[A-Za-z]:$/.test(parent)) break
+    if (stop) {
+      if (!stop.startsWith(parent) && !parent.startsWith(stop)) break
+      result.push(parent)
+      if (parent === stop) break
+    } else {
+      if (level >= MAX_ANCESTOR_LEVELS_WITHOUT_VAULT) break
+      result.push(parent)
+    }
+    current = parent
+  }
+  return result
+}
+
 /**
  * 把 Markdown 中的图片/资源 src 解析成可在渲染层显示的 URL。
  * - http(s)：仅在用户明确允许远程图片时返回，否则替换为本地占位图
  * - data/blob/xmd：原样返回
  * - file://、绝对路径、相对 docDir 的路径：转成 xmd:// 协议
  *
- * 当提供 vaultRoot / searchPaths 时，会在 xmd:// URL 中附加备用路径
- * (?alts=…)，供主进程协议处理器依序尝试，从而支持：
- *   - 站点根相对路径（/static/img.png → vaultRoot/static/img.png）
- *   - 图片目录与文档不在同一层级的情况
+ * 相对路径按以下顺序生成候选，附加在 xmd:// 的 ?alts= 中由主进程依序尝试：
+ *   1. 文档所在目录（主路径）
+ *   2. 文档目录的各级祖先目录（由近及远，至仓库根为止）——兼容文档被挪入
+ *      子文件夹而图片留在原层级的情况
+ *   3. 仓库根（含 /static/img.png 这类站点根相对路径）
+ *   4. 用户配置的「额外图片搜索目录」
+ * 若 src 含百分号编码（如 %20），再补一轮解码后的同序候选，兼容
+ * Typora 等编辑器对空格/中文做 URL 编码的写法。
  */
 export function resolveAssetURL(
   docDir: string | null,
@@ -95,27 +135,48 @@ export function resolveAssetURL(
   const seen = new Set<string>([primary])
 
   const addAlt = (p: string): void => {
+    if (alts.length >= MAX_ALT_CANDIDATES) return
     if (!seen.has(p)) {
       seen.add(p)
       alts.push(p)
     }
   }
 
-  if (vaultRoot) {
-    if (src.startsWith('/')) {
-      // Site-root-relative: /static/img.png → vaultRoot + /static/img.png
-      addAlt(normalize(`${vaultRoot}${src}`))
-    } else {
-      // Relative path: also try from vault root
-      addAlt(normalize(`${vaultRoot}/${src}`))
+  /** 对一个相对 src，按「祖先目录 → 仓库根 → 额外搜索目录」追加候选。 */
+  const addRelativeCandidates = (relSrc: string): void => {
+    if (docDir && !isAbsolute(relSrc) && !relSrc.startsWith('file://')) {
+      for (const ancestor of ancestorDirs(docDir, vaultRoot)) {
+        addAlt(normalize(`${ancestor}/${relSrc}`))
+      }
+    }
+    if (vaultRoot) {
+      if (relSrc.startsWith('/')) {
+        // Site-root-relative: /static/img.png → vaultRoot + /static/img.png
+        addAlt(normalize(`${vaultRoot}${relSrc}`))
+      } else {
+        addAlt(normalize(`${vaultRoot}/${relSrc}`))
+      }
+    }
+    if (searchPaths) {
+      for (const base of searchPaths) {
+        const trimmed = base.trim()
+        if (trimmed) addAlt(normalize(`${trimmed}/${relSrc}`))
+      }
     }
   }
 
-  // User-configured extra search directories
-  if (searchPaths) {
-    for (const base of searchPaths) {
-      const trimmed = base.trim()
-      if (trimmed) addAlt(normalize(`${trimmed}/${src}`))
+  addRelativeCandidates(src)
+
+  // 含百分号编码的写法（%20、中文转码等）：补一轮解码后的候选
+  if (src.includes('%')) {
+    try {
+      const decoded = decodeURIComponent(src)
+      if (decoded !== src) {
+        if (docDir && !isAbsolute(decoded)) addAlt(normalize(`${docDir}/${decoded}`))
+        addRelativeCandidates(decoded)
+      }
+    } catch {
+      // 非法编码序列：按原样处理即可
     }
   }
 
