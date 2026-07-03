@@ -147,6 +147,9 @@ jobs:
     if: needs.prepare.outputs.publish == 'true'
     strategy:
       fail-fast: false
+      # tauri-action 会读写同一个 Release 和 latest.json；串行发布可避免两个
+      # 平台同时覆盖更新清单，尤其是在修复已有版本时。
+      max-parallel: 1
       matrix:
         include:
           # 钉在 macos-14：macos-latest 已开始轮换到 macOS 26 beta 镜像，
@@ -162,6 +165,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -266,7 +271,8 @@ jobs:
           $config = @{ bundle = @{ windows = @{ certificateThumbprint = $env:WINDOWS_CERTIFICATE_THUMBPRINT; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } } } | ConvertTo-Json -Compress -Depth 4
           "TAURI_CONFIG=$config" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Build and publish GitHub Release assets
+      - name: Build and publish signed macOS Release assets
+        if: runner.os == 'macOS' && steps.signing.outputs.apple == 'true'
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -274,6 +280,25 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Xiangzi MD v__VERSION__
+          releaseBody: ${{ needs.prepare.outputs.notes }}
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}
+
+      - name: Build and publish Release assets without Apple identity
+        if: runner.os != 'macOS' || steps.signing.outputs.apple == 'false'
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 不配置 Apple 证书时不能把空的 APPLE_SIGNING_IDENTITY 传给 Tauri，
+          # 否则 macOS Runner 会尝试用空身份 codesign 并在 keychain 阶段失败。
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
