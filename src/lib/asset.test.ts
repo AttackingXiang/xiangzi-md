@@ -26,6 +26,19 @@ describe('xmd assets', () => {
     expect(imageMimeType('C:\\notes\\diagram.svg')).toBe('image/svg+xml')
   })
 
+  it('parses the Windows http://xmd.localhost mapped form', () => {
+    // WebView2 不支持自定义 scheme，Tauri 在 Windows 上把 xmd:// 映射为
+    // http://xmd.localhost/；解析器必须两种形式都认。
+    const source =
+      'http://xmd.localhost/C%3A%5Cnotes%5Cimage.png?alts=' +
+      encodeURIComponent('C:\\notes\\backup.png')
+    expect(xmdAssetPaths(source)).toEqual(['C:\\notes\\image.png', 'C:\\notes\\backup.png'])
+    // 已映射的地址再次经过 resolveAssetURL 时应原样放行，而不是被当远程图拦截
+    expect(resolveAssetURL('/notes', 'http://xmd.localhost/abc.png')).toBe(
+      'http://xmd.localhost/abc.png',
+    )
+  })
+
   it('reuses complete ArrayBuffers and trims sliced byte views', () => {
     const full = new Uint8Array([1, 2, 3, 4])
     expect(blobPartFromBytes(full)).toBe(full.buffer)
