@@ -66,34 +66,45 @@ jobs:
 
       - name: Build user-facing update notes
         id: notes
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          PREVIOUS_TAG="$(git tag --merged HEAD --list 'v*' --sort=-v:refname | head -n 1 || true)"
-          if [ -n "${PREVIOUS_TAG}" ]; then
-            RANGE="${PREVIOUS_TAG}..HEAD"
-          else
-            RANGE="HEAD~20..HEAD"
-          fi
-
           NOTES_FILE="$(mktemp)"
-          while IFS= read -r SUBJECT; do
-            case "${SUBJECT}" in
-              feat:*|feat\(*\):*|fix:*|fix\(*\):*|perf:*|perf\(*\):*|refactor:*|refactor\(*\):*)
-                TITLE="$(printf '%s' "${SUBJECT}" | sed -E 's/^(feat|fix|perf|refactor)(\([^)]*\))?!?:[[:space:]]*//')"
-                [ -n "${TITLE}" ] && printf -- '- %s\n' "${TITLE}" >> "${NOTES_FILE}"
-                ;;
-            esac
-          done < <(git log "${RANGE}" --no-merges --pretty=format:'%s')
 
-          if [ ! -s "${NOTES_FILE}" ]; then
-            printf '%s\n' '- 常规体验优化与稳定性改进。' > "${NOTES_FILE}"
+          # 附注 tag 的正文优先：发布者打 tag 时写好的完整更新明细原样作为
+          # 发布说明；tag 没有附注正文时才回退到按提交标题自动生成。
+          git tag -l --format='%(contents:body)' "${TAG}" > "${NOTES_FILE}" 2>/dev/null || true
+
+          if ! grep -q '[^[:space:]]' "${NOTES_FILE}"; then
+            : > "${NOTES_FILE}"
+            echo '## 本次更新' >> "${NOTES_FILE}"
+            # sed -n 2p：跳过当前正在发布的 tag 本身，取上一个版本作为区间起点
+            PREVIOUS_TAG="$(git tag --merged HEAD --list 'v*' --sort=-v:refname | sed -n '2p' || true)"
+            if [ -n "${PREVIOUS_TAG}" ]; then
+              RANGE="${PREVIOUS_TAG}..HEAD"
+            else
+              RANGE="HEAD~20..HEAD"
+            fi
+
+            while IFS= read -r SUBJECT; do
+              case "${SUBJECT}" in
+                feat:*|feat\(*\):*|fix:*|fix\(*\):*|perf:*|perf\(*\):*|refactor:*|refactor\(*\):*)
+                  TITLE="$(printf '%s' "${SUBJECT}" | sed -E 's/^(feat|fix|perf|refactor)(\([^)]*\))?!?:[[:space:]]*//')"
+                  [ -n "${TITLE}" ] && printf -- '- %s\n' "${TITLE}" >> "${NOTES_FILE}"
+                  ;;
+              esac
+            done < <(git log "${RANGE}" --no-merges --pretty=format:'%s')
+
+            if [ "$(grep -c '^- ' "${NOTES_FILE}")" -eq 0 ]; then
+              printf '%s\n' '- 常规体验优化与稳定性改进。' >> "${NOTES_FILE}"
+            fi
           fi
 
           DELIMITER="RELEASE_NOTES_$(date +%s%N)"
           {
             echo "body<<${DELIMITER}"
-            echo '## 本次更新'
             cat "${NOTES_FILE}"
             echo "${DELIMITER}"
           } >> "${GITHUB_OUTPUT}"
