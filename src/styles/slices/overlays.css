@@ -114,6 +114,51 @@
   margin: 3px 4px;
 }
 
+/* ---------- 表格网格选择器（浮动面板） ---------- */
+.table-picker-panel {
+  position: fixed;
+  z-index: 200;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px 12px;
+  user-select: none;
+}
+
+.table-picker-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  min-width: 80px;
+}
+
+.table-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 16px);
+  grid-template-rows: repeat(8, 16px);
+  gap: 3px;
+}
+
+.table-picker-cell {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 60ms, border-color 60ms;
+}
+
+.table-picker-cell.active {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-color: var(--accent);
+}
+
+.table-picker-cell:hover {
+  border-color: var(--accent);
+}
+
 /* ---------- 命令面板 ---------- */
 .palette-backdrop {
   align-items: flex-start;
@@ -284,4 +329,3 @@
   align-items: center;
   gap: 7px;
 }
-

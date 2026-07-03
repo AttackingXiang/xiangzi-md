@@ -1,5 +1,7 @@
+use crate::domain::error::{AppError, AppResult};
 use crate::infrastructure::lifecycle::LifecycleState;
 use serde::Serialize;
+use std::path::PathBuf;
 use tauri::{AppHandle, State};
 
 #[derive(Debug, Serialize)]
@@ -28,4 +30,38 @@ pub fn frontend_ready(app: AppHandle, lifecycle: State<'_, LifecycleState>) {
 pub fn quit_confirmed(app: AppHandle, lifecycle: State<'_, LifecycleState>) {
     lifecycle.confirm_quit();
     app.exit(0);
+}
+
+/// Open a file using the OS default application.
+/// Implemented via platform shell commands so no Tauri plugin scope is needed.
+#[tauri::command]
+pub fn open_with_default(path: String) -> AppResult<()> {
+    let path = PathBuf::from(&path);
+    if !path.exists() {
+        return Err(AppError::new("file_not_found", "文件不存在"));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| AppError::new("open_failed", e.to_string()))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path.to_string_lossy()])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| AppError::new("open_failed", e.to_string()))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| AppError::new("open_failed", e.to_string()))
+    }
 }

@@ -102,17 +102,18 @@ export function useDraftRecovery({ tabs, getCurrentTabs, openRecoveredDraft }: D
     return () => window.clearInterval(interval)
   }, [snapshotDirtyTabs])
 
+  // Auto-close dialog when all drafts have been handled
+  useEffect(() => {
+    if (isOpen && drafts.length === 0) setOpen(false)
+  }, [isOpen, drafts.length])
+
   const recover = useCallback(
     async (summary: DraftSummary): Promise<void> => {
       try {
         const draft = await desktop.readDraft(summary.id)
         managedIdsRef.current.add(draft.id)
         openRecoveredDraft(draft)
-        setDrafts((current) => {
-          const remaining = current.filter((item) => item.id !== draft.id)
-          if (remaining.length === 0) setOpen(false)
-          return remaining
-        })
+        setDrafts((current) => current.filter((item) => item.id !== draft.id))
       } catch (error) {
         console.error('Draft recovery failed', error)
         window.alert(t('草稿恢复失败'))

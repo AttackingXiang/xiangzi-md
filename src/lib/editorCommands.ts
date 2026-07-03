@@ -10,7 +10,10 @@ import {
   deleteColumn,
   deleteRow,
   deleteTable,
+  findTable,
+  TableMap,
 } from '@milkdown/kit/prose/tables'
+import { undo, redo } from 'prosemirror-history'
 import { editorBridge } from './editorBridge'
 
 /** 用当前活跃编辑器执行一个由 schema 构造的命令 */
@@ -94,14 +97,109 @@ function insertTable(rows = 3, columns = 3): void {
   view.focus()
 }
 
+function distributeEqualColumns(): void {
+  const view = editorBridge.get()
+  if (!view) return
+  const table = findTable(view.state.selection.$from)
+  if (!table) return
+  const map = TableMap.get(table.node)
+  const numCols = map.width
+  const nodeEl = view.nodeDOM(table.pos)
+  const tableEl = (nodeEl instanceof Element ? nodeEl : null)?.querySelector('table')
+  const totalWidth = tableEl ? Math.floor(tableEl.getBoundingClientRect().width) : numCols * 120
+  const colWidth = Math.max(Math.floor(totalWidth / numCols), 48)
+
+  const seen = new Set<number>()
+  const tr = view.state.tr
+  for (const rawPos of map.map) {
+    if (seen.has(rawPos)) continue
+    seen.add(rawPos)
+    const docPos = table.start + rawPos
+    const node = view.state.doc.nodeAt(docPos)
+    if (!node) continue
+    const colwidths = Array<number>(node.attrs.colspan as number).fill(colWidth)
+    tr.setNodeMarkup(tr.mapping.map(docPos), null, { ...node.attrs, colwidth: colwidths })
+  }
+  editorBridge.markUserEdit()
+  view.dispatch(tr)
+  view.focus()
+}
+
+function smartColumnWidth(): void {
+  const view = editorBridge.get()
+  if (!view) return
+  const table = findTable(view.state.selection.$from)
+  if (!table) return
+  const map = TableMap.get(table.node)
+  const numCols = map.width
+  const nodeEl = view.nodeDOM(table.pos)
+  const tableEl = (nodeEl instanceof Element ? nodeEl : null)?.querySelector('table')
+
+  // Measure natural content widths from DOM (scrollWidth of each column's cells)
+  const naturalWidths = Array<number>(numCols).fill(80)
+  if (tableEl) {
+    const rows = Array.from(tableEl.querySelectorAll('tr'))
+    const colMaxes = Array<number>(numCols).fill(0)
+    rows.forEach(row => {
+      Array.from(row.querySelectorAll<HTMLElement>('th, td')).forEach((cell, ci) => {
+        if (ci < numCols) colMaxes[ci] = Math.max(colMaxes[ci], cell.scrollWidth)
+      })
+    })
+    const totalNatural = colMaxes.reduce((a, b) => a + b, 0)
+    const totalWidth = Math.floor(tableEl.getBoundingClientRect().width)
+    if (totalNatural > 0) {
+      for (let i = 0; i < numCols; i++) {
+        naturalWidths[i] = Math.max(Math.floor((colMaxes[i] / totalNatural) * totalWidth), 48)
+      }
+    }
+  }
+
+  const seen = new Set<number>()
+  const tr = view.state.tr
+  for (const rawPos of map.map) {
+    if (seen.has(rawPos)) continue
+    seen.add(rawPos)
+    const docPos = table.start + rawPos
+    const node = view.state.doc.nodeAt(docPos)
+    if (!node) continue
+    const colIdx = map.colCount(rawPos)
+    const colwidths = Array.from({ length: node.attrs.colspan as number }, (_, i) => naturalWidths[colIdx + i] ?? 80)
+    tr.setNodeMarkup(tr.mapping.map(docPos), null, { ...node.attrs, colwidth: colwidths })
+  }
+  editorBridge.markUserEdit()
+  view.dispatch(tr)
+  view.focus()
+}
+
 /** 是否有可用的所见即所得编辑器（源码模式下没有） */
 export function hasWysiwyg(): boolean {
   return !!editorBridge.get()
 }
 
+function insertLink(): void {
+  const view = editorBridge.get()
+  if (!view) return
+  const linkMark = view.state.schema.marks.link
+  if (!linkMark) return
+  const { from, to, empty } = view.state.selection
+  // If selection already has a link, remove it
+  if (view.state.doc.rangeHasMark(from, empty ? to + 1 : to, linkMark)) {
+    exec((s) => s.marks.link && toggleMark(s.marks.link))
+    return
+  }
+  const href = window.prompt(view.state.schema.marks.link ? 'URL' : 'URL')
+  if (!href?.trim()) return
+  const url = href.trim()
+  const tr = view.state.tr.addMark(from, empty ? from + 1 : to, linkMark.create({ href: url, title: '' }))
+  editorBridge.markUserEdit()
+  view.dispatch(tr)
+  view.focus()
+}
+
 export const editorCmd = {
   bold: () => exec((s) => s.marks.strong && toggleMark(s.marks.strong)),
   italic: () => exec((s) => s.marks.emphasis && toggleMark(s.marks.emphasis)),
+  strike: () => exec((s) => s.marks.strike && toggleMark(s.marks.strike)),
   inlineCode: () => exec((s) => s.marks.inlineCode && toggleMark(s.marks.inlineCode)),
   heading: (level: number) =>
     exec((s) => s.nodes.heading && setBlockType(s.nodes.heading, { level })),
@@ -111,7 +209,10 @@ export const editorCmd = {
   orderedList: () => exec((s) => s.nodes.ordered_list && wrapInList(s.nodes.ordered_list)),
   taskList,
   insertTable,
+  insertLink,
   quote: () => exec((s) => s.nodes.blockquote && wrapIn(s.nodes.blockquote)),
+  undo: () => execCommand(undo),
+  redo: () => execCommand(redo),
   addRowBefore: () => execCommand(addRowBefore),
   addRowAfter: () => execCommand(addRowAfter),
   addColumnBefore: () => execCommand(addColumnBefore),
@@ -119,6 +220,8 @@ export const editorCmd = {
   deleteRow: () => execCommand(deleteRow),
   deleteColumn: () => execCommand(deleteColumn),
   deleteTable: () => execCommand(deleteTable),
+  distributeEqualColumns,
+  smartColumnWidth,
 }
 
 /** 剪贴板操作（依赖编辑器内当前选区，菜单项以 mousedown preventDefault 保留选区） */

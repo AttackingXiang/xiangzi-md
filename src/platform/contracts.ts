@@ -47,7 +47,9 @@ export interface AppSettings {
   assetSearchPaths: string[]
   showAllFiles: boolean
   hiddenWorkspacePaths: string[]
+  hiddenNamePatterns: string[]
   allowRemoteImages: boolean
+  showToolbar: boolean
 }
 
 export interface OpenedFile {
@@ -146,6 +148,7 @@ export interface DesktopPort {
   deleteDraft(id: string): Promise<void>
   reveal(targetPath: string): Promise<void>
   openExternal(url: string): Promise<void>
+  openWithDefault(path: string): Promise<void>
   moveItem(sourcePath: string, targetDirPath: string): Promise<{ path: string; name: string }>
   searchInFolder(root: string, query: string): Promise<SearchResponse>
   cancelSearch(): Promise<void>

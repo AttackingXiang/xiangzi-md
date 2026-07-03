@@ -1,7 +1,11 @@
 import { desktop } from '../../platform'
 import { blobPartFromBytes, imageMimeType, xmdAssetPaths } from '../../lib/asset'
 import { mapWithConcurrencyLimit } from '../../lib/asyncPool'
-import { blobToDataUrl, exportOwnedObjectUrlAttribute, resizeImageBlob } from '../../lib/exportImageAsset'
+import {
+  blobToDataUrl,
+  exportOwnedObjectUrlAttribute,
+  resizeImageBlob,
+} from '../../lib/exportImageAsset'
 import { escapeHtmlText, serializeStyleSheets } from '../../lib/exportStyles'
 import { getLang } from '../../lib/i18n'
 import { imageDimensionsFromBytes, planExportImageMemory } from '../../lib/imageBudget'
@@ -56,284 +60,284 @@ const EXPORT_CONTENT_WIDTH = 800
 
 /** Build a self-contained HTML string that renders identically to the app view */
 export async function generateExportHTML(
-    title: string,
-    mdContent?: string,
-    deferImageDecoding = false,
+  title: string,
+  mdContent?: string,
+  deferImageDecoding = false,
 ): Promise<string | null> {
-    const pm =
-      document.querySelector<HTMLElement>('.milkdown .ProseMirror') ??
-      document.querySelector<HTMLElement>('.milkdown [contenteditable="true"]') ??
-      document.querySelector<HTMLElement>('.milkdown')
-    if (!pm) return null
+  const pm =
+    document.querySelector<HTMLElement>('.milkdown .ProseMirror') ??
+    document.querySelector<HTMLElement>('.milkdown [contenteditable="true"]') ??
+    document.querySelector<HTMLElement>('.milkdown')
+  if (!pm) return null
 
-    // ── Reading-view: pre-render all Mermaid diagrams ─────────────────────
-    // Parse markdown source to know the language of every code block (including
-    // lazy-not-yet-visible ones whose DOM hasn't been initialized yet).
-    const mdBlocks: Array<{ lang: string; code: string }> = []
-    if (mdContent) {
-      const re = /^```(\S*)\s*\n([\s\S]*?)^```/gm
-      let m: RegExpExecArray | null
-      while ((m = re.exec(mdContent)) !== null)
-        mdBlocks.push({ lang: m[1].toLowerCase(), code: m[2] })
-    }
+  // ── Reading-view: pre-render all Mermaid diagrams ─────────────────────
+  // Parse markdown source to know the language of every code block (including
+  // lazy-not-yet-visible ones whose DOM hasn't been initialized yet).
+  const mdBlocks: Array<{ lang: string; code: string }> = []
+  if (mdContent) {
+    const re = /^```(\S*)\s*\n([\s\S]*?)^```/gm
+    let m: RegExpExecArray | null
+    while ((m = re.exec(mdContent)) !== null)
+      mdBlocks.push({ lang: m[1].toLowerCase(), code: m[2] })
+  }
 
-    const liveBlocks = Array.from(pm.querySelectorAll<HTMLElement>('.milkdown-code-block'))
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-    const mermaidTheme = isDark ? 'dark' : 'default'
+  const liveBlocks = Array.from(pm.querySelectorAll<HTMLElement>('.milkdown-code-block'))
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  const mermaidTheme = isDark ? 'dark' : 'default'
 
-    const { EXPORT_CODE_STYLES, highlightCodeForExport } = await import('../../lib/exportSyntax')
+  const { EXPORT_CODE_STYLES, highlightCodeForExport } = await import('../../lib/exportSyntax')
 
-    // Replace editor-only CodeMirror DOM with deterministic reading-view HTML.
-    // This also covers lazy/off-screen blocks by falling back to Markdown source.
-    const blockRenders = await mapWithConcurrencyLimit(
-      liveBlocks,
-      EXPORT_WORK_CONCURRENCY,
-      async (block, i) => {
-        // Already rendered? extract the SVG from the live preview panel.
-        const mermaidPreviewEl = block.querySelector<HTMLElement>(
-          '.preview-panel .preview .mermaid-preview',
-        )
-        if (mermaidPreviewEl) {
-          const svgEl = mermaidPreviewEl.querySelector('svg') ?? mermaidPreviewEl
-          return { kind: 'mermaid' as const, html: svgEl.outerHTML }
-        }
-
-        // Determine language: from language-button (initialized block) or from parsed markdown.
-        const langBtn = block.querySelector<HTMLElement>('.tools .language-button')
-        const langFromBtn = langBtn?.textContent?.trim().toLowerCase() ?? ''
-        const lang = langFromBtn || (mdBlocks[i]?.lang ?? '')
-        // Get code text: prefer cm-editor lines, fall back to placeholder, then parsed markdown.
-        const cmLines = block.querySelectorAll<HTMLElement>('.cm-line')
-        const codeFromDOM =
-          cmLines.length > 0
-            ? Array.from(cmLines)
-                .map((l) => l.textContent ?? '')
-                .join('\n')
-            : (block.querySelector<HTMLElement>('.milkdown-code-block-placeholder code')
-                ?.textContent ?? '')
-        const code = codeFromDOM.trim().length > 0 ? codeFromDOM : (mdBlocks[i]?.code ?? '')
-        if (lang !== 'mermaid') {
-          return {
-            kind: 'code' as const,
-            html: await highlightCodeForExport(code, lang),
-            language: lang,
-          }
-        }
-        if (!code.trim()) return { kind: 'code' as const, html: '', language: lang }
-
-        try {
-          const mermaid = (await import('mermaid')).default
-          mermaid.initialize({ startOnLoad: false, theme: mermaidTheme, securityLevel: 'strict' })
-          const id = 'mmd-export-' + Math.random().toString(36).slice(2)
-          const { svg } = await mermaid.render(id, code)
-          return { kind: 'mermaid' as const, html: svg }
-        } catch {
-          return {
-            kind: 'code' as const,
-            html: await highlightCodeForExport(code, lang),
-            language: lang,
-          }
-        }
-      },
-    )
-
-    // ── Clone and clean ───────────────────────────────────────────────────
-    const clone = pm.cloneNode(true) as HTMLElement
-
-    // Strip Milkdown UI decorations AND code-block toolbar (.tools).
-    const MILKDOWN_UI = [
-      '.milkdown-toolbar',
-      '.milkdown-block-handle',
-      '.milkdown-slash-menu',
-      '.milkdown-top-bar',
-      '.milkdown-ai-diff-actions',
-      '.milkdown-ai-instruction',
-      '.milkdown-ai-streaming',
-      '.milkdown-latex-inline-edit',
-      '.milkdown-link-edit',
-      '.milkdown-link-preview',
-      '.milkdown-diff-controls',
-      '.milkdown-diff-controls-block',
-      '.handle',
-      '.drag-preview',
-      '.tools', // code block top-bar: language picker + copy / toggle buttons
-      '.fold-btn', // heading fold toggle injected by headingFoldPlugin
-    ].join(', ')
-    clone.querySelectorAll(MILKDOWN_UI).forEach((el) => el.remove())
-    clone.querySelectorAll('.selectedCell, .ProseMirror-selectednode').forEach((el) => {
-      el.classList.remove('selectedCell', 'ProseMirror-selectednode')
-    })
-    clone.removeAttribute('contenteditable')
-    clone.querySelectorAll('[contenteditable]').forEach((el) => {
-      el.removeAttribute('contenteditable')
-    })
-    clone.querySelectorAll('[spellcheck]').forEach((el) => {
-      el.removeAttribute('spellcheck')
-    })
-    // html2canvas/WebKit can calculate different baselines for Latin and CJK
-    // glyph runs inside the same heading. Materialize those runs as flex
-    // items so their visual alignment is deterministic in image exports.
-    normalizeExportHeadings(clone)
-
-    // Reading-view code block processing.
-    const cloneBlocks = Array.from(clone.querySelectorAll<HTMLElement>('.milkdown-code-block'))
-    cloneBlocks.forEach((block, i) => {
-      const render = blockRenders[i]
-      if (render?.kind === 'mermaid') {
-        // Replace the entire code block with the static SVG.
-        const wrapper = document.createElement('div')
-        wrapper.className = 'mermaid-export'
-        wrapper.style.cssText = 'margin:16px 0;overflow:auto;text-align:center'
-        wrapper.innerHTML = render.html
-        block.replaceWith(wrapper)
-      } else {
-        const pre = document.createElement('pre')
-        pre.className = 'xmd-export-code'
-        const code = document.createElement('code')
-        if (render?.language) code.dataset.language = render.language
-        code.innerHTML = render?.html ?? ''
-        pre.appendChild(code)
-        block.replaceWith(pre)
+  // Replace editor-only CodeMirror DOM with deterministic reading-view HTML.
+  // This also covers lazy/off-screen blocks by falling back to Markdown source.
+  const blockRenders = await mapWithConcurrencyLimit(
+    liveBlocks,
+    EXPORT_WORK_CONCURRENCY,
+    async (block, i) => {
+      // Already rendered? extract the SVG from the live preview panel.
+      const mermaidPreviewEl = block.querySelector<HTMLElement>(
+        '.preview-panel .preview .mermaid-preview',
+      )
+      if (mermaidPreviewEl) {
+        const svgEl = mermaidPreviewEl.querySelector('svg') ?? mermaidPreviewEl
+        return { kind: 'mermaid' as const, html: svgEl.outerHTML }
       }
-    })
 
-    // Inline local images without a compressed-total hard limit. For PDF/image
-    // exports, plan from decoded pixels and resize only the temporary copy.
-    const imgs = Array.from(clone.querySelectorAll<HTMLImageElement>('img[src]'))
-    const liveImgs = Array.from(pm.querySelectorAll<HTMLImageElement>('img[src]'))
-    const localImages = (
-      await mapWithConcurrencyLimit(
-        imgs,
-        EXPORT_WORK_CONCURRENCY,
-        async (image, index): Promise<LocalExportImage | null> => {
-          const source = image.getAttribute('src') ?? ''
-          const paths = xmdAssetPaths(source)
-          if (paths.length === 0) return null
-
-          let failure: unknown
-          for (const path of paths) {
-            try {
-              const bytes = await desktop.readBinaryFile(path, MAX_SINGLE_EXPORT_IMAGE_BYTES)
-              const blob = new Blob([blobPartFromBytes(bytes)], { type: imageMimeType(path) })
-              const parsed = imageDimensionsFromBytes(bytes)
-              const liveImage =
-                liveImgs[index]?.getAttribute('src') === source
-                  ? liveImgs[index]
-                  : liveImgs.find((candidate) => candidate.getAttribute('src') === source)
-              const width = liveImage?.naturalWidth || parsed?.width || null
-              const height = liveImage?.naturalHeight || parsed?.height || null
-              const renderedWidth = liveImage?.getBoundingClientRect().width ?? 0
-              return {
-                image,
-                blob,
-                width,
-                height,
-                displayWidth: Math.min(
-                  EXPORT_CONTENT_WIDTH,
-                  Math.max(1, renderedWidth || width || EXPORT_CONTENT_WIDTH),
-                ),
-              }
-            } catch (error) {
-              failure = error
-            }
-          }
-          throw failure instanceof Error ? failure : new Error(`无法读取导出图片：${paths[0]}`)
-        },
-      )
-    ).filter((image): image is LocalExportImage => image !== null)
-
-    const plannedDimensions = new Map<HTMLImageElement, { width: number; height: number }>()
-    if (deferImageDecoding) {
-      const plannable = localImages.filter(
-        (image): image is LocalExportImage & { width: number; height: number } =>
-          image.width !== null && image.height !== null,
-      )
-      const plan = planExportImageMemory(
-        plannable.map((image) => ({
-          width: image.width,
-          height: image.height,
-          displayWidth: image.displayWidth,
-        })),
-        {
-          documentHeight: Math.max(pm.scrollHeight, pm.getBoundingClientRect().height),
-        },
-      )
-      plan.images.forEach((dimensions, index) => {
-        plannedDimensions.set(plannable[index].image, dimensions)
-      })
-
-      if (plan.overBudget) {
-        const estimatedMb = Math.ceil(plan.estimatedPeakBytes / (1024 * 1024))
-        const proceed = await desktop.confirm(
-          getLang() === 'en'
-            ? `This image-heavy export may use about ${estimatedMb} MB of memory. Images will be optimized to their visible export size. Continue?`
-            : `此多图文档预计导出峰值约 ${estimatedMb} MB。图片会按导出可见尺寸自动优化，是否继续？`,
-          getLang() === 'en' ? 'Large export' : '大型导出任务',
-          getLang() === 'en' ? 'Continue' : '继续导出',
-          getLang() === 'en' ? 'Cancel' : '取消',
-        )
-        if (!proceed) return null
+      // Determine language: from language-button (initialized block) or from parsed markdown.
+      const langBtn = block.querySelector<HTMLElement>('.tools .language-button')
+      const langFromBtn = langBtn?.textContent?.trim().toLowerCase() ?? ''
+      const lang = langFromBtn || (mdBlocks[i]?.lang ?? '')
+      // Get code text: prefer cm-editor lines, fall back to placeholder, then parsed markdown.
+      const cmLines = block.querySelectorAll<HTMLElement>('.cm-line')
+      const codeFromDOM =
+        cmLines.length > 0
+          ? Array.from(cmLines)
+              .map((l) => l.textContent ?? '')
+              .join('\n')
+          : (block.querySelector<HTMLElement>('.milkdown-code-block-placeholder code')
+              ?.textContent ?? '')
+      const code = codeFromDOM.trim().length > 0 ? codeFromDOM : (mdBlocks[i]?.code ?? '')
+      if (lang !== 'mermaid') {
+        return {
+          kind: 'code' as const,
+          html: await highlightCodeForExport(code, lang),
+          language: lang,
+        }
       }
-    }
+      if (!code.trim()) return { kind: 'code' as const, html: '', language: lang }
 
+      try {
+        const mermaid = (await import('mermaid')).default
+        mermaid.initialize({ startOnLoad: false, theme: mermaidTheme, securityLevel: 'strict' })
+        const id = 'mmd-export-' + Math.random().toString(36).slice(2)
+        const { svg } = await mermaid.render(id, code)
+        return { kind: 'mermaid' as const, html: svg }
+      } catch {
+        return {
+          kind: 'code' as const,
+          html: await highlightCodeForExport(code, lang),
+          language: lang,
+        }
+      }
+    },
+  )
+
+  // ── Clone and clean ───────────────────────────────────────────────────
+  const clone = pm.cloneNode(true) as HTMLElement
+
+  // Strip Milkdown UI decorations AND code-block toolbar (.tools).
+  const MILKDOWN_UI = [
+    '.milkdown-toolbar',
+    '.milkdown-block-handle',
+    '.milkdown-slash-menu',
+    '.milkdown-top-bar',
+    '.milkdown-ai-diff-actions',
+    '.milkdown-ai-instruction',
+    '.milkdown-ai-streaming',
+    '.milkdown-latex-inline-edit',
+    '.milkdown-link-edit',
+    '.milkdown-link-preview',
+    '.milkdown-diff-controls',
+    '.milkdown-diff-controls-block',
+    '.handle',
+    '.drag-preview',
+    '.tools', // code block top-bar: language picker + copy / toggle buttons
+    '.fold-btn', // heading fold toggle injected by headingFoldPlugin
+  ].join(', ')
+  clone.querySelectorAll(MILKDOWN_UI).forEach((el) => el.remove())
+  clone.querySelectorAll('.selectedCell, .ProseMirror-selectednode').forEach((el) => {
+    el.classList.remove('selectedCell', 'ProseMirror-selectednode')
+  })
+  clone.removeAttribute('contenteditable')
+  clone.querySelectorAll('[contenteditable]').forEach((el) => {
+    el.removeAttribute('contenteditable')
+  })
+  clone.querySelectorAll('[spellcheck]').forEach((el) => {
+    el.removeAttribute('spellcheck')
+  })
+  // html2canvas/WebKit can calculate different baselines for Latin and CJK
+  // glyph runs inside the same heading. Materialize those runs as flex
+  // items so their visual alignment is deterministic in image exports.
+  normalizeExportHeadings(clone)
+
+  // Reading-view code block processing.
+  const cloneBlocks = Array.from(clone.querySelectorAll<HTMLElement>('.milkdown-code-block'))
+  cloneBlocks.forEach((block, i) => {
+    const render = blockRenders[i]
+    if (render?.kind === 'mermaid') {
+      // Replace the entire code block with the static SVG.
+      const wrapper = document.createElement('div')
+      wrapper.className = 'mermaid-export'
+      wrapper.style.cssText = 'margin:16px 0;overflow:auto;text-align:center'
+      wrapper.innerHTML = render.html
+      block.replaceWith(wrapper)
+    } else {
+      const pre = document.createElement('pre')
+      pre.className = 'xmd-export-code'
+      const code = document.createElement('code')
+      if (render?.language) code.dataset.language = render.language
+      code.innerHTML = render?.html ?? ''
+      pre.appendChild(code)
+      block.replaceWith(pre)
+    }
+  })
+
+  // Inline local images without a compressed-total hard limit. For PDF/image
+  // exports, plan from decoded pixels and resize only the temporary copy.
+  const imgs = Array.from(clone.querySelectorAll<HTMLImageElement>('img[src]'))
+  const liveImgs = Array.from(pm.querySelectorAll<HTMLImageElement>('img[src]'))
+  const localImages = (
     await mapWithConcurrencyLimit(
-      localImages,
-      deferImageDecoding ? EXPORT_RESIZE_CONCURRENCY : EXPORT_WORK_CONCURRENCY,
-      async (localImage) => {
-        const target = plannedDimensions.get(localImage.image)
-        let output = localImage.blob
-        if (
-          target &&
-          localImage.width !== null &&
-          localImage.height !== null &&
-          (target.width < localImage.width || target.height < localImage.height)
-        ) {
-          output = await resizeImageBlob(
-            localImage.blob,
-            { width: localImage.width, height: localImage.height },
-            target,
-          )
+      imgs,
+      EXPORT_WORK_CONCURRENCY,
+      async (image, index): Promise<LocalExportImage | null> => {
+        const source = image.getAttribute('src') ?? ''
+        const paths = xmdAssetPaths(source)
+        if (paths.length === 0) return null
+
+        let failure: unknown
+        for (const path of paths) {
+          try {
+            const bytes = await desktop.readBinaryFile(path, MAX_SINGLE_EXPORT_IMAGE_BYTES)
+            const blob = new Blob([blobPartFromBytes(bytes)], { type: imageMimeType(path) })
+            const parsed = imageDimensionsFromBytes(bytes)
+            const liveImage =
+              liveImgs[index]?.getAttribute('src') === source
+                ? liveImgs[index]
+                : liveImgs.find((candidate) => candidate.getAttribute('src') === source)
+            const width = liveImage?.naturalWidth || parsed?.width || null
+            const height = liveImage?.naturalHeight || parsed?.height || null
+            const renderedWidth = liveImage?.getBoundingClientRect().width ?? 0
+            return {
+              image,
+              blob,
+              width,
+              height,
+              displayWidth: Math.min(
+                EXPORT_CONTENT_WIDTH,
+                Math.max(1, renderedWidth || width || EXPORT_CONTENT_WIDTH),
+              ),
+            }
+          } catch (error) {
+            failure = error
+          }
         }
-        if (deferImageDecoding) {
-          const objectUrl = URL.createObjectURL(output)
-          localImage.image.setAttribute('src', objectUrl)
-          localImage.image.setAttribute(exportOwnedObjectUrlAttribute(), objectUrl)
-        } else {
-          localImage.image.setAttribute('src', await blobToDataUrl(output))
-        }
+        throw failure instanceof Error ? failure : new Error(`无法读取导出图片：${paths[0]}`)
       },
     )
+  ).filter((image): image is LocalExportImage => image !== null)
 
-    // Keep every source in the export document, but defer decoding so the
-    // isolated renderer can load images one at a time.
-    if (deferImageDecoding) {
-      imgs.forEach((img) => {
-        const source = img.getAttribute('src')
-        if (!source) return
-        // Export frames are positioned far off-screen. WebKit will not load
-        // lazy images there, so make deferred export images explicitly eager.
-        img.setAttribute('loading', 'eager')
-        img.setAttribute('decoding', 'sync')
-        img.setAttribute('data-xmd-export-src', source)
-        img.removeAttribute('src')
-      })
+  const plannedDimensions = new Map<HTMLImageElement, { width: number; height: number }>()
+  if (deferImageDecoding) {
+    const plannable = localImages.filter(
+      (image): image is LocalExportImage & { width: number; height: number } =>
+        image.width !== null && image.height !== null,
+    )
+    const plan = planExportImageMemory(
+      plannable.map((image) => ({
+        width: image.width,
+        height: image.height,
+        displayWidth: image.displayWidth,
+      })),
+      {
+        documentHeight: Math.max(pm.scrollHeight, pm.getBoundingClientRect().height),
+      },
+    )
+    plan.images.forEach((dimensions, index) => {
+      plannedDimensions.set(plannable[index].image, dimensions)
+    })
+
+    if (plan.overBudget) {
+      const estimatedMb = Math.ceil(plan.estimatedPeakBytes / (1024 * 1024))
+      const proceed = await desktop.confirm(
+        getLang() === 'en'
+          ? `This image-heavy export may use about ${estimatedMb} MB of memory. Images will be optimized to their visible export size. Continue?`
+          : `此多图文档预计导出峰值约 ${estimatedMb} MB。图片会按导出可见尺寸自动优化，是否继续？`,
+        getLang() === 'en' ? 'Large export' : '大型导出任务',
+        getLang() === 'en' ? 'Continue' : '继续导出',
+        getLang() === 'en' ? 'Cancel' : '取消',
+      )
+      if (!proceed) return null
     }
+  }
 
-    // Production CSS is emitted as <link rel="stylesheet"> by Vite, while
-    // custom themes and some editor features use <style>. Reading cssRules
-    // captures both forms; selecting only <style> drops Crepe's list/code CSS.
-    const liveStyles = serializeStyleSheets(Array.from(document.styleSheets))
-    const theme = document.documentElement.getAttribute('data-theme') ?? ''
-    const headingNumber = document.documentElement.getAttribute('data-heading-number') ?? ''
-    const htmlAttrs = [
-      'lang="zh-CN"',
-      theme ? `data-theme="${escapeHtmlText(theme)}"` : '',
-      headingNumber ? `data-heading-number="${escapeHtmlText(headingNumber)}"` : '',
-    ]
-      .filter(Boolean)
-      .join(' ')
+  await mapWithConcurrencyLimit(
+    localImages,
+    deferImageDecoding ? EXPORT_RESIZE_CONCURRENCY : EXPORT_WORK_CONCURRENCY,
+    async (localImage) => {
+      const target = plannedDimensions.get(localImage.image)
+      let output = localImage.blob
+      if (
+        target &&
+        localImage.width !== null &&
+        localImage.height !== null &&
+        (target.width < localImage.width || target.height < localImage.height)
+      ) {
+        output = await resizeImageBlob(
+          localImage.blob,
+          { width: localImage.width, height: localImage.height },
+          target,
+        )
+      }
+      if (deferImageDecoding) {
+        const objectUrl = URL.createObjectURL(output)
+        localImage.image.setAttribute('src', objectUrl)
+        localImage.image.setAttribute(exportOwnedObjectUrlAttribute(), objectUrl)
+      } else {
+        localImage.image.setAttribute('src', await blobToDataUrl(output))
+      }
+    },
+  )
 
-    return `<!doctype html>
+  // Keep every source in the export document, but defer decoding so the
+  // isolated renderer can load images one at a time.
+  if (deferImageDecoding) {
+    imgs.forEach((img) => {
+      const source = img.getAttribute('src')
+      if (!source) return
+      // Export frames are positioned far off-screen. WebKit will not load
+      // lazy images there, so make deferred export images explicitly eager.
+      img.setAttribute('loading', 'eager')
+      img.setAttribute('decoding', 'sync')
+      img.setAttribute('data-xmd-export-src', source)
+      img.removeAttribute('src')
+    })
+  }
+
+  // Production CSS is emitted as <link rel="stylesheet"> by Vite, while
+  // custom themes and some editor features use <style>. Reading cssRules
+  // captures both forms; selecting only <style> drops Crepe's list/code CSS.
+  const liveStyles = serializeStyleSheets(Array.from(document.styleSheets))
+  const theme = document.documentElement.getAttribute('data-theme') ?? ''
+  const headingNumber = document.documentElement.getAttribute('data-heading-number') ?? ''
+  const htmlAttrs = [
+    'lang="zh-CN"',
+    theme ? `data-theme="${escapeHtmlText(theme)}"` : '',
+    headingNumber ? `data-heading-number="${escapeHtmlText(headingNumber)}"` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  return `<!doctype html>
 <html ${htmlAttrs}><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>${escapeHtmlText(title)}</title>
 <style id="xmd-export-runtime-styles">
 ${liveStyles}

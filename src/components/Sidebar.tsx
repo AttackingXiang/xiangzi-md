@@ -3,11 +3,13 @@ import {
   ChevronRight,
   FolderOpen,
   RefreshCw,
+  RotateCcw,
   Search,
   Settings as SettingsIcon,
   Star,
   Folder,
 } from 'lucide-react'
+import { useCallback, type RefObject } from 'react'
 import FileTree from './FileTree'
 import type { FileNode, Folder as FolderType } from '../types'
 import { t } from '../lib/i18n'
@@ -40,6 +42,10 @@ interface Props {
   onRootContext: (x: number, y: number) => void
   onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
   reloadKey: number
+  /** Ref to the Set of expanded folder paths — persists across tree remounts. */
+  expandedPathsRef: RefObject<Set<string>>
+  canUndo: boolean
+  onUndo: () => void
   style?: React.CSSProperties
 }
 
@@ -67,16 +73,47 @@ export default function Sidebar({
   onRootContext,
   onMove,
   reloadKey,
+  expandedPathsRef,
+  canUndo,
+  onUndo,
   style,
 }: Props): JSX.Element {
   const isFav = folder ? favorites.includes(folder.root) : false
   const hideFolderNames = hideAttachmentFolders && attachmentFolder ? [attachmentFolder] : []
 
+  const handleToggleExpanded = useCallback((path: string, expanded: boolean) => {
+    if (expanded) expandedPathsRef.current?.add(path)
+    else expandedPathsRef.current?.delete(path)
+  }, [expandedPathsRef])
+
   return (
     <aside className="sidebar" style={style}>
       <div className="sidebar-header">
-        <span className="sidebar-title">{folder ? folder.name : t('资源管理器')}</span>
+        <span
+          className="sidebar-title"
+          title={folder ? folder.root : undefined}
+          onContextMenu={
+            folder
+              ? (event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onRootContext(event.clientX, event.clientY)
+                }
+              : undefined
+          }
+        >
+          {folder ? folder.name : t('资源管理器')}
+        </span>
         <div className="sidebar-actions">
+          {folder && canUndo && (
+            <button
+              className="icon-btn sm"
+              title={t('撤销上次操作')}
+              onClick={onUndo}
+            >
+              <RotateCcw size={15} />
+            </button>
+          )}
           {folder && (
             <button
               className={`icon-btn sm${isFav ? ' active' : ''}`}
@@ -158,7 +195,10 @@ export default function Sidebar({
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}
             onMove={onMove}
+            rootPath={folder.root}
             depth={0}
+            expandedPaths={expandedPathsRef.current ?? new Set()}
+            onToggleExpanded={handleToggleExpanded}
           />
         ) : (
           <div className="sidebar-empty">

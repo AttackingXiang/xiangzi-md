@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { desktop } from '../platform'
 import { getLang, t } from '../lib/i18n'
 import { revealLocationKey } from '../lib/platform'
@@ -7,6 +7,10 @@ import { replaceMovedPath } from '../lib/treeDrag'
 import { removeWorkspacePath } from '../lib/workspaceRemoval'
 import type { FileNode, Folder, Tab } from '../types'
 import type { MenuItem } from '../components/ContextMenu'
+
+export type UndoItem =
+  | { type: 'rename'; fromPath: string; toPath: string; toName: string }
+  | { type: 'move'; fromPath: string; toDir: string; toName: string }
 
 interface Deps {
   folder: Folder | null
@@ -46,6 +50,32 @@ export function useTreeOps({
   setInputDialog,
 }: Deps) {
   const [treeKey, setTreeKey] = useState(0)
+
+  // Persists expanded folder paths across tree remounts (refresh/rename/move).
+  const expandedPathsRef = useRef<Set<string>>(new Set())
+
+  const undoStack = useRef<UndoItem[]>([])
+  const [canUndo, setCanUndo] = useState(false)
+
+  const pushUndo = useCallback((item: UndoItem) => {
+    undoStack.current.push(item)
+    setCanUndo(true)
+  }, [])
+
+  /** Update expandedPaths when a path moves (rename or file-system move). */
+  const updateExpandedAfterMove = useCallback((oldPath: string, newPath: string): void => {
+    const updated = new Set<string>()
+    for (const p of expandedPathsRef.current) {
+      if (p === oldPath) {
+        updated.add(newPath)
+      } else if (p.startsWith(oldPath + '/') || p.startsWith(oldPath + '\\')) {
+        updated.add(newPath + p.slice(oldPath.length))
+      } else {
+        updated.add(p)
+      }
+    }
+    expandedPathsRef.current = updated
+  }, [])
 
   const refreshTree = useCallback(async () => {
     const root = folder?.root
@@ -108,6 +138,7 @@ export function useTreeOps({
         onSubmit: async (name) => {
           try {
             const res = await desktop.rename(node.path, name)
+            updateExpandedAfterMove(node.path, res.path)
             setTabs((current) =>
               current.map((tab) => {
                 if (!tab.path) return tab
@@ -117,6 +148,7 @@ export function useTreeOps({
                   : { ...tab, path: nextPath, name: baseName(nextPath) || res.name }
               }),
             )
+            pushUndo({ type: 'rename', fromPath: res.path, toPath: node.path, toName: node.name })
             await refreshTree()
           } catch {
             window.alert(t('重命名失败'))
@@ -124,8 +156,45 @@ export function useTreeOps({
         },
       })
     },
-    [refreshTree, setInputDialog, setTabs],
+    [refreshTree, setInputDialog, setTabs, updateExpandedAfterMove, pushUndo],
   )
+
+  const undoLastOp = useCallback(async () => {
+    const item = undoStack.current.pop()
+    if (!item) return
+    setCanUndo(undoStack.current.length > 0)
+
+    try {
+      if (item.type === 'rename') {
+        const res = await desktop.rename(item.fromPath, item.toName)
+        updateExpandedAfterMove(item.fromPath, res.path)
+        setTabs((current) =>
+          current.map((tab) => {
+            if (!tab.path) return tab
+            const nextPath = replaceMovedPath(tab.path, item.fromPath, res.path)
+            return nextPath === tab.path
+              ? tab
+              : { ...tab, path: nextPath, name: baseName(nextPath) || res.name }
+          }),
+        )
+      } else if (item.type === 'move') {
+        const res = await desktop.moveItem(item.fromPath, item.toDir)
+        updateExpandedAfterMove(item.fromPath, res.path)
+        setTabs((current) =>
+          current.map((tab) => {
+            if (!tab.path) return tab
+            const nextPath = replaceMovedPath(tab.path, item.fromPath, res.path)
+            return nextPath === tab.path
+              ? tab
+              : { ...tab, path: nextPath, name: baseName(nextPath) || res.name }
+          }),
+        )
+      }
+      await refreshTree()
+    } catch {
+      window.alert(t('撤销失败'))
+    }
+  }, [refreshTree, setTabs, updateExpandedAfterMove])
 
   const deleteNode = useCallback(
     async (node: FileNode) => {
@@ -157,6 +226,9 @@ export function useTreeOps({
         items.push({ label: t('新建文件夹'), onClick: () => createFolderIn(node.path) })
       } else if (node.openable) {
         items.push({ label: t('打开'), onClick: () => openPath(node.path, node.name) })
+        items.push({ label: t('用默认应用打开'), onClick: () => void desktop.openWithDefault(node.path) })
+      } else {
+        items.push({ label: t('用默认应用打开'), onClick: () => void desktop.openWithDefault(node.path) })
       }
       items.push({ label: t('重命名'), onClick: () => renameNode(node), separatorBefore: true })
       items.push({ label: t(revealLocationKey()), onClick: () => desktop.reveal(node.path) })
@@ -222,5 +294,10 @@ export function useTreeOps({
     deleteNode,
     openNodeContext,
     openRootContext,
+    expandedPathsRef,
+    updateExpandedAfterMove,
+    pushUndo,
+    canUndo,
+    undoLastOp,
   }
 }

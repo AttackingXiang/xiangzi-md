@@ -16,12 +16,14 @@ import SourceEditor from './components/SourceEditor'
 const Editor = lazy(() => import('./components/Editor'))
 const Settings = lazy(() => import('./components/Settings'))
 const UpdateNotice = lazy(() => import('./components/UpdateNotice'))
+const EditorToolbar = lazy(() => import('./components/EditorToolbar'))
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
 import Outline from './components/Outline'
 import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
 import ContextMenu, { type MenuItem } from './components/ContextMenu'
+import TableGridPicker from './components/TableGridPicker'
 import InputDialog from './components/InputDialog'
 import ExportCompleteDialog from './components/ExportCompleteDialog'
 import DraftRecoveryDialog from './components/DraftRecoveryDialog'
@@ -38,6 +40,7 @@ import { revealLocationKey } from './lib/platform'
 import { replaceMovedPath } from './lib/treeDrag'
 import { parseOutline } from './lib/outline'
 import { editorBridge } from './lib/editorBridge'
+import { tablePickerBridge } from './lib/tablePickerBridge'
 import { TextSelection } from '@milkdown/kit/prose/state'
 import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
@@ -371,6 +374,15 @@ export default function App(): JSX.Element {
     preserveSelection?: boolean
   } | null>(null)
   const openEditorContext = useEditorContextMenu(setCtxMenu)
+  const [tablePicker, setTablePicker] = useState<{
+    x: number
+    y: number
+    onInsert: (r: number, c: number) => void
+  } | null>(null)
+  useEffect(() => {
+    tablePickerBridge.setHandler((x, y, onInsert) => setTablePicker({ x, y, onInsert }))
+    return () => tablePickerBridge.setHandler(null)
+  }, [])
   const [inputDialog, setInputDialog] = useState<{
     title: string
     initial?: string
@@ -541,7 +553,17 @@ export default function App(): JSX.Element {
   )
 
   // ── File tree ops ──────────────────────────────────────────────────────────
-  const { treeKey, refreshTree, openNodeContext, openRootContext } = useTreeOps({
+  const {
+    treeKey,
+    refreshTree,
+    openNodeContext,
+    openRootContext,
+    expandedPathsRef,
+    updateExpandedAfterMove,
+    pushUndo,
+    canUndo,
+    undoLastOp,
+  } = useTreeOps({
     folder,
     setFolder: setFolderUpdater,
     openPath,
@@ -660,9 +682,11 @@ export default function App(): JSX.Element {
   // ── File tree move (drag-and-drop) ────────────────────────────────────────
   const moveTreeItem = useCallback(
     async (sourcePath: string, targetDirPath: string) => {
+      const originalDir = dirName(sourcePath)
+      const originalName = baseName(sourcePath)
       try {
         const res = await desktop.moveItem(sourcePath, targetDirPath)
-        // Update any open tabs whose path was inside the moved item
+        updateExpandedAfterMove(sourcePath, res.path)
         setTabs((prev) =>
           prev.map((tab) => {
             if (!tab.path) return tab
@@ -672,14 +696,33 @@ export default function App(): JSX.Element {
               : { ...tab, path: newPath, name: baseName(newPath) || res.name }
           }),
         )
+        if (originalDir && originalDir !== targetDirPath) {
+          pushUndo({ type: 'move', fromPath: res.path, toDir: originalDir, toName: originalName })
+        }
         await refreshTree()
         requestReveal(res.path)
       } catch (err) {
         void desktop.notify(t('移动失败：\n') + (err as Error).message)
       }
     },
-    [refreshTree, requestReveal, setTabs],
+    [refreshTree, requestReveal, setTabs, updateExpandedAfterMove, pushUndo],
   )
+
+  // ── File tree Cmd+Z ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+      const isUndo = isMac ? (e.metaKey && !e.shiftKey && e.key === 'z') : (e.ctrlKey && !e.shiftKey && e.key === 'z')
+      if (!isUndo || !canUndo) return
+      // Let the editor handle its own undo when focused.
+      const active = document.activeElement
+      if (active && (active.closest('.milkdown') || active.closest('.cm-editor'))) return
+      e.preventDefault()
+      void undoLastOp()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [canUndo, undoLastOp])
 
   const { paletteFiles, paletteCommands, dispatchShortcut } = useAppCommands({
     folder,
@@ -733,45 +776,49 @@ export default function App(): JSX.Element {
 
   return (
     <div className="app">
-      {sidebarVisible &&
-        (searchView && folder ? (
-          <SearchPanel
-            root={folder.root}
-            onOpenResult={openSearchResult}
-            onBack={() => setSearchView(false)}
-          />
-        ) : (
-          <Sidebar
-            folder={folder}
-            activePath={activeTab?.path ?? null}
-            favorites={settings.favorites}
-            favoritesCollapsed={settings.favoritesCollapsed}
-            favoriteLabels={settings.favoriteLabels}
-            recentFiles={settings.recentFiles}
-            revealPath={revealPath}
-            revealRequestId={revealRequestId}
-            onRevealComplete={handleRevealComplete}
-            hideAttachmentFolders={settings.hideAttachmentFolders ?? false}
-            attachmentFolder={settings.attachmentFolder || 'assets'}
-            onOpenFolder={openFolder}
-            onOpenFolderPath={openFolderByPath}
-            onOpenFile={openPath}
-            onOpenSettings={() => setSettingsSection('appearance')}
-            onOpenSearch={() => setSearchView(true)}
-            onToggleFavorite={toggleFavorite}
-            onFavoritesCollapsedChange={setFavoritesCollapsed}
-            onFavoriteContext={openFavoriteContext}
-            onRefresh={refreshTree}
-            onNodeContext={openNodeContext}
-            onRootContext={openRootContext}
-            onMove={moveTreeItem}
-            reloadKey={treeKey}
-            style={{ width: sidebarWidth, minWidth: sidebarWidth }}
-          />
-        ))}
-
-      {sidebarVisible && !searchView && (
-        <div className="resize-handle" onMouseDown={startSidebarResize} />
+      {sidebarVisible && (
+        <div className="sidebar-wrap" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+          {searchView && folder ? (
+            <SearchPanel
+              root={folder.root}
+              onOpenResult={openSearchResult}
+              onBack={() => setSearchView(false)}
+            />
+          ) : (
+            <Sidebar
+              folder={folder}
+              activePath={activeTab?.path ?? null}
+              favorites={settings.favorites}
+              favoritesCollapsed={settings.favoritesCollapsed}
+              favoriteLabels={settings.favoriteLabels}
+              recentFiles={settings.recentFiles}
+              revealPath={revealPath}
+              revealRequestId={revealRequestId}
+              onRevealComplete={handleRevealComplete}
+              hideAttachmentFolders={settings.hideAttachmentFolders ?? false}
+              attachmentFolder={settings.attachmentFolder || 'assets'}
+              onOpenFolder={openFolder}
+              onOpenFolderPath={openFolderByPath}
+              onOpenFile={openPath}
+              onOpenSettings={() => setSettingsSection('appearance')}
+              onOpenSearch={() => setSearchView(true)}
+              onToggleFavorite={toggleFavorite}
+              onFavoritesCollapsedChange={setFavoritesCollapsed}
+              onFavoriteContext={openFavoriteContext}
+              onRefresh={refreshTree}
+              onNodeContext={openNodeContext}
+              onRootContext={openRootContext}
+              onMove={moveTreeItem}
+              reloadKey={treeKey}
+              expandedPathsRef={expandedPathsRef}
+              canUndo={canUndo}
+              onUndo={undoLastOp}
+            />
+          )}
+          {!searchView && (
+            <div className="resize-handle" onMouseDown={startSidebarResize} />
+          )}
+        </div>
       )}
 
       <div className={`main${sidebarVisible ? '' : ' no-sidebar'}`}>
@@ -806,6 +853,12 @@ export default function App(): JSX.Element {
               setFindMatchIndex(undefined)
             }}
           />
+        )}
+
+        {settings.showToolbar && !sourceMode && !readingMode && activeTab && (
+          <Suspense fallback={null}>
+            <EditorToolbar lang={settings.language as 'zh' | 'en'} />
+          </Suspense>
         )}
 
         <div
@@ -952,6 +1005,15 @@ export default function App(): JSX.Element {
           items={ctxMenu.items}
           preserveSelection={ctxMenu.preserveSelection}
           onClose={() => setCtxMenu(null)}
+        />
+      )}
+
+      {tablePicker && (
+        <TableGridPicker
+          x={tablePicker.x}
+          y={tablePicker.y}
+          onInsert={tablePicker.onInsert}
+          onClose={() => setTablePicker(null)}
         />
       )}
 

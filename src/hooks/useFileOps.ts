@@ -315,7 +315,15 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
 
   const moveTab = useCallback((fromIndex: number, insertAt: number): void => {
     setTabs((prev) => {
-      if (fromIndex === insertAt || fromIndex === insertAt - 1) return prev
+      if (
+        fromIndex < 0 ||
+        fromIndex >= prev.length ||
+        insertAt < 0 ||
+        insertAt > prev.length ||
+        fromIndex === insertAt ||
+        fromIndex === insertAt - 1
+      )
+        return prev
       const next = [...prev]
       const [moved] = next.splice(fromIndex, 1)
       next.splice(insertAt > fromIndex ? insertAt - 1 : insertAt, 0, moved)
@@ -336,13 +344,14 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     if (closeable.size === 0) return
     setTabs((previous) => previous.filter((tab) => !closeable.has(tab.id)))
     setActiveId((current) => {
-      if (!current || !targets.has(current)) return current
+      // Only reassign focus if the currently active tab is actually being closed
+      if (!current || !closeable.has(current)) return current
       const currentIndex = snapshot.findIndex((tab) => tab.id === current)
-      const nextTab = snapshot.slice(currentIndex + 1).find((tab) => !targets.has(tab.id))
+      const nextTab = snapshot.slice(currentIndex + 1).find((tab) => !closeable.has(tab.id))
       const previousTab = snapshot
         .slice(0, currentIndex)
         .reverse()
-        .find((tab) => !targets.has(tab.id))
+        .find((tab) => !closeable.has(tab.id))
       return nextTab?.id ?? previousTab?.id ?? null
     })
   }, [])
@@ -361,6 +370,11 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
       const current = stateRef.current.tabs
       if (!current.find((tab) => tab.id === id)) return
       const targets = current.filter((tab) => tab.id !== id && !tab.locked)
+      // Nothing to close (all others are locked) — just activate the tab
+      if (targets.length === 0) {
+        setActiveId(id)
+        return
+      }
       if (!(await confirmCloseTargets(targets))) return
       const targetIds = new Set(targets.map((tab) => tab.id))
       setTabs((prev) => prev.filter((tab) => !targetIds.has(tab.id)))
@@ -375,8 +389,11 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     if (!(await confirmCloseTargets(targets))) return
     const targetIds = new Set(targets.map((tab) => tab.id))
     setTabs((prev) => prev.filter((tab) => !targetIds.has(tab.id)))
-    if (targetIds.size > 0)
-      setActiveId((active) => (active && !targetIds.has(active) ? active : null))
+    if (targetIds.size > 0) {
+      // Fall back to first locked (pinned) tab rather than null when locked tabs remain
+      const firstLockedId = current.find((t) => t.locked)?.id ?? null
+      setActiveId((active) => (active && !targetIds.has(active) ? active : firstLockedId))
+    }
   }, [confirmCloseTargets])
 
   const closeLeft = useCallback(

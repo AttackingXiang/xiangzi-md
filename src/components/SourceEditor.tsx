@@ -1,7 +1,10 @@
 import { useLayoutEffect, useRef } from 'react'
+import { t } from '../lib/i18n'
 
 interface Props {
   content: string
+  /** 阅读模式：源码只读，尝试编辑时提示先关闭 */
+  readingMode?: boolean
   initialScrollTop?: number
   onScrollTopChange?: (scrollTop: number) => void
   onChange: (markdown: string) => void
@@ -10,6 +13,7 @@ interface Props {
 /** 源码模式：直接编辑原始 Markdown 文本 */
 export default function SourceEditor({
   content,
+  readingMode = false,
   initialScrollTop = 0,
   onScrollTopChange,
   onChange,
@@ -35,13 +39,30 @@ export default function SourceEditor({
     }
   }, [])
 
+  const showReadingHint = (): void => {
+    const editor = ref.current
+    if (!editor?.parentElement || editor.parentElement.querySelector('.reading-mode-toast')) return
+    const el = document.createElement('div')
+    el.className = 'reading-mode-toast'
+    el.textContent = t('请先关闭阅读模式')
+    editor.parentElement.appendChild(el)
+    window.setTimeout(() => el.remove(), 1600)
+  }
+
   return (
     <textarea
       ref={ref}
       className="source-editor"
       defaultValue={content}
       spellCheck={false}
+      readOnly={readingMode}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (!readingMode || e.metaKey || e.ctrlKey || e.altKey) return
+        const mutates =
+          e.key.length === 1 || ['Enter', 'Backspace', 'Delete', 'Tab'].includes(e.key)
+        if (mutates) showReadingHint()
+      }}
       onScroll={(e) => onScrollTopChangeRef.current?.(e.currentTarget.scrollTop)}
       placeholder="# 在此输入 Markdown…"
     />

@@ -19,13 +19,19 @@ function tab(content: string, revision: number): Tab {
 
 describe('save completion', () => {
   it('keeps edits made during I/O dirty while advancing the saved baseline', () => {
-    const result = completeSave(tab('new edit', 2), { content: 'disk snapshot', revision: 1 }, version)
+    const result = completeSave(
+      tab('new edit', 2),
+      { content: 'disk snapshot', revision: 1 },
+      version,
+    )
     expect(result.savedContent).toBe('disk snapshot')
     expect(result.content).toBe('new edit')
     expect(result.dirty).toBe(true)
   })
 
   it('marks the exact saved revision clean', () => {
-    expect(completeSave(tab('same', 2), { content: 'same', revision: 2 }, version).dirty).toBe(false)
+    expect(completeSave(tab('same', 2), { content: 'same', revision: 2 }, version).dirty).toBe(
+      false,
+    )
   })
 })

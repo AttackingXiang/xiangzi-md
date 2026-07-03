@@ -9,6 +9,8 @@ export interface MenuItem {
   separatorBefore?: boolean
   /** 相邻且同组的项目显示为一行紧凑按钮。 */
   compactGroup?: string
+  /** 自定义渲染，提供时忽略 label/icon/onClick，由调用方负责调用 close() 关闭菜单。 */
+  render?: (close: () => void) => ReactNode
 }
 
 interface MenuLayoutEntry {
@@ -114,6 +116,14 @@ export default function ContextMenu({
 
           const item = entry.items[0]
           if (!item) return null
+          if (item.render) {
+            return (
+              <div key={`${entry.key}-${entryIndex}`}>
+                {separator && <div className="ctx-sep" />}
+                {item.render(onClose)}
+              </div>
+            )
+          }
           return (
             <div key={`${entry.key}-${entryIndex}`}>
               {separator && <div className="ctx-sep" />}

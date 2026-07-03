@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { Command } from '../components/CommandPalette'
 import type { SettingsSection } from '../components/Settings'
 import { desktop } from '../platform'
@@ -146,37 +153,92 @@ export function useAppCommands(options: AppCommandOptions): {
   const dispatchShortcut = useCallback(
     (action: ShortcutAction) => {
       const id = stateRef.current.activeId
-      const toggle = (setter: Dispatch<SetStateAction<boolean>>): void =>
-        setter((value) => !value)
+      const toggle = (setter: Dispatch<SetStateAction<boolean>>): void => setter((value) => !value)
       switch (action) {
-        case 'new-file': newFile(); break
-        case 'open-file': void openFile(); break
-        case 'open-folder': void openFolder(); break
-        case 'save': if (id) void saveTab(id); break
-        case 'save-as': if (id) void saveAsTab(id); break
-        case 'close-tab': if (id) void closeTab(id); break
-        case 'find': setShowFind(true); break
-        case 'search-in-folder': setSidebarVisible(true); setSearchView(true); break
-        case 'select-all': clipboardCmd.selectAll(); break
-        case 'command-palette': setShowPalette(true); break
-        case 'toggle-sidebar': toggle(setSidebarVisible); break
-        case 'toggle-outline': toggle(setOutlineVisible); break
-        case 'toggle-source': toggle(setSourceMode); break
-        case 'toggle-focus': toggle(setFocusMode); break
-        case 'toggle-typewriter': toggle(setTypewriterMode); break
-        case 'open-settings': setSettingsSection('appearance'); break
-        case 'show-shortcuts': setSettingsSection('shortcuts'); break
-        case 'heading-1': case 'heading-2': case 'heading-3':
-        case 'heading-4': case 'heading-5': case 'heading-6':
-          editorCmd.heading(Number(action.at(-1))); break
-        case 'paragraph': editorCmd.paragraph(); break
-        case 'bold': editorCmd.bold(); break
-        case 'italic': editorCmd.italic(); break
-        case 'inline-code': editorCmd.inlineCode(); break
-        case 'quote': editorCmd.quote(); break
-        case 'code-block': editorCmd.codeBlock(); break
-        case 'bullet-list': editorCmd.bulletList(); break
-        case 'ordered-list': editorCmd.orderedList(); break
+        case 'new-file':
+          newFile()
+          break
+        case 'open-file':
+          void openFile()
+          break
+        case 'open-folder':
+          void openFolder()
+          break
+        case 'save':
+          if (id) void saveTab(id)
+          break
+        case 'save-as':
+          if (id) void saveAsTab(id)
+          break
+        case 'close-tab':
+          if (id) void closeTab(id)
+          break
+        case 'find':
+          setShowFind(true)
+          break
+        case 'search-in-folder':
+          setSidebarVisible(true)
+          setSearchView(true)
+          break
+        case 'select-all':
+          clipboardCmd.selectAll()
+          break
+        case 'command-palette':
+          setShowPalette(true)
+          break
+        case 'toggle-sidebar':
+          toggle(setSidebarVisible)
+          break
+        case 'toggle-outline':
+          toggle(setOutlineVisible)
+          break
+        case 'toggle-source':
+          toggle(setSourceMode)
+          break
+        case 'toggle-focus':
+          toggle(setFocusMode)
+          break
+        case 'toggle-typewriter':
+          toggle(setTypewriterMode)
+          break
+        case 'open-settings':
+          setSettingsSection('appearance')
+          break
+        case 'show-shortcuts':
+          setSettingsSection('shortcuts')
+          break
+        case 'heading-1':
+        case 'heading-2':
+        case 'heading-3':
+        case 'heading-4':
+        case 'heading-5':
+        case 'heading-6':
+          editorCmd.heading(Number(action.at(-1)))
+          break
+        case 'paragraph':
+          editorCmd.paragraph()
+          break
+        case 'bold':
+          editorCmd.bold()
+          break
+        case 'italic':
+          editorCmd.italic()
+          break
+        case 'inline-code':
+          editorCmd.inlineCode()
+          break
+        case 'quote':
+          editorCmd.quote()
+          break
+        case 'code-block':
+          editorCmd.codeBlock()
+          break
+        case 'bullet-list':
+          editorCmd.bulletList()
+          break
+        case 'ordered-list':
+          editorCmd.orderedList()
+          break
       }
     },
     [
