@@ -1,6 +1,7 @@
 import type { Ctx } from '@milkdown/kit/ctx'
+import { commandsCtx } from '@milkdown/kit/core'
 import { TableNodeView } from '@milkdown/kit/component/table-block'
-import { tableSchema } from '@milkdown/kit/preset/gfm'
+import { moveColCommand, moveRowCommand, tableSchema } from '@milkdown/kit/preset/gfm'
 import type { Node } from '@milkdown/kit/prose/model'
 import { columnResizing, updateColumnsOnResize } from '@milkdown/kit/prose/tables'
 import type { EditorView, NodeViewConstructor } from '@milkdown/kit/prose/view'
@@ -17,7 +18,9 @@ const DEFAULT_COLUMN_WIDTH = 100
 class ResizableTableNodeView extends TableNodeView {
   private readonly table: HTMLTableElement
   private readonly colgroup: HTMLTableColElement
-  private cleanupDragAnimation: (() => void) | null = null
+  private cleanupReorder: (() => void) | null = null
+  private dimmedCells: HTMLElement[] = []
+  private dropLine: HTMLElement | null = null
 
   constructor(ctx: Ctx, node: Node, view: EditorView, getPos: () => number | undefined) {
     super(ctx, node, view, getPos)
@@ -30,7 +33,7 @@ class ResizableTableNodeView extends TableNodeView {
     this.table = table
     this.colgroup = colgroup
     this.updateColumnTracks(node)
-    this.initDragAnimation()
+    this.initHandleReorder()
   }
 
   private updateColumnTracks(node: Node): void {
@@ -54,7 +57,7 @@ class ResizableTableNodeView extends TableNodeView {
   }
 
   override destroy(): void {
-    this.cleanupDragAnimation?.()
+    this.cleanupReorder?.()
     super.destroy()
   }
 
@@ -62,141 +65,203 @@ class ResizableTableNodeView extends TableNodeView {
     return Array.from(this.table.querySelectorAll<HTMLTableRowElement>('tr'))
   }
 
-  private clearRowAnimations(): void {
-    for (const row of this.getRows()) {
-      row.style.transition = ''
-      row.style.transform = ''
-      row.style.opacity = ''
-      for (const cell of row.querySelectorAll<HTMLTableCellElement>('th, td')) {
-        cell.style.transition = ''
-        cell.style.transform = ''
-        cell.style.opacity = ''
+  private headerCells(): HTMLTableCellElement[] {
+    const first = this.getRows()[0]
+    return first ? Array.from(first.querySelectorAll<HTMLTableCellElement>('th, td')) : []
+  }
+
+  /** 指针位置命中的行/列索引（以中线为界，落在后半段则算下一格）。 */
+  private indexFromPointer(type: 'row' | 'col', clientX: number, clientY: number): number {
+    if (type === 'row') {
+      const rows = this.getRows()
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i].getBoundingClientRect()
+        if (clientY < r.top + r.height / 2) return i
       }
+      return rows.length - 1
+    }
+    const cells = this.headerCells()
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i].getBoundingClientRect()
+      if (clientX < c.left + c.width / 2) return i
+    }
+    return cells.length - 1
+  }
+
+  private clearDragCue(): void {
+    for (const el of this.dimmedCells) el.style.opacity = ''
+    this.dimmedCells = []
+    this.dropLine?.remove()
+    this.dropLine = null
+  }
+
+  private dimTrack(type: 'row' | 'col', index: number): void {
+    const rows = this.getRows()
+    const cells =
+      type === 'row'
+        ? Array.from(rows[index]?.querySelectorAll<HTMLTableCellElement>('th, td') ?? [])
+        : rows.map((r) => r.querySelectorAll<HTMLTableCellElement>('th, td')[index]).filter(Boolean)
+    for (const cell of cells) {
+      if (!cell) continue
+      cell.style.opacity = '0.45'
+      this.dimmedCells.push(cell)
     }
   }
 
-  private initDragAnimation(): void {
-    let dragStartIndex = -1
-    let dragType: 'row' | 'col' | null = null
-
-    // Use capture phase so we get the event before the handle calls stopPropagation().
-    const onDragStart = (e: DragEvent): void => {
-      const handle = (e.target as Element).closest('[data-role]') as HTMLElement | null
-      const role = handle?.dataset.role
-      if (!handle || (role !== 'row-drag-handle' && role !== 'col-drag-handle')) return
-
-      const rows = this.getRows()
-
-      if (role === 'row-drag-handle') {
-        dragType = 'row'
-        const rect = handle.getBoundingClientRect()
-        const mid = rect.top + rect.height / 2
-        dragStartIndex = rows.findIndex(r => {
-          const rr = r.getBoundingClientRect()
-          return mid >= rr.top && mid <= rr.bottom
-        })
-      } else {
-        dragType = 'col'
-        const firstRow = rows[0]
-        if (!firstRow) return
-        const cells = Array.from(firstRow.querySelectorAll<HTMLTableCellElement>('th, td'))
-        const rect = handle.getBoundingClientRect()
-        const mid = rect.left + rect.width / 2
-        dragStartIndex = cells.findIndex(c => {
-          const cr = c.getBoundingClientRect()
-          return mid >= cr.left && mid <= cr.right
-        })
-      }
+  /** 在落点边界画一条插入指示线。 */
+  private showDropLine(type: 'row' | 'col', targetIndex: number, dragIndex: number): void {
+    if (!this.dropLine) {
+      const line = document.createElement('div')
+      line.className = 'xmd-table-drop-line'
+      this.dom.appendChild(line)
+      this.dropLine = line
     }
-
-    const onDragOver = (e: DragEvent): void => {
-      if (dragType === null || dragStartIndex === -1) return
-      const rows = this.getRows()
-
-      if (dragType === 'row') {
-        const targetIndex = findOverIndex(rows, e.clientY, 'y')
-        if (targetIndex === -1) return
-        const draggedHeight = rows[dragStartIndex]?.getBoundingClientRect().height ?? 40
-
-        rows.forEach((row, i) => {
-          if (i === dragStartIndex) {
-            row.style.transition = ''
-            row.style.transform = ''
-            row.style.opacity = '0.4'
-            return
-          }
-          row.style.opacity = ''
-          row.style.transition = 'transform 150ms ease'
-          if (dragStartIndex < targetIndex && i > dragStartIndex && i <= targetIndex) {
-            row.style.transform = `translateY(${-draggedHeight}px)`
-          } else if (dragStartIndex > targetIndex && i >= targetIndex && i < dragStartIndex) {
-            row.style.transform = `translateY(${draggedHeight}px)`
-          } else {
-            row.style.transform = ''
-          }
-        })
-      } else {
-        const firstRow = rows[0]
-        if (!firstRow) return
-        const firstCells = Array.from(firstRow.querySelectorAll<HTMLTableCellElement>('th, td'))
-        const targetIndex = findOverIndex(firstCells, e.clientX, 'x')
-        if (targetIndex === -1) return
-        const draggedWidth = firstCells[dragStartIndex]?.getBoundingClientRect().width ?? 100
-
-        rows.forEach(row => {
-          const cells = Array.from(row.querySelectorAll<HTMLTableCellElement>('th, td'))
-          cells.forEach((cell, i) => {
-            if (i === dragStartIndex) {
-              cell.style.transition = ''
-              cell.style.transform = ''
-              cell.style.opacity = '0.4'
-              return
-            }
-            cell.style.opacity = ''
-            cell.style.transition = 'transform 150ms ease'
-            if (dragStartIndex < targetIndex && i > dragStartIndex && i <= targetIndex) {
-              cell.style.transform = `translateX(${-draggedWidth}px)`
-            } else if (dragStartIndex > targetIndex && i >= targetIndex && i < dragStartIndex) {
-              cell.style.transform = `translateX(${draggedWidth}px)`
-            } else {
-              cell.style.transform = ''
-            }
-          })
-        })
-      }
-    }
-
-    const clearAnimation = (): void => {
-      dragType = null
-      dragStartIndex = -1
-      this.clearRowAnimations()
-    }
-
-    this.dom.addEventListener('dragstart', onDragStart, { capture: true })
-    window.addEventListener('dragover', onDragOver)
-    window.addEventListener('dragend', clearAnimation)
-    window.addEventListener('drop', clearAnimation)
-
-    this.cleanupDragAnimation = () => {
-      this.dom.removeEventListener('dragstart', onDragStart, { capture: true })
-      window.removeEventListener('dragover', onDragOver)
-      window.removeEventListener('dragend', clearAnimation)
-      window.removeEventListener('drop', clearAnimation)
+    const line = this.dropLine
+    const base = this.table.getBoundingClientRect()
+    const domRect = this.dom.getBoundingClientRect()
+    // 落点在目标格「靠拖动来向的一侧」边界
+    const after = targetIndex >= dragIndex
+    if (type === 'row') {
+      const rect = this.getRows()[targetIndex]?.getBoundingClientRect()
+      if (!rect) return
+      const y = (after ? rect.bottom : rect.top) - domRect.top
+      Object.assign(line.style, {
+        left: `${base.left - domRect.left}px`,
+        top: `${y}px`,
+        width: `${base.width}px`,
+        height: '2px',
+      })
+    } else {
+      const rect = this.headerCells()[targetIndex]?.getBoundingClientRect()
+      if (!rect) return
+      const x = (after ? rect.right : rect.left) - domRect.left
+      Object.assign(line.style, {
+        left: `${x}px`,
+        top: `${base.top - domRect.top}px`,
+        width: '2px',
+        height: `${base.height}px`,
+      })
     }
   }
-}
 
-function findOverIndex(elements: Element[], pointer: number, axis: 'x' | 'y'): number {
-  const startProp = axis === 'x' ? 'left' : 'top'
-  const endProp = axis === 'x' ? 'right' : 'bottom'
-  const last = elements.length - 1
-  return elements.findIndex((el, i) => {
-    const r = el.getBoundingClientRect()
-    if (r[startProp] <= pointer && pointer <= r[endProp]) return true
-    if (i === 0 && pointer < r[startProp]) return true
-    if (i === last && pointer > r[endProp]) return true
-    return false
-  })
+  /**
+   * 用指针事件（pointerdown/move/up）实现行/列拖动重排。
+   *
+   * Crepe 原生依赖 HTML5 drag-and-drop（dragstart/drop），但在 Tauri 的
+   * WKWebView 里、contenteditable 内的原生拖放极不可靠，drop 常常根本不触发，
+   * 所以内置重排「拖了没反应」。这里改用指针事件自行计算落点并调用 gfm 的
+   * moveRow/moveColCommand，绕开原生拖放；同时拦掉 handle 上的原生 dragstart，
+   * 避免两套机制打架、以及残留的拖动预览。
+   */
+  private initHandleReorder(): void {
+    let type: 'row' | 'col' | null = null
+    let dragIndex = -1
+    let pointerId = -1
+    let moved = false
+    let startX = 0
+    let startY = 0
+
+    const finish = (commit: PointerEvent | null): void => {
+      const t = type
+      const from = dragIndex
+      const wasMoved = moved
+      type = null
+      dragIndex = -1
+      pointerId = -1
+      moved = false
+      this.clearDragCue()
+      if (!t || !wasMoved || !commit) return
+      let to = this.indexFromPointer(t, commit.clientX, commit.clientY)
+      // 表头行必须留在首行：正文行不能落到表头之上。
+      if (t === 'row' && to === 0) to = 1
+      if (to < 0 || to === from) return
+      const pos = (this.getPos() ?? 0) + 1
+      const key = t === 'col' ? moveColCommand.key : moveRowCommand.key
+      this.ctx.get(commandsCtx).call(key, { from, to, pos })
+      requestAnimationFrame(() => this.view.focus())
+    }
+
+    const onPointerDown = (e: PointerEvent): void => {
+      if (e.button !== 0 || !this.view.editable) return
+      const target = e.target
+      if (!(target instanceof Element) || target.closest('button')) return
+      const handle = target.closest('[data-role]')
+      const role = handle instanceof HTMLElement ? handle.dataset.role : undefined
+      if (role !== 'row-drag-handle' && role !== 'col-drag-handle') return
+
+      type = role === 'row-drag-handle' ? 'row' : 'col'
+      const rect = handle!.getBoundingClientRect()
+      dragIndex = this.indexFromPointer(
+        type,
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      )
+      // 表头行固定在首行，不参与拖动重排。
+      if (type === 'row' && dragIndex === 0) {
+        type = null
+        return
+      }
+      pointerId = e.pointerId
+      startX = e.clientX
+      startY = e.clientY
+      moved = false
+    }
+
+    const onPointerMove = (e: PointerEvent): void => {
+      if (type === null || e.pointerId !== pointerId) return
+      if (!moved) {
+        if (Math.abs(e.clientX - startX) < 4 && Math.abs(e.clientY - startY) < 4) return
+        moved = true
+        try {
+          this.dom.setPointerCapture(pointerId)
+        } catch {
+          /* setPointerCapture 偶发失败可忽略，仍用 window 监听兜底 */
+        }
+        this.dimTrack(type, dragIndex)
+      }
+      e.preventDefault()
+      const target = this.indexFromPointer(type, e.clientX, e.clientY)
+      this.showDropLine(type, target, dragIndex)
+    }
+
+    const onPointerUp = (e: PointerEvent): void => {
+      if (type === null || e.pointerId !== pointerId) return
+      finish(e)
+    }
+
+    const onPointerCancel = (e: PointerEvent): void => {
+      if (type === null || e.pointerId !== pointerId) return
+      finish(null)
+    }
+
+    // 拦掉 handle 上的原生拖放：捕获阶段 preventDefault + stopPropagation，
+    // 既终止不可靠的原生 drag，也阻止 Crepe 的 dragstart 处理器建立预览。
+    const onDragStartCapture = (e: DragEvent): void => {
+      const target = e.target
+      if (!(target instanceof Element)) return
+      const handle = target.closest('[data-role]')
+      const role = handle instanceof HTMLElement ? handle.dataset.role : undefined
+      if (role === 'row-drag-handle' || role === 'col-drag-handle') {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    this.dom.addEventListener('pointerdown', onPointerDown, { capture: true })
+    this.dom.addEventListener('dragstart', onDragStartCapture, { capture: true })
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerCancel)
+
+    this.cleanupReorder = () => {
+      this.dom.removeEventListener('pointerdown', onPointerDown, { capture: true })
+      this.dom.removeEventListener('dragstart', onDragStartCapture, { capture: true })
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerCancel)
+      this.clearDragCue()
+    }
+  }
 }
 
 export const resizableTableView = $view(

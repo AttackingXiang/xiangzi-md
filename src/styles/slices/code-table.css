@@ -589,3 +589,92 @@
   word-break: break-word;
   overflow-wrap: anywhere;
 }
+
+/* 行/列拖动重排时的落点指示线 */
+.milkdown .milkdown-table-block .xmd-table-drop-line {
+  position: absolute;
+  z-index: 20;
+  background: var(--accent, #4c7dff);
+  border-radius: 2px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #4c7dff) 35%, transparent);
+}
+
+/* ---------- 表格「放大展开」弹窗 ---------- */
+.table-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: color-mix(in srgb, #000 45%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.table-zoom-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-width: min(96vw, 1400px);
+  max-height: 90vh;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.table-zoom-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.table-zoom-close:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.table-zoom-scroll {
+  overflow: auto;
+  padding: 44px 28px 28px;
+}
+
+/* 弹窗内表格：按原列宽比例（colgroup 百分比）占满弹窗宽度，内容照常换行 */
+.table-zoom-content table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table-zoom-content th,
+.table-zoom-content td {
+  border: 1px solid var(--border-strong, var(--border));
+  padding: 8px 12px;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.table-zoom-content th {
+  background: var(--bg-hover);
+  font-weight: 600;
+}
