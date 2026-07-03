@@ -276,6 +276,40 @@ fn authorize_directory(app: &AppHandle, root: &Path) -> AppResult<()> {
     Ok(())
 }
 
+/// 打开单个文档时，除文档所在目录外额外向上授权的祖先层数。用于相对图片
+/// 路径指向文档上层目录的布局（如 Typora 把图片统一放在上级 assets/）。
+/// 与前端 asset.ts 的祖先探测层数保持一致。
+const DOC_ANCESTOR_AUTH_LEVELS: usize = 3;
+
+/// 需要为某个文档授予读权限的目录集合：文档所在目录 + 向上 `levels` 层祖先。
+fn document_scope_dirs(doc_path: &Path, levels: usize) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let mut current = doc_path.parent();
+    for _ in 0..=levels {
+        let Some(dir) = current else { break };
+        dirs.push(dir.to_path_buf());
+        match dir.parent() {
+            Some(parent) if parent != dir => current = Some(parent),
+            _ => break,
+        }
+    }
+    dirs
+}
+
+/// 为文档所在目录及有限祖先目录授予读权限（fs + asset 协议 scope），使同目录、
+/// 子目录以及上层 assets/ 中的图片都能被渲染层加载。
+///
+/// 单独打开一个文件时，系统只授权了该文件本身；若不放开其所在目录树，指向
+/// 文档同级或上层目录的相对图片就会被协议层的 scope 校验拒绝而显示为裂图。
+/// 这是本地笔记应用的有意放宽：边界由「用户主动打开该文档」提供，且只放开
+/// 其所在目录的有限上层，不会波及到用户主目录等无关位置。
+fn authorize_document_context(app: &AppHandle, doc_path: &Path) {
+    for dir in document_scope_dirs(doc_path, DOC_ANCESTOR_AUTH_LEVELS) {
+        let _ = app.fs_scope().allow_directory(&dir, true);
+        let _ = app.asset_protocol_scope().allow_directory(&dir, true);
+    }
+}
+
 pub fn open_containing_folder(
     app: &AppHandle,
     file_path: &Path,
@@ -302,6 +336,8 @@ pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
         AppError::new("file_encoding_invalid", format!("文件不是 UTF-8：{error}"))
     })?;
     let version = file_version(path, &bytes)?;
+    // 授权文档所在目录及有限上层，使相对图片（含上层 assets/）可被渲染层读取。
+    authorize_document_context(app, path);
     Ok(OpenedFile {
         path: path_string(path),
         name: file_name(path),
@@ -357,9 +393,28 @@ pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<NamedPath>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_ignored, is_visible_text_file, validate_binary_size};
+    use super::{document_scope_dirs, is_ignored, is_visible_text_file, validate_binary_size};
     use crate::domain::safe_name::validate_item_name;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn document_scope_covers_the_folder_and_bounded_ancestors() {
+        // 图片在文档的祖父目录 assets/ 里时，授权集合必须包含该祖父目录。
+        let doc = Path::new("/note/xiangzi-note/科学上网/客户端/修改sim卡国家码.md");
+        let dirs = document_scope_dirs(doc, 3);
+        assert_eq!(dirs[0], PathBuf::from("/note/xiangzi-note/科学上网/客户端"));
+        assert!(dirs.contains(&PathBuf::from("/note/xiangzi-note/科学上网")));
+        assert!(dirs.contains(&PathBuf::from("/note/xiangzi-note")));
+        assert!(dirs.contains(&PathBuf::from("/note")));
+        // 有上限：不会一路授权到文件系统根之外产生空目录
+        assert!(dirs.iter().all(|d| d.as_os_str() != "/"));
+    }
+
+    #[test]
+    fn document_scope_stops_at_filesystem_root() {
+        let dirs = document_scope_dirs(Path::new("/a.md"), 3);
+        assert_eq!(dirs, vec![PathBuf::from("/")]);
+    }
 
     #[test]
     fn rejects_names_that_can_escape_the_parent_directory() {
