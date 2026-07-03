@@ -149,7 +149,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          # 钉在 macos-14：macos-latest 已开始轮换到 macOS 26 beta 镜像，
+          # C 依赖（ring 等）在新 Xcode 下交叉编 universal 会构建失败。
+          - platform: macos-14
             artifact: macos-universal
             args: --target universal-apple-darwin --bundles app,dmg
           - platform: windows-latest
@@ -280,7 +282,7 @@ jobs:
           releaseBody: ${{ needs.prepare.outputs.notes }}
           releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
@@ -296,8 +298,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # macOS 自带 shasum（Perl），Windows git-bash 只有 coreutils 的 sha256sum
+          if command -v sha256sum >/dev/null 2>&1; then
+            HASH_CMD=(sha256sum)
+          else
+            HASH_CMD=(shasum -a 256)
+          fi
           find src-tauri/target -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.tar.gz' -o -name '*.sig' \) -print0 \
-            | sort -z | xargs -0 shasum -a 256 > SHA256SUMS-${{ matrix.artifact }}.txt
+            | sort -z | xargs -0 "${HASH_CMD[@]}" > SHA256SUMS-${{ matrix.artifact }}.txt
           test -s SHA256SUMS-${{ matrix.artifact }}.txt
 
       - name: Attest installers, updater signatures, checksums and SBOM
