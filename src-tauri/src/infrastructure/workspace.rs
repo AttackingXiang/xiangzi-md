@@ -62,9 +62,7 @@ impl WorkspaceVisibility {
 
     fn matches_name_pattern(&self, path: &Path) -> bool {
         let name = path.file_name().and_then(OsStr::to_str).unwrap_or("");
-        self.hidden_name_patterns
-            .iter()
-            .any(|p| p == name)
+        self.hidden_name_patterns.iter().any(|p| p == name)
     }
 }
 

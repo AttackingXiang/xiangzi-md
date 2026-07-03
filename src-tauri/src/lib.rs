@@ -74,6 +74,7 @@ pub fn run() {
             commands::pandoc::pandoc_status,
             commands::pandoc::export_docx,
             commands::pandoc::import_docx,
+            commands::pandoc::export_pandoc_default_template,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Xiangzi MD");

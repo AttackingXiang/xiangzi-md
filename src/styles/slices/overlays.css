@@ -147,7 +147,9 @@
   border-radius: 2px;
   cursor: pointer;
   background: transparent;
-  transition: background 60ms, border-color 60ms;
+  transition:
+    background 60ms,
+    border-color 60ms;
 }
 
 .table-picker-cell.active {

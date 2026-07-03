@@ -39,7 +39,9 @@ export default function TableGridPicker({ x, y, onInsert, onClose }: Props): JSX
 
   // Close on Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
@@ -62,7 +64,10 @@ export default function TableGridPicker({ x, y, onInsert, onClose }: Props): JSX
               className={`table-picker-cell${ri < hover.r && ci < hover.c ? ' active' : ''}`}
               onMouseEnter={() => setHover({ r: ri + 1, c: ci + 1 })}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onInsert(ri + 1, ci + 1); onClose() }}
+              onClick={() => {
+                onInsert(ri + 1, ci + 1)
+                onClose()
+              }}
             />
           )),
         )}

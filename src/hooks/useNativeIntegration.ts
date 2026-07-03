@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 import { classifyExternalLink } from '../lib/externalLinks'
-import { getLang, t } from '../lib/i18n'
+import { t } from '../lib/i18n'
 import { isShortcutAction, type ShortcutAction } from '../lib/shortcuts'
 import { desktop } from '../platform'
 import type { Tab } from '../types'
@@ -95,7 +95,19 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
     const openExternalLink = (event: MouseEvent): void => {
       if (!(event.target instanceof Element)) return
       const anchor = event.target.closest<HTMLAnchorElement>('a[href]')
-      if (!anchor || !/^https?:\/\//i.test(anchor.href)) return
+      if (!anchor) return
+      // 用原始 href 属性判断协议：anchor.href 会被浏览器归一化解析，
+      // 无法可靠区分 javascript:/data: 等危险协议与普通相对路径。
+      const rawHref = anchor.getAttribute('href')
+      if (!rawHref) return
+      // 页内锚点（脚注跳转等）保持默认滚动行为，不拦截
+      if (rawHref.startsWith('#')) return
+      if (!/^https?:\/\//i.test(rawHref)) {
+        // javascript:/data:/file: 等一切非 http(s) 协议一律拦截：
+        // WKWebView 对未处理的锚点点击默认会执行 javascript: URL，必须 preventDefault
+        event.preventDefault()
+        return
+      }
       event.preventDefault()
       const decision = classifyExternalLink(anchor.href)
       if (decision.kind === 'blocked') {
@@ -108,11 +120,9 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
       }
       void desktop
         .confirm(
-          getLang() === 'en'
-            ? `Open this link in your browser?\n\nDomain: ${decision.hostname}\n${decision.url}`
-            : `是否在系统浏览器中打开此链接？\n\n域名：${decision.hostname}\n${decision.url}`,
-          getLang() === 'en' ? 'Open external link' : '打开外部链接',
-          getLang() === 'en' ? 'Open' : '打开',
+          `${t('是否在系统浏览器中打开此链接？')}\n\n${t('域名：')}${decision.hostname}\n${decision.url}`,
+          t('打开外部链接'),
+          t('打开'),
           t('取消'),
         )
         .then((confirmed) => {

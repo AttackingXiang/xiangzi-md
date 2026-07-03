@@ -359,15 +359,24 @@ export default function App(): JSX.Element {
     setActiveId(null)
   }, [captureActiveScroll, setActiveId])
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null)
+  // 提为 useCallback 保持引用稳定，配合 Sidebar 的 memo() 避免每次击键都重渲染 Sidebar
+  const openSidebarSettings = useCallback(() => setSettingsSection('appearance'), [])
   const [showFind, setShowFind] = useState(false)
   const [findInitial, setFindInitial] = useState('')
   const [findLine, setFindLine] = useState<number | undefined>(undefined)
   const [findMatchIndex, setFindMatchIndex] = useState<number | undefined>(undefined)
   const [searchView, setSearchView] = useState(false)
+  const openSidebarSearch = useCallback(() => setSearchView(true), [setSearchView])
   const [showPalette, setShowPalette] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
   const [readingMode, setReadingMode] = useState(false)
+  // 同样提为 useCallback：TabBar / Outline 用 memo() 包裹后，稳定的回调引用才能让 memo 生效
+  const toggleSourceMode = useCallback(() => setSourceMode((v) => !v), [])
+  const toggleSidebarVisible = useCallback(() => setSidebarVisible((v) => !v), [setSidebarVisible])
+  const toggleOutlineVisible = useCallback(() => setOutlineVisible((v) => !v), [])
+  const toggleReadingMode = useCallback(() => setReadingMode((v) => !v), [])
+  const closeOutline = useCallback(() => setOutlineVisible(false), [])
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<{
     x: number
@@ -697,7 +706,7 @@ export default function App(): JSX.Element {
   // ── 导入 Word 文档 ──────────────────────────────────────────────────────────
   // 把 attachmentFolder 提取到 useCallback 外，避免 React Compiler
   // 误把 settings?.attachmentFolder 的依赖追踪提升为整个 settings 对象。
-  const docxMediaSubdir = settings?.attachmentFolder || 'assets'
+  const docxMediaSubdir = settings?.pandocMediaFolder || settings?.attachmentFolder || 'assets'
   const importDocx = useCallback(async () => {
     const status = await desktop.pandocStatus()
     if (!status) {
@@ -849,8 +858,8 @@ export default function App(): JSX.Element {
               onOpenFolder={openFolder}
               onOpenFolderPath={openFolderByPath}
               onOpenFile={openPath}
-              onOpenSettings={() => setSettingsSection('appearance')}
-              onOpenSearch={() => setSearchView(true)}
+              onOpenSettings={openSidebarSettings}
+              onOpenSearch={openSidebarSearch}
               onToggleFavorite={toggleFavorite}
               onFavoritesCollapsedChange={setFavoritesCollapsed}
               onFavoriteContext={openFavoriteContext}
@@ -880,10 +889,10 @@ export default function App(): JSX.Element {
           sourceMode={sourceMode}
           outlineVisible={outlineVisible}
           readingMode={readingMode}
-          onToggleSource={() => setSourceMode((v) => !v)}
-          onToggleSidebar={() => setSidebarVisible((v) => !v)}
-          onToggleOutline={() => setOutlineVisible((v) => !v)}
-          onToggleReading={() => setReadingMode((v) => !v)}
+          onToggleSource={toggleSourceMode}
+          onToggleSidebar={toggleSidebarVisible}
+          onToggleOutline={toggleOutlineVisible}
+          onToggleReading={toggleReadingMode}
           onRevealFile={revealActiveFile}
           activeHasPath={!!activeTab?.path}
         />
@@ -993,7 +1002,7 @@ export default function App(): JSX.Element {
                 items={outline}
                 onSelect={scrollToHeading}
                 onReorder={reorderSection}
-                onClose={() => setOutlineVisible(false)}
+                onClose={closeOutline}
                 width={outlineWidth}
               />
             </>

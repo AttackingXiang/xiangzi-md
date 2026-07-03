@@ -1,7 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
 import { desktop } from '../platform'
 import { generateExportHTML } from '../features/export/generateExportHtml'
-import { getLang, t } from '../lib/i18n'
+import { t } from '../lib/i18n'
 import { dirName } from '../lib/path'
 import type { Tab } from '../types'
 
@@ -27,10 +27,7 @@ export function useExportActions(
       const res = await desktop.exportHTML(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
     } catch (error) {
-      window.alert(
-        (getLang() === 'en' ? 'HTML export failed:\n' : 'HTML 导出失败：\n') +
-          (error as Error).message,
-      )
+      window.alert(t('HTML 导出失败：\n') + (error as Error).message)
     } finally {
       exportInProgressRef.current = false
     }
@@ -48,10 +45,7 @@ export function useExportActions(
       const res = await desktop.exportPDF(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
     } catch (error) {
-      window.alert(
-        (getLang() === 'en' ? 'PDF export failed:\n' : 'PDF 导出失败：\n') +
-          (error as Error).message,
-      )
+      window.alert(t('PDF 导出失败：\n') + (error as Error).message)
     } finally {
       exportInProgressRef.current = false
     }
@@ -69,10 +63,7 @@ export function useExportActions(
       const res = await desktop.exportImage(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
     } catch (error) {
-      window.alert(
-        (getLang() === 'en' ? 'Image export failed:\n' : '图片导出失败：\n') +
-          (error as Error).message,
-      )
+      window.alert(t('图片导出失败：\n') + (error as Error).message)
     } finally {
       exportInProgressRef.current = false
     }

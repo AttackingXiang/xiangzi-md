@@ -127,14 +127,24 @@ fn file_menu(
     let export_html = action(app, "export-html", "HTML…", None)?;
     let export_pdf = action(app, "export-pdf", "PDF…", None)?;
     let export_image = action(app, "export-image", tr(language, "图片…", "Image…"), None)?;
-    let export_docx = action(app, "export-docx", tr(language, "Word 文档…", "Word Document…"), None)?;
+    let export_docx = action(
+        app,
+        "export-docx",
+        tr(language, "Word 文档…", "Word Document…"),
+        None,
+    )?;
     let export = SubmenuBuilder::new(app, tr(language, "导出", "Export"))
         .item(&export_html)
         .item(&export_pdf)
         .item(&export_image)
         .item(&export_docx)
         .build()?;
-    let import_docx = action(app, "import-docx", tr(language, "导入 Word 文档…", "Import Word Document…"), None)?;
+    let import_docx = action(
+        app,
+        "import-docx",
+        tr(language, "导入 Word 文档…", "Import Word Document…"),
+        None,
+    )?;
     let close_tab = action(
         app,
         "close-tab",

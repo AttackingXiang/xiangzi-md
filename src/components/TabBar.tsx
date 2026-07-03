@@ -1,5 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
-import { BookOpen, ChevronDown, Code2, Eye, List, MapPin, PanelLeft, Pin, Plus, X } from 'lucide-react'
+import { memo, useEffect, useRef, useState } from 'react'
+import {
+  BookOpen,
+  ChevronDown,
+  Code2,
+  Eye,
+  List,
+  MapPin,
+  PanelLeft,
+  Pin,
+  Plus,
+  X,
+} from 'lucide-react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 
@@ -22,7 +33,7 @@ interface Props {
   activeHasPath?: boolean
 }
 
-export default function TabBar({
+const TabBar = memo(function TabBar({
   tabs,
   activeId,
   onSelect,
@@ -134,12 +145,17 @@ export default function TabBar({
 
   // ── Shared tab renderer ───────────────────────────────────────────────────
 
-  const renderTab = (tab: Tab, extra?: React.HTMLAttributes<HTMLDivElement> & { 'data-drag-idx'?: number }): JSX.Element => {
+  const renderTab = (
+    tab: Tab,
+    extra?: React.HTMLAttributes<HTMLDivElement> & { 'data-drag-idx'?: number },
+  ): JSX.Element => {
     const isActive = tab.id === activeId
     const { 'data-drag-idx': localIdx, ...divProps } = extra ?? {}
     const isDragging = localIdx !== undefined && dragIndex === localIdx
-    const dropLeft = localIdx !== undefined && dropTarget?.index === localIdx && dropTarget.side === 'left'
-    const dropRight = localIdx !== undefined && dropTarget?.index === localIdx && dropTarget.side === 'right'
+    const dropLeft =
+      localIdx !== undefined && dropTarget?.index === localIdx && dropTarget.side === 'left'
+    const dropRight =
+      localIdx !== undefined && dropTarget?.index === localIdx && dropTarget.side === 'right'
 
     return (
       <div
@@ -156,17 +172,32 @@ export default function TabBar({
           .filter(Boolean)
           .join(' ')}
         title={tab.path ?? tab.name}
-        onPointerDown={(e) => { if (e.button === 0) onSelect(tab.id) }}
-        onClick={(e) => { if (e.detail === 0) onSelect(tab.id) }}
-        onContextMenu={(e) => { e.preventDefault(); onTabContext(tab.id, e.clientX, e.clientY) }}
-        onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); onClose(tab.id) } }}
+        onPointerDown={(e) => {
+          if (e.button === 0) onSelect(tab.id)
+        }}
+        onClick={(e) => {
+          if (e.detail === 0) onSelect(tab.id)
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          onTabContext(tab.id, e.clientX, e.clientY)
+        }}
+        onAuxClick={(e) => {
+          if (e.button === 1) {
+            e.preventDefault()
+            onClose(tab.id)
+          }
+        }}
         {...divProps}
       >
         <span className="tab-name">{tab.name}</span>
         <button
           className="tab-close"
           onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onClose(tab.id) }}
+          onClick={(e) => {
+            e.stopPropagation()
+            onClose(tab.id)
+          }}
         >
           {tab.dirty ? <span className="dot" /> : <X size={13} />}
         </button>
@@ -203,9 +234,16 @@ export default function TabBar({
                     .filter(Boolean)
                     .join(' ')}
                   title={tab.path ?? tab.name}
-                  onPointerDown={(e) => { if (e.button === 0) onSelect(tab.id) }}
-                  onClick={(e) => { if (e.detail === 0) onSelect(tab.id) }}
-                  onContextMenu={(e) => { e.preventDefault(); onTabContext(tab.id, e.clientX, e.clientY) }}
+                  onPointerDown={(e) => {
+                    if (e.button === 0) onSelect(tab.id)
+                  }}
+                  onClick={(e) => {
+                    if (e.detail === 0) onSelect(tab.id)
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    onTabContext(tab.id, e.clientX, e.clientY)
+                  }}
                 >
                   <Pin size={10} className="tab-pin-icon" />
                   <span className="tab-name">{tab.name}</span>
@@ -226,7 +264,10 @@ export default function TabBar({
             onDragStart: () => setDragIndex(localIdx),
             onDragOver: (e: React.DragEvent) => handleDragOver(e, localIdx),
             onDrop: (e: React.DragEvent) => handleDrop(e, localIdx),
-            onDragEnd: () => { setDragIndex(null); setDropTarget(null) },
+            onDragEnd: () => {
+              setDragIndex(null)
+              setDropTarget(null)
+            },
             'data-drag-idx': localIdx,
           }),
         )}
@@ -248,10 +289,16 @@ export default function TabBar({
             <div
               className="tab-overflow-panel"
               ref={overflowPanelRef}
-              style={showOverflow ? (() => {
-                const rect = overflowBtnRef.current?.getBoundingClientRect()
-                return rect ? { top: rect.bottom + 4, right: window.innerWidth - rect.right } : {}
-              })() : undefined}
+              style={
+                showOverflow
+                  ? (() => {
+                      const rect = overflowBtnRef.current?.getBoundingClientRect()
+                      return rect
+                        ? { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+                        : {}
+                    })()
+                  : undefined
+              }
             >
               {tabs.map((tab) => (
                 <div
@@ -261,7 +308,10 @@ export default function TabBar({
                   <button
                     className="tab-overflow-select"
                     onPointerDown={(e) => e.preventDefault()}
-                    onClick={() => { onSelect(tab.id); setShowOverflow(false) }}
+                    onClick={() => {
+                      onSelect(tab.id)
+                      setShowOverflow(false)
+                    }}
                   >
                     {tab.dirty && <span className="dot" />}
                     {tab.locked && <Pin size={11} className="tab-overflow-lock" />}
@@ -310,4 +360,6 @@ export default function TabBar({
       </button>
     </div>
   )
-}
+})
+
+export default TabBar

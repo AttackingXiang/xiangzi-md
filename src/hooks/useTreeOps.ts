@@ -226,9 +226,15 @@ export function useTreeOps({
         items.push({ label: t('新建文件夹'), onClick: () => createFolderIn(node.path) })
       } else if (node.openable) {
         items.push({ label: t('打开'), onClick: () => openPath(node.path, node.name) })
-        items.push({ label: t('用默认应用打开'), onClick: () => void desktop.openWithDefault(node.path) })
+        items.push({
+          label: t('用默认应用打开'),
+          onClick: () => void desktop.openWithDefault(node.path),
+        })
       } else {
-        items.push({ label: t('用默认应用打开'), onClick: () => void desktop.openWithDefault(node.path) })
+        items.push({
+          label: t('用默认应用打开'),
+          onClick: () => void desktop.openWithDefault(node.path),
+        })
       }
       items.push({ label: t('重命名'), onClick: () => renameNode(node), separatorBefore: true })
       items.push({ label: t(revealLocationKey()), onClick: () => desktop.reveal(node.path) })

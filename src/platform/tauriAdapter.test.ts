@@ -244,6 +244,35 @@ describe('tauriDesktopAdapter', () => {
     expect(invokeMock).not.toHaveBeenCalled()
   })
 
+  it('selects Pandoc and Word reference template files', async () => {
+    openMock.mockResolvedValueOnce('/opt/homebrew/bin/pandoc')
+    openMock.mockResolvedValueOnce('/notes/reference.docx')
+
+    await expect(tauriDesktopAdapter.pickPandocExecutable()).resolves.toEqual({
+      path: '/opt/homebrew/bin/pandoc',
+    })
+    await expect(tauriDesktopAdapter.pickWordTemplate()).resolves.toEqual({
+      path: '/notes/reference.docx',
+    })
+    expect(openMock).toHaveBeenNthCalledWith(1, { multiple: false })
+    expect(openMock).toHaveBeenNthCalledWith(2, {
+      multiple: false,
+      filters: [{ name: 'Word Template', extensions: ['docx'] }],
+    })
+  })
+
+  it('exports the editable Pandoc default template after choosing a destination', async () => {
+    saveMock.mockResolvedValueOnce('/notes/reference.docx')
+    invokeMock.mockResolvedValueOnce({ path: '/notes/reference.docx' })
+
+    await expect(tauriDesktopAdapter.savePandocDefaultTemplate()).resolves.toEqual({
+      path: '/notes/reference.docx',
+    })
+    expect(invokeMock).toHaveBeenCalledWith('export_pandoc_default_template', {
+      outputPath: '/notes/reference.docx',
+    })
+  })
+
   it('maps updater metadata without exposing the plugin object to React features', async () => {
     const close = vi.fn().mockResolvedValue(undefined)
     const downloadAndInstall = vi.fn().mockResolvedValue(undefined)

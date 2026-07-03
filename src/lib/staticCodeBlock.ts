@@ -1,5 +1,9 @@
 import { $view } from '@milkdown/kit/utils'
-import type { NodeView, NodeViewConstructor, EditorView as PMEditorView } from '@milkdown/kit/prose/view'
+import type {
+  NodeView,
+  NodeViewConstructor,
+  EditorView as PMEditorView,
+} from '@milkdown/kit/prose/view'
 import type { Node as PMNode } from '@milkdown/kit/prose/model'
 import { codeBlockSchema } from '@milkdown/kit/preset/commonmark'
 import { languages as cmLanguages } from '@codemirror/language-data'
@@ -16,7 +20,10 @@ export function setCodeBlockTheme(theme: 'light' | 'dark'): void {
 
 // ---------- language list for picker ----------
 
-interface LangEntry { name: string; lower: string }
+interface LangEntry {
+  name: string
+  lower: string
+}
 const LANG_LIST: LangEntry[] = cmLanguages
   .map((d) => ({ name: d.name, lower: d.name.toLowerCase() }))
   .sort((a, b) => a.name.localeCompare(b.name))
@@ -54,7 +61,9 @@ class LanguagePicker {
     this.input.className = 'xmd-lang-search'
     this.input.placeholder = t('搜索语言…')
     this.input.addEventListener('input', () => this.filterList())
-    this.input.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.hide() })
+    this.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.hide()
+    })
     searchRow.appendChild(this.input)
 
     this.autoBtn = document.createElement('button')
@@ -75,7 +84,12 @@ class LanguagePicker {
     document.addEventListener('mousedown', this.onOutsideClick, true)
   }
 
-  show(anchor: HTMLElement, currentLang: string, onSelect: (lang: string) => void, getCode: () => string): void {
+  show(
+    anchor: HTMLElement,
+    currentLang: string,
+    onSelect: (lang: string) => void,
+    getCode: () => string,
+  ): void {
     this.onSelect = onSelect
     this.getCode = getCode
     this.input.value = ''
@@ -107,7 +121,9 @@ class LanguagePicker {
     } else {
       this.input.focus()
       this.input.placeholder = t('未能识别，请手动选择')
-      setTimeout(() => { this.input.placeholder = t('搜索语言…') }, 2000)
+      setTimeout(() => {
+        this.input.placeholder = t('搜索语言…')
+      }, 2000)
     }
   }
 
@@ -176,13 +192,22 @@ class StaticCodeBlockView implements NodeView {
     this.dom.className = 'xmd-code-block'
 
     this.dom.addEventListener('focusin', () => {
-      if (!this._autoDetectArmed) { this._autoDetectArmed = true; return }
+      if (!this._autoDetectArmed) {
+        this._autoDetectArmed = true
+        return
+      }
       if (!this.language && this.content.trim()) {
         const detected = autoDetectLanguage(this.content)
         if (detected) this.setLanguage(detected)
       }
     })
-    this.dom.addEventListener('pointerdown', () => { this._autoDetectArmed = true }, { once: true })
+    this.dom.addEventListener(
+      'pointerdown',
+      () => {
+        this._autoDetectArmed = true
+      },
+      { once: true },
+    )
 
     // Header
     const header = document.createElement('div')
@@ -221,7 +246,13 @@ class StaticCodeBlockView implements NodeView {
   }
 
   private updateLangLabel(): void {
-    this.langBtn.innerHTML = `<span>${this.language || 'text'}</span>${CHEVRON_ICON}`
+    // 语言标签来自 markdown 围栏信息串（用户可控内容），禁止用 innerHTML 拼接，
+    // 否则恶意文档可用 `<svg/onload=...>` 之类的围栏语言注入脚本。
+    // 先用常量图标重置内容，再用 textContent 安全插入语言文本。
+    this.langBtn.innerHTML = CHEVRON_ICON
+    const span = document.createElement('span')
+    span.textContent = this.language || 'text'
+    this.langBtn.insertBefore(span, this.langBtn.firstChild)
   }
 
   private setLanguage(lang: string): void {
@@ -236,7 +267,12 @@ class StaticCodeBlockView implements NodeView {
   }
 
   private openPicker(): void {
-    picker.show(this.langBtn, this.language, (lang) => this.setLanguage(lang), () => this.content)
+    picker.show(
+      this.langBtn,
+      this.language,
+      (lang) => this.setLanguage(lang),
+      () => this.content,
+    )
   }
 
   private initMermaid(): void {
@@ -275,7 +311,10 @@ class StaticCodeBlockView implements NodeView {
   private renderMermaid(code: string): void {
     const seq = ++this.mermaidSeq
     if (!this.mermaidEl) return
-    if (!code.trim()) { this.mermaidEl.innerHTML = ''; return }
+    if (!code.trim()) {
+      this.mermaidEl.innerHTML = ''
+      return
+    }
     const renderer = renderMermaid(_theme)
     renderer('mermaid', code, (result) => {
       if (this.mermaidSeq !== seq || !this.mermaidEl) return
@@ -293,7 +332,9 @@ class StaticCodeBlockView implements NodeView {
   private doCopy(): void {
     void navigator.clipboard.writeText(this.content).then(() => {
       this.copyBtn.innerHTML = CHECK_ICON
-      setTimeout(() => { this.copyBtn.innerHTML = COPY_ICON }, 1400)
+      setTimeout(() => {
+        this.copyBtn.innerHTML = COPY_ICON
+      }, 1400)
     })
   }
 

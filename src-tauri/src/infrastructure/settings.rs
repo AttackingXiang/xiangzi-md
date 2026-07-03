@@ -281,6 +281,13 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(allow_remote_images);
     replace_if_some!(show_toolbar);
     replace_if_some!(pandoc_path);
+    replace_if_some!(pandoc_reference_doc);
+    replace_if_some!(pandoc_export_args);
+    replace_if_some!(pandoc_import_args);
+    replace_if_some!(pandoc_media_folder);
+    replace_if_some!(pandoc_toc);
+    replace_if_some!(pandoc_number_sections);
+    replace_if_some!(pandoc_normalize_fonts);
 }
 
 #[cfg(test)]

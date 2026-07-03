@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 
@@ -15,13 +16,17 @@ function countWords(text: string): number {
   return cjk + words
 }
 
-export default function StatusBar({
+const StatusBar = memo(function StatusBar({
   tab,
   sourceMode,
   focusMode,
   typewriterMode,
   autoSave,
 }: Props): JSX.Element {
+  // App 每次击键都会重渲染，字数/字符数统计避免在每次渲染时重算，只在内容变化时重算
+  const content = tab?.content ?? ''
+  const wordCount = useMemo(() => countWords(content), [content])
+  const charCount = content.length
   return (
     <div className="statusbar">
       <span className="status-left">{tab ? (tab.path ?? t('未保存')) : t('就绪')}</span>
@@ -29,10 +34,10 @@ export default function StatusBar({
         {tab && (
           <>
             <span>
-              {countWords(tab.content)} {t('字')}
+              {wordCount} {t('字')}
             </span>
             <span>
-              {tab.content.length} {t('字符')}
+              {charCount} {t('字符')}
             </span>
             {sourceMode && <span>{t('源码')}</span>}
             {typewriterMode && <span>{t('打字机模式')}</span>}
@@ -44,4 +49,6 @@ export default function StatusBar({
       </span>
     </div>
   )
-}
+})
+
+export default StatusBar

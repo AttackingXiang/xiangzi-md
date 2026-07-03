@@ -18,6 +18,9 @@ fn legacy_settings_receive_current_defaults() {
     assert!(settings.check_updates_on_startup);
     assert!(!settings.favorites_collapsed);
     assert!(settings.favorite_labels.is_empty());
+    assert_eq!(settings.pandoc_media_folder, "assets");
+    assert!(settings.pandoc_normalize_fonts);
+    assert!(settings.pandoc_reference_doc.is_empty());
 }
 
 #[test]

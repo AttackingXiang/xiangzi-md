@@ -1,7 +1,7 @@
 use super::settings_model::{
     AppSettings, MAX_ASSET_SEARCH_PATHS, MAX_FAVORITES, MAX_FAVORITE_LABEL_CHARS,
-    MAX_HIDDEN_WORKSPACE_PATHS, MAX_PATH_LENGTH, MAX_RECENT_ITEMS, MAX_SESSION_FILES,
-    MAX_SHORTCUT_OVERRIDES, SETTINGS_SCHEMA_VERSION, SHORTCUT_ACTIONS,
+    MAX_HIDDEN_WORKSPACE_PATHS, MAX_PANDOC_ARGS_LENGTH, MAX_PATH_LENGTH, MAX_RECENT_ITEMS,
+    MAX_SESSION_FILES, MAX_SHORTCUT_OVERRIDES, SETTINGS_SCHEMA_VERSION, SHORTCUT_ACTIONS,
 };
 use crate::domain::{
     error::{AppError, AppResult},
@@ -63,6 +63,15 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !valid_folder_name(&settings.attachment_folder) {
         settings.attachment_folder = "assets".into();
     }
+    if !valid_folder_name(&settings.pandoc_media_folder) {
+        settings.pandoc_media_folder = "assets".into();
+    }
+    if settings.pandoc_export_args.len() > MAX_PANDOC_ARGS_LENGTH {
+        settings.pandoc_export_args.clear();
+    }
+    if settings.pandoc_import_args.len() > MAX_PANDOC_ARGS_LENGTH {
+        settings.pandoc_import_args.clear();
+    }
     settings.image_max_width = settings.image_max_width.min(10_000);
     let mut seen_shortcuts = BTreeSet::new();
     settings.shortcuts.retain(|action, binding| {
@@ -96,6 +105,14 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
     if !valid_folder_name(&settings.attachment_folder) {
         return Err(AppError::new("settings_invalid", "附件目录名称无效"));
     }
+    if !valid_folder_name(&settings.pandoc_media_folder) {
+        return Err(AppError::new("settings_invalid", "Word 媒体目录名称无效"));
+    }
+    if settings.pandoc_export_args.len() > MAX_PANDOC_ARGS_LENGTH
+        || settings.pandoc_import_args.len() > MAX_PANDOC_ARGS_LENGTH
+    {
+        return Err(AppError::new("settings_invalid", "Pandoc 附加参数过长"));
+    }
     if settings.image_max_width > 10_000 {
         return Err(AppError::new("settings_invalid", "图片宽度设置过大"));
     }
@@ -109,6 +126,8 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
         return Err(AppError::new("settings_invalid", "快捷键设置无效"));
     }
     if settings.custom_css_path.len() > MAX_PATH_LENGTH
+        || settings.pandoc_path.len() > MAX_PATH_LENGTH
+        || settings.pandoc_reference_doc.len() > MAX_PATH_LENGTH
         || settings
             .asset_search_paths
             .iter()
