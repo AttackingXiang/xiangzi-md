@@ -37,4 +37,38 @@ describe('xmd assets', () => {
     expect(resolveAssetURL('/notes', remote)).toBe(BLOCKED_REMOTE_IMAGE)
     expect(resolveAssetURL('/notes', remote, null, [], true)).toBe(remote)
   })
+
+  it('tries every ancestor directory between docDir and the vault root', () => {
+    // 文档在 vault/科学上网/客户端/，图片实际在 vault/科学上网/assets/…：
+    // 相对路径应逐级向上探测，直到仓库根为止。
+    const url = resolveAssetURL(
+      '/vault/科学上网/客户端',
+      'assets/修改sim卡国家码/img.png',
+      '/vault',
+    )
+    const candidates = xmdAssetPaths(url)
+    expect(candidates[0]).toBe('/vault/科学上网/客户端/assets/修改sim卡国家码/img.png')
+    expect(candidates).toContain('/vault/科学上网/assets/修改sim卡国家码/img.png')
+    expect(candidates).toContain('/vault/assets/修改sim卡国家码/img.png')
+    // 不越过仓库根向上爬
+    expect(candidates.some((p) => p.startsWith('/assets'))).toBe(false)
+  })
+
+  it('limits ancestor probing when the document is outside any vault', () => {
+    const url = resolveAssetURL('/a/b/c/d/e', 'img.png', null)
+    const candidates = xmdAssetPaths(url)
+    expect(candidates[0]).toBe('/a/b/c/d/e/img.png')
+    expect(candidates).toContain('/a/b/c/d/img.png')
+    expect(candidates).toContain('/a/b/img.png')
+    // 最多向上 3 层，不无限爬到根目录
+    expect(candidates).not.toContain('/a/img.png')
+  })
+
+  it('adds percent-decoded candidates for encoded relative paths', () => {
+    const url = resolveAssetURL('/notes', 'assets/my%20image.png', '/vault')
+    const candidates = xmdAssetPaths(url)
+    expect(candidates[0]).toBe('/notes/assets/my%20image.png')
+    expect(candidates).toContain('/notes/assets/my image.png')
+    expect(candidates).toContain('/vault/assets/my image.png')
+  })
 })
