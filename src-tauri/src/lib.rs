@@ -71,6 +71,9 @@ pub fn run() {
             commands::search::search_in_folder,
             commands::search::cancel_search,
             commands::attachment::save_attachment,
+            commands::pandoc::pandoc_status,
+            commands::pandoc::export_docx,
+            commands::pandoc::import_docx,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Xiangzi MD");

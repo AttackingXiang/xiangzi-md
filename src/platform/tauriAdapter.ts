@@ -247,6 +247,24 @@ export const tauriDesktopAdapter: DesktopPort = {
       releaseExportObjectUrls(html)
     }
   },
+  pandocStatus: () => invoke<{ path: string; version: string } | null>('pandoc_status'),
+  exportDocx: async (markdown, docDir, suggestedName) => {
+    const path = await save({
+      defaultPath: suggestedName.replace(/\.md$/i, '') + '.docx',
+      filters: [{ name: 'Word Document', extensions: ['docx'] }],
+    })
+    if (!path) return null
+    await invoke('export_docx', { markdown, docDir, outputPath: path })
+    return { path }
+  },
+  importDocx: async (mediaSubdir) => {
+    const docxPath = await open({
+      multiple: false,
+      filters: [{ name: 'Word Document', extensions: ['docx'] }],
+    })
+    if (!docxPath) return null
+    return invoke<{ markdownPath: string }>('import_docx', { docxPath, mediaSubdir })
+  },
   pickCss: async () => {
     const path = await open({
       multiple: false,

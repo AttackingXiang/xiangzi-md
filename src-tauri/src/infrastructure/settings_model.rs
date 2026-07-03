@@ -82,6 +82,8 @@ pub struct AppSettings {
     pub hidden_name_patterns: Vec<String>,
     pub allow_remote_images: bool,
     pub show_toolbar: bool,
+    /// pandoc 可执行文件的自定义路径，空字符串表示自动探测
+    pub pandoc_path: String,
 }
 
 impl Default for AppSettings {
@@ -120,6 +122,7 @@ impl Default for AppSettings {
             ],
             allow_remote_images: false,
             show_toolbar: false,
+            pandoc_path: String::new(),
         }
     }
 }
@@ -151,6 +154,7 @@ pub struct SettingsPatch {
     pub hidden_name_patterns: Option<Vec<String>>,
     pub allow_remote_images: Option<bool>,
     pub show_toolbar: Option<bool>,
+    pub pandoc_path: Option<String>,
 }
 
 impl SettingsPatch {

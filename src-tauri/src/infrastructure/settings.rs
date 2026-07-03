@@ -280,6 +280,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(hidden_name_patterns);
     replace_if_some!(allow_remote_images);
     replace_if_some!(show_toolbar);
+    replace_if_some!(pandoc_path);
 }
 
 #[cfg(test)]

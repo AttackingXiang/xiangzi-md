@@ -50,6 +50,7 @@ export interface AppSettings {
   hiddenNamePatterns: string[]
   allowRemoteImages: boolean
   showToolbar: boolean
+  pandocPath: string
 }
 
 export interface OpenedFile {
@@ -168,6 +169,13 @@ export interface DesktopPort {
   exportHTML(html: string, suggestedName: string): Promise<{ path: string } | null>
   exportPDF(html: string, suggestedName: string): Promise<{ path: string } | null>
   exportImage(html: string, suggestedName: string): Promise<{ path: string } | null>
+  pandocStatus(): Promise<{ path: string; version: string } | null>
+  exportDocx(
+    markdown: string,
+    docDir: string | null,
+    suggestedName: string,
+  ): Promise<{ path: string } | null>
+  importDocx(mediaSubdir: string): Promise<{ markdownPath: string } | null>
   pickCss(): Promise<{ path: string } | null>
   notify(message: string, title?: string): Promise<void>
   confirm(message: string, title: string, okLabel: string, cancelLabel: string): Promise<boolean>
