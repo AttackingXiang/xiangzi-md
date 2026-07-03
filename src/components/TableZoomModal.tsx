@@ -24,10 +24,7 @@ export default function TableZoomModal({ html, onClose }: Props): JSX.Element {
           <X size={18} />
         </button>
         <div className="table-zoom-scroll milkdown">
-          <div
-            className="table-zoom-content"
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          <div className="table-zoom-content" dangerouslySetInnerHTML={{ __html: html }} />
         </div>
       </div>
     </div>

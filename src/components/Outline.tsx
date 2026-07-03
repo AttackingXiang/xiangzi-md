@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { OutlineItem } from '../types'
 import { t } from '../lib/i18n'
@@ -12,7 +12,7 @@ interface Props {
   width?: number
 }
 
-export default function Outline({
+const Outline = memo(function Outline({
   items,
   onSelect,
   onReorder,
@@ -126,4 +126,6 @@ export default function Outline({
       </div>
     </aside>
   )
-}
+})
+
+export default Outline

@@ -319,15 +319,36 @@ function insertLink(): void {
   const linkMark = view.state.schema.marks.link
   if (!linkMark) return
   const { from, to, empty } = view.state.selection
+  // 空选区时探测的是 [from, from+1)，若光标恰好在文档末尾要夹住，否则 rangeHasMark 越界报错
+  const docSize = view.state.doc.content.size
+  const checkTo = empty ? Math.min(to + 1, docSize) : to
   // If selection already has a link, remove it
-  if (view.state.doc.rangeHasMark(from, empty ? to + 1 : to, linkMark)) {
+  if (view.state.doc.rangeHasMark(from, checkTo, linkMark)) {
     exec((s) => s.marks.link && toggleMark(s.marks.link))
     return
   }
-  const href = window.prompt(view.state.schema.marks.link ? 'URL' : 'URL')
+  const href = window.prompt('URL')
   if (!href?.trim()) return
-  const url = href.trim()
-  const tr = view.state.tr.addMark(from, empty ? from + 1 : to, linkMark.create({ href: url, title: '' }))
+  const trimmed = href.trim()
+  // 无 scheme 前缀的输入按 https 处理；scheme 非 http/https/mailto 一律拒绝插入，
+  // 防止 javascript:/data: 等危险协议通过手动插入链接绕过前面的外链拦截
+  const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed)
+  let url: string
+  if (!schemeMatch) {
+    url = `https://${trimmed}`
+  } else {
+    const scheme = schemeMatch[1].toLowerCase()
+    if (scheme !== 'http' && scheme !== 'https' && scheme !== 'mailto') return
+    url = trimmed
+  }
+  const tr = view.state.tr
+  if (empty) {
+    // 空选区：插入 URL 文本本身并加 link mark，而不是把 mark 盲目套在光标后的下一个字符上
+    tr.insertText(url, from)
+    tr.addMark(from, from + url.length, linkMark.create({ href: url, title: '' }))
+  } else {
+    tr.addMark(from, to, linkMark.create({ href: url, title: '' }))
+  }
   editorBridge.markUserEdit()
   view.dispatch(tr)
   view.focus()

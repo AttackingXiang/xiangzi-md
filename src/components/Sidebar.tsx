@@ -9,7 +9,7 @@ import {
   Star,
   Folder,
 } from 'lucide-react'
-import { useCallback, type RefObject } from 'react'
+import { memo, useCallback, type RefObject } from 'react'
 import FileTree from './FileTree'
 import type { FileNode, Folder as FolderType } from '../types'
 import { t } from '../lib/i18n'
@@ -49,7 +49,7 @@ interface Props {
   style?: React.CSSProperties
 }
 
-export default function Sidebar({
+const Sidebar = memo(function Sidebar({
   folder,
   activePath,
   favorites,
@@ -81,10 +81,13 @@ export default function Sidebar({
   const isFav = folder ? favorites.includes(folder.root) : false
   const hideFolderNames = hideAttachmentFolders && attachmentFolder ? [attachmentFolder] : []
 
-  const handleToggleExpanded = useCallback((path: string, expanded: boolean) => {
-    if (expanded) expandedPathsRef.current?.add(path)
-    else expandedPathsRef.current?.delete(path)
-  }, [expandedPathsRef])
+  const handleToggleExpanded = useCallback(
+    (path: string, expanded: boolean) => {
+      if (expanded) expandedPathsRef.current?.add(path)
+      else expandedPathsRef.current?.delete(path)
+    },
+    [expandedPathsRef],
+  )
 
   return (
     <aside className="sidebar" style={style}>
@@ -106,11 +109,7 @@ export default function Sidebar({
         </span>
         <div className="sidebar-actions">
           {folder && canUndo && (
-            <button
-              className="icon-btn sm"
-              title={t('撤销上次操作')}
-              onClick={onUndo}
-            >
+            <button className="icon-btn sm" title={t('撤销上次操作')} onClick={onUndo}>
               <RotateCcw size={15} />
             </button>
           )}
@@ -211,4 +210,6 @@ export default function Sidebar({
       </div>
     </aside>
   )
-}
+})
+
+export default Sidebar

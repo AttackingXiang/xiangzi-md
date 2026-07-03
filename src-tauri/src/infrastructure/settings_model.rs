@@ -10,6 +10,7 @@ pub(crate) const MAX_HIDDEN_WORKSPACE_PATHS: usize = 64;
 pub(crate) const MAX_SHORTCUT_OVERRIDES: usize = 64;
 pub(crate) const MAX_PATH_LENGTH: usize = 4096;
 pub(crate) const MAX_FAVORITE_LABEL_CHARS: usize = 80;
+pub(crate) const MAX_PANDOC_ARGS_LENGTH: usize = 8_192;
 
 pub(crate) const SHORTCUT_ACTIONS: &[&str] = &[
     "new-file",
@@ -84,6 +85,17 @@ pub struct AppSettings {
     pub show_toolbar: bool,
     /// pandoc 可执行文件的自定义路径，空字符串表示自动探测
     pub pandoc_path: String,
+    /// 自定义 reference.docx；空字符串表示使用 Pandoc 内置模板
+    pub pandoc_reference_doc: String,
+    /// 导入/导出的附加参数（按命令行引号规则解析，但不经过 shell）
+    pub pandoc_export_args: String,
+    pub pandoc_import_args: String,
+    /// 导入 Word 时提取图片的相对目录
+    pub pandoc_media_folder: String,
+    pub pandoc_toc: bool,
+    pub pandoc_number_sections: bool,
+    /// 是否执行项目既有的宋体/黑体及黑色标题规范化
+    pub pandoc_normalize_fonts: bool,
 }
 
 impl Default for AppSettings {
@@ -123,6 +135,13 @@ impl Default for AppSettings {
             allow_remote_images: false,
             show_toolbar: false,
             pandoc_path: String::new(),
+            pandoc_reference_doc: String::new(),
+            pandoc_export_args: String::new(),
+            pandoc_import_args: String::new(),
+            pandoc_media_folder: "assets".into(),
+            pandoc_toc: false,
+            pandoc_number_sections: false,
+            pandoc_normalize_fonts: true,
         }
     }
 }
@@ -155,6 +174,13 @@ pub struct SettingsPatch {
     pub allow_remote_images: Option<bool>,
     pub show_toolbar: Option<bool>,
     pub pandoc_path: Option<String>,
+    pub pandoc_reference_doc: Option<String>,
+    pub pandoc_export_args: Option<String>,
+    pub pandoc_import_args: Option<String>,
+    pub pandoc_media_folder: Option<String>,
+    pub pandoc_toc: Option<bool>,
+    pub pandoc_number_sections: Option<bool>,
+    pub pandoc_normalize_fonts: Option<bool>,
 }
 
 impl SettingsPatch {

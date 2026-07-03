@@ -51,6 +51,13 @@ export interface AppSettings {
   allowRemoteImages: boolean
   showToolbar: boolean
   pandocPath: string
+  pandocReferenceDoc: string
+  pandocExportArgs: string
+  pandocImportArgs: string
+  pandocMediaFolder: string
+  pandocToc: boolean
+  pandocNumberSections: boolean
+  pandocNormalizeFonts: boolean
 }
 
 export interface OpenedFile {
@@ -176,6 +183,9 @@ export interface DesktopPort {
     suggestedName: string,
   ): Promise<{ path: string } | null>
   importDocx(mediaSubdir: string): Promise<{ markdownPath: string } | null>
+  pickPandocExecutable(): Promise<{ path: string } | null>
+  pickWordTemplate(): Promise<{ path: string } | null>
+  savePandocDefaultTemplate(): Promise<{ path: string } | null>
   pickCss(): Promise<{ path: string } | null>
   notify(message: string, title?: string): Promise<void>
   confirm(message: string, title: string, okLabel: string, cancelLabel: string): Promise<boolean>

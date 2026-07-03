@@ -50,8 +50,11 @@ pub fn open_with_default(path: String) -> AppResult<()> {
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", &path.to_string_lossy()])
+        // 不用 `cmd /C start` 是因为 cmd 会对路径里的 `%VAR%` 做环境变量展开，
+        // 文件名恰好包含 `%...%` 时会被静默替换甚至打开错误路径。
+        // explorer 直接接收路径参数交给系统关联程序打开，不经过 cmd 的字符串解析。
+        std::process::Command::new("explorer")
+            .arg(&path)
             .spawn()
             .map(|_| ())
             .map_err(|e| AppError::new("open_failed", e.to_string()))

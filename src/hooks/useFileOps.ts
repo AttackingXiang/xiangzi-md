@@ -340,7 +340,9 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     if (targets.size === 0) return
     const snapshot = stateRef.current.tabs
     // Never close locked tabs
-    const closeable = new Set(snapshot.filter((t) => targets.has(t.id) && !t.locked).map((t) => t.id))
+    const closeable = new Set(
+      snapshot.filter((t) => targets.has(t.id) && !t.locked).map((t) => t.id),
+    )
     if (closeable.size === 0) return
     setTabs((previous) => previous.filter((tab) => !closeable.has(tab.id)))
     setActiveId((current) => {

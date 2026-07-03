@@ -2,7 +2,10 @@ import { useEffect, useRef } from 'react'
 import { desktop } from '../platform'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import { commandsCtx, editorViewCtx } from '@milkdown/kit/core'
-import { clearTextInCurrentBlockCommand, hardbreakFilterNodes } from '@milkdown/kit/preset/commonmark'
+import {
+  clearTextInCurrentBlockCommand,
+  hardbreakFilterNodes,
+} from '@milkdown/kit/preset/commonmark'
 import { tablePickerBridge } from '../lib/tablePickerBridge'
 import { editorCmd } from '../lib/editorCommands'
 import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
@@ -197,10 +200,8 @@ export default function Editor({
                 const { from } = view.state.selection
                 const coords = view.coordsAtPos(from)
                 ctx.get(commandsCtx).call(clearTextInCurrentBlockCommand.key)
-                tablePickerBridge.request(
-                  coords.left,
-                  coords.bottom + 8,
-                  (r, c) => editorCmd.insertTable(r, c),
+                tablePickerBridge.request(coords.left, coords.bottom + 8, (r, c) =>
+                  editorCmd.insertTable(r, c),
                 )
               },
             })

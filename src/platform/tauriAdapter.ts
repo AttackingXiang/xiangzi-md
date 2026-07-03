@@ -265,6 +265,25 @@ export const tauriDesktopAdapter: DesktopPort = {
     if (!docxPath) return null
     return invoke<{ markdownPath: string }>('import_docx', { docxPath, mediaSubdir })
   },
+  pickPandocExecutable: async () => {
+    const path = await open({ multiple: false })
+    return path ? { path } : null
+  },
+  pickWordTemplate: async () => {
+    const path = await open({
+      multiple: false,
+      filters: [{ name: 'Word Template', extensions: ['docx'] }],
+    })
+    return path ? { path } : null
+  },
+  savePandocDefaultTemplate: async () => {
+    const path = await save({
+      defaultPath: 'reference.docx',
+      filters: [{ name: 'Word Template', extensions: ['docx'] }],
+    })
+    if (!path) return null
+    return invoke<{ path: string }>('export_pandoc_default_template', { outputPath: path })
+  },
   pickCss: async () => {
     const path = await open({
       multiple: false,

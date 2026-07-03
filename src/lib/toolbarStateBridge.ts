@@ -7,7 +7,7 @@ export interface ToolbarActiveState {
   strike: boolean
   inlineCode: boolean
   link: boolean
-  headingLevel: number | null  // 1-6 or null
+  headingLevel: number | null // 1-6 or null
   blockquote: boolean
   codeBlock: boolean
   bulletList: boolean

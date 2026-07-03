@@ -164,6 +164,88 @@ pub fn find_pandoc_full(override_path: Option<&str>) -> Option<PathBuf> {
     }
 }
 
+const MAX_CUSTOM_PANDOC_ARGS: usize = 64;
+
+/// 按常见命令行引号规则解析附加参数，但始终直接传给 Command，不经过 shell。
+fn parse_pandoc_args(raw: &str) -> AppResult<Vec<String>> {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Quote {
+        None,
+        Single,
+        Double,
+    }
+
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut quote = Quote::None;
+    let mut escaped = false;
+
+    for ch in raw.chars() {
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+        match (quote, ch) {
+            (Quote::None | Quote::Double, '\\') => escaped = true,
+            (Quote::None, '\'') => quote = Quote::Single,
+            (Quote::None, '"') => quote = Quote::Double,
+            (Quote::Single, '\'') => quote = Quote::None,
+            (Quote::Double, '"') => quote = Quote::None,
+            (Quote::None, value) if value.is_whitespace() => {
+                if !current.is_empty() {
+                    args.push(std::mem::take(&mut current));
+                }
+            }
+            (_, value) => current.push(value),
+        }
+    }
+
+    if escaped || quote != Quote::None {
+        return Err(AppError::new(
+            "pandoc_args_invalid",
+            "Pandoc 附加参数中存在未闭合的引号或转义符",
+        ));
+    }
+    if !current.is_empty() {
+        args.push(current);
+    }
+    if args.len() > MAX_CUSTOM_PANDOC_ARGS {
+        return Err(AppError::new(
+            "pandoc_args_invalid",
+            format!("Pandoc 附加参数不能超过 {MAX_CUSTOM_PANDOC_ARGS} 项"),
+        ));
+    }
+    if let Some(argument) = args
+        .iter()
+        .find(|argument| is_reserved_pandoc_arg(argument))
+    {
+        return Err(AppError::new(
+            "pandoc_args_reserved",
+            format!("参数 {argument} 由应用管理，请使用对应设置项"),
+        ));
+    }
+    Ok(args)
+}
+
+fn is_reserved_pandoc_arg(argument: &str) -> bool {
+    const LONG: &[&str] = &[
+        "--from",
+        "--to",
+        "--output",
+        "--extract-media",
+        "--reference-doc",
+    ];
+    LONG.iter()
+        .any(|name| argument == *name || argument.starts_with(&format!("{name}=")))
+        || ["-f", "-t", "-o"].iter().any(|name| {
+            argument == *name
+                || (argument.starts_with(name)
+                    && argument.len() > name.len()
+                    && !argument.starts_with("--"))
+        })
+}
+
 // ── Tauri 命令 ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
@@ -222,6 +304,66 @@ pub struct ExportDocxResult {
     pub path: String,
 }
 
+#[derive(Debug)]
+struct PandocExportOptions {
+    reference_doc: Option<PathBuf>,
+    extra_args: Vec<String>,
+    table_of_contents: bool,
+    number_sections: bool,
+}
+
+/// 把 Pandoc 内置 reference.docx 导出为可编辑副本。
+#[tauri::command]
+pub async fn export_pandoc_default_template(
+    app: AppHandle,
+    settings_store: State<'_, SettingsStore>,
+    output_path: String,
+) -> AppResult<ExportDocxResult> {
+    let settings = settings_store.get(&app)?;
+    let pandoc_path = find_pandoc_full(if settings.pandoc_path.is_empty() {
+        None
+    } else {
+        Some(&settings.pandoc_path)
+    })
+    .ok_or_else(|| {
+        AppError::new(
+            "pandoc_not_found",
+            "未找到 pandoc，请先安装或在设置中指定路径",
+        )
+    })?;
+    let output_path_for_task = output_path.clone();
+
+    crate::commands::blocking(move || {
+        run_export_default_template(&pandoc_path, Path::new(&output_path_for_task))
+    })
+    .await?;
+
+    Ok(ExportDocxResult { path: output_path })
+}
+
+fn run_export_default_template(pandoc_path: &Path, output_path: &Path) -> AppResult<()> {
+    let result = make_command(pandoc_path)
+        .args(["--print-default-data-file", "reference.docx"])
+        .output()
+        .map_err(|error| {
+            AppError::new(
+                "pandoc_exec_failed",
+                format!("读取 Pandoc 默认模板失败：{error}"),
+            )
+        })?;
+    if !result.status.success() {
+        return Err(AppError::new(
+            "pandoc_template_export_failed",
+            format!(
+                "导出 Pandoc 默认模板失败：{}",
+                String::from_utf8_lossy(&result.stderr)
+            ),
+        ));
+    }
+    std::fs::write(output_path, result.stdout)
+        .map_err(|error| AppError::io("写入默认 Word 模板失败", error))
+}
+
 /// 把 Markdown 文本（通过 stdin）用 pandoc 转换为 docx，然后后处理字体。
 ///
 /// - markdown：要导出的 Markdown 原文
@@ -236,7 +378,7 @@ pub async fn export_docx(
     output_path: String,
 ) -> AppResult<ExportDocxResult> {
     let settings = settings_store.get(&app)?;
-    let override_path = settings.pandoc_path;
+    let override_path = settings.pandoc_path.clone();
     let pandoc_path = find_pandoc_full(if override_path.is_empty() {
         None
     } else {
@@ -248,6 +390,31 @@ pub async fn export_docx(
             "未找到 pandoc，请先安装或在设置中指定路径",
         )
     })?;
+
+    let reference_doc = if settings.pandoc_reference_doc.trim().is_empty() {
+        None
+    } else {
+        let path = PathBuf::from(settings.pandoc_reference_doc.trim());
+        if !path.is_file()
+            || !path
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case("docx"))
+        {
+            return Err(AppError::new(
+                "pandoc_reference_doc_invalid",
+                "自定义 Word 模板不存在或不是 .docx 文件",
+            ));
+        }
+        Some(path)
+    };
+    let options = PandocExportOptions {
+        reference_doc,
+        extra_args: parse_pandoc_args(&settings.pandoc_export_args)?,
+        table_of_contents: settings.pandoc_toc,
+        number_sections: settings.pandoc_number_sections,
+    };
+    let normalize_fonts = settings.pandoc_normalize_fonts;
 
     let output = PathBuf::from(&output_path);
 
@@ -263,12 +430,15 @@ pub async fn export_docx(
             &markdown2,
             doc_dir2.as_deref(),
             &output_path2,
+            &options,
         )
     })
     .await?;
 
     // 后处理：归一化字体
-    normalize_docx_fonts(&output)?;
+    if normalize_fonts {
+        normalize_docx_fonts(&output)?;
+    }
 
     Ok(ExportDocxResult { path: output_path })
 }
@@ -278,21 +448,29 @@ fn run_export_docx(
     markdown: &str,
     doc_dir: Option<&str>,
     output_path: &str,
+    options: &PandocExportOptions,
 ) -> AppResult<()> {
     use std::io::Write;
 
     let mut cmd = make_command(pandoc_path);
-    cmd.args([
-        "-f",
-        "gfm+tex_math_dollars",
-        "-t",
-        "docx",
-        "-o",
-        output_path,
-    ])
-    .stdin(std::process::Stdio::piped())
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::piped());
+    cmd.args(["-f", "gfm+tex_math_dollars", "-t", "docx"]);
+    if let Some(reference_doc) = &options.reference_doc {
+        cmd.arg(format!(
+            "--reference-doc={}",
+            reference_doc.to_string_lossy()
+        ));
+    }
+    if options.table_of_contents {
+        cmd.arg("--toc");
+    }
+    if options.number_sections {
+        cmd.arg("--number-sections");
+    }
+    cmd.args(&options.extra_args);
+    cmd.args(["-o", output_path])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
 
     // 让 pandoc 以文档目录为 cwd，相对路径图片才能正确嵌入
     if let Some(dir) = doc_dir {
@@ -347,7 +525,7 @@ pub async fn import_docx(
     media_subdir: String,
 ) -> AppResult<ImportDocxResult> {
     let settings = settings_store.get(&app)?;
-    let override_path = settings.pandoc_path;
+    let override_path = settings.pandoc_path.clone();
     let pandoc_path = find_pandoc_full(if override_path.is_empty() {
         None
     } else {
@@ -359,6 +537,7 @@ pub async fn import_docx(
             "未找到 pandoc，请先安装或在设置中指定路径",
         )
     })?;
+    let extra_args = parse_pandoc_args(&settings.pandoc_import_args)?;
 
     // 文件选择器只会授权用户选中的 docx。Pandoc 随后创建的 Markdown
     // 和媒体目录是新路径，需要显式加入 Tauri scope，前端才能立即打开。
@@ -367,9 +546,10 @@ pub async fn import_docx(
         .parent()
         .map(|parent| parent.join(&media_subdir));
 
-    let result =
-        crate::commands::blocking(move || run_import_docx(&pandoc_path, &docx_path, &media_subdir))
-            .await?;
+    let result = crate::commands::blocking(move || {
+        run_import_docx(&pandoc_path, &docx_path, &media_subdir, &extra_args)
+    })
+    .await?;
 
     app.fs_scope()
         .allow_file(&result.markdown_path)
@@ -394,6 +574,7 @@ fn run_import_docx(
     pandoc_path: &Path,
     docx_path: &str,
     media_subdir: &str,
+    extra_args: &[String],
 ) -> AppResult<ImportDocxResult> {
     let docx = PathBuf::from(docx_path);
     let cwd = docx
@@ -428,12 +609,12 @@ fn run_import_docx(
         "--wrap=none",
         "--markdown-headings=atx",
         &format!("--extract-media={media_subdir}"),
-        "-o",
-        &out_name,
-    ])
-    .current_dir(cwd)
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::piped());
+    ]);
+    cmd.args(extra_args);
+    cmd.args(["-o", &out_name])
+        .current_dir(cwd)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
 
     let result = cmd
         .output()
@@ -941,6 +1122,44 @@ mod tests {
         );
     }
 
+    #[test]
+    fn custom_args_support_quotes_without_using_a_shell() {
+        let args = parse_pandoc_args(
+            r#"--metadata title="季度 报告" --resource-path '/tmp/my assets' --fail-if-warnings"#,
+        )
+        .expect("参数应能解析");
+        assert_eq!(
+            args,
+            [
+                "--metadata",
+                "title=季度 报告",
+                "--resource-path",
+                "/tmp/my assets",
+                "--fail-if-warnings"
+            ]
+        );
+    }
+
+    #[test]
+    fn custom_args_reject_app_managed_flags() {
+        for raw in [
+            "-o other.docx",
+            "--output=other.docx",
+            "--reference-doc=other.docx",
+            "--extract-media=elsewhere",
+            "-tdocx",
+        ] {
+            let error = parse_pandoc_args(raw).expect_err("应用管理的参数应被拒绝");
+            assert_eq!(error.code, "pandoc_args_reserved");
+        }
+    }
+
+    #[test]
+    fn custom_args_reject_unclosed_quotes() {
+        let error = parse_pandoc_args("--metadata 'title=未闭合").expect_err("未闭合引号应被拒绝");
+        assert_eq!(error.code, "pandoc_args_invalid");
+    }
+
     // ── 集成测试：需要真实 pandoc（不存在则跳过）──────────────────────────────
 
     #[test]
@@ -958,7 +1177,14 @@ mod tests {
         let out = dir.path().join("test_out.docx");
 
         // 导出
-        run_export_docx(&pandoc, md, None, &out.to_string_lossy()).expect("export_docx 应成功");
+        let options = PandocExportOptions {
+            reference_doc: None,
+            extra_args: Vec::new(),
+            table_of_contents: false,
+            number_sections: false,
+        };
+        run_export_docx(&pandoc, md, None, &out.to_string_lossy(), &options)
+            .expect("export_docx 应成功");
         assert!(out.exists(), "docx 文件应存在");
 
         // 归一化字体
@@ -984,6 +1210,24 @@ mod tests {
         let heading = &styles[heading_start..heading_end];
         assert!(heading.contains(r#"<w:color w:val="000000"/>"#));
         assert!(!heading.contains("themeColor"));
+    }
+
+    #[test]
+    fn exports_editable_default_reference_doc() {
+        let pandoc = match find_pandoc_full(None) {
+            Some(path) => path,
+            None => {
+                eprintln!("skip: pandoc not found");
+                return;
+            }
+        };
+        let dir = tempfile::tempdir().expect("创建临时目录失败");
+        let output = dir.path().join("reference.docx");
+        run_export_default_template(&pandoc, &output).expect("默认模板应能导出");
+
+        let bytes = std::fs::read(output).expect("默认模板应可读");
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).expect("模板应为有效 docx");
+        assert!(archive.by_name("word/styles.xml").is_ok());
     }
 
     #[test]
@@ -1019,8 +1263,8 @@ mod tests {
             .expect("应能启动 pandoc");
         assert!(status.success(), "生成测试 docx 应成功");
 
-        let imported =
-            run_import_docx(&pandoc, &docx.to_string_lossy(), "assets").expect("导入 docx 应成功");
+        let imported = run_import_docx(&pandoc, &docx.to_string_lossy(), "assets", &[])
+            .expect("导入 docx 应成功");
         let markdown = std::fs::read_to_string(imported.markdown_path).unwrap();
         assert!(
             markdown.contains("| A"),

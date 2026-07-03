@@ -34,7 +34,11 @@ export async function loadLanguage(name: string): Promise<LangParser | null> {
 
 // ---------- span computation ----------
 
-interface Span { from: number; to: number; cls: string }
+interface Span {
+  from: number
+  to: number
+  cls: string
+}
 
 // Keyed by `${lang}\0${code}` — cleared automatically when language changes
 const spanCache = new Map<string, Span[]>()
@@ -51,7 +55,9 @@ function computeSpans(lang: LangParser, code: string): Span[] {
       if (classes) spans.push({ from: pos, to: pos + text.length, cls: classes })
       pos += text.length
     },
-    () => { pos++ },
+    () => {
+      pos++
+    },
   )
   return spans
 }
@@ -103,17 +109,25 @@ export const codeHighlightPlugin = $prose(
     new Plugin<DecorationSet>({
       key: hlKey,
       state: {
-        init(_, { doc }) { return buildDecos(doc) },
+        init(_, { doc }) {
+          return buildDecos(doc)
+        },
         apply(tr, old, _, { doc }) {
           return tr.docChanged || tr.getMeta(hlKey) ? buildDecos(doc) : old
         },
       },
       props: {
-        decorations(state) { return this.getState(state) },
+        decorations(state) {
+          return this.getState(state)
+        },
       },
       view(pv) {
         _pmView = pv
-        return { destroy() { if (_pmView === pv) _pmView = null } }
+        return {
+          destroy() {
+            if (_pmView === pv) _pmView = null
+          },
+        }
       },
     }),
 )

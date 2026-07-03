@@ -190,7 +190,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         fs::write(&path, b"same content").expect("rewrite");
         assert_ne!(
-            file_version(&path, b"same content").expect("version2").modified_nanos,
+            file_version(&path, b"same content")
+                .expect("version2")
+                .modified_nanos,
             version.modified_nanos,
             "precondition: rewrite should change mtime",
         );
