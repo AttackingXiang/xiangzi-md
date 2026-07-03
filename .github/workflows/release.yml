@@ -46,6 +46,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ inputs.tag }}
           FORCE_RELEASE: ${{ inputs.force }}
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -56,7 +57,11 @@ jobs:
           if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_RELEASE}" = "true" ]; then
             echo "Repair mode enabled for ${TAG}; existing release assets will be rebuilt."
             echo "publish=true" >> "${GITHUB_OUTPUT}"
-          elif git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+          elif curl -sf -o /dev/null \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"; then
+            # 以 GitHub Release 是否存在为准。之前检查的是 tag 是否存在于远端，
+            # 而 tag push 触发的 run 里 tag 必然已存在，导致推 tag 永远不发布。
             echo "Version ${TAG} is already released; CI will still validate this commit."
             echo "publish=false" >> "${GITHUB_OUTPUT}"
           else
