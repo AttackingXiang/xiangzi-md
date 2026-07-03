@@ -1,3 +1,5 @@
+import { convertFileSrc } from '@tauri-apps/api/core'
+
 /** 规范化路径（统一为正斜杠，处理 . 与 ..），兼容 POSIX 与 Windows 盘符 */
 function normalize(input: string): string {
   const path = input.replace(/\\/g, '/')
@@ -15,11 +17,30 @@ function isAbsolute(src: string): boolean {
   return src.startsWith('/') || /^[A-Za-z]:[\\/]/.test(src) || src.startsWith('\\\\')
 }
 
+/**
+ * 生成 xmd 协议 URL。macOS/Linux 的 WebView 可直接加载自定义协议
+ * （xmd://localhost/…），Windows 的 WebView2 不支持自定义 scheme，Tauri 将其
+ * 映射为 http://xmd.localhost/…。convertFileSrc 由运行时注入、按平台返回正确
+ * 形式；测试等非 Tauri 环境下回退到 macOS 形式。
+ */
+function xmdUrl(path: string): string {
+  try {
+    return convertFileSrc(path, 'xmd')
+  } catch {
+    return `xmd://localhost/${encodeURIComponent(path)}`
+  }
+}
+
+/** 是否为 xmd 协议地址（含 Windows 的 http://xmd.localhost 映射形式）。 */
+function isXmdUrl(url: URL): boolean {
+  return url.protocol === 'xmd:' || (/^https?:$/.test(url.protocol) && url.hostname === 'xmd.localhost')
+}
+
 /** 解析 xmd:// 地址中的主路径和备用路径，顺序与 Rust 协议处理器一致。 */
 export function xmdAssetPaths(source: string): string[] {
   try {
     const url = new URL(source)
-    if (url.protocol !== 'xmd:') return []
+    if (!isXmdUrl(url)) return []
     const primary = decodeURIComponent(url.pathname.slice(1))
     const alternatives = (url.searchParams.get('alts') ?? '')
       .split('\n')
@@ -113,6 +134,9 @@ export function resolveAssetURL(
   allowRemoteImages = false,
 ): string {
   if (!src) return src
+  // Windows 上已解析过的 xmd 映射地址（http://xmd.localhost/…）原样放行，
+  // 必须先于 https? 远程判断，否则会被误当远程图片拦截。
+  if (/^https?:\/\/xmd\.localhost\//i.test(src)) return src
   if (/^https?:/i.test(src)) return allowRemoteImages ? src : BLOCKED_REMOTE_IMAGE
   if (/^(data|blob|xmd):/i.test(src)) return src
 
@@ -180,7 +204,7 @@ export function resolveAssetURL(
     }
   }
 
-  const primaryUrl = `xmd://localhost/${encodeURIComponent(primary)}`
+  const primaryUrl = xmdUrl(primary)
   if (alts.length === 0) return primaryUrl
   // Encode alt paths as newline-separated query param (URLSearchParams auto-encodes)
   return `${primaryUrl}?alts=${encodeURIComponent(alts.join('\n'))}`
