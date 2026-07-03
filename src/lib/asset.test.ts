@@ -71,8 +71,22 @@ describe('xmd assets', () => {
     expect(candidates[0]).toBe('/vault/科学上网/客户端/assets/修改sim卡国家码/img.png')
     expect(candidates).toContain('/vault/科学上网/assets/修改sim卡国家码/img.png')
     expect(candidates).toContain('/vault/assets/修改sim卡国家码/img.png')
-    // 不越过仓库根向上爬
-    expect(candidates.some((p) => p.startsWith('/assets'))).toBe(false)
+  })
+
+  it('keeps probing a bounded distance above the vault root', () => {
+    // 用户把子文件夹当仓库打开（docDir == vaultRoot）、图片实际在上层目录：
+    // 越过仓库根仍要多探几层，否则这类布局全部裂图；安全由协议层授权兜底。
+    const url = resolveAssetURL(
+      '/note/科学上网/客户端',
+      'assets/修改sim卡国家码/img.png',
+      '/note/科学上网/客户端',
+    )
+    const candidates = xmdAssetPaths(url)
+    expect(candidates[0]).toBe('/note/科学上网/客户端/assets/修改sim卡国家码/img.png')
+    expect(candidates).toContain('/note/科学上网/assets/修改sim卡国家码/img.png')
+    expect(candidates).toContain('/note/assets/修改sim卡国家码/img.png')
+    // 越根探测有上限（2 层），不会一路爬到根目录
+    expect(candidates).not.toContain('/assets/修改sim卡国家码/img.png')
   })
 
   it('limits ancestor probing when the document is outside any vault', () => {

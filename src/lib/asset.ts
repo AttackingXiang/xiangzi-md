@@ -86,9 +86,15 @@ const MAX_ALT_CANDIDATES = 32
 /** 无仓库根时向上探测的最大层数（避免一路爬到用户主目录产生噪声候选）。 */
 const MAX_ANCESTOR_LEVELS_WITHOUT_VAULT = 3
 
+/** 越过仓库根后额外探测的层数：用户把某个子文件夹当仓库打开、而图片存放在
+ * 上层目录时（Typora 常见布局），仅靠仓库内探测会漏掉真实路径。多探几层的
+ * 安全性由协议层兜底——未授权的路径 xmd 处理器本来就不会服务。 */
+const MAX_ANCESTOR_LEVELS_BEYOND_VAULT = 2
+
 /**
  * docDir 的祖先目录序列（由近及远）。docDir 在 vaultRoot 之下时走到 vaultRoot
- * 为止（含）；否则最多向上 MAX_ANCESTOR_LEVELS_WITHOUT_VAULT 层。
+ * 后再额外探 MAX_ANCESTOR_LEVELS_BEYOND_VAULT 层；无仓库时最多向上
+ * MAX_ANCESTOR_LEVELS_WITHOUT_VAULT 层。
  * 典型场景：Typora 用户把文档挪进子文件夹，图片还留在原层级的 assets/ 里，
  * 相对路径于是指向文档的某个祖先目录而不是文档所在目录。
  */
@@ -96,17 +102,22 @@ function ancestorDirs(docDir: string, vaultRoot?: string | null): string[] {
   const stop = vaultRoot ? normalize(vaultRoot) : null
   const result: string[] = []
   let current = normalize(docDir)
-  if (stop && current === stop) return result
+  let beyondVault = stop ? (current === stop ? 0 : -1) : -1
   for (let level = 0; ; level++) {
     const cut = current.lastIndexOf('/')
     if (cut <= 0) break
     const parent = current.slice(0, cut)
     // Windows 盘符根（如 "C:"）或 POSIX 根不再继续
     if (parent === '' || /^[A-Za-z]:$/.test(parent)) break
-    if (stop) {
+    if (stop && beyondVault < 0) {
+      // 仍在仓库内向上走；到达仓库根后切换到"越根探测"计数
       if (!stop.startsWith(parent) && !parent.startsWith(stop)) break
       result.push(parent)
-      if (parent === stop) break
+      if (parent === stop) beyondVault = 0
+    } else if (stop) {
+      if (beyondVault >= MAX_ANCESTOR_LEVELS_BEYOND_VAULT) break
+      result.push(parent)
+      beyondVault++
     } else {
       if (level >= MAX_ANCESTOR_LEVELS_WITHOUT_VAULT) break
       result.push(parent)
