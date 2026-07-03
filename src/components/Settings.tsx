@@ -17,6 +17,12 @@ import type { UpdaterController } from '../hooks/useUpdater'
 import Shortcuts from './Shortcuts'
 import { getLang, t } from '../lib/i18n'
 
+// pandoc 状态结果类型
+interface PandocStatus {
+  path: string
+  version: string
+}
+
 export type SettingsSection =
   | 'appearance'
   | 'editor'
@@ -321,10 +327,10 @@ export default function Settings({
                           const result = await desktop.pickFolder()
                           if (!result || settings.hiddenWorkspacePaths.includes(result.path)) return
                           onChange({
-                            hiddenWorkspacePaths: [...settings.hiddenWorkspacePaths, result.path].slice(
-                              0,
-                              64,
-                            ),
+                            hiddenWorkspacePaths: [
+                              ...settings.hiddenWorkspacePaths,
+                              result.path,
+                            ].slice(0, 64),
                           })
                         }}
                       >
@@ -425,6 +431,7 @@ export default function Settings({
                     )}
                   </p>
                 </SettingsCard>
+                <PandocSettingsCard settings={settings} onChange={onChange} en={en} />
               </SettingsPage>
             )}
 
@@ -584,7 +591,10 @@ function HiddenNamePatterns({
 
   const add = (): void => {
     const trimmed = draft.trim()
-    if (!trimmed || patterns.includes(trimmed)) { setDraft(''); return }
+    if (!trimmed || patterns.includes(trimmed)) {
+      setDraft('')
+      return
+    }
     onChange([...patterns, trimmed])
     setDraft('')
   }
@@ -605,9 +615,7 @@ function HiddenNamePatterns({
           </span>
         ))}
         {patterns.length === 0 && (
-          <span className="settings-empty-text">
-            {en ? 'No patterns.' : '暂无规则。'}
-          </span>
+          <span className="settings-empty-text">{en ? 'No patterns.' : '暂无规则。'}</span>
         )}
       </div>
       <div className="name-pattern-input-row">
@@ -616,13 +624,69 @@ function HiddenNamePatterns({
           placeholder={en ? 'e.g. dist, .next, *.log' : '例如 dist、.next、*.log'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') add() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') add()
+          }}
         />
         <button className="secondary-btn" onClick={add} disabled={!draft.trim()}>
           {en ? 'Add' : '添加'}
         </button>
       </div>
     </div>
+  )
+}
+
+function PandocSettingsCard({
+  settings,
+  onChange,
+  en,
+}: {
+  settings: AppSettings
+  onChange: (patch: Partial<AppSettings>) => void
+  en: boolean
+}): JSX.Element {
+  const [pandocStatus, setPandocStatus] = useState<PandocStatus | null | undefined>(undefined)
+
+  useEffect(() => {
+    void desktop
+      .pandocStatus()
+      .then((s) => setPandocStatus(s))
+      .catch(() => setPandocStatus(null))
+  }, [settings.pandocPath])
+
+  return (
+    <SettingsCard title={en ? 'Word Import / Export (Pandoc)' : 'Word 导入 / 导出（Pandoc）'}>
+      <SettingRow label={en ? 'Pandoc path' : 'Pandoc 路径'}>
+        <input
+          type="text"
+          value={settings.pandocPath ?? ''}
+          placeholder={en ? 'Auto-detect' : '留空则自动检测'}
+          onChange={(event) => onChange({ pandocPath: event.target.value })}
+        />
+      </SettingRow>
+      <p className="settings-hint">
+        {pandocStatus === undefined ? (
+          en ? (
+            'Checking…'
+          ) : (
+            '检测中…'
+          )
+        ) : pandocStatus ? (
+          en ? (
+            `Pandoc ${pandocStatus.version} detected at ${pandocStatus.path}`
+          ) : (
+            `已检测到 Pandoc ${pandocStatus.version}（${pandocStatus.path}）`
+          )
+        ) : (
+          <>
+            {en ? 'Pandoc not found. ' : '未找到 Pandoc。'}
+            <a href="https://pandoc.org/installing.html" target="_blank" rel="noreferrer">
+              {en ? 'Download Pandoc' : '点击下载安装 Pandoc'}
+            </a>
+          </>
+        )}
+      </p>
+    </SettingsCard>
   )
 }
 

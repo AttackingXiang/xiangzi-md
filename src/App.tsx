@@ -612,7 +612,11 @@ export default function App(): JSX.Element {
       ]
       if (!tab?.locked)
         items.push({ label: t('关闭'), onClick: () => void closeTab(id), separatorBefore: true })
-      items.push({ label: t('关闭其他'), onClick: () => void closeOthers(id), separatorBefore: !tab?.locked })
+      items.push({
+        label: t('关闭其他'),
+        onClick: () => void closeOthers(id),
+        separatorBefore: !tab?.locked,
+      })
       if (idx > 0) items.push({ label: t('关闭左侧全部'), onClick: () => void closeLeft(id) })
       if (idx >= 0 && idx < list.length - 1)
         items.push({ label: t('关闭右侧全部'), onClick: () => void closeRight(id) })
@@ -685,7 +689,39 @@ export default function App(): JSX.Element {
       .catch((error: unknown) => console.error('Outline reorder failed', error))
   }, [])
 
-  const { exportHTML, exportPDF, exportImage } = useExportActions(stateRef, setExportResultPath)
+  const { exportHTML, exportPDF, exportImage, exportDocx } = useExportActions(
+    stateRef,
+    setExportResultPath,
+  )
+
+  // ── 导入 Word 文档 ──────────────────────────────────────────────────────────
+  // 把 attachmentFolder 提取到 useCallback 外，避免 React Compiler
+  // 误把 settings?.attachmentFolder 的依赖追踪提升为整个 settings 对象。
+  const docxMediaSubdir = settings?.attachmentFolder || 'assets'
+  const importDocx = useCallback(async () => {
+    const status = await desktop.pandocStatus()
+    if (!status) {
+      const confirmed = await desktop.confirm(
+        t('未检测到 Pandoc，导入 Word 需要安装 Pandoc。是否打开下载页面？'),
+        t('未找到 Pandoc'),
+        t('打开下载页面'),
+        t('取消'),
+      )
+      if (confirmed) {
+        await desktop.openExternal('https://pandoc.org/installing.html')
+      }
+      return
+    }
+    try {
+      const result = await desktop.importDocx(docxMediaSubdir)
+      if (!result) return
+      await openPath(result.markdownPath, baseName(result.markdownPath))
+      await refreshTree()
+    } catch (error) {
+      void desktop.notify(t('Word 导入失败：\n') + (error as Error).message)
+    }
+  }, [docxMediaSubdir, openPath, refreshTree])
+
   // ── File tree move (drag-and-drop) ────────────────────────────────────────
   const moveTreeItem = useCallback(
     async (sourcePath: string, targetDirPath: string) => {
@@ -719,7 +755,9 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
-      const isUndo = isMac ? (e.metaKey && !e.shiftKey && e.key === 'z') : (e.ctrlKey && !e.shiftKey && e.key === 'z')
+      const isUndo = isMac
+        ? e.metaKey && !e.shiftKey && e.key === 'z'
+        : e.ctrlKey && !e.shiftKey && e.key === 'z'
       if (!isUndo || !canUndo) return
       // Let the editor handle its own undo when focused.
       const active = document.activeElement
@@ -747,6 +785,8 @@ export default function App(): JSX.Element {
     exportHTML,
     exportPDF,
     exportImage,
+    exportDocx,
+    importDocx,
     setShowPalette,
     setSidebarVisible,
     setSearchView,
@@ -772,6 +812,8 @@ export default function App(): JSX.Element {
     exportHTML,
     exportPDF,
     exportImage,
+    exportDocx,
+    importDocx,
     checkForUpdates: updater.checkNow,
     clearRuntimeDrafts,
     deleteDrafts,
@@ -822,9 +864,7 @@ export default function App(): JSX.Element {
               onUndo={undoLastOp}
             />
           )}
-          {!searchView && (
-            <div className="resize-handle" onMouseDown={startSidebarResize} />
-          )}
+          {!searchView && <div className="resize-handle" onMouseDown={startSidebarResize} />}
         </div>
       )}
 

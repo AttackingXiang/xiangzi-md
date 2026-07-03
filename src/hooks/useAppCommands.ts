@@ -36,6 +36,8 @@ interface AppCommandOptions {
   exportHTML: () => Promise<void>
   exportPDF: () => Promise<void>
   exportImage: () => Promise<void>
+  exportDocx: () => Promise<void>
+  importDocx: () => Promise<void>
   setShowPalette: Dispatch<SetStateAction<boolean>>
   setSidebarVisible: Dispatch<SetStateAction<boolean>>
   setSearchView: Dispatch<SetStateAction<boolean>>
@@ -68,6 +70,8 @@ export function useAppCommands(options: AppCommandOptions): {
     exportHTML,
     exportPDF,
     exportImage,
+    exportDocx,
+    importDocx,
     setShowPalette,
     setSidebarVisible,
     setSearchView,
@@ -125,14 +129,18 @@ export function useAppCommands(options: AppCommandOptions): {
       { id: 'export-html', label: t('导出 HTML'), run: exportHTML },
       { id: 'export-pdf', label: t('导出 PDF'), run: exportPDF },
       { id: 'export-image', label: t('导出图片'), run: exportImage },
+      { id: 'export-docx', label: t('导出 Word'), run: exportDocx },
+      { id: 'import-docx', label: t('导入 Word 文档…'), run: importDocx },
       { id: 'settings', label: t('设置'), run: () => setSettingsSection('appearance') },
       { id: 'shortcuts', label: t('快捷键'), run: () => setSettingsSection('shortcuts') },
     ],
     [
       activeId,
+      exportDocx,
       exportHTML,
       exportImage,
       exportPDF,
+      importDocx,
       lang,
       newFile,
       openFile,

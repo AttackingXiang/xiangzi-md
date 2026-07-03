@@ -231,6 +231,17 @@ const EN: Record<string, string> = {
   列表缩进: 'Indent list',
   列表反缩进: 'Outdent list',
   命令面板: 'Command palette',
+  // Word import / export (Pandoc)
+  '导出 Word': 'Export Word',
+  '导入 Word 文档…': 'Import Word Document…',
+  'Word 导出失败：\n': 'Word export failed:\n',
+  'Word 导入失败：\n': 'Word import failed:\n',
+  '未检测到 Pandoc，导出 Word 需要安装 Pandoc。是否打开下载页面？':
+    'Pandoc was not found. Word export requires Pandoc. Open the download page?',
+  '未检测到 Pandoc，导入 Word 需要安装 Pandoc。是否打开下载页面？':
+    'Pandoc was not found. Word import requires Pandoc. Open the download page?',
+  '未找到 Pandoc': 'Pandoc Not Found',
+  打开下载页面: 'Open Download Page',
   // Slash menu
   文本: 'Text',
   标题1: 'Heading 1',

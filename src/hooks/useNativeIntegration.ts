@@ -12,6 +12,8 @@ interface NativeIntegrationOptions {
   exportHTML: () => Promise<void>
   exportPDF: () => Promise<void>
   exportImage: () => Promise<void>
+  exportDocx: () => Promise<void>
+  importDocx: () => Promise<void>
   checkForUpdates: (manual?: boolean) => Promise<void>
   clearRuntimeDrafts: () => Promise<void>
   deleteDrafts: (ids: string[]) => Promise<void>
@@ -26,6 +28,8 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
     exportHTML,
     exportPDF,
     exportImage,
+    exportDocx,
+    importDocx,
     checkForUpdates,
     clearRuntimeDrafts,
     deleteDrafts,
@@ -44,6 +48,8 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
         if (action === 'export-html') void exportHTML()
         else if (action === 'export-pdf') void exportPDF()
         else if (action === 'export-image') void exportImage()
+        else if (action === 'export-docx') void exportDocx()
+        else if (action === 'import-docx') void importDocx()
         else if (action === 'check-updates') void checkForUpdates(true)
         else if (action === 'query-dirty') {
           const dirtyTabs = stateRef.current.tabs.filter((tab) => tab.dirty)
@@ -74,9 +80,11 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
       clearRuntimeDrafts,
       deleteDrafts,
       dispatchShortcut,
+      exportDocx,
       exportHTML,
       exportImage,
       exportPDF,
+      importDocx,
       requestCloseDecision,
       saveTab,
       stateRef,
