@@ -45,6 +45,14 @@ describe('xmd assets', () => {
     expect(new Uint8Array(blobPartFromBytes(full.subarray(1, 3)))).toEqual(new Uint8Array([2, 3]))
   })
 
+  it('passes raw ArrayBuffers through without zero-filling', () => {
+    // tauri::ipc::Response 的二进制在前端是 ArrayBuffer；曾经的 TypedArray
+    // 分支对它 set() 不拷贝任何字节，产出全零图片导致复制图片静默失败。
+    const raw = new Uint8Array([9, 8, 7]).buffer
+    expect(blobPartFromBytes(raw)).toBe(raw)
+    expect(new Uint8Array(blobPartFromBytes(raw))).toEqual(new Uint8Array([9, 8, 7]))
+  })
+
   it('blocks remote images by default and only permits them after opt-in', () => {
     const remote = 'https://images.example/private.png'
     expect(resolveAssetURL('/notes', remote)).toBe(BLOCKED_REMOTE_IMAGE)

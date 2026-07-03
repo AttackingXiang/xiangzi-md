@@ -121,9 +121,13 @@ export const tauriDesktopAdapter: DesktopPort = {
   readFile: (path) => invoke<OpenedFile>('read_file', { path }),
   readBinaryFile: async (path, maxBytes = MAX_BINARY_READ_BYTES) => {
     const limit = binaryReadLimit(maxBytes)
-    return invoke<Uint8Array>('read_binary_file', { path, maxBytes: limit })
+    // Rust 侧返回 tauri::ipc::Response（原始二进制通道），前端实际收到的是
+    // ArrayBuffer；这里统一规范成 Uint8Array，避免下游按 TypedArray 处理时
+    // 拿到全零数据（TypedArray.set 对非 array-like 的 ArrayBuffer 不拷贝）。
+    return new Uint8Array(await invoke<ArrayBuffer>('read_binary_file', { path, maxBytes: limit }))
   },
-  readRemoteImage: (url) => invoke<Uint8Array>('read_remote_image', { url }),
+  readRemoteImage: async (url) =>
+    new Uint8Array(await invoke<ArrayBuffer>('read_remote_image', { url })),
   writeFile: (path, content, expectedVersion, force = false) =>
     invoke('write_file', { path, content, expectedVersion, force }),
   saveAs: async (content, suggestedName) => {
