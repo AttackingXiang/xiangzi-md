@@ -140,7 +140,7 @@ const TreeNode = memo(function TreeNode({
     if (expanded && children === null) void loadChildren()
     // Run only on mount — expanded/loadChildren are intentionally excluded to
     // avoid re-triggering when the user collapses/re-expands interactively.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   useEffect(() => {

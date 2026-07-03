@@ -24,6 +24,7 @@ import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
 import ContextMenu, { type MenuItem } from './components/ContextMenu'
 import TableGridPicker from './components/TableGridPicker'
+import TableZoomModal from './components/TableZoomModal'
 import InputDialog from './components/InputDialog'
 import ExportCompleteDialog from './components/ExportCompleteDialog'
 import DraftRecoveryDialog from './components/DraftRecoveryDialog'
@@ -41,6 +42,7 @@ import { replaceMovedPath } from './lib/treeDrag'
 import { parseOutline } from './lib/outline'
 import { editorBridge } from './lib/editorBridge'
 import { tablePickerBridge } from './lib/tablePickerBridge'
+import { tableZoomBridge } from './lib/tableZoomBridge'
 import { TextSelection } from '@milkdown/kit/prose/state'
 import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
@@ -382,6 +384,11 @@ export default function App(): JSX.Element {
   useEffect(() => {
     tablePickerBridge.setHandler((x, y, onInsert) => setTablePicker({ x, y, onInsert }))
     return () => tablePickerBridge.setHandler(null)
+  }, [])
+  const [tableZoomHtml, setTableZoomHtml] = useState<string | null>(null)
+  useEffect(() => {
+    tableZoomBridge.setHandler((html) => setTableZoomHtml(html))
+    return () => tableZoomBridge.setHandler(null)
   }, [])
   const [inputDialog, setInputDialog] = useState<{
     title: string
@@ -857,7 +864,7 @@ export default function App(): JSX.Element {
 
         {settings.showToolbar && !sourceMode && !readingMode && activeTab && (
           <Suspense fallback={null}>
-            <EditorToolbar lang={settings.language as 'zh' | 'en'} />
+            <EditorToolbar lang={settings.language} />
           </Suspense>
         )}
 
@@ -1015,6 +1022,10 @@ export default function App(): JSX.Element {
           onInsert={tablePicker.onInsert}
           onClose={() => setTablePicker(null)}
         />
+      )}
+
+      {tableZoomHtml !== null && (
+        <TableZoomModal html={tableZoomHtml} onClose={() => setTableZoomHtml(null)} />
       )}
 
       {inputDialog && (
