@@ -186,6 +186,7 @@ jobs:
         run: npm ci
 
       - name: Verify signing secrets
+        id: signing
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -200,15 +201,37 @@ jobs:
           WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
         run: |
           set -euo pipefail
+          # 更新器签名密钥是硬性要求：缺了它 latest.json 无法生成，自动更新会断。
           test -n "${TAURI_SIGNING_PRIVATE_KEY}"
+          # 平台代码签名证书是可选项：全部配齐才启用签名，全空则构建未签名安装包
+          #（与 v1.2.1 之前的发布行为一致）；只配了一部分视为配置错误，直接失败。
+          count_set() { local n=0; for v in "$@"; do [ -n "${v}" ] && n=$((n+1)); done; echo "${n}"; }
           if [ "${RUNNER_OS}" = "macOS" ]; then
-            test -n "${APPLE_CERTIFICATE}${APPLE_CERTIFICATE_PASSWORD}${APPLE_SIGNING_IDENTITY}${APPLE_ID}${APPLE_PASSWORD}${APPLE_TEAM_ID}"
+            SET=$(count_set "${APPLE_CERTIFICATE}" "${APPLE_CERTIFICATE_PASSWORD}" "${APPLE_SIGNING_IDENTITY}" "${APPLE_ID}" "${APPLE_PASSWORD}" "${APPLE_TEAM_ID}")
+            if [ "${SET}" = "6" ]; then
+              echo "apple=true" >> "${GITHUB_OUTPUT}"
+            elif [ "${SET}" = "0" ]; then
+              echo "::warning::未配置 Apple 签名证书，本次构建未签名 macOS 安装包。"
+              echo "apple=false" >> "${GITHUB_OUTPUT}"
+            else
+              echo "::error::Apple 签名 secrets 只配置了 ${SET}/6 项，请配齐或全部留空。"
+              exit 1
+            fi
           else
-            test -n "${WINDOWS_CERTIFICATE}${WINDOWS_CERTIFICATE_PASSWORD}${WINDOWS_CERTIFICATE_THUMBPRINT}"
+            SET=$(count_set "${WINDOWS_CERTIFICATE}" "${WINDOWS_CERTIFICATE_PASSWORD}" "${WINDOWS_CERTIFICATE_THUMBPRINT}")
+            if [ "${SET}" = "3" ]; then
+              echo "windows=true" >> "${GITHUB_OUTPUT}"
+            elif [ "${SET}" = "0" ]; then
+              echo "::warning::未配置 Windows 签名证书，本次构建未签名安装包。"
+              echo "windows=false" >> "${GITHUB_OUTPUT}"
+            else
+              echo "::error::Windows 签名 secrets 只配置了 ${SET}/3 项，请配齐或全部留空。"
+              exit 1
+            fi
           fi
 
       - name: Import macOS Developer ID certificate
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.signing.outputs.apple == 'true'
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -226,7 +249,7 @@ jobs:
           security list-keychain -d user -s "${KEYCHAIN_PATH}" login.keychain-db
 
       - name: Import Windows Authenticode certificate
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.signing.outputs.windows == 'true'
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
