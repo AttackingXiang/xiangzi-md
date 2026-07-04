@@ -430,7 +430,10 @@ mod tests {
         let dirs = document_scope_dirs(Path::new("/a/b/c.md"), 5);
         assert_eq!(dirs[0], PathBuf::from("/a/b"));
         assert!(dirs.contains(&PathBuf::from("/a")));
-        assert_eq!(document_scope_dirs(Path::new("/a.md"), 3), vec![PathBuf::from("/")]);
+        assert_eq!(
+            document_scope_dirs(Path::new("/a.md"), 3),
+            vec![PathBuf::from("/")]
+        );
     }
 
     #[test]
