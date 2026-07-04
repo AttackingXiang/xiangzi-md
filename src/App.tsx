@@ -55,6 +55,7 @@ import { useExportActions } from './hooks/useExportActions'
 import { useAppCommands } from './hooks/useAppCommands'
 import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
+import type { ThemeName } from './lib/codeSyntaxPalette'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 
@@ -417,8 +418,8 @@ export default function App(): JSX.Element {
 
   const updater = useUpdater(settings?.checkUpdatesOnStartup ?? false)
 
-  // Resolved theme for the Editor key (determines CodeMirror theme)
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
+  // Resolved theme for the Editor key (forces remount so Milkdown/CodeMirror re-measure on theme change)
+  const [resolvedTheme, setResolvedTheme] = useState<ThemeName>('light')
   useEffect(() => {
     const apply = (): void => {
       const t =
@@ -969,7 +970,6 @@ export default function App(): JSX.Element {
                   assetSearchPaths={settings.assetSearchPaths ?? []}
                   allowRemoteImages={settings.allowRemoteImages ?? false}
                   imageMaxWidth={settings.imageMaxWidth}
-                  theme={resolvedTheme}
                   focusMode={focusMode}
                   typewriterMode={typewriterMode}
                   readingMode={readingMode}

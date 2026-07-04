@@ -4,16 +4,11 @@
 .wysiwyg-editor .milkdown .xmd-code-block {
   position: relative;
   margin: 4px 0 16px;
-  border: 1px solid #e4e4e4;
+  border: 1px solid var(--code-card-border);
   border-radius: 6px;
   overflow: hidden;
-  background: #f7f7f7;
+  background: var(--code-card-bg);
   font-family: 'JetBrains Mono', 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
-}
-
-[data-theme='dark'] .milkdown .xmd-code-block {
-  border-color: #2d333b;
-  background: #1e2128;
 }
 
 .wysiwyg-editor .milkdown .xmd-code-block:focus-within {
@@ -28,13 +23,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #f0f0f0;
-  border-bottom: 1px solid #e4e4e4;
-}
-
-[data-theme='dark'] .milkdown .xmd-code-header {
-  background: #252b34;
-  border-bottom-color: #2d333b;
+  background: var(--code-header-bg);
+  border-bottom: 1px solid var(--code-card-border);
 }
 
 /* 语言标签：纯文字，不带边框/背景，避免输入框感 */
@@ -45,7 +35,7 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: #64748b;
+  color: var(--code-lang-color);
   font-family: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -56,15 +46,7 @@
 }
 
 .wysiwyg-editor .milkdown .xmd-lang-btn:hover {
-  color: #334155;
-}
-
-[data-theme='dark'] .milkdown .xmd-lang-btn {
-  color: #6e7681;
-}
-
-[data-theme='dark'] .milkdown .xmd-lang-btn:hover {
-  color: #8b949e;
+  color: var(--code-lang-hover-color);
 }
 
 .wysiwyg-editor .milkdown .xmd-lang-btn svg {
@@ -89,7 +71,7 @@
   border: none;
   border-radius: 5px;
   background: transparent;
-  color: #94a3b8;
+  color: var(--code-btn-color);
   cursor: pointer;
   transition:
     background 0.1s,
@@ -97,17 +79,8 @@
 }
 
 .wysiwyg-editor .milkdown .xmd-code-btn:hover {
-  color: #475569;
-  background: #e2e8f0;
-}
-
-[data-theme='dark'] .milkdown .xmd-code-btn {
-  color: #4d5566;
-}
-
-[data-theme='dark'] .milkdown .xmd-code-btn:hover {
-  color: #8b949e;
-  background: #2d333b;
+  color: var(--code-btn-hover-color);
+  background: var(--code-btn-hover-bg);
 }
 
 .wysiwyg-editor .milkdown .xmd-code-btn svg {
@@ -119,11 +92,7 @@
   margin: 0;
   padding: 14px 18px;
   overflow-x: auto;
-  background: #f7f7f7;
-}
-
-[data-theme='dark'] .milkdown .xmd-code-pre {
-  background: #1e2128;
+  background: var(--code-card-bg);
 }
 
 .wysiwyg-editor .milkdown .xmd-code-content {
@@ -131,24 +100,16 @@
   font-family: inherit;
   font-size: 13.5px;
   line-height: 1.7;
-  color: #1e293b;
+  color: var(--code-text);
   white-space: pre;
   outline: none;
   caret-color: var(--accent);
   tab-size: 2;
 }
 
-[data-theme='dark'] .milkdown .xmd-code-content {
-  color: #adbac7;
-}
-
 /* 代码块内选中色 */
 .wysiwyg-editor .milkdown .xmd-code-content ::selection {
-  background: #d9d9d9;
-}
-
-[data-theme='dark'] .milkdown .xmd-code-content ::selection {
-  background: rgba(125, 175, 255, 0.2);
+  background: var(--code-selection-bg);
 }
 
 /* Mermaid 预览区 */
@@ -259,77 +220,64 @@
   color: var(--text);
 }
 
-/* ── 语法高亮 token 色（浅色 GitHub 风格） ── */
+/* ── 语法高亮 token 色 ──
+   一律引用 --code-* 变量（foundation.css），随 [data-theme] 自动切换，
+   不再为每个主题各写一份完整选择器。tok-variableName.tok-definition /
+   tok-propertyName.tok-definition 曾各自硬编码一份颜色，数值其实等于基础
+   的 variable / property 槽位，统一后成了多余的重复规则，一并去掉。 */
 .wysiwyg-editor .milkdown .xmd-code-content .tok-keyword {
-  color: #cf222e;
+  color: var(--code-keyword);
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-atom {
-  color: #0550ae;
+.wysiwyg-editor .milkdown .xmd-code-content .tok-invalid {
+  color: var(--code-invalid);
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-bool {
-  color: #0550ae;
+.wysiwyg-editor .milkdown .xmd-code-content .tok-atom,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-bool,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-number,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-attributeName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-labelName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-literal {
+  color: var(--code-number);
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-number {
-  color: #0550ae;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-string {
-  color: #0a3069;
-}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-string,
 .wysiwyg-editor .milkdown .xmd-code-content .tok-string2 {
-  color: #0a3069;
+  color: var(--code-string);
 }
 .wysiwyg-editor .milkdown .xmd-code-content .tok-comment {
-  color: #6e7781;
+  color: var(--code-comment);
   font-style: italic;
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName {
-  color: #24292f;
+.wysiwyg-editor .milkdown .xmd-code-content .tok-meta {
+  color: var(--code-meta);
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName2 {
-  color: #24292f;
-}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName2,
 .wysiwyg-editor .milkdown .xmd-code-content .tok-variableName3 {
-  color: #24292f;
+  color: var(--code-variable);
 }
 .wysiwyg-editor .milkdown .xmd-code-content .tok-propertyName {
-  color: #116329;
+  color: var(--code-property);
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-typeName {
-  color: #953800;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-namespace {
-  color: #953800;
-}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-typeName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-namespace,
 .wysiwyg-editor .milkdown .xmd-code-content .tok-className {
-  color: #953800;
+  color: var(--code-type);
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-macroName {
-  color: #8250df;
+.wysiwyg-editor .milkdown .xmd-code-content .tok-macroName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName.tok-function,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-propertyName.tok-function {
+  color: var(--code-function);
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-operator {
-  color: #57606a;
-}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-operator,
 .wysiwyg-editor .milkdown .xmd-code-content .tok-punctuation {
-  color: #57606a;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-meta {
-  color: #6e7781;
+  color: var(--code-operator);
 }
 .wysiwyg-editor .milkdown .xmd-code-content .tok-tagName {
-  color: #116329;
+  color: var(--code-tag);
 }
-.wysiwyg-editor .milkdown .xmd-code-content .tok-attributeName {
-  color: #0550ae;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-labelName {
-  color: #0550ae;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-link {
-  color: #0969da;
-  text-decoration: underline;
-}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-link,
 .wysiwyg-editor .milkdown .xmd-code-content .tok-url {
-  color: #0969da;
+  color: var(--code-link);
   text-decoration: underline;
 }
 .wysiwyg-editor .milkdown .xmd-code-content .tok-heading {
@@ -342,158 +290,33 @@
   font-weight: 700;
 }
 .wysiwyg-editor .milkdown .xmd-code-content .tok-inserted {
-  color: #116329;
-  background: color-mix(in srgb, #116329 10%, transparent);
+  color: var(--code-diff-added);
+  background: color-mix(in srgb, var(--code-diff-added) 10%, transparent);
 }
 .wysiwyg-editor .milkdown .xmd-code-content .tok-deleted {
-  color: #cf222e;
-  background: color-mix(in srgb, #cf222e 10%, transparent);
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-invalid {
-  color: #cf222e;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-literal {
-  color: #0550ae;
-}
-
-/* function calls: variableName + definition or special role */
-.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName.tok-function {
-  color: #8250df;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-propertyName.tok-function {
-  color: #8250df;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName.tok-definition {
-  color: #24292f;
-}
-.wysiwyg-editor .milkdown .xmd-code-content .tok-propertyName.tok-definition {
-  color: #116329;
-}
-
-/* ── 深色主题 token 色（One Dark 风格） ── */
-[data-theme='dark'] .milkdown .xmd-code-content .tok-keyword {
-  color: #c678dd;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-atom {
-  color: #d19a66;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-bool {
-  color: #d19a66;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-number {
-  color: #d19a66;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-string {
-  color: #98c379;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-string2 {
-  color: #98c379;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-comment {
-  color: #5c6370;
-  font-style: italic;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-variableName {
-  color: #e06c75;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-variableName2 {
-  color: #e06c75;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-variableName3 {
-  color: #e06c75;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-propertyName {
-  color: #56b6c2;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-typeName {
-  color: #e5c07b;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-namespace {
-  color: #e5c07b;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-className {
-  color: #e5c07b;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-macroName {
-  color: #61afef;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-operator {
-  color: #56b6c2;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-punctuation {
-  color: #abb2bf;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-meta {
-  color: #5c6370;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-tagName {
-  color: #e06c75;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-attributeName {
-  color: #d19a66;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-labelName {
-  color: #d19a66;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-link {
-  color: #61afef;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-url {
-  color: #61afef;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-inserted {
-  color: #98c379;
-  background: rgba(152, 195, 121, 0.1);
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-deleted {
-  color: #e06c75;
-  background: rgba(224, 108, 117, 0.1);
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-invalid {
-  color: #e06c75;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-literal {
-  color: #d19a66;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-variableName.tok-function {
-  color: #61afef;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-propertyName.tok-function {
-  color: #61afef;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-variableName.tok-definition {
-  color: #e06c75;
-}
-[data-theme='dark'] .milkdown .xmd-code-content .tok-propertyName.tok-definition {
-  color: #56b6c2;
+  color: var(--code-diff-removed);
+  background: color-mix(in srgb, var(--code-diff-removed) 10%, transparent);
 }
 
 /* ── Crepe CSS 变量覆盖（最高优先级：.wysiwyg-editor .milkdown 比 .milkdown 更具体） ── */
-/* 通过覆盖 --crepe-color-surface 变量让 Crepe/CM 的所有 surface 颜色变浅 */
+/* 通过覆盖 --crepe-color-surface 变量让 Crepe/CM 的所有 surface 颜色变浅。
+   直接引用 --code-* 静态代码块色板（foundation.css），与上方 .xmd-code-block
+   共用同一套值，不再各themes各写一份、也不必为每个新增主题单独适配。 */
 .wysiwyg-editor .milkdown {
-  --crepe-color-surface: #f8fafc;
-  --crepe-color-surface-low: #f1f5f9;
-}
-
-[data-theme='dark'] .wysiwyg-editor .milkdown {
-  --crepe-color-surface: #1e2128;
-  --crepe-color-surface-low: #252b34;
+  --crepe-color-surface: var(--code-card-bg);
+  --crepe-color-surface-low: var(--code-header-bg);
+  --crepe-color-inline-area: var(--code-card-border);
 }
 
 /* ── Crepe/CM NodeView 高优先级覆盖（3 层选择器，优先级高于 Crepe 的 2 层） ── */
 .wysiwyg-editor .milkdown .milkdown-code-block {
-  background: #f8fafc !important;
-  border: 1px solid #e2e8f0 !important;
+  background: var(--code-card-bg) !important;
+  border: 1px solid var(--code-card-border) !important;
   border-radius: 6px !important;
   padding: 0 !important;
   margin: 4px 0 16px !important;
   overflow: hidden !important;
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace !important;
-}
-
-[data-theme='dark'] .wysiwyg-editor .milkdown .milkdown-code-block {
-  background: #1e2128 !important;
-  border-color: #2d333b !important;
 }
 
 /* CM 内部所有层：全部透明，让上层背景色透出 */
@@ -514,51 +337,36 @@
 /* Crepe 工具栏 */
 .wysiwyg-editor .milkdown .milkdown-code-block .tools {
   padding: 4px 8px !important;
-  background: #f1f5f9 !important;
-  border-bottom: 1px solid #e2e8f0 !important;
+  background: var(--code-header-bg) !important;
+  border-bottom: 1px solid var(--code-card-border) !important;
   min-height: 34px !important;
-}
-
-[data-theme='dark'] .wysiwyg-editor .milkdown .milkdown-code-block .tools {
-  background: #252b34 !important;
-  border-bottom-color: #2d333b !important;
 }
 
 .wysiwyg-editor .milkdown .milkdown-code-block .language-button {
   opacity: 1 !important;
   background: transparent !important;
-  color: #64748b !important;
+  color: var(--code-lang-color) !important;
   font-size: 12px !important;
   font-weight: 500 !important;
   margin-bottom: 0 !important;
   padding: 2px 4px !important;
 }
 
-[data-theme='dark'] .wysiwyg-editor .milkdown .milkdown-code-block .language-button {
-  color: #6e7681 !important;
-}
-
 .wysiwyg-editor .milkdown .milkdown-code-block .tools-button-group > button {
   opacity: 1 !important;
   background: transparent !important;
-  color: #94a3b8 !important;
+  color: var(--code-btn-color) !important;
 }
 
 /* 行内代码 */
 .milkdown code:not(.xmd-code-content) {
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: var(--code-header-bg);
+  border: 1px solid var(--code-card-border);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 0.85em;
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
-  color: #c7254e;
-}
-
-[data-theme='dark'] .milkdown code:not(.xmd-code-content) {
-  background: #252b34;
-  border-color: #2d333b;
-  color: #f47067;
+  color: var(--code-inline-text);
 }
 
 /* ---------- 表格 ---------- */

@@ -6,10 +6,6 @@
   --crepe-font-title: var(--crepe-font-default);
   --crepe-font-code:
     'SFMono-Regular', 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  /* 覆盖 Crepe 的代码块/内联代码背景色变量，让 pre/code 的灰色背景变浅 */
-  --crepe-color-surface: #f7f7f7;
-  --crepe-color-surface-low: #f0f0f0;
-  --crepe-color-inline-area: #e4e4e4;
   max-width: var(--editor-max-width, 860px);
   margin: 0 auto;
   padding: 0;
@@ -17,12 +13,6 @@
   background: var(--bg);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-}
-
-[data-theme='dark'] .wysiwyg-editor .milkdown {
-  --crepe-color-surface: #1e2128;
-  --crepe-color-surface-low: #252b34;
-  --crepe-color-inline-area: #2d333b;
 }
 
 /* 让空文档和短文档的整页空白都属于可点击编辑区。 */

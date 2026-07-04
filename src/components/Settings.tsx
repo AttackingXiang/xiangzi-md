@@ -156,6 +156,10 @@ export default function Settings({
                       <option value="system">{t('跟随系统')}</option>
                       <option value="light">{t('浅色')}</option>
                       <option value="dark">{t('深色')}</option>
+                      <option value="warm">{t('暖色')}</option>
+                      <option value="mint">{t('浅绿')}</option>
+                      <option value="blue">{t('蓝调')}</option>
+                      <option value="summer">{t('夏日')}</option>
                     </select>
                   </SettingRow>
                   <SettingRow label={t('编辑区宽度')}>

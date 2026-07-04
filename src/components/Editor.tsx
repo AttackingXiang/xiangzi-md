@@ -28,7 +28,7 @@ import { t } from '../lib/i18n'
 import { typewriterScrollDelta } from '../lib/typewriterScroll'
 import { setupRichClipboard } from '../lib/richClipboard'
 import { codeHighlightPlugin } from '../lib/codeHighlight'
-import { codeBlockView, setCodeBlockTheme } from '../lib/staticCodeBlock'
+import { codeBlockView } from '../lib/staticCodeBlock'
 import { codeMirrorTheme } from '../lib/codeTheme'
 
 interface Props {
@@ -44,8 +44,6 @@ interface Props {
   /** 是否允许编辑器向远程图片主机发起网络请求 */
   allowRemoteImages: boolean
   imageMaxWidth: number
-  /** 已解析的主题，用于代码块语法高亮配色 */
-  theme: 'light' | 'dark'
   focusMode: boolean
   typewriterMode: boolean
   /** 阅读模式：编辑器只读，尝试编辑时提示先关闭 */
@@ -70,7 +68,6 @@ export default function Editor({
   assetSearchPaths,
   allowRemoteImages,
   imageMaxWidth,
-  theme,
   focusMode,
   typewriterMode,
   readingMode,
@@ -125,7 +122,6 @@ export default function Editor({
       return relPath
     }
 
-    setCodeBlockTheme(theme)
     let destroyed = false
     const remoteObjectUrls = new Set<string>()
     const crepe = new Crepe({
@@ -133,7 +129,7 @@ export default function Editor({
       defaultValue: content,
       featureConfigs: {
         [CrepeFeature.CodeMirror]: {
-          theme: codeMirrorTheme(theme),
+          theme: codeMirrorTheme(),
         },
         [CrepeFeature.ImageBlock]: {
           proxyDomURL: async (url: string) => {

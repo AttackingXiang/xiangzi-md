@@ -11,6 +11,12 @@ export function baseName(p: string): string {
   return i < 0 ? p : p.slice(i + 1)
 }
 
+/** 仅用于展示：去掉文件名的扩展名。以点开头的隐藏文件（如 .gitignore）不处理，避免把文件名清空。 */
+export function stripExtension(name: string): string {
+  const dot = name.lastIndexOf('.')
+  return dot <= 0 ? name : name.slice(0, dot)
+}
+
 /** 取所在目录；无目录返回 null */
 export function dirName(p: string | null): string | null {
   if (!p) return null

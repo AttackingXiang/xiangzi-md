@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
+import { stripExtension } from '../lib/path'
 
 interface Props {
   tabs: Tab[]
@@ -190,7 +191,7 @@ const TabBar = memo(function TabBar({
         }}
         {...divProps}
       >
-        <span className="tab-name">{tab.name}</span>
+        <span className="tab-name">{stripExtension(tab.name)}</span>
         <button
           className="tab-close"
           onPointerDown={(e) => e.stopPropagation()}
@@ -246,7 +247,7 @@ const TabBar = memo(function TabBar({
                   }}
                 >
                   <Pin size={10} className="tab-pin-icon" />
-                  <span className="tab-name">{tab.name}</span>
+                  <span className="tab-name">{stripExtension(tab.name)}</span>
                   {tab.dirty && <span className="dot dot-pinned" />}
                 </div>
               )
@@ -315,7 +316,7 @@ const TabBar = memo(function TabBar({
                   >
                     {tab.dirty && <span className="dot" />}
                     {tab.locked && <Pin size={11} className="tab-overflow-lock" />}
-                    <span className="tab-overflow-name">{tab.name}</span>
+                    <span className="tab-overflow-name">{stripExtension(tab.name)}</span>
                   </button>
                   <button
                     className="tab-overflow-close"
