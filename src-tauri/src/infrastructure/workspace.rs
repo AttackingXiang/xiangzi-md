@@ -276,10 +276,18 @@ fn authorize_directory(app: &AppHandle, root: &Path) -> AppResult<()> {
     Ok(())
 }
 
-/// 打开单个文档时，除文档所在目录外额外向上授权的祖先层数。用于相对图片
-/// 路径指向文档上层目录的布局（如 Typora 把图片统一放在上级 assets/）。
-/// 与前端 asset.ts 的祖先探测层数保持一致。
-const DOC_ANCESTOR_AUTH_LEVELS: usize = 3;
+/// 打开单个文档时，除文档所在目录外额外向上授权的祖先层数。
+///
+/// 单独打开一个文件时，应用会把该文件所在目录作为工作区一并打开——这一步走
+/// macOS 文件选择器的 powerbox 授权，不弹系统权限框，且覆盖了文档同级/子目录。
+/// 因此文档目录本身及其下的 assets/ 图片零弹窗即可显示。
+///
+/// 每额外向上授权「一层」目录（越出 powerbox 授权的文件夹、落入 ~/Documents 等
+/// 受保护区），macOS 就会多弹一次「想访问文稿文件夹」——旧值 3 正是每次单文件
+/// 打开弹三次的原因。取 1：只向上覆盖一层，兼容「文档被挪进子文件夹、图片仍在
+/// 上级 assets/」这一最常见布局（此时恰好一次弹窗、图片正常），又把权限打扰降到
+/// 最低。更深层级的图片请改用「打开文件夹」的方式，powerbox 会持久覆盖整棵树。
+const DOC_ANCESTOR_AUTH_LEVELS: usize = 1;
 
 /// 需要为某个文档授予读权限的目录集合：文档所在目录 + 向上 `levels` 层祖先。
 fn document_scope_dirs(doc_path: &Path, levels: usize) -> Vec<PathBuf> {
@@ -296,13 +304,13 @@ fn document_scope_dirs(doc_path: &Path, levels: usize) -> Vec<PathBuf> {
     dirs
 }
 
-/// 为文档所在目录及有限祖先目录授予读权限（fs + asset 协议 scope），使同目录、
-/// 子目录以及上层 assets/ 中的图片都能被渲染层加载。
+/// 为文档所在目录授予读权限（fs + asset 协议 scope），使同目录、子目录里的
+/// 图片能被渲染层加载。
 ///
-/// 单独打开一个文件时，系统只授权了该文件本身；若不放开其所在目录树，指向
-/// 文档同级或上层目录的相对图片就会被协议层的 scope 校验拒绝而显示为裂图。
-/// 这是本地笔记应用的有意放宽：边界由「用户主动打开该文档」提供，且只放开
-/// 其所在目录的有限上层，不会波及到用户主目录等无关位置。
+/// 单独打开一个文件时，系统只授权了该文件本身；不放开其所在目录，指向文档
+/// 同级/子目录的相对图片就会被协议层的 scope 校验拒绝而显示为裂图。范围严格
+/// 限制在文档所在目录，不向上越界，以免触发 macOS 对「文稿」等目录的权限弹窗
+/// （见 DOC_ANCESTOR_AUTH_LEVELS 说明）。
 fn authorize_document_context(app: &AppHandle, doc_path: &Path) {
     for dir in document_scope_dirs(doc_path, DOC_ANCESTOR_AUTH_LEVELS) {
         let _ = app.fs_scope().allow_directory(&dir, true);
@@ -393,27 +401,36 @@ pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<NamedPath>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{document_scope_dirs, is_ignored, is_visible_text_file, validate_binary_size};
+    use super::{
+        document_scope_dirs, is_ignored, is_visible_text_file, validate_binary_size,
+        DOC_ANCESTOR_AUTH_LEVELS,
+    };
     use crate::domain::safe_name::validate_item_name;
     use std::path::{Path, PathBuf};
 
     #[test]
-    fn document_scope_covers_the_folder_and_bounded_ancestors() {
-        // 图片在文档的祖父目录 assets/ 里时，授权集合必须包含该祖父目录。
+    fn document_scope_covers_only_the_folder_and_one_ancestor() {
+        // 默认层数为 1：文档所在目录 + 恰好一层父目录。前者由 powerbox 覆盖不弹窗，
+        // 后者最多引发一次系统权限框，兼容「图片在上级 assets/」且把打扰降到最低。
+        assert_eq!(DOC_ANCESTOR_AUTH_LEVELS, 1);
         let doc = Path::new("/note/xiangzi-note/科学上网/客户端/修改sim卡国家码.md");
-        let dirs = document_scope_dirs(doc, 3);
-        assert_eq!(dirs[0], PathBuf::from("/note/xiangzi-note/科学上网/客户端"));
-        assert!(dirs.contains(&PathBuf::from("/note/xiangzi-note/科学上网")));
-        assert!(dirs.contains(&PathBuf::from("/note/xiangzi-note")));
-        assert!(dirs.contains(&PathBuf::from("/note")));
-        // 有上限：不会一路授权到文件系统根之外产生空目录
-        assert!(dirs.iter().all(|d| d.as_os_str() != "/"));
+        let dirs = document_scope_dirs(doc, DOC_ANCESTOR_AUTH_LEVELS);
+        assert_eq!(
+            dirs,
+            vec![
+                PathBuf::from("/note/xiangzi-note/科学上网/客户端"),
+                PathBuf::from("/note/xiangzi-note/科学上网"),
+            ]
+        );
     }
 
     #[test]
-    fn document_scope_stops_at_filesystem_root() {
-        let dirs = document_scope_dirs(Path::new("/a.md"), 3);
-        assert_eq!(dirs, vec![PathBuf::from("/")]);
+    fn document_scope_walks_bounded_ancestors_when_asked() {
+        // 函数本身仍支持向上取多层（用于潜在的其它调用场景），并在文件系统根停下。
+        let dirs = document_scope_dirs(Path::new("/a/b/c.md"), 5);
+        assert_eq!(dirs[0], PathBuf::from("/a/b"));
+        assert!(dirs.contains(&PathBuf::from("/a")));
+        assert_eq!(document_scope_dirs(Path::new("/a.md"), 3), vec![PathBuf::from("/")]);
     }
 
     #[test]
