@@ -26,6 +26,7 @@ pub(super) fn migrate_settings(settings: &mut AppSettings, source_version: u32) 
             1 => migrate_v1_to_v2(settings),
             2 => migrate_v2_to_v3(settings),
             3 => migrate_v3_to_v4(settings),
+            4 => migrate_v4_to_v5(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -43,6 +44,7 @@ fn migrate_v0_to_v1(_settings: &mut AppSettings) {}
 fn migrate_v1_to_v2(_settings: &mut AppSettings) {}
 fn migrate_v2_to_v3(_settings: &mut AppSettings) {}
 fn migrate_v3_to_v4(_settings: &mut AppSettings) {}
+fn migrate_v4_to_v5(_settings: &mut AppSettings) {}
 
 pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !matches!(settings.language.as_str(), "zh" | "en") {
@@ -91,7 +93,17 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     settings.hidden_workspace_paths.retain(|path| {
         !path.trim().is_empty() && path.len() <= MAX_PATH_LENGTH && Path::new(path).is_absolute()
     });
+    if !settings.background_image_path.is_empty() && !valid_background_image_path(settings) {
+        settings.background_image_path.clear();
+    }
+    settings.background_opacity = settings.background_opacity.min(100);
+    settings.theme_shade = settings.theme_shade.clamp(-50, 50);
     limit_collections(settings);
+}
+
+fn valid_background_image_path(settings: &AppSettings) -> bool {
+    settings.background_image_path.len() <= MAX_PATH_LENGTH
+        && Path::new(&settings.background_image_path).is_absolute()
 }
 
 pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
@@ -107,6 +119,15 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
         )
     {
         return Err(AppError::new("settings_invalid", "设置选项无效"));
+    }
+    if !settings.background_image_path.is_empty() && !valid_background_image_path(settings) {
+        return Err(AppError::new("settings_invalid", "背景图片路径无效"));
+    }
+    if settings.background_opacity > 100 {
+        return Err(AppError::new("settings_invalid", "背景图片强度超出范围"));
+    }
+    if !(-50..=50).contains(&settings.theme_shade) {
+        return Err(AppError::new("settings_invalid", "主题深浅超出范围"));
     }
     if !valid_folder_name(&settings.attachment_folder) {
         return Err(AppError::new("settings_invalid", "附件目录名称无效"));

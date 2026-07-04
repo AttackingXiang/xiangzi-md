@@ -296,6 +296,14 @@ export const tauriDesktopAdapter: DesktopPort = {
     })
     return path ? { path } : null
   },
+  pickImage: async () => {
+    const path = await open({
+      multiple: false,
+      filters: [{ name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+    })
+    return path ? { path } : null
+  },
+  allowBackgroundImage: (path) => invoke('allow_background_image', { path }),
   notify: (msg, title) => message(msg, { title }).then(() => {}),
   confirm: (msg, title, okLabel, cancelLabel) =>
     ask(msg, {

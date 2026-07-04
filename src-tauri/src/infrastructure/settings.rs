@@ -263,6 +263,9 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(theme);
     replace_if_some!(editor_width);
     replace_if_some!(custom_css_path);
+    replace_if_some!(background_image_path);
+    replace_if_some!(background_opacity);
+    replace_if_some!(theme_shade);
     replace_if_some!(heading_number);
     replace_if_some!(auto_save);
     replace_if_some!(check_updates_on_startup);

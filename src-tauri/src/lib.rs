@@ -49,6 +49,7 @@ pub fn run() {
             commands::app::quit_confirmed,
             commands::app::open_with_default,
             commands::assets::read_remote_image,
+            commands::assets::allow_background_image,
             commands::workspace::open_folder_path,
             commands::workspace::open_containing_folder,
             commands::workspace::read_file,

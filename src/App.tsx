@@ -118,6 +118,7 @@ export default function App(): JSX.Element {
     settings,
     settingsReady,
     customCssError,
+    backgroundImageError,
     saveSettings,
     pushRecentFile,
     pushRecentFolder,
@@ -1025,6 +1026,7 @@ export default function App(): JSX.Element {
             settings={settings}
             updater={updater}
             customCssError={customCssError}
+            backgroundImageError={backgroundImageError}
             initialSection={settingsSection}
             onChange={(patch) => {
               void saveSettings(patch).catch((error: unknown) => {

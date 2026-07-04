@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 4;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 5;
 pub(crate) const MAX_RECENT_ITEMS: usize = 15;
 pub(crate) const MAX_FAVORITES: usize = 32;
 pub(crate) const MAX_SESSION_FILES: usize = 12;
@@ -65,6 +65,12 @@ pub struct AppSettings {
     pub theme: String,
     pub editor_width: String,
     pub custom_css_path: String,
+    /// 背景图片的绝对路径；空字符串表示不启用。
+    pub background_image_path: String,
+    /// 背景图片可见强度，0-100。
+    pub background_opacity: u32,
+    /// 当前主题背景色的深浅偏移，-50（更深）到 50（更浅），0 表示不调整。
+    pub theme_shade: i32,
     pub heading_number: bool,
     pub auto_save: bool,
     pub check_updates_on_startup: bool,
@@ -109,6 +115,9 @@ impl Default for AppSettings {
             theme: "system".into(),
             editor_width: "full".into(),
             custom_css_path: String::new(),
+            background_image_path: String::new(),
+            background_opacity: 35,
+            theme_shade: 0,
             heading_number: false,
             auto_save: false,
             check_updates_on_startup: true,
@@ -156,6 +165,9 @@ pub struct SettingsPatch {
     pub theme: Option<String>,
     pub editor_width: Option<String>,
     pub custom_css_path: Option<String>,
+    pub background_image_path: Option<String>,
+    pub background_opacity: Option<u32>,
+    pub theme_shade: Option<i32>,
     pub heading_number: Option<bool>,
     pub auto_save: Option<bool>,
     pub check_updates_on_startup: Option<bool>,
