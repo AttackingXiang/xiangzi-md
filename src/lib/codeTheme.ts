@@ -12,7 +12,10 @@ import { tags as t } from '@lezer/highlight'
  *跟着变，不需要为每个新主题单独维护一份 HighlightStyle。
  */
 const highlight = HighlightStyle.define([
-  { tag: [t.keyword, t.modifier, t.operatorKeyword, t.controlKeyword], color: 'var(--code-keyword)' },
+  {
+    tag: [t.keyword, t.modifier, t.operatorKeyword, t.controlKeyword],
+    color: 'var(--code-keyword)',
+  },
   { tag: [t.string, t.special(t.string), t.regexp], color: 'var(--code-string)' },
   {
     tag: [t.comment, t.lineComment, t.blockComment],

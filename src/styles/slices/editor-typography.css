@@ -11,10 +11,14 @@
   padding: 0;
   color: var(--text);
   /* --bg-image-shade 为 0（默认，无背景图片）时等价于纯色 var(--bg)；
-     用户调高背景强度后，正文表面按同一强度变透明，让固定背景图层
-     （foundation.css 的 body::before）透出来，同时封顶在 60%——避免高强度
-     时正文完全透明、文字失去可读性。 */
-  background: color-mix(in srgb, var(--bg) calc(100% - var(--bg-image-shade, 0) * 60%), transparent);
+     用户调高背景强度后，正文表面按同一强度变透明，让 html 背景上的图片
+     （foundation.css）透出来，同时封顶在 60%——避免高强度时正文完全透明、
+     文字失去可读性。 */
+  background: color-mix(
+    in srgb,
+    var(--bg) calc(100% - var(--bg-image-shade, 0) * 60%),
+    transparent
+  );
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }

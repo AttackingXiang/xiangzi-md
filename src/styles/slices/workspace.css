@@ -16,7 +16,11 @@
   /* 与 .editor-area/.sidebar 用同一套 --bg-image-shade 公式，见
      foundation.css 里 html 背景图的注释；系数取 30% 的原因见 sidebar.css
      里 .sidebar 的注释（正文列被两层叠加，标签栏和侧边栏一样只有单层）。 */
-  background: color-mix(in srgb, var(--bg-sidebar) calc(100% - var(--bg-image-shade, 0) * 30%), transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-sidebar) calc(100% - var(--bg-image-shade, 0) * 30%),
+    transparent
+  );
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
 }
@@ -350,7 +354,11 @@
      --bg-image-shade 公式：这一层是 html 背景图和正文之间唯一的中间层，
      之前用不透明的 var(--bg) 整块盖住，图片再怎么调都透不上来。两处都变
      透明才能让编辑区（含左右留白）统一透出背景图。 */
-  background: color-mix(in srgb, var(--bg) calc(100% - var(--bg-image-shade, 0) * 60%), transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg) calc(100% - var(--bg-image-shade, 0) * 60%),
+    transparent
+  );
   display: flex;
   position: relative;
 }
@@ -411,7 +419,11 @@
   color: var(--text);
   /* 源码模式是 .wysiwyg-editor .milkdown 的替代品，同样直接坐在 .editor-area
      里面，用同一套双层 60% 公式保持切换模式时背景图强度观感一致。 */
-  background: color-mix(in srgb, var(--bg) calc(100% - var(--bg-image-shade, 0) * 60%), transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg) calc(100% - var(--bg-image-shade, 0) * 60%),
+    transparent
+  );
 }
 
 /* ---------- 大纲 ---------- */
@@ -421,7 +433,11 @@
   flex-shrink: 0;
   border-left: 1px solid var(--border);
   /* 单层面板，用跟 .sidebar 一样的 30% 系数，理由见 sidebar.css 里的注释。 */
-  background: color-mix(in srgb, var(--bg-sidebar) calc(100% - var(--bg-image-shade, 0) * 30%), transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-sidebar) calc(100% - var(--bg-image-shade, 0) * 30%),
+    transparent
+  );
   display: flex;
   flex-direction: column;
   overflow: hidden;
