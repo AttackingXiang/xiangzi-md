@@ -72,6 +72,10 @@ const EN: Record<string, string> = {
   适中: 'Normal',
   较宽: 'Wide',
   全宽: 'Full',
+  主题深浅: 'Theme shade',
+  原色: 'Original',
+  背景图片: 'Background image',
+  背景强度: 'Background intensity',
   标题自动编号: 'Auto heading numbers',
   '开启后，已保存过的文档在停止输入约 1 秒后自动写回磁盘。':
     'When on, saved documents are written to disk ~1s after you stop typing.',

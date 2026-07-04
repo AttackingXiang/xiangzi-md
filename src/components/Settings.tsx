@@ -38,6 +38,7 @@ interface Props {
   settings: AppSettings
   updater: UpdaterController
   customCssError?: boolean
+  backgroundImageError?: boolean
   initialSection?: SettingsSection
   onChange: (patch: Partial<AppSettings>) => void
   onClose: () => void
@@ -47,6 +48,7 @@ export default function Settings({
   settings,
   updater,
   customCssError = false,
+  backgroundImageError = false,
   initialSection = 'appearance',
   onChange,
   onClose,
@@ -174,6 +176,78 @@ export default function Settings({
                       <option value="full">{t('全宽')}</option>
                     </select>
                   </SettingRow>
+                  <SettingRow label={t('主题深浅')}>
+                    <span className="settings-inline">
+                      <input
+                        type="range"
+                        min={-50}
+                        max={50}
+                        step={5}
+                        value={settings.themeShade}
+                        onChange={(event) => onChange({ themeShade: Number(event.target.value) })}
+                      />
+                      <small>
+                        {settings.themeShade === 0
+                          ? t('原色')
+                          : settings.themeShade > 0
+                            ? `+${settings.themeShade}`
+                            : settings.themeShade}
+                      </small>
+                    </span>
+                  </SettingRow>
+                </SettingsCard>
+                <SettingsCard title={t('背景图片')}>
+                  <div className="settings-file-picker">
+                    <div>
+                      <p>
+                        {settings.backgroundImagePath ||
+                          (en ? 'No background image' : '未设置背景图片')}
+                      </p>
+                    </div>
+                    <span className="settings-inline">
+                      {settings.backgroundImagePath && (
+                        <button
+                          className="secondary-btn"
+                          onClick={() => onChange({ backgroundImagePath: '' })}
+                        >
+                          {t('清除')}
+                        </button>
+                      )}
+                      <button
+                        className="secondary-btn"
+                        onClick={async () => {
+                          const result = await desktop.pickImage()
+                          if (result) onChange({ backgroundImagePath: result.path })
+                        }}
+                      >
+                        {settings.backgroundImagePath ? t('更换…') : t('选择…')}
+                      </button>
+                    </span>
+                  </div>
+                  {settings.backgroundImagePath && (
+                    <SettingRow label={t('背景强度')}>
+                      <span className="settings-inline">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={settings.backgroundOpacity}
+                          onChange={(event) =>
+                            onChange({ backgroundOpacity: Number(event.target.value) })
+                          }
+                        />
+                        <small>{settings.backgroundOpacity}%</small>
+                      </span>
+                    </SettingRow>
+                  )}
+                  {backgroundImageError && (
+                    <p className="settings-error" role="alert">
+                      {en
+                        ? 'The selected image could not be read. The previous background was removed.'
+                        : '无法读取所选图片，旧的背景已移除。'}
+                    </p>
+                  )}
                 </SettingsCard>
                 <SettingsCard title={t('自定义主题 CSS')}>
                   <div className="settings-file-picker">

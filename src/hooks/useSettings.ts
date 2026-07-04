@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { desktop } from '../platform'
 import { setLang } from '../lib/i18n'
+import { bytesToBlobUrl } from '../lib/backgroundImage'
+import { applyThemeShade } from '../lib/themeShade'
 import type { AppSettings } from '../types'
 
 /**
@@ -12,6 +14,8 @@ export function useSettings() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [settingsReady, setSettingsReady] = useState(false)
   const [customCssError, setCustomCssError] = useState(false)
+  const [backgroundImageError, setBackgroundImageError] = useState(false)
+  const backgroundImageUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
     void desktop
@@ -99,6 +103,56 @@ export function useSettings() {
     }
   }, [settings?.customCssPath])
 
+  // ── 背景图片 ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const clearBlobUrl = (): void => {
+      if (backgroundImageUrlRef.current) {
+        URL.revokeObjectURL(backgroundImageUrlRef.current)
+        backgroundImageUrlRef.current = null
+      }
+    }
+    if (!settings) return undefined
+    setBackgroundImageError(false)
+    if (!settings.backgroundImagePath) {
+      clearBlobUrl()
+      document.documentElement.style.removeProperty('--bg-image')
+      return undefined
+    }
+    let cancelled = false
+    const path = settings.backgroundImagePath
+    void desktop
+      .allowBackgroundImage(path)
+      .catch(() => {})
+      .then(() => desktop.readBinaryFile(path))
+      .then((bytes) => {
+        if (cancelled) return
+        clearBlobUrl()
+        const url = bytesToBlobUrl(bytes, path)
+        backgroundImageUrlRef.current = url
+        document.documentElement.style.setProperty('--bg-image', `url("${url}")`)
+      })
+      .catch(() => {
+        if (!cancelled) setBackgroundImageError(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [settings?.backgroundImagePath])
+
+  // 图片本身用固定图层展示（见 foundation.css 的 body::before），这里额外算出
+  // 一个 0-1 的无单位系数，供编辑器正文表面按同一强度变半透明，让图片透出来。
+  useEffect(() => {
+    if (!settings) return
+    const shade = (settings.backgroundOpacity ?? 0) / 100
+    document.documentElement.style.setProperty('--bg-image-shade', String(shade))
+  }, [settings?.backgroundOpacity])
+
+  // ── 主题深浅 ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!settings) return
+    applyThemeShade(settings.themeShade ?? 0)
+  }, [settings?.themeShade, settings?.theme])
+
   // ── Mutations ──────────────────────────────────────────────────────────────
   const saveSettings = useCallback(async (patch: Partial<AppSettings>): Promise<AppSettings> => {
     const next = await desktop.setSettings(patch)
@@ -170,6 +224,7 @@ export function useSettings() {
     settings,
     settingsReady,
     customCssError,
+    backgroundImageError,
     saveSettings,
     pushRecentFile,
     pushRecentFolder,

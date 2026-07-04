@@ -33,6 +33,9 @@ export interface AppSettings {
   theme: 'system' | 'light' | 'dark' | 'warm' | 'mint' | 'blue' | 'summer'
   editorWidth: 'normal' | 'wide' | 'full'
   customCssPath: string
+  backgroundImagePath: string
+  backgroundOpacity: number
+  themeShade: number
   headingNumber: boolean
   autoSave: boolean
   checkUpdatesOnStartup: boolean
@@ -188,6 +191,8 @@ export interface DesktopPort {
   pickWordTemplate(): Promise<{ path: string } | null>
   savePandocDefaultTemplate(): Promise<{ path: string } | null>
   pickCss(): Promise<{ path: string } | null>
+  pickImage(): Promise<{ path: string } | null>
+  allowBackgroundImage(path: string): Promise<void>
   notify(message: string, title?: string): Promise<void>
   confirm(message: string, title: string, okLabel: string, cancelLabel: string): Promise<boolean>
   onMenuAction(callback: (action: string) => void): () => void

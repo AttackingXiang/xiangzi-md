@@ -107,6 +107,30 @@ fn accepts_every_built_in_theme_preset_and_rejects_unknown_ones() {
 }
 
 #[test]
+fn validates_background_image_path_and_shade_bounds() {
+    let mut settings = AppSettings::default();
+    assert!(validate_settings(&settings).is_ok());
+
+    settings.background_image_path = "relative/path.png".into();
+    assert!(validate_settings(&settings).is_err());
+
+    settings.background_image_path = "/Users/x/Pictures/bg.png".into();
+    assert!(validate_settings(&settings).is_ok());
+
+    settings.background_opacity = 101;
+    assert!(validate_settings(&settings).is_err());
+    settings.background_opacity = 100;
+    assert!(validate_settings(&settings).is_ok());
+
+    settings.theme_shade = 51;
+    assert!(validate_settings(&settings).is_err());
+    settings.theme_shade = -51;
+    assert!(validate_settings(&settings).is_err());
+    settings.theme_shade = -50;
+    assert!(validate_settings(&settings).is_ok());
+}
+
+#[test]
 fn rejects_conflicting_or_malformed_shortcuts() {
     let mut settings = AppSettings::default();
     settings.shortcuts.insert("save".into(), "Mod+Alt+S".into());
