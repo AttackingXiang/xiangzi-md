@@ -8,9 +8,7 @@ import { CODE_PALETTE_CSS_VARS, type ThemeName } from './codeSyntaxPalette'
 // there can't silently miss a variable that the other 5 themes define — a
 // typo or omission here would otherwise only surface as a wrong color deep in
 // a specific theme, easy to miss in review.
-const foundationCssPath = fileURLToPath(
-  new URL('../styles/slices/foundation.css', import.meta.url),
-)
+const foundationCssPath = fileURLToPath(new URL('../styles/slices/foundation.css', import.meta.url))
 const css = readFileSync(foundationCssPath, 'utf-8')
 
 const THEME_SELECTORS: Record<ThemeName, string> = {

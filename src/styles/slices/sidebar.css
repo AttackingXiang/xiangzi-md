@@ -17,7 +17,11 @@
      （两层各透 60% 相当于合起来只透约 29%）；侧边栏只有这一层，用同样
      60% 会显得比正文薄、更透——这里改成 30% 让侧边栏单层也有接近正文的
      "毛玻璃" 厚度，两侧视觉一致。 */
-  background: color-mix(in srgb, var(--bg-sidebar) calc(100% - var(--bg-image-shade, 0) * 30%), transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-sidebar) calc(100% - var(--bg-image-shade, 0) * 30%),
+    transparent
+  );
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;

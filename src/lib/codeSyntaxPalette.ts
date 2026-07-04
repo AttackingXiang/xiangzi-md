@@ -52,9 +52,7 @@ export function readComputedCodePalette(
 ): CodeSyntaxPalette {
   const style = getComputedStyle(root)
   const read = (name: string): string => style.getPropertyValue(`--${name}`).trim()
-  const entries = Object.entries(CODE_PALETTE_CSS_VARS) as Array<
-    [keyof CodeSyntaxPalette, string]
-  >
+  const entries = Object.entries(CODE_PALETTE_CSS_VARS) as Array<[keyof CodeSyntaxPalette, string]>
   const result = {} as CodeSyntaxPalette
   for (const [key, cssVar] of entries) result[key] = read(cssVar)
   return result
