@@ -13,13 +13,6 @@ import { copySvgMarkupAsImage } from './richClipboard'
 import { t } from './i18n'
 import { autoDetectLanguage } from './languageDetection'
 
-// ---------- theme ----------
-
-let _theme: 'light' | 'dark' = 'light'
-export function setCodeBlockTheme(theme: 'light' | 'dark'): void {
-  _theme = theme
-}
-
 // ---------- language list for picker ----------
 
 interface LangEntry {
@@ -317,7 +310,7 @@ class StaticCodeBlockView implements NodeView {
       this.mermaidEl.innerHTML = ''
       return
     }
-    const renderer = renderMermaid(_theme)
+    const renderer = renderMermaid()
     renderer('mermaid', code, (result) => {
       if (this.mermaidSeq !== seq || !this.mermaidEl) return
       if (typeof result === 'string') {
@@ -352,11 +345,15 @@ class StaticCodeBlockView implements NodeView {
   /** Mermaid 图表处于预览态时复制渲染出的图片；否则（源码态、非图表代码块）复制文本源码。 */
   private doCopy(): void {
     if (this.language === 'mermaid' && this.showPreview && this.content.trim()) {
-      const background = _theme === 'dark' ? '#1e2128' : '#f7f7f7'
+      // 读当前生效的卡片底色（随 [data-theme] 走，不再按 light/dark 二选一），
+      // 保证栅格化出的 PNG 背景和屏幕上看到的代码卡片一致。
+      const background = getComputedStyle(document.documentElement)
+        .getPropertyValue('--code-card-bg')
+        .trim()
       // 屏幕预览的 SVG 含 foreignObject，无法栅格化（WebKit 会污染画布）；
       // 用 htmlLabels:false 重新渲染一份纯 SVG 专供转图，再写入剪贴板。
-      renderMermaidForExport(_theme, this.content)
-        .then((svgMarkup) => copySvgMarkupAsImage(svgMarkup, background))
+      renderMermaidForExport(this.content)
+        .then((svgMarkup) => copySvgMarkupAsImage(svgMarkup, background || '#f7f7f7'))
         .then((ok) => {
           if (ok) this.flashCopied()
           else this.copyTextFallback()

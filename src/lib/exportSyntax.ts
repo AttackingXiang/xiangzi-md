@@ -14,32 +14,42 @@ const LANGUAGE_ALIASES: Record<string, string> = {
 
 const PLAIN_TEXT_LANGUAGES = new Set(['', 'text', 'txt', 'plain', 'plaintext'])
 
+/**
+ * 导出的 HTML 是脱离 App 运行时的静态文件，但 generateExportHtml 会把当前
+ * 全部样式表（含 foundation.css 的 --code-* 变量定义）原样内联进导出文档，
+ * 且 <html> 标签带着当前 data-theme——所以这里同样可以直接引用 --code-*
+ * 变量，浏览器打开导出文件时按普通 CSS 层叠解析，不需要为每个主题烘焙一份
+ * 字面量颜色，天然对新主题免维护。
+ *
+ * 这里顺带修正了此前手工同步产生的三处偏移（读作静态渲染态 code-table.css
+ * 的对应版本才是权威值）：
+ * - tok-variableName.tok-definition/tok-variableName2 曾被误标成函数紫色，
+ *   实际语义就是变量名，改回变量色
+ * - 深色 tok-comment/tok-meta 曾用一个独立的 #7f848e，未跟随其余两处的
+ *   #5c6370
+ * - tok-inserted/tok-deleted 曾借用 property 青色，现在使用专门的
+ *   diff-added/diff-removed 语义色
+ */
 export const EXPORT_CODE_STYLES = `
-.milkdown .ProseMirror pre.xmd-export-code{margin:.3em 0 1em;padding:14px 16px;overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg-sidebar);color:#24292f;font-family:'SFMono-Regular','SF Mono','JetBrains Mono',Menlo,Consolas,'Liberation Mono',monospace;font-size:13.5px;line-height:1.6;tab-size:2;white-space:pre}
+.milkdown .ProseMirror pre.xmd-export-code{margin:.3em 0 1em;padding:14px 16px;overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--code-card-bg);color:var(--code-text);font-family:'SFMono-Regular','SF Mono','JetBrains Mono',Menlo,Consolas,'Liberation Mono',monospace;font-size:13.5px;line-height:1.6;tab-size:2;white-space:pre}
 .milkdown .ProseMirror .xmd-export-code code{display:block;padding:0;background:transparent;color:inherit!important;font:inherit;white-space:inherit}
-.xmd-export-code .tok-keyword,.xmd-export-code .tok-invalid{color:#cf222e}
-.xmd-export-code .tok-string,.xmd-export-code .tok-string2,.xmd-export-code .tok-url{color:#0a3069}
-.xmd-export-code .tok-comment,.xmd-export-code .tok-meta{color:#6e7781;font-style:italic}
-.xmd-export-code .tok-number,.xmd-export-code .tok-bool,.xmd-export-code .tok-atom,.xmd-export-code .tok-literal{color:#0550ae}
-.xmd-export-code .tok-variableName.tok-definition,.xmd-export-code .tok-variableName2{color:#8250df}
-.xmd-export-code .tok-typeName,.xmd-export-code .tok-className,.xmd-export-code .tok-namespace,.xmd-export-code .tok-macroName{color:#953800}
-.xmd-export-code .tok-propertyName,.xmd-export-code .tok-labelName,.xmd-export-code .tok-inserted{color:#116329}
-.xmd-export-code .tok-variableName{color:#24292f}
-.xmd-export-code .tok-operator,.xmd-export-code .tok-punctuation{color:#57606a}
-.xmd-export-code .tok-link{text-decoration:underline;color:#0969da}
+.xmd-export-code .tok-keyword{color:var(--code-keyword)}
+.xmd-export-code .tok-invalid{color:var(--code-invalid)}
+.xmd-export-code .tok-string,.xmd-export-code .tok-string2,.xmd-export-code .tok-url{color:var(--code-string)}
+.xmd-export-code .tok-comment{color:var(--code-comment);font-style:italic}
+.xmd-export-code .tok-meta{color:var(--code-meta)}
+.xmd-export-code .tok-number,.xmd-export-code .tok-bool,.xmd-export-code .tok-atom,.xmd-export-code .tok-literal,.xmd-export-code .tok-attributeName,.xmd-export-code .tok-labelName{color:var(--code-number)}
+.xmd-export-code .tok-variableName,.xmd-export-code .tok-variableName2,.xmd-export-code .tok-variableName.tok-definition{color:var(--code-variable)}
+.xmd-export-code .tok-propertyName{color:var(--code-property)}
+.xmd-export-code .tok-typeName,.xmd-export-code .tok-className,.xmd-export-code .tok-namespace{color:var(--code-type)}
+.xmd-export-code .tok-macroName,.xmd-export-code .tok-propertyName.tok-function,.xmd-export-code .tok-variableName.tok-function{color:var(--code-function)}
+.xmd-export-code .tok-operator,.xmd-export-code .tok-punctuation{color:var(--code-operator)}
+.xmd-export-code .tok-tagName{color:var(--code-tag)}
+.xmd-export-code .tok-link,.xmd-export-code .tok-url{text-decoration:underline;color:var(--code-link)}
 .xmd-export-code .tok-heading,.xmd-export-code .tok-strong{font-weight:600}
 .xmd-export-code .tok-emphasis{font-style:italic}
-.xmd-export-code .tok-deleted{text-decoration:line-through;color:#cf222e}
-[data-theme='dark'] .milkdown .ProseMirror pre.xmd-export-code{color:#abb2bf;background:#282c34;border-color:var(--border-strong)}
-[data-theme='dark'] .xmd-export-code .tok-keyword,[data-theme='dark'] .xmd-export-code .tok-invalid{color:#c678dd}
-[data-theme='dark'] .xmd-export-code .tok-string,[data-theme='dark'] .xmd-export-code .tok-string2,[data-theme='dark'] .xmd-export-code .tok-url{color:#98c379}
-[data-theme='dark'] .xmd-export-code .tok-comment,[data-theme='dark'] .xmd-export-code .tok-meta{color:#7f848e}
-[data-theme='dark'] .xmd-export-code .tok-number,[data-theme='dark'] .xmd-export-code .tok-bool,[data-theme='dark'] .xmd-export-code .tok-atom,[data-theme='dark'] .xmd-export-code .tok-literal{color:#d19a66}
-[data-theme='dark'] .xmd-export-code .tok-variableName.tok-definition,[data-theme='dark'] .xmd-export-code .tok-variableName2{color:#61afef}
-[data-theme='dark'] .xmd-export-code .tok-typeName,[data-theme='dark'] .xmd-export-code .tok-className,[data-theme='dark'] .xmd-export-code .tok-namespace,[data-theme='dark'] .xmd-export-code .tok-macroName{color:#e5c07b}
-[data-theme='dark'] .xmd-export-code .tok-propertyName,[data-theme='dark'] .xmd-export-code .tok-labelName,[data-theme='dark'] .xmd-export-code .tok-inserted{color:#56b6c2}
-[data-theme='dark'] .xmd-export-code .tok-variableName{color:#abb2bf}
-[data-theme='dark'] .xmd-export-code .tok-operator,[data-theme='dark'] .xmd-export-code .tok-punctuation{color:#abb2bf}
+.xmd-export-code .tok-inserted{color:var(--code-diff-added);background:color-mix(in srgb,var(--code-diff-added) 10%,transparent)}
+.xmd-export-code .tok-deleted{text-decoration:line-through;color:var(--code-diff-removed);background:color-mix(in srgb,var(--code-diff-removed) 10%,transparent)}
 `
 
 function languageName(language: string): string {

@@ -48,7 +48,10 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !matches!(settings.language.as_str(), "zh" | "en") {
         settings.language = "zh".into();
     }
-    if !matches!(settings.theme.as_str(), "system" | "light" | "dark") {
+    if !matches!(
+        settings.theme.as_str(),
+        "system" | "light" | "dark" | "warm" | "mint" | "blue" | "summer"
+    ) {
         settings.theme = "system".into();
     }
     if !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full") {
@@ -93,7 +96,10 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
 
 pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
     if !matches!(settings.language.as_str(), "zh" | "en")
-        || !matches!(settings.theme.as_str(), "system" | "light" | "dark")
+        || !matches!(
+            settings.theme.as_str(),
+            "system" | "light" | "dark" | "warm" | "mint" | "blue" | "summer"
+        )
         || !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full")
         || !matches!(
             settings.attachment_mode.as_str(),

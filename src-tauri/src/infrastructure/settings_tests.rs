@@ -92,6 +92,21 @@ fn patch_only_changes_explicit_fields() {
 }
 
 #[test]
+fn accepts_every_built_in_theme_preset_and_rejects_unknown_ones() {
+    let mut settings = AppSettings::default();
+    for theme in ["system", "light", "dark", "warm", "mint", "blue", "summer"] {
+        settings.theme = theme.into();
+        assert!(
+            validate_settings(&settings).is_ok(),
+            "{theme} should validate"
+        );
+    }
+
+    settings.theme = "sepia".into();
+    assert!(validate_settings(&settings).is_err());
+}
+
+#[test]
 fn rejects_conflicting_or_malformed_shortcuts() {
     let mut settings = AppSettings::default();
     settings.shortcuts.insert("save".into(), "Mod+Alt+S".into());
