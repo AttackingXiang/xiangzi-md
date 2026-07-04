@@ -8,6 +8,7 @@
     "dialog:default",
     "clipboard-manager:allow-write-html",
     "clipboard-manager:allow-write-image",
+    "clipboard-manager:allow-write-text",
     {
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "https://*" }]

@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Image } from '@tauri-apps/api/image'
-import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
+import { writeHtml, writeImage, writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { ask, message, open, save } from '@tauri-apps/plugin-dialog'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
@@ -173,6 +173,7 @@ export const tauriDesktopAdapter: DesktopPort = {
       },
     }),
   writeClipboardHtml: (html, altText) => writeHtml(html, altText),
+  writeClipboardText: (text) => writeText(text),
   writeClipboardImage: async (png) => {
     const image = await Image.fromBytes(png)
     try {

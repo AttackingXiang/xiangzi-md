@@ -419,6 +419,103 @@ async function writeSnapshot(snapshot: ClipboardSnapshot): Promise<boolean> {
   return legacyWrite(complete.html, snapshot.text)
 }
 
+/**
+ * 把一段 SVG 标记（如 mermaid 重新渲染出的导出专用 SVG）栅格化为 PNG 并写入
+ * 系统剪贴板，让图表预览态的「复制」得到可粘贴进 Word/微信等应用的真实图片。
+ *
+ * 传入的 SVG 必须不含 foreignObject（WebKit 会因此污染画布，toBlob 静默返回
+ * null、toDataURL 抛 SecurityError）——mermaid 侧用 htmlLabels:false 重新渲染
+ * 即可满足；见 mermaidPreview.renderMermaidForExport。
+ *
+ * 用 Blob + ObjectURL 而非 base64 data URL 承载 SVG：data URL 需要 btoa，
+ * 而图表里的中文标签等非 Latin1 字符会让 btoa 直接抛错。
+ *
+ * 剪贴板优先走 Tauri 原生通道：它不依赖浏览器的「用户手势有效期」，异步栅格
+ * 化完成后写入依然可靠；Web Clipboard 仅作后备。
+ */
+export async function copySvgMarkupAsImage(
+  svgMarkup: string,
+  backgroundColor: string,
+  scale = 2,
+): Promise<boolean> {
+  // 从标记中解析出 SVG 节点读取 viewBox 尺寸（无需布局即可访问）
+  const holder = document.createElement('div')
+  holder.innerHTML = svgMarkup
+  const svg = holder.querySelector('svg')
+  if (!svg) return false
+  const viewBox = svg.viewBox.baseVal
+  const width = Math.max(1, Math.round(viewBox?.width || Number(svg.getAttribute('width')) || 800))
+  const height = Math.max(
+    1,
+    Math.round(viewBox?.height || Number(svg.getAttribute('height')) || 600),
+  )
+  // 给克隆体写回确定的像素尺寸，作为 <img> 的固有尺寸供缩放绘制
+  svg.setAttribute('width', String(width))
+  svg.setAttribute('height', String(height))
+  svg.style.maxWidth = ''
+
+  const serialized = new XMLSerializer().serializeToString(svg)
+  const svgBlob = new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' })
+  const url = URL.createObjectURL(svgBlob)
+  let canvas: HTMLCanvasElement | undefined
+  try {
+    const image = new Image()
+    image.decoding = 'async'
+    const decodeTimeoutMs = 5000
+    await Promise.race([
+      new Promise<void>((resolve, reject) => {
+        image.addEventListener('load', () => resolve(), { once: true })
+        image.addEventListener('error', () => reject(new Error('图表转换失败')), { once: true })
+        image.src = url
+      }),
+      // 个别 WebView 对畸形 SVG 既不触发 load 也不触发 error；加超时保证
+      // 栅格化失败时能在有限时间内退回复制源码，而不是彻底没反应。
+      new Promise<void>((_, reject) => {
+        setTimeout(() => reject(new Error('图表图片解码超时')), decodeTimeoutMs)
+      }),
+    ])
+    // 放大 scale 倍绘制（SVG 是矢量，放大不损失），高分屏粘贴出去更清晰
+    const dimensions = fitImageDimensions(width * scale, height * scale, MAX_CLIPBOARD_IMAGE_PIXELS)
+    canvas = document.createElement('canvas')
+    canvas.width = dimensions.width
+    canvas.height = dimensions.height
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('无法创建图片画布')
+    // 图表通常透明背景；补一层与当前主题一致的底色，粘贴到白底/深底应用时
+    // 线条和文字不会因透明背景而不可读。
+    context.fillStyle = backgroundColor
+    context.fillRect(0, 0, dimensions.width, dimensions.height)
+    context.drawImage(image, 0, 0, dimensions.width, dimensions.height)
+    // 用 toDataURL 而非 toBlob：WKWebView 的 toBlob 在画布被判定不干净时静默
+    // 回调 null；toDataURL 则抛出明确的 SecurityError，便于兜底逻辑接手。
+    const png = dataUrlToBlob(canvas.toDataURL('image/png'))
+
+    if ('__TAURI_INTERNALS__' in window) {
+      try {
+        await desktop.writeClipboardImage(new Uint8Array(await png.arrayBuffer()))
+        return true
+      } catch {
+        // 原生剪贴板不可用时继续尝试 Web Clipboard。
+      }
+    }
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })])
+        return true
+      } catch {
+        // 两条路径都不可用时放弃，调用方保留复制源码文本的兜底。
+      }
+    }
+    return false
+  } finally {
+    if (canvas) {
+      canvas.width = 1
+      canvas.height = 1
+    }
+    URL.revokeObjectURL(url)
+  }
+}
+
 export async function copyImageElement(image: HTMLImageElement): Promise<boolean> {
   const source = imageSource(image)
   if (!source) return false

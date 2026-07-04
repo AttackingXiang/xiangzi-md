@@ -7,7 +7,9 @@ import type {
 import type { Node as PMNode } from '@milkdown/kit/prose/model'
 import { codeBlockSchema } from '@milkdown/kit/preset/commonmark'
 import { languages as cmLanguages } from '@codemirror/language-data'
-import { renderMermaid } from './mermaidPreview'
+import { desktop } from '../platform'
+import { renderMermaid, renderMermaidForExport } from './mermaidPreview'
+import { copySvgMarkupAsImage } from './richClipboard'
 import { t } from './i18n'
 import { autoDetectLanguage } from './languageDetection'
 
@@ -329,13 +331,44 @@ class StaticCodeBlockView implements NodeView {
     })
   }
 
+  private flashCopied(): void {
+    this.copyBtn.innerHTML = CHECK_ICON
+    setTimeout(() => {
+      this.copyBtn.innerHTML = COPY_ICON
+    }, 1400)
+  }
+
+  private copyTextFallback(): void {
+    // Web Clipboard 的写入依赖「用户手势有效期」，若这次复制经过了异步栅格化
+    // 再兜底到这里，手势可能已过期被拒（NotAllowedError）；此时改走 Tauri
+    // 原生剪贴板通道，它不受手势时效限制。
+    navigator.clipboard
+      .writeText(this.content)
+      .catch(() => desktop.writeClipboardText(this.content))
+      .then(() => this.flashCopied())
+      .catch((error: unknown) => console.error('复制源码失败', error))
+  }
+
+  /** Mermaid 图表处于预览态时复制渲染出的图片；否则（源码态、非图表代码块）复制文本源码。 */
   private doCopy(): void {
-    void navigator.clipboard.writeText(this.content).then(() => {
-      this.copyBtn.innerHTML = CHECK_ICON
-      setTimeout(() => {
-        this.copyBtn.innerHTML = COPY_ICON
-      }, 1400)
-    })
+    if (this.language === 'mermaid' && this.showPreview && this.content.trim()) {
+      const background = _theme === 'dark' ? '#1e2128' : '#f7f7f7'
+      // 屏幕预览的 SVG 含 foreignObject，无法栅格化（WebKit 会污染画布）；
+      // 用 htmlLabels:false 重新渲染一份纯 SVG 专供转图，再写入剪贴板。
+      renderMermaidForExport(_theme, this.content)
+        .then((svgMarkup) => copySvgMarkupAsImage(svgMarkup, background))
+        .then((ok) => {
+          if (ok) this.flashCopied()
+          else this.copyTextFallback()
+        })
+        .catch((error: unknown) => {
+          // 渲染/栅格化任何一步失败都不能让复制按钮没反应：退回复制源码。
+          console.error('复制图表图片失败，已退回复制源码', error)
+          this.copyTextFallback()
+        })
+      return
+    }
+    this.copyTextFallback()
   }
 
   update(node: PMNode): boolean {

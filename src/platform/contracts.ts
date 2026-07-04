@@ -169,6 +169,7 @@ export interface DesktopPort {
   ): Promise<{ relPath: string }>
   writeClipboardHtml(html: string, altText: string): Promise<void>
   writeClipboardImage(png: Uint8Array): Promise<void>
+  writeClipboardText(text: string): Promise<void>
   getSettings(): Promise<AppSettings>
   setSettings(patch: Partial<AppSettings>): Promise<AppSettings>
   findInPage(text: string, forward?: boolean, findNext?: boolean): Promise<void>
