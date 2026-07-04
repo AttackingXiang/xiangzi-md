@@ -114,7 +114,11 @@ fn validates_background_image_path_and_shade_bounds() {
     settings.background_image_path = "relative/path.png".into();
     assert!(validate_settings(&settings).is_err());
 
-    settings.background_image_path = "/Users/x/Pictures/bg.png".into();
+    // 用 std::env::temp_dir() 而不是硬编码的 "/Users/..." 字符串：Unix 风格的
+    // 前导 "/" 在 Windows 上不构成 Path::is_absolute()，硬编码路径在 Windows
+    // CI 上会让这条本该通过的断言失败。
+    let absolute_path = std::env::temp_dir().join("bg.png");
+    settings.background_image_path = absolute_path.to_string_lossy().into_owned();
     assert!(validate_settings(&settings).is_ok());
 
     settings.background_opacity = 101;
