@@ -1,16 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import {
-  BookOpen,
-  ChevronDown,
-  Code2,
-  Eye,
-  List,
-  MapPin,
-  PanelLeft,
-  Pin,
-  Plus,
-  X,
-} from 'lucide-react'
+import { ChevronDown, List, MapPin, PanelLeft, Pin, Plus, X } from 'lucide-react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 import { stripExtension } from '../lib/path'
@@ -23,15 +12,12 @@ interface Props {
   onMoveTab: (fromIndex: number, insertAt: number) => void
   onTabContext: (id: string, x: number, y: number) => void
   onShowWelcome: () => void
-  sourceMode: boolean
   outlineVisible: boolean
-  readingMode: boolean
-  onToggleSource: () => void
   onToggleSidebar: () => void
   onToggleOutline: () => void
-  onToggleReading: () => void
   onRevealFile?: () => void
   activeHasPath?: boolean
+  showRevealButton?: boolean
 }
 
 const TabBar = memo(function TabBar({
@@ -42,15 +28,12 @@ const TabBar = memo(function TabBar({
   onMoveTab,
   onTabContext,
   onShowWelcome,
-  sourceMode,
   outlineVisible,
-  readingMode,
-  onToggleSource,
   onToggleSidebar,
   onToggleOutline,
-  onToggleReading,
   onRevealFile,
   activeHasPath,
+  showRevealButton = true,
 }: Props): JSX.Element {
   const activeRef = useRef<HTMLDivElement>(null)
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -216,7 +199,7 @@ const TabBar = memo(function TabBar({
         <PanelLeft size={16} />
       </button>
 
-      {onRevealFile && activeHasPath && (
+      {showRevealButton && onRevealFile && activeHasPath && (
         <button className="icon-btn drag-none" title={t('在文件夹中定位')} onClick={onRevealFile}>
           <MapPin size={16} />
         </button>
@@ -339,25 +322,11 @@ const TabBar = memo(function TabBar({
       </button>
 
       <button
-        className={`icon-btn drag-none${readingMode ? ' active' : ''}`}
-        title={`${t('阅读模式')}（${readingMode ? t('已开启') : t('已关闭')}）`}
-        onClick={onToggleReading}
-      >
-        <BookOpen size={16} />
-      </button>
-      <button
         className={`icon-btn drag-none${outlineVisible ? ' active' : ''}`}
         title={`${t('大纲')}（${outlineVisible ? t('已显示') : t('已隐藏')}）⌘⇧K`}
         onClick={onToggleOutline}
       >
         <List size={16} />
-      </button>
-      <button
-        className={`icon-btn drag-none${sourceMode ? ' active' : ''}`}
-        title={`${t('源码模式')}（${sourceMode ? t('已开启') : t('已关闭')}）⌘/`}
-        onClick={onToggleSource}
-      >
-        {sourceMode ? <Eye size={16} /> : <Code2 size={16} />}
       </button>
     </div>
   )

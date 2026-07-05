@@ -2,16 +2,10 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-// 背景图片能不能透出来，取决于 html 与正文之间的每一层容器背景是否都跟着
-// --bg-image-shade 变透明——之前 .editor-area 独立铺了一层不透明 var(--bg)，
-// 图片再怎么调都透不上来，且这个 bug 在 CSS 里悄无声息、不会报错。这里把
-// "html 到编辑器正文之间的关键容器都必须引用 --bg-image-shade" 固化成测试，
-// 避免以后新加一层不透明背景又把图片盖住。
-const LAYERS = [
-  {
-    file: '../styles/slices/foundation.css',
-    selector: 'html',
-  },
+// 背景图由 .app 承载，标题栏与工作区各叠一次相同的可读性表面；工作区内部
+// 各区域必须透明，
+// 否则正文、侧栏和状态栏会再次叠色，重新出现“预览区多一层”的视觉断层。
+const TRANSPARENT_LAYERS = [
   {
     file: '../styles/slices/workspace.css',
     selector: '.tabbar',
@@ -50,9 +44,34 @@ function extractBlock(css: string, selector: string): string {
 }
 
 describe('background image layers stay transparent-capable', () => {
-  it.each(LAYERS)('$selector references --bg-image-shade or --bg-image', ({ file, selector }) => {
+  it('keeps the image and shared surface token on the app root', () => {
+    const foundation = readCss('../styles/slices/foundation.css')
+    expect(extractBlock(foundation, '.app')).toMatch(/--bg-image/)
+    expect(extractBlock(foundation, '.app')).toMatch(/--bg-image-shade/)
+    expect(extractBlock(foundation, '.workspace-shell')).toMatch(/--workspace-surface/)
+  })
+
+  it.each(TRANSPARENT_LAYERS)('$selector stays transparent', ({ file, selector }) => {
     const css = readCss(file)
     const block = extractBlock(css, selector)
-    expect(block).toMatch(/--bg-image(-shade)?/)
+    expect(block).toMatch(/background:\s*transparent/)
+  })
+
+  it('keeps the custom title bar on the same app surface', () => {
+    const css = readCss('../styles/slices/titlebar.css')
+    expect(extractBlock(css, '.titlebar')).toMatch(/background:\s*var\(--workspace-surface\)/)
+  })
+
+  it('keeps the sidebar height chain constrained so the tree scrolls on both axes', () => {
+    const css = readCss('../styles/slices/sidebar.css')
+    expect(extractBlock(css, '.sidebar-wrap')).toMatch(/min-height:\s*0/)
+    expect(extractBlock(css, '.sidebar-wrap')).toMatch(/overflow:\s*hidden/)
+    expect(extractBlock(css, '.sidebar')).toMatch(/min-height:\s*0/)
+    expect(extractBlock(css, '.sidebar')).toMatch(/overflow:\s*hidden/)
+
+    const body = extractBlock(css, '.sidebar-body')
+    expect(body).toMatch(/flex:\s*1 1 0/)
+    expect(body).toMatch(/height:\s*0/)
+    expect(body).toMatch(/overflow:\s*auto/)
   })
 })

@@ -7,7 +7,7 @@
   border: 1px solid var(--code-card-border);
   border-radius: 6px;
   overflow: hidden;
-  background: var(--code-card-bg);
+  background: color-mix(in srgb, var(--code-card-bg) var(--code-block-opacity, 30%), transparent);
   font-family: 'JetBrains Mono', 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
 }
 
@@ -23,7 +23,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--code-header-bg);
+  background: color-mix(in srgb, var(--code-header-bg) var(--code-block-opacity, 30%), transparent);
   border-bottom: 1px solid var(--code-card-border);
 }
 
@@ -92,7 +92,7 @@
   margin: 0;
   padding: 14px 18px;
   overflow-x: auto;
-  background: var(--code-card-bg);
+  background: transparent;
 }
 
 .wysiwyg-editor .milkdown .xmd-code-content {
@@ -303,14 +303,26 @@
    直接引用 --code-* 静态代码块色板（foundation.css），与上方 .xmd-code-block
    共用同一套值，不再各themes各写一份、也不必为每个新增主题单独适配。 */
 .wysiwyg-editor .milkdown {
-  --crepe-color-surface: var(--code-card-bg);
-  --crepe-color-surface-low: var(--code-header-bg);
+  --crepe-color-surface: color-mix(
+    in srgb,
+    var(--code-card-bg) var(--code-block-opacity, 30%),
+    transparent
+  );
+  --crepe-color-surface-low: color-mix(
+    in srgb,
+    var(--code-header-bg) var(--code-block-opacity, 30%),
+    transparent
+  );
   --crepe-color-inline-area: var(--code-card-border);
 }
 
 /* ── Crepe/CM NodeView 高优先级覆盖（3 层选择器，优先级高于 Crepe 的 2 层） ── */
 .wysiwyg-editor .milkdown .milkdown-code-block {
-  background: var(--code-card-bg) !important;
+  background: color-mix(
+    in srgb,
+    var(--code-card-bg) var(--code-block-opacity, 30%),
+    transparent
+  ) !important;
   border: 1px solid var(--code-card-border) !important;
   border-radius: 6px !important;
   padding: 0 !important;
@@ -337,7 +349,11 @@
 /* Crepe 工具栏 */
 .wysiwyg-editor .milkdown .milkdown-code-block .tools {
   padding: 4px 8px !important;
-  background: var(--code-header-bg) !important;
+  background: color-mix(
+    in srgb,
+    var(--code-header-bg) var(--code-block-opacity, 30%),
+    transparent
+  ) !important;
   border-bottom: 1px solid var(--code-card-border) !important;
   min-height: 34px !important;
 }

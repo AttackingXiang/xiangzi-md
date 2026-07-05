@@ -1,0 +1,102 @@
+.titlebar {
+  position: relative;
+  z-index: 100;
+  height: 38px;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  background: var(--workspace-surface);
+  border-bottom: 1px solid var(--workspace-divider);
+  color: var(--text-2);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar-title {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  max-width: min(52vw, 620px);
+  height: 100%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.titlebar-app-name {
+  flex-shrink: 0;
+  color: var(--text);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.titlebar-separator {
+  color: var(--workspace-divider-strong);
+}
+
+.titlebar-document-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.titlebar-dirty {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.titlebar-controls {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-standard .titlebar-controls {
+  margin-left: auto;
+}
+
+.titlebar-button {
+  width: 44px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-2);
+  cursor: default;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.titlebar-button:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.titlebar-standard .titlebar-button-close:hover {
+  color: #fff;
+  background: #c42b1c;
+}
+
+.titlebar-mac {
+  /* Keep the title clear of macOS' native traffic-light controls. */
+  padding-left: 78px;
+}
+
+@media (max-width: 720px) {
+  .titlebar-title {
+    max-width: 42vw;
+  }
+}

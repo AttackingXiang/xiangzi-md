@@ -4,6 +4,7 @@ import {
   Files,
   Info,
   Keyboard,
+  PanelBottom,
   Palette,
   PenLine,
   RefreshCw,
@@ -27,6 +28,7 @@ interface PandocStatus {
 export type SettingsSection =
   | 'appearance'
   | 'editor'
+  | 'controls'
   | 'files'
   | 'attachments'
   | 'word'
@@ -83,6 +85,7 @@ export default function Settings({
   }> = [
     { id: 'appearance', label: en ? 'Appearance' : '外观', icon: Palette },
     { id: 'editor', label: en ? 'Editor' : '编辑器', icon: PenLine },
+    { id: 'controls', label: en ? 'Controls' : '控件', icon: PanelBottom },
     { id: 'files', label: en ? 'Files' : '文件', icon: Files },
     { id: 'attachments', label: en ? 'Images' : '图片与附件', icon: FileImage },
     { id: 'word', label: en ? 'Word / Pandoc' : 'Word / Pandoc', icon: FileType2 },
@@ -177,9 +180,10 @@ export default function Settings({
                     </select>
                   </SettingRow>
                   <SettingRow label={t('主题深浅')}>
-                    <span className="settings-inline">
+                    <span className="settings-range-control">
                       <input
                         type="range"
+                        aria-label={t('主题深浅')}
                         min={-50}
                         max={50}
                         step={5}
@@ -190,9 +194,30 @@ export default function Settings({
                         {settings.themeShade === 0
                           ? t('原色')
                           : settings.themeShade > 0
-                            ? `+${settings.themeShade}`
-                            : settings.themeShade}
+                            ? `${t('变亮')} ${settings.themeShade}%`
+                            : `${t('加深')} ${Math.abs(settings.themeShade)}%`}
                       </small>
+                    </span>
+                  </SettingRow>
+                  <p className="settings-range-hint">
+                    {en
+                      ? 'Move left to darken the theme surface and right to brighten it. This does not change the background-image intensity.'
+                      : '向左会加深主题底色，向右会变亮；它不会改变背景图片强度。'}
+                  </p>
+                  <SettingRow label={t('代码块不透明度')}>
+                    <span className="settings-range-control">
+                      <input
+                        type="range"
+                        aria-label={t('代码块不透明度')}
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={settings.codeBlockOpacity}
+                        onChange={(event) =>
+                          onChange({ codeBlockOpacity: Number(event.target.value) })
+                        }
+                      />
+                      <small>{settings.codeBlockOpacity}%</small>
                     </span>
                   </SettingRow>
                 </SettingsCard>
@@ -226,9 +251,10 @@ export default function Settings({
                   </div>
                   {settings.backgroundImagePath && (
                     <SettingRow label={t('背景强度')}>
-                      <span className="settings-inline">
+                      <span className="settings-range-control">
                         <input
                           type="range"
+                          aria-label={t('背景强度')}
                           min={0}
                           max={100}
                           step={5}
@@ -320,6 +346,75 @@ export default function Settings({
                     }
                     checked={settings.showToolbar ?? false}
                     onChange={(checked) => onChange({ showToolbar: checked })}
+                  />
+                </SettingsCard>
+              </SettingsPage>
+            )}
+
+            {section === 'controls' && (
+              <SettingsPage
+                title={en ? 'Controls' : '控件'}
+                description={
+                  en
+                    ? 'Choose which workspace controls stay visible.'
+                    : '选择主界面中需要持续显示的操作控件。'
+                }
+              >
+                <SettingsCard title={en ? 'Bottom bar' : '底部栏'}>
+                  <ToggleRow
+                    label={en ? 'Show bottom bar' : '显示底部一行'}
+                    description={
+                      en
+                        ? 'Show document status and the optional view controls at the bottom.'
+                        : '在底部显示文档状态以及可选的阅读、源码控件。'
+                    }
+                    checked={settings.showStatusBar}
+                    onChange={(showStatusBar) => onChange({ showStatusBar })}
+                  />
+                  <ToggleRow
+                    label={en ? 'Show file path' : '显示文件路径'}
+                    description={
+                      en
+                        ? 'Show the active document path in the bottom bar.'
+                        : '在底部栏显示当前文档路径。'
+                    }
+                    checked={settings.showStatusPath}
+                    disabled={!settings.showStatusBar}
+                    onChange={(showStatusPath) => onChange({ showStatusPath })}
+                  />
+                  <ToggleRow
+                    label={en ? 'Show reading mode button' : '显示阅读模式按钮'}
+                    description={
+                      en
+                        ? 'Show the reading-mode switch at bottom right.'
+                        : '在右下角显示阅读模式切换按钮。'
+                    }
+                    checked={settings.showReadingModeControl}
+                    disabled={!settings.showStatusBar}
+                    onChange={(showReadingModeControl) => onChange({ showReadingModeControl })}
+                  />
+                  <ToggleRow
+                    label={en ? 'Show source mode button' : '显示源码切换按钮'}
+                    description={
+                      en
+                        ? 'Show the source/WYSIWYG switch at bottom right.'
+                        : '在右下角显示源码与所见即所得切换按钮。'
+                    }
+                    checked={settings.showSourceModeControl}
+                    disabled={!settings.showStatusBar}
+                    onChange={(showSourceModeControl) => onChange({ showSourceModeControl })}
+                  />
+                </SettingsCard>
+                <SettingsCard title={en ? 'Tab bar' : '标签栏'}>
+                  <ToggleRow
+                    label={en ? 'Show reveal button' : '显示定位按钮'}
+                    description={
+                      en
+                        ? 'Show the button that reveals the active file in the sidebar.'
+                        : '显示将当前文件定位到左侧目录的按钮。'
+                    }
+                    checked={settings.showRevealButton}
+                    onChange={(showRevealButton) => onChange({ showRevealButton })}
                   />
                 </SettingsCard>
               </SettingsPage>
@@ -640,15 +735,17 @@ function ToggleRow({
   label,
   description,
   checked,
+  disabled = false,
   onChange,
 }: {
   label: string
   description?: string
   checked: boolean
+  disabled?: boolean
   onChange: (checked: boolean) => void
 }): JSX.Element {
   return (
-    <label className="settings-row settings-toggle-row">
+    <label className={`settings-row settings-toggle-row${disabled ? ' is-disabled' : ''}`}>
       <span>
         <span className="settings-label">{label}</span>
         {description && <small>{description}</small>}
@@ -656,6 +753,7 @@ function ToggleRow({
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
       />
     </label>

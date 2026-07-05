@@ -226,6 +226,12 @@ export function useAppCommands(options: AppCommandOptions): {
         case 'paragraph':
           editorCmd.paragraph()
           break
+        case 'promote-heading':
+          editorCmd.promoteHeading()
+          break
+        case 'demote-heading':
+          editorCmd.demoteHeading()
+          break
         case 'bold':
           editorCmd.bold()
           break

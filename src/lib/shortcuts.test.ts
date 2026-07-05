@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { effectiveShortcut, effectiveShortcutMap, isSafeShortcut } from './shortcuts'
+import {
+  SHORTCUT_DEFINITIONS,
+  effectiveShortcut,
+  effectiveShortcutMap,
+  isSafeShortcut,
+} from './shortcuts'
 
 describe('keyboard shortcuts', () => {
   it('uses defaults until a user override is present', () => {
@@ -20,5 +25,12 @@ describe('keyboard shortcuts', () => {
     expect(isSafeShortcut('Shift+K')).toBe(false)
     expect(isSafeShortcut('Mod+')).toBe(false)
     expect(isSafeShortcut('Mod+NotAKey')).toBe(false)
+  })
+
+  it('exposes distinct configurable heading-level shortcuts', () => {
+    expect(effectiveShortcut({}, 'promote-heading')).toBe('Mod+Alt+ArrowUp')
+    expect(effectiveShortcut({}, 'demote-heading')).toBe('Mod+Alt+ArrowDown')
+    const bindings = SHORTCUT_DEFINITIONS.map((definition) => definition.defaultBinding)
+    expect(new Set(bindings).size).toBe(bindings.length)
   })
 })

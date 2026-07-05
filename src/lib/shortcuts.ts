@@ -25,6 +25,8 @@ export type ShortcutAction =
   | 'heading-5'
   | 'heading-6'
   | 'paragraph'
+  | 'promote-heading'
+  | 'demote-heading'
   | 'bold'
   | 'italic'
   | 'inline-code'
@@ -197,6 +199,20 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     labelZh: '设为正文',
     labelEn: 'Paragraph',
     defaultBinding: 'Mod+0',
+  },
+  {
+    id: 'promote-heading',
+    category: 'format',
+    labelZh: '升级标题',
+    labelEn: 'Promote Heading',
+    defaultBinding: 'Mod+Alt+ArrowUp',
+  },
+  {
+    id: 'demote-heading',
+    category: 'format',
+    labelZh: '降级标题',
+    labelEn: 'Demote Heading',
+    defaultBinding: 'Mod+Alt+ArrowDown',
   },
   { id: 'bold', category: 'format', labelZh: '加粗', labelEn: 'Bold', defaultBinding: 'Mod+B' },
   { id: 'italic', category: 'format', labelZh: '斜体', labelEn: 'Italic', defaultBinding: 'Mod+I' },

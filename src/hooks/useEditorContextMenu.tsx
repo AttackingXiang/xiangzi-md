@@ -5,6 +5,8 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   ArrowUpToLine,
+  ArrowUp,
+  ArrowDown,
   Bold,
   ClipboardPaste,
   Code,
@@ -13,6 +15,9 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
   Italic,
   List,
   ListOrdered,
@@ -30,7 +35,7 @@ import {
   Wand2,
 } from 'lucide-react'
 import type { MenuItem } from '../components/ContextMenu'
-import { clipboardCmd, editorCmd, hasWysiwyg } from '../lib/editorCommands'
+import { clipboardCmd, editorCmd, getSelectedHeadingLevel, hasWysiwyg } from '../lib/editorCommands'
 import { t } from '../lib/i18n'
 import { copyImageElement } from '../lib/richClipboard'
 import { tablePickerBridge } from '../lib/tablePickerBridge'
@@ -68,6 +73,7 @@ export function useEditorContextMenu(
         },
       ]
       if (hasWysiwyg()) {
+        const headingLevel = getSelectedHeadingLevel()
         if (inTable) {
           items.push(
             {
@@ -176,11 +182,46 @@ export function useEditorContextMenu(
               compactGroup: 'block-style',
             },
             {
+              label: t('标题 4'),
+              icon: <Heading4 size={sz} />,
+              onClick: () => editorCmd.heading(4),
+              compactGroup: 'block-style',
+            },
+            {
+              label: t('标题 5'),
+              icon: <Heading5 size={sz} />,
+              onClick: () => editorCmd.heading(5),
+              compactGroup: 'block-style',
+            },
+            {
+              label: t('标题 6'),
+              icon: <Heading6 size={sz} />,
+              onClick: () => editorCmd.heading(6),
+              compactGroup: 'block-style',
+            },
+            {
               label: t('正文'),
               icon: <Pilcrow size={sz} />,
               onClick: editorCmd.paragraph,
               compactGroup: 'block-style',
             },
+            ...(headingLevel === null
+              ? []
+              : [
+                  {
+                    label: t('升级标题'),
+                    icon: <ArrowUp size={sz} />,
+                    onClick: editorCmd.promoteHeading,
+                    disabled: headingLevel <= 1,
+                    separatorBefore: true,
+                  },
+                  {
+                    label: t('降级标题'),
+                    icon: <ArrowDown size={sz} />,
+                    onClick: editorCmd.demoteHeading,
+                    disabled: headingLevel >= 6,
+                  },
+                ]),
             {
               label: t('无序列表'),
               icon: <List size={sz} />,

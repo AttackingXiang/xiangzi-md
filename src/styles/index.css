@@ -1,4 +1,5 @@
 @import './slices/foundation.css';
+@import './slices/titlebar.css';
 @import './slices/sidebar.css';
 @import './slices/workspace.css';
 @import './slices/welcome-status.css';

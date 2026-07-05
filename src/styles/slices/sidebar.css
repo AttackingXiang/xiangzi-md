@@ -4,25 +4,21 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ---------- 侧边栏 ---------- */
 .sidebar {
   flex: 1;
+  height: 100%;
   width: 100%;
   min-width: 0;
-  /* 与 .editor-area/.milkdown 用同一套 --bg-image-shade 公式，让背景图能
-     铺满整个应用窗口，不只是编辑区。见 foundation.css 里 html 背景图的注释。
-     正文列会被 .editor-area 与 .milkdown 两层叠加，视觉上比单独一层更"厚"
-     （两层各透 60% 相当于合起来只透约 29%）；侧边栏只有这一层，用同样
-     60% 会显得比正文薄、更透——这里改成 30% 让侧边栏单层也有接近正文的
-     "毛玻璃" 厚度，两侧视觉一致。 */
-  background: color-mix(
-    in srgb,
-    var(--bg-sidebar) calc(100% - var(--bg-image-shade, 0) * 30%),
-    transparent
-  );
-  border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  border-right: 1px solid var(--workspace-divider);
   display: flex;
   flex-direction: column;
   user-select: none;
@@ -56,16 +52,17 @@
 }
 
 .sidebar-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 8px 8px 14px;
-  padding-top: 30px;
+  padding-top: 8px;
   gap: 6px;
 }
 
 .is-mac .sidebar-header {
-  padding-top: 34px;
+  padding-top: 8px;
 }
 
 .sidebar-title {
@@ -86,8 +83,9 @@
 }
 
 .sidebar-section {
+  flex: 0 0 auto;
   padding: 4px 8px 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--workspace-divider);
 }
 
 .section-label {
@@ -145,8 +143,12 @@
 }
 
 .sidebar-body {
-  flex: 1;
-  overflow-y: auto;
+  flex: 1 1 0;
+  height: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 6px;
 }
 
@@ -163,6 +165,8 @@
 
 /* ---------- 文件树 ---------- */
 .file-tree {
+  width: max-content;
+  min-width: 100%;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -178,7 +182,8 @@
   font-size: 13px;
   color: var(--text-2);
   white-space: nowrap;
-  overflow: hidden;
+  width: max-content;
+  min-width: 100%;
   cursor: grab;
 }
 
@@ -225,8 +230,7 @@
 }
 
 .tree-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
 }
 
 .tree-row.drag-over {
