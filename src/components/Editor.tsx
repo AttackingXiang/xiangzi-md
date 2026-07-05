@@ -1,13 +1,17 @@
 import { useEffect, useRef } from 'react'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { AArrowDown, AArrowUp, type LucideIcon } from 'lucide-react'
 import { desktop } from '../platform'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
+import type { ToolbarFeatureConfig } from '@milkdown/crepe/feature/toolbar'
 import { commandsCtx, editorViewCtx } from '@milkdown/kit/core'
 import {
   clearTextInCurrentBlockCommand,
   hardbreakFilterNodes,
 } from '@milkdown/kit/preset/commonmark'
 import { tablePickerBridge } from '../lib/tablePickerBridge'
-import { editorCmd } from '../lib/editorCommands'
+import { editorCmd, shouldClearHeadingOnBackspace } from '../lib/editorCommands'
 import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import '@milkdown/crepe/theme/common/style.css'
@@ -30,6 +34,7 @@ import { setupRichClipboard } from '../lib/richClipboard'
 import { codeHighlightPlugin } from '../lib/codeHighlight'
 import { codeBlockView } from '../lib/staticCodeBlock'
 import { codeMirrorTheme } from '../lib/codeTheme'
+import { headingSelectionToolbarPlugin } from '../lib/headingSelectionToolbar'
 
 interface Props {
   content: string
@@ -54,6 +59,24 @@ interface Props {
 }
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+type ToolbarBuilder = Parameters<NonNullable<ToolbarFeatureConfig['buildToolbar']>>[0]
+
+function headingShiftToolbarIcon(
+  Icon: LucideIcon,
+  label: string,
+  direction: 'promote' | 'demote',
+): string {
+  return renderToStaticMarkup(
+    createElement(
+      Icon,
+      {
+        'aria-label': label,
+        strokeWidth: 1.8,
+      },
+      createElement('title', null, label),
+    ),
+  ).replace('<svg ', `<svg data-heading-shift="${direction}" `)
+}
 
 /**
  * 所见即所得编辑器，基于 Milkdown Crepe（ProseMirror 内核）。
@@ -203,6 +226,21 @@ export default function Editor({
             })
           },
         },
+        [CrepeFeature.Toolbar]: {
+          buildToolbar: (builder: ToolbarBuilder) => {
+            const headingGroup = builder.addGroup('heading-level', t('标题层级'))
+            headingGroup.addItem('promote-heading', {
+              icon: headingShiftToolbarIcon(AArrowUp, t('升级标题'), 'promote'),
+              active: () => false,
+              onRun: () => editorCmd.promoteHeading(),
+            })
+            headingGroup.addItem('demote-heading', {
+              icon: headingShiftToolbarIcon(AArrowDown, t('降级标题'), 'demote'),
+              active: () => false,
+              onRun: () => editorCmd.demoteHeading(),
+            })
+          },
+        },
       },
     })
 
@@ -219,6 +257,7 @@ export default function Editor({
     crepe.editor.use(focusPlugin)
     crepe.editor.use(searchPlugin)
     crepe.editor.use(headingFoldPlugin)
+    crepe.editor.use(headingSelectionToolbarPlugin)
     crepe.editor.use(toolbarStatePlugin)
     crepe.editor.use(tableColumnResizingPlugin)
     // 放在 Crepe 自带 tableBlockView 之后注册，同一节点类型由最后注册的视图接管。
@@ -313,6 +352,13 @@ export default function Editor({
       window.getSelection()?.removeAllRanges()
     }
     const clearSelectAllOnKey = (event: KeyboardEvent): void => {
+      if (editorView && shouldClearHeadingOnBackspace(editorView.state, event)) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        editorCmd.paragraph()
+        clearSelectAllVisual()
+        return
+      }
       const keepSelection =
         (event.metaKey || event.ctrlKey) && ['a', 'c'].includes(event.key.toLowerCase())
       const editingShortcut =

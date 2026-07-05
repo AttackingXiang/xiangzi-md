@@ -1,5 +1,5 @@
 import type { Node as ProseNode, NodeType, Schema } from '@milkdown/kit/prose/model'
-import { Selection, type Command } from '@milkdown/kit/prose/state'
+import { Selection, type Command, type EditorState } from '@milkdown/kit/prose/state'
 import { toggleMark, setBlockType, wrapIn } from '@milkdown/kit/prose/commands'
 import { wrapInList } from '@milkdown/kit/prose/schema-list'
 import {
@@ -35,6 +35,65 @@ function execCommand(command: Command): void {
   editorBridge.markUserEdit()
   command(view.state, view.dispatch)
   view.focus()
+}
+
+export function headingLevelFromState(state: EditorState): number | null {
+  const { $from } = state.selection
+  const heading = state.schema.nodes.heading
+  if (!heading) return null
+  for (let depth = $from.depth; depth >= 0; depth -= 1) {
+    const node = $from.node(depth)
+    if (node.type === heading) return node.attrs.level as number
+  }
+  return null
+}
+
+export function getSelectedHeadingLevel(): number | null {
+  const view = editorBridge.get()
+  return view ? headingLevelFromState(view.state) : null
+}
+
+export function shiftedHeadingLevel(level: number, direction: 'promote' | 'demote'): number {
+  const delta = direction === 'promote' ? -1 : 1
+  return Math.min(6, Math.max(1, level + delta))
+}
+
+type HeadingBackspaceEvent = Pick<
+  KeyboardEvent,
+  'key' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'
+>
+
+/**
+ * Whether Backspace is being used at the very start of a heading to clear its
+ * block style. Crepe's default keymap walks H6 → H5 → … → paragraph; Xiangzi MD
+ * treats this as one formatting-removal action instead.
+ */
+export function shouldClearHeadingOnBackspace(
+  state: EditorState,
+  event: HeadingBackspaceEvent,
+): boolean {
+  if (
+    event.key !== 'Backspace' ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    !state.selection.empty
+  ) {
+    return false
+  }
+
+  const { $from } = state.selection
+  const heading = state.schema.nodes.heading
+  return Boolean(heading && $from.parent.type === heading && $from.parentOffset === 0)
+}
+
+function shiftSelectedHeading(direction: 'promote' | 'demote'): void {
+  const level = getSelectedHeadingLevel()
+  if (level === null) return
+  const next = shiftedHeadingLevel(level, direction)
+  if (next === level) return
+  exec((schema) => schema.nodes.heading && setBlockType(schema.nodes.heading, { level: next }))
 }
 
 function taskList(): void {
@@ -361,6 +420,8 @@ export const editorCmd = {
   inlineCode: () => exec((s) => s.marks.inlineCode && toggleMark(s.marks.inlineCode)),
   heading: (level: number) =>
     exec((s) => s.nodes.heading && setBlockType(s.nodes.heading, { level })),
+  promoteHeading: () => shiftSelectedHeading('promote'),
+  demoteHeading: () => shiftSelectedHeading('demote'),
   paragraph: () => exec((s) => s.nodes.paragraph && setBlockType(s.nodes.paragraph)),
   codeBlock: () => exec((s) => s.nodes.code_block && setBlockType(s.nodes.code_block)),
   bulletList: () => exec((s) => s.nodes.bullet_list && wrapInList(s.nodes.bullet_list)),

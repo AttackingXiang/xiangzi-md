@@ -1,33 +1,36 @@
 # Design QA
 
-- Existing editor state: `audit/current-state/01-editor.png`
-- Existing settings state: `audit/current-state/02-settings.png`
-- Final editor state: `audit/final-state/01-editor.png`
-- Final settings state: `audit/final-state/02-settings.png`
-- Final shortcuts state: `audit/final-state/03-shortcuts.png`
-- Final updater state: `audit/final-state/04-updates.png`
-- Sticky-header evidence: `audit/final-state/05-sticky-close.png`
-- Viewport: 1200 × 800 logical pixels, macOS Retina window capture
-- State: light theme, restored workspace, WYSIWYG editor and settings modal
+- Reference state: `qa-native-final-crop.png`
+- Final workspace: `qa-native-controls-final-crop.png`
+- Final appearance settings: `qa-appearance-settings-final.png`
+- Final controls settings: `qa-controls-settings-final.png`
+- Final heading selection toolbar: `qa-heading-selection-toolbar.png`
+- Final heading shortcut settings: `qa-heading-shortcuts-settings.png`
+- Platform: macOS, native Tauri debug bundle
+- State: light theme, theme shade 0, background intensity 30%, code-block opacity 30%
 
-## Same-input comparisons
+## Visual comparison
 
-The existing and final settings screenshots were inspected together in one comparison input. The former single long form has been replaced by six stable categories, preserving the product's white, gray and violet visual language. Field labels, controls and card borders share a consistent baseline; the modal header and close control no longer participate in content scrolling.
+The original and final workspace states were inspected at the same application size. The final build keeps the existing typography and violet accent while replacing the custom macOS controls with native traffic lights, reducing upper-right toolbar density, moving view controls to the fixed bottom-right edge, and keeping the background material continuous across title bar, file tree, editor, and status bar.
 
-The existing and final editor screenshots were also inspected together. The final build preserves the established Typora-like typography, compact list rhythm and marker alignment. A temporary `freezePrototype` hardening setting was caught by visual QA because it prevented Milkdown from mounting; that incompatible setting was removed and the signed build was repeated before the final screenshots.
+The appearance page was inspected after setting both requested opacity values to 30%. All range tracks retain the same measured width as labels change. Theme shade now displays a stable direction label and explains that negative values darken the theme surface while positive values brighten it.
 
 ## Interaction evidence
 
-- Every settings category is keyboard/accessibility reachable.
-- Shortcut rows expose action names, current bindings and reset state; duplicate bindings are rejected before persistence.
-- After scrolling the shortcuts page one viewport, the header and close button remain fixed (`05-sticky-close.png`).
-- The updater page exposes startup checking, manual checking, current version, fallback status and signature assurance.
-- Editor content, ordered-list markers and document navigation render after a clean signed-app restart.
+- Native close, minimize, and zoom controls are exposed by macOS.
+- Bottom reading/source buttons expose accessible pressed state and toggle successfully.
+- H1–H6 are present in the editor toolbar and right-click menu.
+- Right-clicking H1 disables Promote and enables Demote; heading-level calculations are unit tested at H1/H6 boundaries.
+- Selecting heading text adds Promote/Demote to Crepe's native floating toolbar. H1 disables Promote, H6 disables Demote, and non-heading selections hide both controls and their divider.
+- `Cmd/Ctrl+Alt+ArrowUp` and `Cmd/Ctrl+Alt+ArrowDown` promote/demote headings and are visible and editable in shortcut settings.
+- Backspace at the start of H1-H6 clears the heading directly to paragraph in one action; native H6 testing confirmed it no longer walks through intermediate levels.
+- Turning off the bottom bar immediately hides it and disables the path/reading/source visibility toggles; restoring it re-enables all three.
+- The file tree scrolls vertically after expanding nested folders and uses one two-axis overflow container for long paths.
 
-## Findings
+## Verification
 
-- No actionable P0 or P1 visual defect remains in the tested states.
-- P3: the settings dialog is intentionally wider than the earlier form to support category navigation; the 720 px minimum app width remains supported by responsive CSS.
-- P3: custom CSS can still change typography and therefore remains outside pixel-level visual guarantees.
+- Frontend: format, lint, TypeScript, 129 Vitest tests, production build — passed.
+- Native: Rust formatting, 50 tests, Clippy with warnings denied — passed.
+- Packaging: macOS debug `.app` bundle with the platform overlay configuration — passed.
 
 final result: passed

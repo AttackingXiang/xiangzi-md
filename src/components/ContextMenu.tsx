@@ -6,6 +6,7 @@ export interface MenuItem {
   icon?: ReactNode
   hint?: string
   danger?: boolean
+  disabled?: boolean
   separatorBefore?: boolean
   /** 相邻且同组的项目显示为一行紧凑按钮。 */
   compactGroup?: string
@@ -100,6 +101,7 @@ export default function ContextMenu({
                       className={`ctx-compact-item${item.danger ? ' danger' : ''}`}
                       title={item.hint ? `${item.label}  ${item.hint}` : item.label}
                       aria-label={item.label}
+                      disabled={item.disabled}
                       onMouseDown={guard}
                       onClick={() => {
                         item.onClick()
@@ -130,6 +132,7 @@ export default function ContextMenu({
               <button
                 type="button"
                 className={`ctx-item${item.danger ? ' danger' : ''}`}
+                disabled={item.disabled}
                 onMouseDown={guard}
                 onClick={() => {
                   item.onClick()

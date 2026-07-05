@@ -27,6 +27,8 @@ pub(super) fn migrate_settings(settings: &mut AppSettings, source_version: u32) 
             2 => migrate_v2_to_v3(settings),
             3 => migrate_v3_to_v4(settings),
             4 => migrate_v4_to_v5(settings),
+            5 => migrate_v5_to_v6(settings),
+            6 => migrate_v6_to_v7(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -45,6 +47,8 @@ fn migrate_v1_to_v2(_settings: &mut AppSettings) {}
 fn migrate_v2_to_v3(_settings: &mut AppSettings) {}
 fn migrate_v3_to_v4(_settings: &mut AppSettings) {}
 fn migrate_v4_to_v5(_settings: &mut AppSettings) {}
+fn migrate_v5_to_v6(_settings: &mut AppSettings) {}
+fn migrate_v6_to_v7(_settings: &mut AppSettings) {}
 
 pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !matches!(settings.language.as_str(), "zh" | "en") {
@@ -97,6 +101,7 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
         settings.background_image_path.clear();
     }
     settings.background_opacity = settings.background_opacity.min(100);
+    settings.code_block_opacity = settings.code_block_opacity.min(100);
     settings.theme_shade = settings.theme_shade.clamp(-50, 50);
     limit_collections(settings);
 }
@@ -125,6 +130,9 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
     }
     if settings.background_opacity > 100 {
         return Err(AppError::new("settings_invalid", "背景图片强度超出范围"));
+    }
+    if settings.code_block_opacity > 100 {
+        return Err(AppError::new("settings_invalid", "代码块不透明度超出范围"));
     }
     if !(-50..=50).contains(&settings.theme_shade) {
         return Err(AppError::new("settings_invalid", "主题深浅超出范围"));

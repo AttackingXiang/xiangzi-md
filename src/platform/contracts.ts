@@ -35,6 +35,7 @@ export interface AppSettings {
   customCssPath: string
   backgroundImagePath: string
   backgroundOpacity: number
+  codeBlockOpacity: number
   themeShade: number
   headingNumber: boolean
   autoSave: boolean
@@ -53,6 +54,11 @@ export interface AppSettings {
   hiddenNamePatterns: string[]
   allowRemoteImages: boolean
   showToolbar: boolean
+  showStatusBar: boolean
+  showStatusPath: boolean
+  showReadingModeControl: boolean
+  showSourceModeControl: boolean
+  showRevealButton: boolean
   pandocPath: string
   pandocReferenceDoc: string
   pandocExportArgs: string

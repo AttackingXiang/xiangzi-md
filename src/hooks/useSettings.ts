@@ -147,6 +147,14 @@ export function useSettings() {
     document.documentElement.style.setProperty('--bg-image-shade', String(shade))
   }, [settings?.backgroundOpacity])
 
+  // Code surfaces share one opacity token across the static renderer and
+  // Milkdown/CodeMirror so appearance changes never drift between modes.
+  useEffect(() => {
+    if (!settings) return
+    const opacity = Math.min(100, Math.max(0, settings.codeBlockOpacity ?? 30))
+    document.documentElement.style.setProperty('--code-block-opacity', `${opacity}%`)
+  }, [settings?.codeBlockOpacity])
+
   // ── 主题深浅 ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!settings) return

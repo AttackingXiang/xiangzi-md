@@ -14,6 +14,9 @@
   --accent-text: #4f46e5;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
   --radius: 8px;
+  --workspace-divider: color-mix(in srgb, var(--text) 11%, transparent);
+  --workspace-divider-strong: color-mix(in srgb, var(--text) 18%, transparent);
+  --code-block-opacity: 30%;
 
   /* 静态代码块（xmd-code-block）专用色板：数值取自原先散落在
      code-table.css 里的硬编码值，集中到这里后新增主题只需在这一处补一组值，
@@ -341,23 +344,8 @@ body,
   overflow: hidden;
 }
 
-/* 背景图片直接画在 html 的背景上，而不是用一个额外的 fixed 定位伪元素：
-   body 自身有一份不透明的 --bg 填充（下方 body 规则），伪元素方案得靠
-   z-index 让 .app 压在它上面才能透出——这类堆叠上下文判定在不同 WebView
-   实现里并不总一致，实测在这里就没picture透出来。直接把图片放在 html 的
-   background 上则不存在这个问题：html 在 DOM 树最外层，body（乃至 .app）
-   的不透明背景本来就天然盖在它上面，完全不需要 z-index。图片是否透出，
-   只取决于 body 不再整体铺色（见下方 body 规则去掉了 background），以及
-   编辑器正文表面按 --bg-image-shade 变半透明（editor-typography.css 里
-   .wysiwyg-editor .milkdown 的 background）。未设置图片时 --bg-image 为空，
-   background-image 解析成 none，与这条规则完全不存在时零差异。 */
 html {
   background: var(--bg);
-  background-image: var(--bg-image, none);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
 }
 
 body {
@@ -368,9 +356,28 @@ body {
 }
 
 .app {
+  --workspace-surface: color-mix(
+    in srgb,
+    var(--bg) calc(100% - var(--bg-image-shade, 0) * 48%),
+    transparent
+  );
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  background-color: var(--bg);
+  background-image: var(--bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.workspace-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--workspace-surface);
 }
 
 button {

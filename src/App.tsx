@@ -19,6 +19,7 @@ const UpdateNotice = lazy(() => import('./components/UpdateNotice'))
 const EditorToolbar = lazy(() => import('./components/EditorToolbar'))
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
+import TitleBar from './components/TitleBar'
 import Outline from './components/Outline'
 import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
@@ -832,191 +833,210 @@ export default function App(): JSX.Element {
     saveTab,
   })
   // Don't render until settings are loaded (avoids flash of wrong theme/width)
-  if (!settings) return <div className="app" />
+  if (!settings) {
+    return (
+      <div className="app">
+        <TitleBar />
+      </div>
+    )
+  }
 
   return (
     <div className="app">
-      {sidebarVisible && (
-        <div className="sidebar-wrap" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
-          {searchView && folder ? (
-            <SearchPanel
-              root={folder.root}
-              onOpenResult={openSearchResult}
-              onBack={() => setSearchView(false)}
-            />
-          ) : (
-            <Sidebar
-              folder={folder}
-              activePath={activeTab?.path ?? null}
-              favorites={settings.favorites}
-              favoritesCollapsed={settings.favoritesCollapsed}
-              favoriteLabels={settings.favoriteLabels}
-              recentFiles={settings.recentFiles}
-              revealPath={revealPath}
-              revealRequestId={revealRequestId}
-              onRevealComplete={handleRevealComplete}
-              hideAttachmentFolders={settings.hideAttachmentFolders ?? false}
-              attachmentFolder={settings.attachmentFolder || 'assets'}
-              onOpenFolder={openFolder}
-              onOpenFolderPath={openFolderByPath}
-              onOpenFile={openPath}
-              onOpenSettings={openSidebarSettings}
-              onOpenSearch={openSidebarSearch}
-              onToggleFavorite={toggleFavorite}
-              onFavoritesCollapsedChange={setFavoritesCollapsed}
-              onFavoriteContext={openFavoriteContext}
-              onRefresh={refreshTree}
-              onNodeContext={openNodeContext}
-              onRootContext={openRootContext}
-              onMove={moveTreeItem}
-              reloadKey={treeKey}
-              expandedPathsRef={expandedPathsRef}
-              canUndo={canUndo}
-              onUndo={undoLastOp}
-            />
-          )}
-          {!searchView && <div className="resize-handle" onMouseDown={startSidebarResize} />}
-        </div>
-      )}
-
-      <div className={`main${sidebarVisible ? '' : ' no-sidebar'}`}>
-        <TabBar
-          tabs={tabs}
-          activeId={activeId}
-          onSelect={selectTab}
-          onClose={closeTab}
-          onMoveTab={moveTab}
-          onTabContext={openTabContext}
-          onShowWelcome={showWelcome}
-          sourceMode={sourceMode}
-          outlineVisible={outlineVisible}
-          readingMode={readingMode}
-          onToggleSource={toggleSourceMode}
-          onToggleSidebar={toggleSidebarVisible}
-          onToggleOutline={toggleOutlineVisible}
-          onToggleReading={toggleReadingMode}
-          onRevealFile={revealActiveFile}
-          activeHasPath={!!activeTab?.path}
-        />
-
-        {showFind && (
-          <FindBar
-            initialQuery={findInitial}
-            initialLine={findLine}
-            initialMatchIndex={findMatchIndex}
-            onClose={() => {
-              setShowFind(false)
-              setFindInitial('')
-              setFindLine(undefined)
-              setFindMatchIndex(undefined)
-            }}
-          />
-        )}
-
-        {settings.showToolbar && !sourceMode && !readingMode && activeTab && (
-          <Suspense fallback={null}>
-            <EditorToolbar lang={settings.language} />
-          </Suspense>
-        )}
-
-        <div
-          className="editor-area"
-          onMouseDownCapture={() => window.dispatchEvent(new Event('xmd-clear-select-all'))}
-          onDoubleClickCapture={(event) => {
-            if (!(event.target instanceof Element)) return
-            const target = event.target
-            const image =
-              target instanceof HTMLImageElement
-                ? target
-                : target.closest('.image-wrapper, .milkdown-image-inline')?.querySelector('img')
-            if (!image) return
-            event.preventDefault()
-            event.stopPropagation()
-            const src = image.currentSrc || image.src
-            if (src) setZoomSrc(src)
-          }}
-          onContextMenu={(e) => {
-            if (!activeTab) return
-            e.preventDefault()
-            const target = e.target instanceof Element ? e.target : null
-            const image =
-              target instanceof HTMLImageElement
-                ? target
-                : target
-                    ?.closest('.image-wrapper, .milkdown-image-inline')
-                    ?.querySelector<HTMLImageElement>('img')
-            openEditorContext(e.clientX, e.clientY, image ?? undefined, !!target?.closest('td, th'))
-          }}
-        >
-          {activeTab ? (
-            sourceMode ? (
-              <SourceEditor
-                key={activeTab.id + '-src'}
-                content={activeTab.content}
-                readingMode={readingMode}
-                initialScrollTop={sourceScrollPositions.current.get(activeTab.id) ?? 0}
-                onScrollTopChange={(scrollTop) =>
-                  sourceScrollPositions.current.set(activeTab.id, scrollTop)
-                }
-                onChange={(c) => updateContent(activeTab.id, c)}
+      <TitleBar documentName={activeTab?.name} dirty={activeTab?.dirty} />
+      <div className="workspace-shell">
+        {sidebarVisible && (
+          <div className="sidebar-wrap" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+            {searchView && folder ? (
+              <SearchPanel
+                root={folder.root}
+                onOpenResult={openSearchResult}
+                onBack={() => setSearchView(false)}
               />
             ) : (
-              <Suspense fallback={<div className="editor-loading" />}>
-                <Editor
-                  key={activeTab.id + '-' + resolvedTheme}
+              <Sidebar
+                folder={folder}
+                activePath={activeTab?.path ?? null}
+                favorites={settings.favorites}
+                favoritesCollapsed={settings.favoritesCollapsed}
+                favoriteLabels={settings.favoriteLabels}
+                recentFiles={settings.recentFiles}
+                revealPath={revealPath}
+                revealRequestId={revealRequestId}
+                onRevealComplete={handleRevealComplete}
+                hideAttachmentFolders={settings.hideAttachmentFolders ?? false}
+                attachmentFolder={settings.attachmentFolder || 'assets'}
+                onOpenFolder={openFolder}
+                onOpenFolderPath={openFolderByPath}
+                onOpenFile={openPath}
+                onOpenSettings={openSidebarSettings}
+                onOpenSearch={openSidebarSearch}
+                onToggleFavorite={toggleFavorite}
+                onFavoritesCollapsedChange={setFavoritesCollapsed}
+                onFavoriteContext={openFavoriteContext}
+                onRefresh={refreshTree}
+                onNodeContext={openNodeContext}
+                onRootContext={openRootContext}
+                onMove={moveTreeItem}
+                reloadKey={treeKey}
+                expandedPathsRef={expandedPathsRef}
+                canUndo={canUndo}
+                onUndo={undoLastOp}
+              />
+            )}
+            {!searchView && <div className="resize-handle" onMouseDown={startSidebarResize} />}
+          </div>
+        )}
+
+        <div className={`main${sidebarVisible ? '' : ' no-sidebar'}`}>
+          <TabBar
+            tabs={tabs}
+            activeId={activeId}
+            onSelect={selectTab}
+            onClose={closeTab}
+            onMoveTab={moveTab}
+            onTabContext={openTabContext}
+            onShowWelcome={showWelcome}
+            outlineVisible={outlineVisible}
+            onToggleSidebar={toggleSidebarVisible}
+            onToggleOutline={toggleOutlineVisible}
+            onRevealFile={revealActiveFile}
+            activeHasPath={!!activeTab?.path}
+            showRevealButton={settings.showRevealButton}
+          />
+
+          {showFind && (
+            <FindBar
+              initialQuery={findInitial}
+              initialLine={findLine}
+              initialMatchIndex={findMatchIndex}
+              onClose={() => {
+                setShowFind(false)
+                setFindInitial('')
+                setFindLine(undefined)
+                setFindMatchIndex(undefined)
+              }}
+            />
+          )}
+
+          {settings.showToolbar && !sourceMode && !readingMode && activeTab && (
+            <Suspense fallback={null}>
+              <EditorToolbar lang={settings.language} />
+            </Suspense>
+          )}
+
+          <div
+            className="editor-area"
+            onMouseDownCapture={() => window.dispatchEvent(new Event('xmd-clear-select-all'))}
+            onDoubleClickCapture={(event) => {
+              if (!(event.target instanceof Element)) return
+              const target = event.target
+              const image =
+                target instanceof HTMLImageElement
+                  ? target
+                  : target.closest('.image-wrapper, .milkdown-image-inline')?.querySelector('img')
+              if (!image) return
+              event.preventDefault()
+              event.stopPropagation()
+              const src = image.currentSrc || image.src
+              if (src) setZoomSrc(src)
+            }}
+            onContextMenu={(e) => {
+              if (!activeTab) return
+              e.preventDefault()
+              const target = e.target instanceof Element ? e.target : null
+              const image =
+                target instanceof HTMLImageElement
+                  ? target
+                  : target
+                      ?.closest('.image-wrapper, .milkdown-image-inline')
+                      ?.querySelector<HTMLImageElement>('img')
+              openEditorContext(
+                e.clientX,
+                e.clientY,
+                image ?? undefined,
+                !!target?.closest('td, th'),
+              )
+            }}
+          >
+            {activeTab ? (
+              sourceMode ? (
+                <SourceEditor
+                  key={activeTab.id + '-src'}
                   content={activeTab.content}
-                  docDir={activeDocDir}
-                  docName={activeTab.name}
-                  vaultRoot={folder?.root ?? null}
-                  assetSearchPaths={settings.assetSearchPaths ?? []}
-                  allowRemoteImages={settings.allowRemoteImages ?? false}
-                  imageMaxWidth={settings.imageMaxWidth}
-                  focusMode={focusMode}
-                  typewriterMode={typewriterMode}
                   readingMode={readingMode}
-                  initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
+                  initialScrollTop={sourceScrollPositions.current.get(activeTab.id) ?? 0}
                   onScrollTopChange={(scrollTop) =>
-                    wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
+                    sourceScrollPositions.current.set(activeTab.id, scrollTop)
                   }
                   onChange={(c) => updateContent(activeTab.id, c)}
                 />
-              </Suspense>
-            )
-          ) : (
-            <Welcome
-              recentFiles={settings.recentFiles}
-              recentFolders={settings.recentFolders}
-              onOpenFolder={openFolder}
-              onOpenFile={openFile}
-              onNewFile={newFile}
-              onOpenRecentFile={(p) => openPath(p, baseName(p))}
-              onOpenRecentFolder={openFolderByPath}
-              draftCount={draftSummaries.length}
-              onOpenDrafts={() => setDraftRecoveryOpen(true)}
+              ) : (
+                <Suspense fallback={<div className="editor-loading" />}>
+                  <Editor
+                    key={activeTab.id + '-' + resolvedTheme}
+                    content={activeTab.content}
+                    docDir={activeDocDir}
+                    docName={activeTab.name}
+                    vaultRoot={folder?.root ?? null}
+                    assetSearchPaths={settings.assetSearchPaths ?? []}
+                    allowRemoteImages={settings.allowRemoteImages ?? false}
+                    imageMaxWidth={settings.imageMaxWidth}
+                    focusMode={focusMode}
+                    typewriterMode={typewriterMode}
+                    readingMode={readingMode}
+                    initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
+                    onScrollTopChange={(scrollTop) =>
+                      wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
+                    }
+                    onChange={(c) => updateContent(activeTab.id, c)}
+                  />
+                </Suspense>
+              )
+            ) : (
+              <Welcome
+                recentFiles={settings.recentFiles}
+                recentFolders={settings.recentFolders}
+                onOpenFolder={openFolder}
+                onOpenFile={openFile}
+                onNewFile={newFile}
+                onOpenRecentFile={(p) => openPath(p, baseName(p))}
+                onOpenRecentFolder={openFolderByPath}
+                draftCount={draftSummaries.length}
+                onOpenDrafts={() => setDraftRecoveryOpen(true)}
+              />
+            )}
+
+            {outlineVisible && activeTab && (
+              <>
+                <div className="resize-handle" onMouseDown={startOutlineResize} />
+                <Outline
+                  items={outline}
+                  onSelect={scrollToHeading}
+                  onReorder={reorderSection}
+                  onClose={closeOutline}
+                  width={outlineWidth}
+                />
+              </>
+            )}
+          </div>
+
+          {settings.showStatusBar && (
+            <StatusBar
+              tab={activeTab}
+              sourceMode={sourceMode}
+              focusMode={focusMode}
+              typewriterMode={typewriterMode}
+              autoSave={settings.autoSave}
+              readingMode={readingMode}
+              showPath={settings.showStatusPath}
+              showReadingModeControl={settings.showReadingModeControl}
+              showSourceModeControl={settings.showSourceModeControl}
+              onToggleReading={toggleReadingMode}
+              onToggleSource={toggleSourceMode}
             />
           )}
-
-          {outlineVisible && activeTab && (
-            <>
-              <div className="resize-handle" onMouseDown={startOutlineResize} />
-              <Outline
-                items={outline}
-                onSelect={scrollToHeading}
-                onReorder={reorderSection}
-                onClose={closeOutline}
-                width={outlineWidth}
-              />
-            </>
-          )}
         </div>
-
-        <StatusBar
-          tab={activeTab}
-          sourceMode={sourceMode}
-          focusMode={focusMode}
-          typewriterMode={typewriterMode}
-          autoSave={settings.autoSave}
-        />
       </div>
 
       {settingsSection && (

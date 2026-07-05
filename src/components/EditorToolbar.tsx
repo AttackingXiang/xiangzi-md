@@ -7,6 +7,11 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
+  ArrowUp,
+  ArrowDown,
   List,
   ListOrdered,
   ListTodo,
@@ -93,6 +98,23 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
       {btn('H1', <Heading1 size={15} />, ts.headingLevel === 1, () => editorCmd.heading(1))}
       {btn('H2', <Heading2 size={15} />, ts.headingLevel === 2, () => editorCmd.heading(2))}
       {btn('H3', <Heading3 size={15} />, ts.headingLevel === 3, () => editorCmd.heading(3))}
+      {btn('H4', <Heading4 size={15} />, ts.headingLevel === 4, () => editorCmd.heading(4))}
+      {btn('H5', <Heading5 size={15} />, ts.headingLevel === 5, () => editorCmd.heading(5))}
+      {btn('H6', <Heading6 size={15} />, ts.headingLevel === 6, () => editorCmd.heading(6))}
+      {btn(
+        t('升级标题', 'Promote heading'),
+        <ArrowUp size={15} />,
+        false,
+        () => editorCmd.promoteHeading(),
+        ts.headingLevel === null || ts.headingLevel <= 1,
+      )}
+      {btn(
+        t('降级标题', 'Demote heading'),
+        <ArrowDown size={15} />,
+        false,
+        () => editorCmd.demoteHeading(),
+        ts.headingLevel === null || ts.headingLevel >= 6,
+      )}
 
       <span className="toolbar-sep" />
 

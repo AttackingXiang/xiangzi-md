@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 5;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 7;
 pub(crate) const MAX_RECENT_ITEMS: usize = 15;
 pub(crate) const MAX_FAVORITES: usize = 32;
 pub(crate) const MAX_SESSION_FILES: usize = 12;
@@ -37,6 +37,8 @@ pub(crate) const SHORTCUT_ACTIONS: &[&str] = &[
     "heading-5",
     "heading-6",
     "paragraph",
+    "promote-heading",
+    "demote-heading",
     "bold",
     "italic",
     "inline-code",
@@ -69,6 +71,8 @@ pub struct AppSettings {
     pub background_image_path: String,
     /// 背景图片可见强度，0-100。
     pub background_opacity: u32,
+    /// 代码块表面的不透明度，0-100。
+    pub code_block_opacity: u32,
     /// 当前主题背景色的深浅偏移，-50（更深）到 50（更浅），0 表示不调整。
     pub theme_shade: i32,
     pub heading_number: bool,
@@ -89,6 +93,11 @@ pub struct AppSettings {
     pub hidden_name_patterns: Vec<String>,
     pub allow_remote_images: bool,
     pub show_toolbar: bool,
+    pub show_status_bar: bool,
+    pub show_status_path: bool,
+    pub show_reading_mode_control: bool,
+    pub show_source_mode_control: bool,
+    pub show_reveal_button: bool,
     /// pandoc 可执行文件的自定义路径，空字符串表示自动探测
     pub pandoc_path: String,
     /// 自定义 reference.docx；空字符串表示使用 Pandoc 内置模板
@@ -116,7 +125,8 @@ impl Default for AppSettings {
             editor_width: "full".into(),
             custom_css_path: String::new(),
             background_image_path: String::new(),
-            background_opacity: 35,
+            background_opacity: 30,
+            code_block_opacity: 30,
             theme_shade: 0,
             heading_number: false,
             auto_save: false,
@@ -143,6 +153,11 @@ impl Default for AppSettings {
             ],
             allow_remote_images: false,
             show_toolbar: false,
+            show_status_bar: true,
+            show_status_path: true,
+            show_reading_mode_control: true,
+            show_source_mode_control: true,
+            show_reveal_button: true,
             pandoc_path: String::new(),
             pandoc_reference_doc: String::new(),
             pandoc_export_args: String::new(),
@@ -167,6 +182,7 @@ pub struct SettingsPatch {
     pub custom_css_path: Option<String>,
     pub background_image_path: Option<String>,
     pub background_opacity: Option<u32>,
+    pub code_block_opacity: Option<u32>,
     pub theme_shade: Option<i32>,
     pub heading_number: Option<bool>,
     pub auto_save: Option<bool>,
@@ -185,6 +201,11 @@ pub struct SettingsPatch {
     pub hidden_name_patterns: Option<Vec<String>>,
     pub allow_remote_images: Option<bool>,
     pub show_toolbar: Option<bool>,
+    pub show_status_bar: Option<bool>,
+    pub show_status_path: Option<bool>,
+    pub show_reading_mode_control: Option<bool>,
+    pub show_source_mode_control: Option<bool>,
+    pub show_reveal_button: Option<bool>,
     pub pandoc_path: Option<String>,
     pub pandoc_reference_doc: Option<String>,
     pub pandoc_export_args: Option<String>,

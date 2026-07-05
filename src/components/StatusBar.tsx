@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react'
+import { BookOpen, Code2, Eye } from 'lucide-react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 
@@ -8,6 +9,12 @@ interface Props {
   focusMode: boolean
   typewriterMode: boolean
   autoSave: boolean
+  readingMode: boolean
+  showPath: boolean
+  showReadingModeControl: boolean
+  showSourceModeControl: boolean
+  onToggleReading: () => void
+  onToggleSource: () => void
 }
 
 function countWords(text: string): number {
@@ -22,6 +29,12 @@ const StatusBar = memo(function StatusBar({
   focusMode,
   typewriterMode,
   autoSave,
+  readingMode,
+  showPath,
+  showReadingModeControl,
+  showSourceModeControl,
+  onToggleReading,
+  onToggleSource,
 }: Props): JSX.Element {
   // App 每次击键都会重渲染，字数/字符数统计避免在每次渲染时重算，只在内容变化时重算
   const content = tab?.content ?? ''
@@ -29,7 +42,9 @@ const StatusBar = memo(function StatusBar({
   const charCount = content.length
   return (
     <div className="statusbar">
-      <span className="status-left">{tab ? (tab.path ?? t('未保存')) : t('就绪')}</span>
+      <span className="status-left">
+        {showPath ? (tab ? (tab.path ?? t('未保存')) : t('就绪')) : ''}
+      </span>
       <span className="status-right">
         {tab && (
           <>
@@ -45,6 +60,32 @@ const StatusBar = memo(function StatusBar({
             {autoSave && <span>{t('自动保存')}</span>}
             {tab.dirty && <span className="status-dirty">●&nbsp;{t('未保存')}</span>}
           </>
+        )}
+        {(showReadingModeControl || showSourceModeControl) && (
+          <span className="status-actions" aria-label={t('视图控制')}>
+            {showReadingModeControl && (
+              <button
+                className={`status-action${readingMode ? ' active' : ''}`}
+                type="button"
+                title={`${t('阅读模式')}（${readingMode ? t('已开启') : t('已关闭')}）`}
+                aria-pressed={readingMode}
+                onClick={onToggleReading}
+              >
+                <BookOpen size={14} />
+              </button>
+            )}
+            {showSourceModeControl && (
+              <button
+                className={`status-action${sourceMode ? ' active' : ''}`}
+                type="button"
+                title={`${t('源码模式')}（${sourceMode ? t('已开启') : t('已关闭')}）⌘/`}
+                aria-pressed={sourceMode}
+                onClick={onToggleSource}
+              >
+                {sourceMode ? <Eye size={14} /> : <Code2 size={14} />}
+              </button>
+            )}
+          </span>
         )}
       </span>
     </div>

@@ -21,6 +21,13 @@ fn legacy_settings_receive_current_defaults() {
     assert_eq!(settings.pandoc_media_folder, "assets");
     assert!(settings.pandoc_normalize_fonts);
     assert!(settings.pandoc_reference_doc.is_empty());
+    assert_eq!(settings.background_opacity, 30);
+    assert_eq!(settings.code_block_opacity, 30);
+    assert!(settings.show_status_bar);
+    assert!(settings.show_status_path);
+    assert!(settings.show_reading_mode_control);
+    assert!(settings.show_source_mode_control);
+    assert!(settings.show_reveal_button);
 }
 
 #[test]
@@ -83,11 +90,14 @@ fn patch_only_changes_explicit_fields() {
         SettingsPatch {
             language: Some("en".into()),
             auto_save: Some(true),
+            show_status_bar: Some(false),
             ..SettingsPatch::default()
         },
     );
     assert_eq!(settings.language, "en");
     assert!(settings.auto_save);
+    assert!(!settings.show_status_bar);
+    assert!(settings.show_status_path);
     assert_eq!(settings.theme, "system");
 }
 
@@ -126,6 +136,11 @@ fn validates_background_image_path_and_shade_bounds() {
     settings.background_opacity = 100;
     assert!(validate_settings(&settings).is_ok());
 
+    settings.code_block_opacity = 101;
+    assert!(validate_settings(&settings).is_err());
+    settings.code_block_opacity = 0;
+    assert!(validate_settings(&settings).is_ok());
+
     settings.theme_shade = 51;
     assert!(validate_settings(&settings).is_err());
     settings.theme_shade = -51;
@@ -154,6 +169,18 @@ fn accepts_the_select_all_shortcut_exposed_by_the_frontend() {
     settings
         .shortcuts
         .insert("select-all".into(), "Mod+A".into());
+    assert!(validate_settings(&settings).is_ok());
+}
+
+#[test]
+fn accepts_heading_level_shortcuts_exposed_by_the_frontend() {
+    let mut settings = AppSettings::default();
+    settings
+        .shortcuts
+        .insert("promote-heading".into(), "Mod+Alt+ArrowUp".into());
+    settings
+        .shortcuts
+        .insert("demote-heading".into(), "Mod+Alt+ArrowDown".into());
     assert!(validate_settings(&settings).is_ok());
 }
 
