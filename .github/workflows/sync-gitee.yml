@@ -48,16 +48,27 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
           ssh-keygen -F gitee.com -f ~/.ssh/known_hosts >/dev/null
 
-      - name: Mirror main, Electron legacy branch and tags
+      - name: Mirror branches and the current release tag
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           set -euo pipefail
           git remote add gitee git@gitee.com:tlqgyx/xiangzi-md.git
           git fetch origin \
             +refs/heads/main:refs/remotes/origin/main \
-            +refs/heads/electron-legacy-v0.1:refs/remotes/origin/electron-legacy-v0.1 \
-            +refs/tags/*:refs/tags/*
+            +refs/heads/electron-legacy-v0.1:refs/remotes/origin/electron-legacy-v0.1
           git push gitee refs/remotes/origin/main:refs/heads/main
           git push gitee refs/remotes/origin/electron-legacy-v0.1:refs/heads/electron-legacy-v0.1
-          git push gitee --tags
+
+          # A tag-triggered run publishes only that tag. Pushing every historical
+          # tag makes an unrelated legacy mismatch (currently v1.2.6) fail every
+          # future release even after the new tag itself was accepted by Gitee.
+          if [ "${REF_TYPE}" = "tag" ]; then
+            [[ "${REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]
+            git fetch origin \
+              "refs/tags/${REF_NAME}:refs/tags/${REF_NAME}"
+            git push gitee \
+              "refs/tags/${REF_NAME}:refs/tags/${REF_NAME}"
+          fi
