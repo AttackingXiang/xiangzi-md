@@ -1,4 +1,6 @@
 name: Publish Gitee Release
+run-name: >-
+  Publish Gitee Release (${{ inputs.tag || github.event.workflow_run.display_title }})
 
 on:
   workflow_run:
@@ -9,15 +11,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Git tag to publish
+        description: Existing GitHub Release tag to publish or repair (for example v1.4.2)
         required: true
-        default: v1.0.0
 permissions:
   contents: read
 
 concurrency:
-  group: publish-gitee-release
-  cancel-in-progress: true
+  # A repair run for one release must not cancel an upload for another release.
+  # Re-running the same tag is safe because attachment uploads are idempotent.
+  group: publish-gitee-release-${{ inputs.tag || github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -170,7 +173,14 @@ jobs:
             esac
           done < <(echo "${ATTACHMENTS}" | jq -r '.[] | [.id, .name] | @tsv')
 
-          for FILE in artifacts/*; do
+          # Upload smaller metadata/signature/Windows assets first and the large
+          # DMG last. If Gitee stalls on the DMG, a repair run can skip everything
+          # already present and resume with only the missing attachment.
+          mapfile -t FILES < <(
+            find artifacts -maxdepth 1 -type f ! -name '*.dmg' -print | sort
+            find artifacts -maxdepth 1 -type f -name '*.dmg' -print | sort
+          )
+          for FILE in "${FILES[@]}"; do
             NAME=$(basename "${FILE}")
             ATTACHMENTS=$(gitee_curl --fail --silent --show-error \
               --retry 3 --retry-delay 5 --retry-all-errors \
@@ -224,7 +234,16 @@ jobs:
               rm -f "${RESPONSE_FILE}"
               [ -z "${UPLOADED}" ] || break
             done
-            test -n "${UPLOADED}"
+            if [ -z "${UPLOADED}" ]; then
+              {
+                echo "## Gitee attachment upload needs repair"
+                echo
+                echo "Failed to upload \`${NAME}\` for \`${TAG}\` after two attempts."
+                echo "Existing attachments were kept. Re-run this workflow with"
+                echo "**Run workflow → tag: ${TAG}** to resume the missing files."
+              } >> "${GITHUB_STEP_SUMMARY}"
+              exit 1
+            fi
           done
 
           ATTACHMENTS=$(gitee_curl --fail --silent --show-error \
