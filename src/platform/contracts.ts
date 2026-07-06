@@ -54,6 +54,7 @@ export interface AppSettings {
   hiddenNamePatterns: string[]
   allowRemoteImages: boolean
   showToolbar: boolean
+  showSelectionToolbar: boolean
   showStatusBar: boolean
   showStatusPath: boolean
   showReadingModeControl: boolean

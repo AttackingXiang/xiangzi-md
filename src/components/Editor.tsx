@@ -51,6 +51,7 @@ interface Props {
   imageMaxWidth: number
   focusMode: boolean
   typewriterMode: boolean
+  showSelectionToolbar: boolean
   /** 阅读模式：编辑器只读，尝试编辑时提示先关闭 */
   readingMode: boolean
   initialScrollTop?: number
@@ -93,6 +94,7 @@ export default function Editor({
   imageMaxWidth,
   focusMode,
   typewriterMode,
+  showSelectionToolbar,
   readingMode,
   initialScrollTop = 0,
   onScrollTopChange,
@@ -150,6 +152,9 @@ export default function Editor({
     const crepe = new Crepe({
       root,
       defaultValue: content,
+      features: {
+        [CrepeFeature.Toolbar]: showSelectionToolbar,
+      },
       featureConfigs: {
         [CrepeFeature.CodeMirror]: {
           theme: codeMirrorTheme(),

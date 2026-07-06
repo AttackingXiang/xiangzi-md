@@ -16,6 +16,7 @@ export type ShortcutAction =
   | 'toggle-source'
   | 'toggle-focus'
   | 'toggle-typewriter'
+  | 'toggle-selection-toolbar'
   | 'open-settings'
   | 'show-shortcuts'
   | 'heading-1'
@@ -136,6 +137,13 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     labelZh: '打字机模式',
     labelEn: 'Typewriter Mode',
     defaultBinding: 'Mod+Shift+T',
+  },
+  {
+    id: 'toggle-selection-toolbar',
+    category: 'navigation',
+    labelZh: '切换选中文本快捷工具栏',
+    labelEn: 'Toggle Selection Toolbar',
+    defaultBinding: 'Mod+Alt+T',
   },
   {
     id: 'open-settings',
