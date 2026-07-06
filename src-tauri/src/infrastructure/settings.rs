@@ -284,6 +284,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(hidden_name_patterns);
     replace_if_some!(allow_remote_images);
     replace_if_some!(show_toolbar);
+    replace_if_some!(show_selection_toolbar);
     replace_if_some!(show_status_bar);
     replace_if_some!(show_status_path);
     replace_if_some!(show_reading_mode_control);

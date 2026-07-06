@@ -129,6 +129,11 @@ export default function App(): JSX.Element {
   } = useSettings()
 
   const lang = settings?.language ?? 'zh'
+  const selectionToolbarEnabled = settings?.showSelectionToolbar
+  const toggleSelectionToolbar = useCallback((): void => {
+    if (selectionToolbarEnabled === undefined) return
+    void saveSettings({ showSelectionToolbar: !selectionToolbarEnabled })
+  }, [saveSettings, selectionToolbarEnabled])
 
   // ── Unsaved changes confirmation ─────────────────────────────────────────
   const closeRequestRef = useRef<{
@@ -807,6 +812,7 @@ export default function App(): JSX.Element {
     setSourceMode,
     setFocusMode,
     setTypewriterMode,
+    toggleSelectionToolbar,
     setSettingsSection,
   })
   // ── Auto-save ─────────────────────────────────────────────────────────────
@@ -974,7 +980,7 @@ export default function App(): JSX.Element {
               ) : (
                 <Suspense fallback={<div className="editor-loading" />}>
                   <Editor
-                    key={activeTab.id + '-' + resolvedTheme}
+                    key={activeTab.id + '-' + resolvedTheme + '-' + settings.showSelectionToolbar}
                     content={activeTab.content}
                     docDir={activeDocDir}
                     docName={activeTab.name}
@@ -984,6 +990,7 @@ export default function App(): JSX.Element {
                     imageMaxWidth={settings.imageMaxWidth}
                     focusMode={focusMode}
                     typewriterMode={typewriterMode}
+                    showSelectionToolbar={settings.showSelectionToolbar}
                     readingMode={readingMode}
                     initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
                     onScrollTopChange={(scrollTop) =>

@@ -360,6 +360,18 @@ export default function Settings({
                     : '选择主界面中需要持续显示的操作控件。'
                 }
               >
+                <SettingsCard title={en ? 'Editor overlays' : '编辑器浮层'}>
+                  <ToggleRow
+                    label={en ? 'Selection toolbar' : '选中文本快捷工具栏'}
+                    description={
+                      en
+                        ? 'Show formatting actions when regular document text is selected.'
+                        : '选中普通正文时显示格式快捷操作；代码块内始终不显示。'
+                    }
+                    checked={settings.showSelectionToolbar}
+                    onChange={(showSelectionToolbar) => onChange({ showSelectionToolbar })}
+                  />
+                </SettingsCard>
                 <SettingsCard title={en ? 'Bottom bar' : '底部栏'}>
                   <ToggleRow
                     label={en ? 'Show bottom bar' : '显示底部一行'}
