@@ -10,6 +10,7 @@ import { languages as cmLanguages } from '@codemirror/language-data'
 import { desktop } from '../platform'
 import { renderMermaid, renderMermaidForExport } from './mermaidPreview'
 import { copySvgMarkupAsImage } from './richClipboard'
+import { getMermaidCopyMode } from './copyPreferences'
 import { t } from './i18n'
 import { autoDetectLanguage } from './languageDetection'
 
@@ -342,9 +343,15 @@ class StaticCodeBlockView implements NodeView {
       .catch((error: unknown) => console.error('复制源码失败', error))
   }
 
-  /** Mermaid 图表处于预览态时复制渲染出的图片；否则（源码态、非图表代码块）复制文本源码。 */
+  /** Mermaid 图表处于预览态时复制渲染出的图片；否则（源码态、非图表代码块、或
+   * 复制控制里选了「复制源文本」）复制文本源码。 */
   private doCopy(): void {
-    if (this.language === 'mermaid' && this.showPreview && this.content.trim()) {
+    if (
+      this.language === 'mermaid' &&
+      this.showPreview &&
+      this.content.trim() &&
+      getMermaidCopyMode() === 'image'
+    ) {
       // 读当前生效的卡片底色（随 [data-theme] 走，不再按 light/dark 二选一），
       // 保证栅格化出的 PNG 背景和屏幕上看到的代码卡片一致。
       const background = getComputedStyle(document.documentElement)

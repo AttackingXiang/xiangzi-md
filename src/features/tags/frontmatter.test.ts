@@ -26,6 +26,34 @@ describe('frontmatter tags', () => {
     ])
   })
 
+  it('reads a frontmatter title field, unquoting and trimming it', () => {
+    expect(parseMarkdownFrontmatter('---\ntitle: Hello World\n---\nText').title).toBe('Hello World')
+    expect(parseMarkdownFrontmatter('---\ntitle: "Quoted Title"\n---\nText').title).toBe(
+      'Quoted Title',
+    )
+    expect(parseMarkdownFrontmatter('---\ntags: [a]\n---\nText').title).toBeNull()
+  })
+
+  it('falls back to frontmatter title (not the filename) when the body has no H1', () => {
+    const meta = documentMetaFromMarkdown(
+      '/notes/demo.md',
+      'demo.md',
+      '---\ntitle: Frontmatter Title\n---\nBody with no heading.',
+      1_700_000_000_000_000_000,
+    )
+    expect(meta.title).toBe('Frontmatter Title')
+  })
+
+  it('prefers the body H1 over frontmatter title when both exist (no duplicate title)', () => {
+    const meta = documentMetaFromMarkdown(
+      '/notes/demo.md',
+      'demo.md',
+      '---\ntitle: Should Not Win\n---\n# Real H1 Wins\nBody text.',
+      1_700_000_000_000_000_000,
+    )
+    expect(meta.title).toBe('Real H1 Wins')
+  })
+
   it('ignores a trailing YAML comment on an inline or block tags line', () => {
     expect(
       parseMarkdownFrontmatter('---\ntags: [work, urgent] # reviewed 2026\n---\nText').tags,

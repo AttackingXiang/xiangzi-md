@@ -14,6 +14,10 @@ interface Props {
   folder: FolderType | null
   isFav: boolean
   canUndo: boolean
+  /** 是否显示"打开文件夹"按钮（默认隐藏，见控件设置） */
+  showOpenFolderButton: boolean
+  /** 是否显示"设置"按钮（默认隐藏，见控件设置） */
+  showSettingsButton: boolean
   onUndo: () => void
   onToggleFavorite: (root: string) => void
   onRefresh: () => void
@@ -30,6 +34,8 @@ export default function SidebarHeader({
   folder,
   isFav,
   canUndo,
+  showOpenFolderButton,
+  showSettingsButton,
   onUndo,
   onToggleFavorite,
   onRefresh,
@@ -86,12 +92,16 @@ export default function SidebarHeader({
             <Tags size={15} />
           </button>
         )}
-        <button className="icon-btn sm" title={t('打开文件夹')} onClick={() => onOpenFolder()}>
-          <FolderOpen size={15} />
-        </button>
-        <button className="icon-btn sm" title={t('设置')} onClick={onOpenSettings}>
-          <SettingsIcon size={15} />
-        </button>
+        {showOpenFolderButton && (
+          <button className="icon-btn sm" title={t('打开文件夹')} onClick={() => onOpenFolder()}>
+            <FolderOpen size={15} />
+          </button>
+        )}
+        {showSettingsButton && (
+          <button className="icon-btn sm" title={t('设置')} onClick={onOpenSettings}>
+            <SettingsIcon size={15} />
+          </button>
+        )}
       </div>
     </div>
   )

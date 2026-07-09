@@ -24,6 +24,9 @@ interface Props {
   onOpenFolderPath: (root: string) => void
   onOpenFile: (path: string, name?: string) => void
   onOpenSettings: () => void
+  /** 侧边栏顶部按钮显隐（默认隐藏，见控件设置） */
+  showOpenFolderButton: boolean
+  showSettingsButton: boolean
   onOpenSearch: () => void
   onShowTags: () => void
   onToggleFavorite: (path: string) => void
@@ -56,6 +59,8 @@ const Sidebar = memo(function Sidebar({
   onOpenFolderPath,
   onOpenFile,
   onOpenSettings,
+  showOpenFolderButton,
+  showSettingsButton,
   onOpenSearch,
   onShowTags,
   onToggleFavorite,
@@ -88,6 +93,8 @@ const Sidebar = memo(function Sidebar({
         folder={folder}
         isFav={isFav}
         canUndo={canUndo}
+        showOpenFolderButton={showOpenFolderButton}
+        showSettingsButton={showSettingsButton}
         onUndo={onUndo}
         onToggleFavorite={onToggleFavorite}
         onRefresh={onRefresh}

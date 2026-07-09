@@ -1,20 +1,439 @@
-/* 文档标签栏：正文区顶部一条独立的栏（不再挂在编辑器内部），水平对齐到
-   与文档正文相同的居中列宽，使 #标签 视觉上就在标题正上方。 */
+/* 文档标签栏：仿 Obsidian 属性面板，正文顶部一张独立的卡片。现在是
+   .wysiwyg-editor（滚动视口本身）内部的第一个子节点，跟 .crepe-mount
+   （Crepe 的挂载点）是兄弟节点——这样它会跟标题、正文一起滚动，而不是钉死
+   在编辑区顶部。外层用跟正文一样的 max-width + 40px 内边距对齐到标题左
+   边缘，卡片本身的描边会比标题文字略宽一圈，看起来像"框住"了这一行属性，
+   而不是一条光秃秃贴着标题的工具条。 */
 .document-tag-bar {
   flex: 0 0 auto;
   box-sizing: border-box;
   width: 100%;
   max-width: var(--editor-max-width, 860px);
-  margin: 0 auto;
-  padding: 14px 40px 10px;
-  min-height: 26px;
+  margin: 14px auto 0;
+  padding: 9px 40px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 20px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--workspace-divider) 82%, transparent);
+  background: color-mix(in srgb, var(--workspace-surface) 55%, transparent);
   user-select: none;
+}
+
+/* 卡片紧接着正文时，把标题原本给"顶部留白"用的 padding-top 收紧一些，
+   让标题看起来是紧跟在这张属性卡片（或下面那个 frontmatter title 兜底）下面，
+   而不是隔着一大截空白。用 ~ 而不是 + ，因为卡片和 .crepe-mount 之间可能还
+   夹着 .document-title-fallback。 */
+.document-tag-bar ~ .crepe-mount .milkdown .ProseMirror,
+.document-properties ~ .crepe-mount .milkdown .ProseMirror {
+  padding-top: 28px;
+}
+
+/* 有些笔记只在 frontmatter 写了 title、正文没有 H1——这里原样照抄 H1 的排版
+   （字号、粗细、下边框），把 frontmatter 的 title 摆在正文本该是标题的位置，
+   这样笔记看起来不会像"没有标题"。这段文字本身不可编辑，要改标题得去改
+   frontmatter（源码模式，或以后给这里加内联编辑）。 */
+.document-title-fallback {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--editor-max-width, 860px);
+  margin: 0 auto;
+  padding: 20px 40px 0.18em;
+  border-bottom: 1px solid var(--border-strong);
+  /* .document-title-fallback 是 .milkdown 的兄弟节点而不是后代，够不着
+     --crepe-font-title（只在 .milkdown 上定义），这里直接抄一份同样的字体栈。 */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif;
+  color: var(--text);
+  letter-spacing: -0.015em;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.28;
+  cursor: default;
+}
+
+/* ── 文档属性面板（仿 Obsidian）─────────────────────────────────────────
+   跟 .document-tag-bar 一样是 .wysiwyg-editor 滚动视口内的第一个子节点，跟
+   标题、正文一起滚动。每个 frontmatter 字段一行：类型图标 + 键名 + 值编辑器。 */
+.document-properties {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--editor-max-width, 860px);
+  margin: 14px auto 0;
+  padding: 8px 28px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--workspace-divider) 82%, transparent);
+  background: color-mix(in srgb, var(--workspace-surface) 55%, transparent);
+  user-select: none;
+}
+
+.prop-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.prop-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 30px;
+  padding: 1px 0;
+}
+
+.prop-key {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 168px;
+  min-height: 30px;
+  color: var(--text-muted);
+}
+
+.prop-type-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.prop-type-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+  color: var(--text-2);
+}
+
+.prop-key-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  outline: 0;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+}
+
+.prop-key-input:hover:not(:disabled),
+.prop-key-input:focus {
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+}
+
+.prop-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+}
+
+.prop-value-input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  outline: 0;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.prop-value-input:hover:not(:disabled),
+.prop-value-input:focus {
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+}
+
+.prop-value-input[type='number'] {
+  width: auto;
+  max-width: 160px;
+}
+
+/* 阅读模式（disabled）下把输入框还原成普通只读文本：WKWebView 默认会用
+   -webkit-text-fill-color 把 disabled 文字变灰，这里显式改回正常颜色。 */
+.prop-key-input:disabled,
+.prop-value-input:disabled,
+.prop-type-button:disabled {
+  opacity: 1;
+  cursor: default;
+  background: transparent;
+}
+
+.prop-value-input:disabled {
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+}
+
+.prop-key-input:disabled {
+  color: var(--text-2);
+  -webkit-text-fill-color: var(--text-2);
+}
+
+.prop-type-button:disabled {
+  color: var(--text-muted);
+}
+
+.prop-value-complex {
+  padding: 0 6px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.prop-value-checkbox {
+  width: 15px;
+  height: 15px;
+  margin: 0 6px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* 值列的列表编辑器（tags / aliases / 任意多值属性） */
+.prop-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 0;
+}
+
+.prop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 200px;
+  height: 23px;
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--workspace-divider-strong);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--workspace-surface) 78%, transparent);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1;
+}
+
+.prop-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.prop-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.prop-chip-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+
+.prop-list-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px dashed var(--workspace-divider-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.prop-row:hover .prop-list-add,
+.prop-list-add:focus-visible {
+  opacity: 1;
+}
+
+.prop-list-add:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--workspace-divider));
+}
+
+.prop-list-add-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 23px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--workspace-surface) 80%, transparent);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.prop-list-add-editor input {
+  width: 96px;
+  border: 0;
+  outline: 0;
+  padding: 0 0 0 1px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+/* 删除整行 */
+.prop-row-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.prop-row:hover .prop-row-remove,
+.prop-row-remove:focus-visible {
+  opacity: 0.75;
+}
+
+.prop-row-remove:hover {
+  opacity: 1;
+  color: var(--danger, #c2414b);
+  background: color-mix(in srgb, var(--danger, #c2414b) 12%, transparent);
+}
+
+/* 类型切换菜单 */
+.prop-type-menu {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  z-index: 20;
+  min-width: 132px;
+  padding: 4px;
+  border: 1px solid var(--workspace-divider-strong);
+  border-radius: 8px;
+  background: var(--workspace-surface);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.prop-type-option {
+  display: block;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prop-type-option:hover {
+  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  color: var(--text);
+}
+
+.prop-type-option.active {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* 新增属性 */
+.prop-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.prop-add-button:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+}
+
+.prop-add-button:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+
+.prop-add-editor {
+  margin-top: 3px;
+  padding: 2px 0 2px 28px;
+}
+
+.prop-add-editor input {
+  height: 26px;
+  width: 168px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 5px;
+  outline: 0;
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--workspace-surface) 80%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.document-tag-label {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .document-tag-list {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
   gap: 7px;
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AArrowDown, AArrowUp, type LucideIcon } from 'lucide-react'
@@ -52,6 +52,10 @@ interface Props {
   focusMode: boolean
   typewriterMode: boolean
   showSelectionToolbar: boolean
+  /** 文档标签栏（由调用方渲染好传入）。放进滚动视口内部、正文最上方，让它跟
+   * 标题、正文一起滚动，而不是钉死在编辑区顶部。Editor 本身不关心标签数据，
+   * 只负责把这块内容摆在滚动容器里的正确位置——保持标签逻辑跟编辑器解耦。 */
+  tagBar?: ReactNode
   /** 阅读模式：编辑器只读，尝试编辑时提示先关闭 */
   readingMode: boolean
   initialScrollTop?: number
@@ -95,12 +99,17 @@ export default function Editor({
   focusMode,
   typewriterMode,
   showSelectionToolbar,
+  tagBar,
   readingMode,
   initialScrollTop = 0,
   onScrollTopChange,
   onChange,
 }: Props): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
+  // rootRef 是滚动视口本身（.wysiwyg-editor，overflow-y: auto），文档标签栏和
+  // Crepe 的挂载点都是它的子元素——这样标签栏会跟正文一起滚动，而不是钉死在
+  // 顶部。Crepe 只接管 crepeMountRef 这一个子节点，不会碰到旁边的标签栏。
+  const crepeMountRef = useRef<HTMLDivElement>(null)
   const crepeRef = useRef<Crepe | null>(null)
   const readingModeRef = useRef(readingMode)
   readingModeRef.current = readingMode
@@ -124,7 +133,8 @@ export default function Editor({
 
   useEffect(() => {
     const root = rootRef.current
-    if (!root) return
+    const crepeRoot = crepeMountRef.current
+    if (!root || !crepeRoot) return
 
     const upload = async (file: File): Promise<string> => {
       const dir = docDirRef.current
@@ -150,7 +160,7 @@ export default function Editor({
     let destroyed = false
     const remoteObjectUrls = new Set<string>()
     const crepe = new Crepe({
-      root,
+      root: crepeRoot,
       defaultValue: content,
       features: {
         [CrepeFeature.Toolbar]: showSelectionToolbar,
@@ -357,7 +367,15 @@ export default function Editor({
       window.getSelection()?.removeAllRanges()
     }
     const clearSelectAllOnKey = (event: KeyboardEvent): void => {
-      if (editorView && shouldClearHeadingOnBackspace(editorView.state, event)) {
+      // shouldClearHeadingOnBackspace 判断的是 ProseMirror 自己记的上一次选区，
+      // 跟这次按键事件真正的 DOM target 无关——标签栏挪进这个滚动容器之后，
+      // 在标签栏的输入框里按 Backspace 也会经过这里；如果上次光标恰好停在
+      // 标题开头，就会被误当成"清空标题"而把标题降级成正文，同时
+      // stopImmediatePropagation 还会拦掉标签输入框自己的删除逻辑。这里先用
+      // 事件的真实 target 排除掉标签栏触发的按键。
+      const fromTagBar =
+        event.target instanceof Element && event.target.closest('.document-tag-bar')
+      if (!fromTagBar && editorView && shouldClearHeadingOnBackspace(editorView.state, event)) {
         event.preventDefault()
         event.stopImmediatePropagation()
         editorCmd.paragraph()
@@ -469,6 +487,14 @@ export default function Editor({
     const markUserEdited = (): void => {
       userEdited = true
     }
+    // editorBridge.markUserEdit() 调 markUserEdited 时是零参调用（见
+    // editorCommands.ts），不能直接改 markUserEdited 的签名。这个包一层的版本
+    // 只给下面 root 上的 DOM 事件监听器用：标签栏现在是这个滚动容器的子节点，
+    // 它自己的输入框触发的 beforeinput/paste/cut/drop 不代表用户真的编辑了正文。
+    const markUserEditedFromDomEvent = (event: Event): void => {
+      if (event.target instanceof Element && event.target.closest('.document-tag-bar')) return
+      markUserEdited()
+    }
     // Arm the anchoring stand-down for the duration of a navigation. The glide
     // fires scroll events; each one pushes the disarm out by 200ms, so anchoring
     // resumes only once the animation has actually settled — at which point the
@@ -494,10 +520,10 @@ export default function Editor({
     root.addEventListener('wheel', cancelScrollRestore, { passive: true })
     root.addEventListener('touchstart', cancelScrollRestore, { passive: true })
     root.addEventListener('pointerdown', cancelScrollRestore, true)
-    root.addEventListener('beforeinput', markUserEdited)
-    root.addEventListener('paste', markUserEdited)
-    root.addEventListener('cut', markUserEdited)
-    root.addEventListener('drop', markUserEdited)
+    root.addEventListener('beforeinput', markUserEditedFromDomEvent)
+    root.addEventListener('paste', markUserEditedFromDomEvent)
+    root.addEventListener('cut', markUserEditedFromDomEvent)
+    root.addEventListener('drop', markUserEditedFromDomEvent)
     window.addEventListener('xmd-navigate', onNavigateRequest)
     // Emulated scroll anchoring: when the content's height changes (images,
     // mermaid SVGs loading), hold the block the reader is looking at in place
@@ -546,10 +572,10 @@ export default function Editor({
       root.removeEventListener('wheel', cancelScrollRestore)
       root.removeEventListener('touchstart', cancelScrollRestore)
       root.removeEventListener('pointerdown', cancelScrollRestore, true)
-      root.removeEventListener('beforeinput', markUserEdited)
-      root.removeEventListener('paste', markUserEdited)
-      root.removeEventListener('cut', markUserEdited)
-      root.removeEventListener('drop', markUserEdited)
+      root.removeEventListener('beforeinput', markUserEditedFromDomEvent)
+      root.removeEventListener('paste', markUserEditedFromDomEvent)
+      root.removeEventListener('cut', markUserEditedFromDomEvent)
+      root.removeEventListener('drop', markUserEditedFromDomEvent)
       window.removeEventListener('xmd-navigate', onNavigateRequest)
       resizeObserver?.disconnect()
       if (navSettleTimer !== null) clearTimeout(navSettleTimer)
@@ -684,5 +710,10 @@ export default function Editor({
     }
   }, [typewriterMode])
 
-  return <div className={`wysiwyg-editor${focusMode ? ' focus-mode' : ''}`} ref={rootRef} />
+  return (
+    <div className={`wysiwyg-editor${focusMode ? ' focus-mode' : ''}`} ref={rootRef}>
+      {tagBar}
+      <div className="crepe-mount" ref={crepeMountRef} />
+    </div>
+  )
 }

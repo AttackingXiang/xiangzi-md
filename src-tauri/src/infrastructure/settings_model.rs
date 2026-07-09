@@ -100,6 +100,14 @@ pub struct AppSettings {
     pub show_reading_mode_control: bool,
     pub show_source_mode_control: bool,
     pub show_reveal_button: bool,
+    /// 侧边栏顶部的"打开文件夹"按钮；默认隐藏（仍可用 Welcome 页/快捷键打开）
+    pub show_open_folder_button: bool,
+    /// 侧边栏顶部的"设置"按钮；默认隐藏（仍可用 ⌘, / 命令面板打开）
+    pub show_settings_button: bool,
+    /// 复制含图片的内容时：'image' 复制图片本身（默认），'address' 复制地址
+    pub image_copy_mode: String,
+    /// 复制 Mermaid 图表时：'image' 复制图片（默认），'source' 复制源码文本
+    pub mermaid_copy_mode: String,
     /// pandoc 可执行文件的自定义路径，空字符串表示自动探测
     pub pandoc_path: String,
     /// 自定义 reference.docx；空字符串表示使用 Pandoc 内置模板
@@ -161,6 +169,10 @@ impl Default for AppSettings {
             show_reading_mode_control: true,
             show_source_mode_control: true,
             show_reveal_button: true,
+            show_open_folder_button: false,
+            show_settings_button: false,
+            image_copy_mode: "image".into(),
+            mermaid_copy_mode: "image".into(),
             pandoc_path: String::new(),
             pandoc_reference_doc: String::new(),
             pandoc_export_args: String::new(),
@@ -210,6 +222,10 @@ pub struct SettingsPatch {
     pub show_reading_mode_control: Option<bool>,
     pub show_source_mode_control: Option<bool>,
     pub show_reveal_button: Option<bool>,
+    pub show_open_folder_button: Option<bool>,
+    pub show_settings_button: Option<bool>,
+    pub image_copy_mode: Option<String>,
+    pub mermaid_copy_mode: Option<String>,
     pub pandoc_path: Option<String>,
     pub pandoc_reference_doc: Option<String>,
     pub pandoc_export_args: Option<String>,

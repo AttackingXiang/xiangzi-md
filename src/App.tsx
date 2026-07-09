@@ -38,13 +38,14 @@ import SearchPanel from './components/SearchPanel'
 import CommandPalette from './components/CommandPalette'
 import RelatedDocumentsSidebar from './features/tags/components/RelatedDocumentsSidebar'
 import TagOverviewSidebar from './features/tags/components/TagOverviewSidebar'
-import DocumentTagBar from './features/tags/components/DocumentTagBar'
+import DocumentPropertyPanel from './features/tags/components/DocumentPropertyPanel'
 import { t } from './lib/i18n'
 import { ErrorCode } from './lib/errorCodes'
 import { baseName, dirName } from './lib/path'
 import { revealLocationKey } from './lib/platform'
 import { replaceMovedPath } from './lib/treeDrag'
 import { parseOutline } from './lib/outline'
+import { setCopyPreferences } from './lib/copyPreferences'
 import { editorBridge } from './lib/editorBridge'
 import { tablePickerBridge } from './lib/tablePickerBridge'
 import { tableZoomBridge } from './lib/tableZoomBridge'
@@ -68,10 +69,13 @@ import {
   extractInlineTags,
   parseMarkdownFrontmatter,
   replaceMarkdownBody,
-  setFrontmatterTags,
   tagKey,
 } from './features/tags/frontmatter'
-import type { DocumentTagChip } from './features/tags/components/DocumentTagBar'
+import {
+  parseFrontmatterProperties,
+  setFrontmatterProperties,
+  type DocumentProperty,
+} from './features/tags/properties'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 
@@ -435,17 +439,25 @@ export default function App(): JSX.Element {
     () => parseMarkdownFrontmatter(activeTab?.content ?? ''),
     [activeTab?.content],
   )
-  // 顶部标签栏：frontmatter 标签（可删）+ 正文内联 #标签（只读，见 DocumentTagChip）合并展示。
-  const activeDocumentTags = useMemo((): DocumentTagChip[] => {
+  // 顶部属性面板：解析出 frontmatter 的全部字段（title/tags/aliases/任意自定义键），
+  // 逐行以 Obsidian 风格展示、可编辑。
+  const activeProperties = useMemo(
+    () => parseFrontmatterProperties(activeFrontmatter.raw),
+    [activeFrontmatter.raw],
+  )
+  // 正文里手打的 #标签（只读，展示在 tags 行末尾）——排除掉已经写进 frontmatter
+  // tags 的，避免重复。
+  const inlineOnlyTags = useMemo(() => {
     const seen = new Set(activeFrontmatter.tags.map(tagKey))
-    const inlineOnly = extractInlineTags(activeFrontmatter.body).filter(
-      (tag) => !seen.has(tagKey(tag)),
-    )
-    return [
-      ...activeFrontmatter.tags.map((tag) => ({ tag, removable: true })),
-      ...inlineOnly.map((tag) => ({ tag, removable: false })),
-    ]
+    return extractInlineTags(activeFrontmatter.body).filter((tag) => !seen.has(tagKey(tag)))
   }, [activeFrontmatter.tags, activeFrontmatter.body])
+  // 有些笔记（尤其从别的工具迁移过来的）只在 frontmatter 写了 title，正文没有
+  // H1——这种情况下正文没有任何东西看起来像"标题"，需要把 frontmatter 的
+  // title 显示出来占上这个位置，而不是让笔记看起来像没有标题。
+  const hasBodyHeading = useMemo(
+    () => /^\s*#\s+(.+?)\s*$/m.test(activeFrontmatter.body),
+    [activeFrontmatter.body],
+  )
   const deferredOutlineContent = useDeferredValue(
     outlineVisible && activeTab ? activeFrontmatter.body : '',
   )
@@ -691,20 +703,20 @@ export default function App(): JSX.Element {
     tagNavigation.showTags()
   }, [tagNavigation.showTags])
 
-  /** Add/remove 共用：改文档的 frontmatter 标签、写回 content、存盘。标签索引
-   * 的更新交给上面那个 effect（它已经在监听 activeTab.savedContent/version），
+  /** 属性面板改动统一入口：用新的属性列表重写 frontmatter、写回 content、存盘。
+   * 标签索引的更新交给上面那个 effect（它已经在监听 activeTab.savedContent/version），
    * 不在这里手动调用 upsertDocument，避免维护两份触发路径。写入方式必须走
    * updateContent（更新 tab.content 且同步刷新 stateRef）再调用 saveTab，
    * 不能让 performSave 携带独立的内容快照——那样在保存排队被合并/覆盖时，
-   * 标签会悄悄丢失但调用方仍然收到"保存成功"。
-   * 未保存（无 path）的新文档也允许改标签：只更新内存缓冲，等用户真正保存时
+   * 改动会悄悄丢失但调用方仍然收到"保存成功"。
+   * 未保存（无 path）的新文档也允许改属性：只更新内存缓冲，等用户真正保存时
    * 一起落盘，不弹另存为对话框。每次改动都往撤销栈压一步，支持 Cmd+Z / 侧边栏
-   * 撤销按钮把标签恢复到改动前。 */
-  const changeDocumentTags = useCallback(
-    async (nextTags: string[]): Promise<boolean> => {
+   * 撤销按钮把属性恢复到改动前。 */
+  const changeDocumentProperties = useCallback(
+    async (next: DocumentProperty[]): Promise<boolean> => {
       const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
       if (!current) return false
-      const nextContent = setFrontmatterTags(current.content, nextTags)
+      const nextContent = setFrontmatterProperties(current.content, next)
       if (nextContent === current.content) return true
       const tabId = current.id
       const previousContent = current.content
@@ -722,27 +734,6 @@ export default function App(): JSX.Element {
     [pushUndo, saveTab, stateRef, updateContent],
   )
 
-  const addDocumentTag = useCallback(
-    (tag: string): Promise<boolean> => {
-      const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
-      const parsed = parseMarkdownFrontmatter(current?.content ?? '')
-      if (parsed.tags.some((existing) => tagKey(existing) === tagKey(tag)))
-        return Promise.resolve(true)
-      return changeDocumentTags([...parsed.tags, tag])
-    },
-    [changeDocumentTags, stateRef],
-  )
-
-  const removeDocumentTag = useCallback(
-    (tag: string): Promise<boolean> => {
-      const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
-      const parsed = parseMarkdownFrontmatter(current?.content ?? '')
-      const key = tagKey(tag)
-      return changeDocumentTags(parsed.tags.filter((existing) => tagKey(existing) !== key))
-    },
-    [changeDocumentTags, stateRef],
-  )
-
   const workspaceVisibilityKey = settings
     ? `${settings.showAllFiles}:${settings.hiddenWorkspacePaths.join('\0')}`
     : ''
@@ -750,6 +741,15 @@ export default function App(): JSX.Element {
     if (!workspaceVisibilityKey) return
     void refreshTree()
   }, [workspaceVisibilityKey, refreshTree])
+
+  // 把复制控制设置推给剪贴板逻辑（richClipboard / staticCodeBlock 都是非 React
+  // 环境，copy 发生时同步读取这个单例）。
+  useEffect(() => {
+    setCopyPreferences({
+      imageCopyMode: settings?.imageCopyMode ?? 'image',
+      mermaidCopyMode: settings?.mermaidCopyMode ?? 'image',
+    })
+  }, [settings?.imageCopyMode, settings?.mermaidCopyMode])
 
   // ── System open-path (file association / double-click) ────────────────────
   useEffect(() => {
@@ -1007,6 +1007,8 @@ export default function App(): JSX.Element {
                   folder={folder}
                   isFav={folder ? settings.favorites.includes(folder.root) : false}
                   canUndo={canUndo}
+                  showOpenFolderButton={settings.showOpenFolderButton}
+                  showSettingsButton={settings.showSettingsButton}
                   onUndo={undoLastOp}
                   onToggleFavorite={toggleFavorite}
                   onRefresh={refreshTree}
@@ -1054,6 +1056,8 @@ export default function App(): JSX.Element {
                 onOpenFolderPath={openFolderByPath}
                 onOpenFile={openPath}
                 onOpenSettings={openSidebarSettings}
+                showOpenFolderButton={settings.showOpenFolderButton}
+                showSettingsButton={settings.showSettingsButton}
                 onOpenSearch={openSidebarSearch}
                 onShowTags={showAllTags}
                 onToggleFavorite={toggleFavorite}
@@ -1157,40 +1161,44 @@ export default function App(): JSX.Element {
                   onChange={(c) => updateContent(activeTab.id, c)}
                 />
               ) : (
-                <>
-                  {!readingMode && (
-                    <DocumentTagBar
-                      tags={activeDocumentTags}
-                      activeTag={tagNavigation.selectedTag}
-                      onSelectTag={openDocumentTag}
-                      onAddTag={addDocumentTag}
-                      onRemoveTag={removeDocumentTag}
-                    />
-                  )}
-                  <Suspense fallback={<div className="editor-loading" />}>
-                    <Editor
-                      key={activeTab.id + '-' + resolvedTheme + '-' + settings.showSelectionToolbar}
-                      content={activeFrontmatter.body}
-                      docDir={activeDocDir}
-                      docName={activeTab.name}
-                      vaultRoot={folder?.root ?? null}
-                      assetSearchPaths={settings.assetSearchPaths ?? []}
-                      allowRemoteImages={settings.allowRemoteImages ?? false}
-                      imageMaxWidth={settings.imageMaxWidth}
-                      focusMode={focusMode}
-                      typewriterMode={typewriterMode}
-                      showSelectionToolbar={settings.showSelectionToolbar}
-                      readingMode={readingMode}
-                      initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
-                      onScrollTopChange={(scrollTop) =>
-                        wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
-                      }
-                      onChange={(c) =>
-                        updateContent(activeTab.id, replaceMarkdownBody(activeTab.content, c))
-                      }
-                    />
-                  </Suspense>
-                </>
+                <Suspense fallback={<div className="editor-loading" />}>
+                  <Editor
+                    key={activeTab.id + '-' + resolvedTheme + '-' + settings.showSelectionToolbar}
+                    content={activeFrontmatter.body}
+                    docDir={activeDocDir}
+                    docName={activeTab.name}
+                    vaultRoot={folder?.root ?? null}
+                    assetSearchPaths={settings.assetSearchPaths ?? []}
+                    allowRemoteImages={settings.allowRemoteImages ?? false}
+                    imageMaxWidth={settings.imageMaxWidth}
+                    focusMode={focusMode}
+                    typewriterMode={typewriterMode}
+                    showSelectionToolbar={settings.showSelectionToolbar}
+                    tagBar={
+                      <>
+                        <DocumentPropertyPanel
+                          properties={activeProperties}
+                          inlineTags={inlineOnlyTags}
+                          activeTag={tagNavigation.selectedTag}
+                          disabled={readingMode}
+                          onSelectTag={openDocumentTag}
+                          onChange={changeDocumentProperties}
+                        />
+                        {!hasBodyHeading && activeFrontmatter.title && (
+                          <div className="document-title-fallback">{activeFrontmatter.title}</div>
+                        )}
+                      </>
+                    }
+                    readingMode={readingMode}
+                    initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
+                    onScrollTopChange={(scrollTop) =>
+                      wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
+                    }
+                    onChange={(c) =>
+                      updateContent(activeTab.id, replaceMarkdownBody(activeTab.content, c))
+                    }
+                  />
+                </Suspense>
               )
             ) : (
               <Welcome
