@@ -86,6 +86,36 @@ export function renameTagInMarkdown(
   return { changed, content }
 }
 
+export interface TagRenameFileIO {
+  read: (path: string) => Promise<string>
+  write: (path: string, content: string) => Promise<void>
+}
+
+/** 逐个文件套用标签改名：读 → 改写 → 只在真的变了才写回。返回改了几个 / 失败几个，
+ * 便于把结果反馈给用户。纯逻辑（IO 通过参数注入），方便测试批量循环本身。 */
+export async function renameTagInFiles(
+  paths: readonly string[],
+  fromKey: string,
+  toTag: string,
+  io: TagRenameFileIO,
+): Promise<{ changed: number; failed: number }> {
+  let changed = 0
+  let failed = 0
+  for (const path of paths) {
+    try {
+      const original = await io.read(path)
+      const { changed: hit, content } = renameTagInMarkdown(original, fromKey, toTag)
+      if (hit) {
+        await io.write(path, content)
+        changed += 1
+      }
+    } catch {
+      failed += 1
+    }
+  }
+  return { changed, failed }
+}
+
 /** 把「drop 拖动源到目标下」翻译成 toTag：目标完整路径 + 拖动源的叶子段。
  * 例如把 a/b 拖到 c 下 -> c/b；把 test 拖到 project 下 -> project/test。 */
 export function moveTagUnderTarget(dragKey: string, targetFullLabel: string): string {

@@ -73,7 +73,11 @@ import {
   replaceMarkdownBody,
   tagKey,
 } from './features/tags/frontmatter'
-import { moveTagUnderTarget, renameTagInMarkdown } from './features/tags/renameTag'
+import {
+  moveTagUnderTarget,
+  renameTagInFiles,
+  renameTagInMarkdown,
+} from './features/tags/renameTag'
 import {
   parseFrontmatterProperties,
   setFrontmatterProperties,
@@ -755,31 +759,48 @@ export default function App(): JSX.Element {
           : `将修改 ${paths.size} 个文档里的这个标签，确定？`
       if (!window.confirm(message)) return
 
+      // 打开着的标签页用内存内容改写（避免覆盖未保存的编辑），其余走磁盘。
+      const openByPath = new Map<string, (typeof stateRef.current.tabs)[number]>()
+      for (const tab of stateRef.current.tabs) if (tab.path) openByPath.set(tab.path, tab)
+
+      let changed = 0
       let failed = 0
+      const closedPaths: string[] = []
       for (const path of paths) {
-        const openTab = stateRef.current.tabs.find((t) => t.path === path)
+        const tab = openByPath.get(path)
+        if (!tab) {
+          closedPaths.push(path)
+          continue
+        }
         try {
-          if (openTab) {
-            const { changed, content } = renameTagInMarkdown(openTab.content, fromKey, toTag)
-            if (changed) {
-              updateContent(openTab.id, content)
-              await saveTab(openTab.id)
-            }
-          } else {
-            const file = await desktop.readFile(path)
-            const { changed, content } = renameTagInMarkdown(file.content, fromKey, toTag)
-            if (changed) await desktop.writeFile(path, content, file.version)
+          const result = renameTagInMarkdown(tab.content, fromKey, toTag)
+          if (result.changed) {
+            updateContent(tab.id, result.content)
+            if ((await saveTab(tab.id)) || !tab.path) changed += 1
+            else failed += 1
           }
         } catch {
           failed += 1
         }
       }
+
+      // 未打开的文件：读 → 改 → 强制写盘。用 force 跳过版本冲突检查——写的正是我们
+      // 刚读进来的内容，中间没人动过；不 force 时旧代码会因冲突把大部分文件跳过，
+      // 表现为“每次只改了一条”。
+      const closedResult = await renameTagInFiles(closedPaths, fromKey, toTag, {
+        read: async (path) => (await desktop.readFile(path)).content,
+        write: (path, content) =>
+          desktop.writeFile(path, content, null, true).then(() => undefined),
+      })
+      changed += closedResult.changed
+      failed += closedResult.failed
+
       tagIndex.refresh()
-      if (failed > 0) {
-        void desktop.notify(
-          lang === 'en' ? `${failed} file(s) could not be updated.` : `${failed} 个文件修改失败。`,
-        )
-      }
+      void desktop.notify(
+        lang === 'en'
+          ? `Updated ${changed} document(s)${failed ? `, ${failed} failed` : ''}.`
+          : `已更新 ${changed} 个文档${failed ? `，${failed} 个失败` : ''}。`,
+      )
     },
     [tagIndex, updateContent, saveTab, stateRef, lang],
   )

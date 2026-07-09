@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { moveTagUnderTarget, renamedTag, renameTagInMarkdown } from './renameTag'
+import { moveTagUnderTarget, renamedTag, renameTagInFiles, renameTagInMarkdown } from './renameTag'
 import { documentMetaFromMarkdown } from './frontmatter'
 
 describe('renamedTag', () => {
@@ -52,6 +52,47 @@ describe('renameTagInMarkdown', () => {
   it('does not touch a sibling-prefixed tag', () => {
     const md = `---\ntags:\n  - testx\n---\nbody`
     expect(renameTagInMarkdown(md, 'test', 'exam').changed).toBe(false)
+  })
+})
+
+describe('renameTagInFiles (bulk loop)', () => {
+  it('rewrites every affected doc, not just one', async () => {
+    const files: Record<string, string> = {
+      'a.md': `---\ntags:\n  - Claude/test\n---\nA`,
+      'b.md': `---\ntags:\n  - Claude/test\n---\nB`,
+      'c.md': `---\ntags:\n  - Claude/test/wap\n---\nC`,
+      'd.md': `---\ntags:\n  - other\n---\nD`,
+    }
+    const writes: string[] = []
+    const result = await renameTagInFiles(
+      ['a.md', 'b.md', 'c.md', 'd.md'],
+      'claude/test',
+      'Claude/test1',
+      {
+        read: (p) => Promise.resolve(files[p]),
+        write: (p, content) => {
+          files[p] = content
+          writes.push(p)
+          return Promise.resolve()
+        },
+      },
+    )
+    expect(result).toEqual({ changed: 3, failed: 0 })
+    expect(writes.sort()).toEqual(['a.md', 'b.md', 'c.md']) // d.md untouched
+    expect(files['a.md']).toContain('Claude/test1')
+    expect(files['b.md']).toContain('Claude/test1')
+    expect(files['c.md']).toContain('Claude/test1/wap')
+  })
+
+  it('counts failures and keeps going', async () => {
+    const result = await renameTagInFiles(['x.md', 'y.md'], 'test', 'exam', {
+      read: (p) =>
+        p === 'x.md'
+          ? Promise.reject(new Error('boom'))
+          : Promise.resolve('---\ntags:\n  - test\n---\n'),
+      write: () => Promise.resolve(),
+    })
+    expect(result).toEqual({ changed: 1, failed: 1 })
   })
 })
 
