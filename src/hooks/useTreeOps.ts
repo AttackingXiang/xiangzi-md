@@ -11,6 +11,9 @@ import type { MenuItem } from '../components/ContextMenu'
 export type UndoItem =
   | { type: 'rename'; fromPath: string; toPath: string; toName: string }
   | { type: 'move'; fromPath: string; toDir: string; toName: string }
+  // 通用"恢复"条目：由调用方给出撤销时要执行的动作（如把文档标签恢复到改动前）。
+  // 让不涉及文件树的操作也能复用同一套撤销栈 / 撤销按钮 / Cmd+Z。
+  | { type: 'restore'; run: () => Promise<void> | void }
 
 interface Deps {
   folder: Folder | null
@@ -165,6 +168,10 @@ export function useTreeOps({
     setCanUndo(undoStack.current.length > 0)
 
     try {
+      if (item.type === 'restore') {
+        await item.run()
+        return
+      }
       if (item.type === 'rename') {
         const res = await desktop.rename(item.fromPath, item.toName)
         updateExpandedAfterMove(item.fromPath, res.path)

@@ -9,7 +9,7 @@
   border-bottom: 1px solid var(--workspace-divider);
   color: var(--text-2);
   user-select: none;
-  -webkit-app-region: drag;
+  cursor: default;
 }
 
 .titlebar-title {

@@ -1,16 +1,7 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  FolderOpen,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  Settings as SettingsIcon,
-  Star,
-  Folder,
-} from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder } from 'lucide-react'
 import { memo, useCallback, type RefObject } from 'react'
 import FileTree from './FileTree'
+import SidebarHeader from './SidebarHeader'
 import type { FileNode, Folder as FolderType } from '../types'
 import { t } from '../lib/i18n'
 import { baseName } from '../lib/path'
@@ -34,6 +25,7 @@ interface Props {
   onOpenFile: (path: string, name?: string) => void
   onOpenSettings: () => void
   onOpenSearch: () => void
+  onShowTags: () => void
   onToggleFavorite: (path: string) => void
   onFavoritesCollapsedChange: (collapsed: boolean) => void
   onFavoriteContext: (path: string, x: number, y: number) => void
@@ -65,6 +57,7 @@ const Sidebar = memo(function Sidebar({
   onOpenFile,
   onOpenSettings,
   onOpenSearch,
+  onShowTags,
   onToggleFavorite,
   onFavoritesCollapsedChange,
   onFavoriteContext,
@@ -91,55 +84,19 @@ const Sidebar = memo(function Sidebar({
 
   return (
     <aside className="sidebar" style={style}>
-      <div className="sidebar-header">
-        <span
-          className="sidebar-title"
-          title={folder ? folder.root : undefined}
-          onContextMenu={
-            folder
-              ? (event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onRootContext(event.clientX, event.clientY)
-                }
-              : undefined
-          }
-        >
-          {folder ? folder.name : t('资源管理器')}
-        </span>
-        <div className="sidebar-actions">
-          {folder && canUndo && (
-            <button className="icon-btn sm" title={t('撤销上次操作')} onClick={onUndo}>
-              <RotateCcw size={15} />
-            </button>
-          )}
-          {folder && (
-            <button
-              className={`icon-btn sm${isFav ? ' active' : ''}`}
-              title={isFav ? t('取消收藏') : t('收藏此目录')}
-              onClick={() => onToggleFavorite(folder.root)}
-            >
-              <Star size={15} fill={isFav ? 'currentColor' : 'none'} />
-            </button>
-          )}
-          {folder && (
-            <button className="icon-btn sm" title={t('刷新')} onClick={onRefresh}>
-              <RefreshCw size={15} />
-            </button>
-          )}
-          {folder && (
-            <button className="icon-btn sm" title={t('在文件夹中搜索')} onClick={onOpenSearch}>
-              <Search size={15} />
-            </button>
-          )}
-          <button className="icon-btn sm" title={t('打开文件夹')} onClick={() => onOpenFolder()}>
-            <FolderOpen size={15} />
-          </button>
-          <button className="icon-btn sm" title={t('设置')} onClick={onOpenSettings}>
-            <SettingsIcon size={15} />
-          </button>
-        </div>
-      </div>
+      <SidebarHeader
+        folder={folder}
+        isFav={isFav}
+        canUndo={canUndo}
+        onUndo={onUndo}
+        onToggleFavorite={onToggleFavorite}
+        onRefresh={onRefresh}
+        onOpenSearch={onOpenSearch}
+        onShowTags={onShowTags}
+        onOpenFolder={onOpenFolder}
+        onOpenSettings={onOpenSettings}
+        onRootContext={onRootContext}
+      />
 
       {favorites.length > 0 && (
         <div className="sidebar-section">

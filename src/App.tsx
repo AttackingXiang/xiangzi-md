@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { desktop } from './platform'
 import Sidebar from './components/Sidebar'
+import SidebarHeader from './components/SidebarHeader'
 import TabBar from './components/TabBar'
 import SourceEditor from './components/SourceEditor'
 
@@ -35,6 +36,9 @@ import UnsavedChangesDialog, {
 } from './components/UnsavedChangesDialog'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette from './components/CommandPalette'
+import RelatedDocumentsSidebar from './features/tags/components/RelatedDocumentsSidebar'
+import TagOverviewSidebar from './features/tags/components/TagOverviewSidebar'
+import DocumentTagBar from './features/tags/components/DocumentTagBar'
 import { t } from './lib/i18n'
 import { ErrorCode } from './lib/errorCodes'
 import { baseName, dirName } from './lib/path'
@@ -57,6 +61,17 @@ import { useAppCommands } from './hooks/useAppCommands'
 import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
 import type { ThemeName } from './lib/codeSyntaxPalette'
+import { useTagIndex } from './features/tags/useTagIndex'
+import { useTagNavigation } from './features/tags/useTagNavigation'
+import {
+  documentMetaFromMarkdown,
+  extractInlineTags,
+  parseMarkdownFrontmatter,
+  replaceMarkdownBody,
+  setFrontmatterTags,
+  tagKey,
+} from './features/tags/frontmatter'
+import type { DocumentTagChip } from './features/tags/components/DocumentTagBar'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 
@@ -379,6 +394,7 @@ export default function App(): JSX.Element {
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
   const [readingMode, setReadingMode] = useState(false)
+  const tagNavigation = useTagNavigation()
   // 同样提为 useCallback：TabBar / Outline 用 memo() 包裹后，稳定的回调引用才能让 memo 生效
   const toggleSourceMode = useCallback(() => setSourceMode((v) => !v), [])
   const toggleSidebarVisible = useCallback(() => setSidebarVisible((v) => !v), [setSidebarVisible])
@@ -415,8 +431,23 @@ export default function App(): JSX.Element {
   } | null>(null)
   const [exportResultPath, setExportResultPath] = useState<string | null>(null)
 
+  const activeFrontmatter = useMemo(
+    () => parseMarkdownFrontmatter(activeTab?.content ?? ''),
+    [activeTab?.content],
+  )
+  // 顶部标签栏：frontmatter 标签（可删）+ 正文内联 #标签（只读，见 DocumentTagChip）合并展示。
+  const activeDocumentTags = useMemo((): DocumentTagChip[] => {
+    const seen = new Set(activeFrontmatter.tags.map(tagKey))
+    const inlineOnly = extractInlineTags(activeFrontmatter.body).filter(
+      (tag) => !seen.has(tagKey(tag)),
+    )
+    return [
+      ...activeFrontmatter.tags.map((tag) => ({ tag, removable: true })),
+      ...inlineOnly.map((tag) => ({ tag, removable: false })),
+    ]
+  }, [activeFrontmatter.tags, activeFrontmatter.body])
   const deferredOutlineContent = useDeferredValue(
-    outlineVisible && activeTab ? activeTab.content : '',
+    outlineVisible && activeTab ? activeFrontmatter.body : '',
   )
   const outline = useMemo(
     () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
@@ -600,6 +631,117 @@ export default function App(): JSX.Element {
     setCtxMenu,
     setInputDialog,
   })
+
+  const tagIndex = useTagIndex(folder?.root ?? null, treeKey)
+  const tagEntries = useMemo(
+    () =>
+      Object.entries(tagIndex.tagIndex)
+        .map(([key, documents]) => ({
+          key,
+          label: tagIndex.tagLabels[key] ?? key,
+          count: documents.length,
+        }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
+    [tagIndex.tagIndex, tagIndex.tagLabels],
+  )
+
+  useEffect(() => {
+    tagNavigation.closeTags()
+  }, [folder?.root, tagNavigation.closeTags])
+
+  useEffect(() => {
+    if (!activeTab?.path || !activeTab.version) return
+    // 文档不属于当前打开的工作区（比如通过"打开文件"单独打开了外部文件）时不要
+    // 把它并入标签索引——否则切换回这个文件夹后，标签总览/相关文档里会混入
+    // 不属于这个工作区的文档。判定逻辑与 revealActiveFile 里的 isUnderFolder
+    // 保持一致。
+    const root = folder?.root
+    const isUnderFolder =
+      !root || activeTab.path.startsWith(root + '/') || activeTab.path.startsWith(root + '\\')
+    if (!isUnderFolder) return
+    tagIndex.upsertDocument(
+      documentMetaFromMarkdown(
+        activeTab.path,
+        activeTab.name,
+        activeTab.savedContent,
+        activeTab.version.modifiedNanos,
+      ),
+    )
+  }, [
+    activeTab?.name,
+    activeTab?.path,
+    activeTab?.savedContent,
+    activeTab?.version,
+    folder?.root,
+    tagIndex.upsertDocument,
+  ])
+
+  const openDocumentTag = useCallback(
+    (tag: string): void => {
+      setSidebarVisible(true)
+      setSearchView(false)
+      tagNavigation.openTag(tag)
+    },
+    [tagNavigation.openTag],
+  )
+
+  const showAllTags = useCallback((): void => {
+    setSidebarVisible(true)
+    setSearchView(false)
+    tagNavigation.showTags()
+  }, [tagNavigation.showTags])
+
+  /** Add/remove 共用：改文档的 frontmatter 标签、写回 content、存盘。标签索引
+   * 的更新交给上面那个 effect（它已经在监听 activeTab.savedContent/version），
+   * 不在这里手动调用 upsertDocument，避免维护两份触发路径。写入方式必须走
+   * updateContent（更新 tab.content 且同步刷新 stateRef）再调用 saveTab，
+   * 不能让 performSave 携带独立的内容快照——那样在保存排队被合并/覆盖时，
+   * 标签会悄悄丢失但调用方仍然收到"保存成功"。
+   * 未保存（无 path）的新文档也允许改标签：只更新内存缓冲，等用户真正保存时
+   * 一起落盘，不弹另存为对话框。每次改动都往撤销栈压一步，支持 Cmd+Z / 侧边栏
+   * 撤销按钮把标签恢复到改动前。 */
+  const changeDocumentTags = useCallback(
+    async (nextTags: string[]): Promise<boolean> => {
+      const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
+      if (!current) return false
+      const nextContent = setFrontmatterTags(current.content, nextTags)
+      if (nextContent === current.content) return true
+      const tabId = current.id
+      const previousContent = current.content
+      pushUndo({
+        type: 'restore',
+        run: async () => {
+          updateContent(tabId, previousContent)
+          if (stateRef.current.tabs.find((tab) => tab.id === tabId)?.path) await saveTab(tabId)
+        },
+      })
+      updateContent(tabId, nextContent)
+      if (!current.path) return true
+      return saveTab(tabId)
+    },
+    [pushUndo, saveTab, stateRef, updateContent],
+  )
+
+  const addDocumentTag = useCallback(
+    (tag: string): Promise<boolean> => {
+      const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
+      const parsed = parseMarkdownFrontmatter(current?.content ?? '')
+      if (parsed.tags.some((existing) => tagKey(existing) === tagKey(tag)))
+        return Promise.resolve(true)
+      return changeDocumentTags([...parsed.tags, tag])
+    },
+    [changeDocumentTags, stateRef],
+  )
+
+  const removeDocumentTag = useCallback(
+    (tag: string): Promise<boolean> => {
+      const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
+      const parsed = parseMarkdownFrontmatter(current?.content ?? '')
+      const key = tagKey(tag)
+      return changeDocumentTags(parsed.tags.filter((existing) => tagKey(existing) !== key))
+    },
+    [changeDocumentTags, stateRef],
+  )
 
   const workspaceVisibilityKey = settings
     ? `${settings.showAllFiles}:${settings.hiddenWorkspacePaths.join('\0')}`
@@ -859,6 +1001,42 @@ export default function App(): JSX.Element {
                 onOpenResult={openSearchResult}
                 onBack={() => setSearchView(false)}
               />
+            ) : tagNavigation.mode ? (
+              <aside className="sidebar">
+                <SidebarHeader
+                  folder={folder}
+                  isFav={folder ? settings.favorites.includes(folder.root) : false}
+                  canUndo={canUndo}
+                  onUndo={undoLastOp}
+                  onToggleFavorite={toggleFavorite}
+                  onRefresh={refreshTree}
+                  onOpenSearch={openSidebarSearch}
+                  onShowTags={showAllTags}
+                  onOpenFolder={openFolder}
+                  onOpenSettings={openSidebarSettings}
+                  onRootContext={openRootContext}
+                />
+                {tagNavigation.mode === 'related' && tagNavigation.selectedTag ? (
+                  <RelatedDocumentsSidebar
+                    tag={tagIndex.tagLabels[tagNavigation.selectedTag] ?? tagNavigation.selectedTag}
+                    documents={tagIndex.tagIndex[tagNavigation.selectedTag] ?? []}
+                    activePath={activeTab?.path ?? null}
+                    folderName={folder?.name ?? null}
+                    loading={tagIndex.loading}
+                    error={tagIndex.error}
+                    onBack={tagNavigation.showTags}
+                    onOpenDocument={(path, name) => void openPath(path, name)}
+                  />
+                ) : (
+                  <TagOverviewSidebar
+                    tags={tagEntries}
+                    loading={tagIndex.loading}
+                    error={tagIndex.error}
+                    onClose={tagNavigation.closeTags}
+                    onOpenTag={openDocumentTag}
+                  />
+                )}
+              </aside>
             ) : (
               <Sidebar
                 folder={folder}
@@ -877,6 +1055,7 @@ export default function App(): JSX.Element {
                 onOpenFile={openPath}
                 onOpenSettings={openSidebarSettings}
                 onOpenSearch={openSidebarSearch}
+                onShowTags={showAllTags}
                 onToggleFavorite={toggleFavorite}
                 onFavoritesCollapsedChange={setFavoritesCollapsed}
                 onFavoriteContext={openFavoriteContext}
@@ -978,27 +1157,40 @@ export default function App(): JSX.Element {
                   onChange={(c) => updateContent(activeTab.id, c)}
                 />
               ) : (
-                <Suspense fallback={<div className="editor-loading" />}>
-                  <Editor
-                    key={activeTab.id + '-' + resolvedTheme + '-' + settings.showSelectionToolbar}
-                    content={activeTab.content}
-                    docDir={activeDocDir}
-                    docName={activeTab.name}
-                    vaultRoot={folder?.root ?? null}
-                    assetSearchPaths={settings.assetSearchPaths ?? []}
-                    allowRemoteImages={settings.allowRemoteImages ?? false}
-                    imageMaxWidth={settings.imageMaxWidth}
-                    focusMode={focusMode}
-                    typewriterMode={typewriterMode}
-                    showSelectionToolbar={settings.showSelectionToolbar}
-                    readingMode={readingMode}
-                    initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
-                    onScrollTopChange={(scrollTop) =>
-                      wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
-                    }
-                    onChange={(c) => updateContent(activeTab.id, c)}
-                  />
-                </Suspense>
+                <>
+                  {!readingMode && (
+                    <DocumentTagBar
+                      tags={activeDocumentTags}
+                      activeTag={tagNavigation.selectedTag}
+                      onSelectTag={openDocumentTag}
+                      onAddTag={addDocumentTag}
+                      onRemoveTag={removeDocumentTag}
+                    />
+                  )}
+                  <Suspense fallback={<div className="editor-loading" />}>
+                    <Editor
+                      key={activeTab.id + '-' + resolvedTheme + '-' + settings.showSelectionToolbar}
+                      content={activeFrontmatter.body}
+                      docDir={activeDocDir}
+                      docName={activeTab.name}
+                      vaultRoot={folder?.root ?? null}
+                      assetSearchPaths={settings.assetSearchPaths ?? []}
+                      allowRemoteImages={settings.allowRemoteImages ?? false}
+                      imageMaxWidth={settings.imageMaxWidth}
+                      focusMode={focusMode}
+                      typewriterMode={typewriterMode}
+                      showSelectionToolbar={settings.showSelectionToolbar}
+                      readingMode={readingMode}
+                      initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
+                      onScrollTopChange={(scrollTop) =>
+                        wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
+                      }
+                      onChange={(c) =>
+                        updateContent(activeTab.id, replaceMarkdownBody(activeTab.content, c))
+                      }
+                    />
+                  </Suspense>
+                </>
               )
             ) : (
               <Welcome
