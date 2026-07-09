@@ -26,9 +26,13 @@
    让标题看起来是紧跟在这张属性卡片（或下面那个 frontmatter title 兜底）下面，
    而不是隔着一大截空白。用 ~ 而不是 + ，因为卡片和 .crepe-mount 之间可能还
    夹着 .document-title-fallback。 */
+/* 顶部有属性面板时，收紧正文的巨大顶部留白（默认 72px），让标题紧跟在面板下方，
+   而不是隔着一大截空白。用 :has() 直接钉在滚动视口上，不依赖 ~ 兄弟链，避免因
+   crepe 内部 DOM 结构变化而失效。 */
 .document-tag-bar ~ .crepe-mount .milkdown .ProseMirror,
-.document-properties ~ .crepe-mount .milkdown .ProseMirror {
-  padding-top: 28px;
+.document-properties ~ .crepe-mount .milkdown .ProseMirror,
+.wysiwyg-editor:has(.document-properties) .milkdown .ProseMirror {
+  padding-top: 18px;
 }
 
 /* 有些笔记只在 frontmatter 写了 title、正文没有 H1——这里原样照抄 H1 的排版
@@ -63,7 +67,7 @@
   box-sizing: border-box;
   width: 100%;
   max-width: var(--editor-max-width, 860px);
-  margin: 14px auto 0;
+  margin: 8px auto 0;
   padding: 8px 28px;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--workspace-divider) 82%, transparent);
@@ -400,6 +404,7 @@
 }
 
 .prop-add-editor {
+  position: relative;
   margin-top: 3px;
   padding: 2px 0 2px 28px;
 }
@@ -416,6 +421,63 @@
   font: inherit;
   font-size: 13px;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* 「添加属性」候选下拉：紧贴输入框下方，仿 Obsidian 的属性名建议列表。 */
+.prop-suggest-menu {
+  position: absolute;
+  top: 100%;
+  left: 28px;
+  z-index: 20;
+  min-width: 200px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--workspace-divider-strong);
+  border-radius: 8px;
+  background: var(--workspace-surface);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.prop-suggest-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prop-suggest-option:hover {
+  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  color: var(--text);
+}
+
+.prop-suggest-option svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.prop-suggest-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prop-suggest-key {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .document-tag-label {

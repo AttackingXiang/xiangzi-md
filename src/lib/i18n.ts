@@ -36,6 +36,13 @@ const EN: Record<string, string> = {
   空: 'Empty',
   添加: 'Add',
   '复杂值，请在源码模式编辑': 'Complex value — edit in source mode',
+  // 添加属性候选键的本地化展示名
+  别名: 'Aliases',
+  'CSS 类': 'CSS classes',
+  创建日期: 'Created',
+  描述: 'Description',
+  作者: 'Author',
+  发布: 'Publish',
   标签治理: 'Manage tags',
   返回标签: 'Back to tags',
   全部标签: 'All tags',
