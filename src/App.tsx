@@ -68,10 +68,12 @@ import { useTagNavigation } from './features/tags/useTagNavigation'
 import {
   documentMetaFromMarkdown,
   extractInlineTags,
+  normalizeTag,
   parseMarkdownFrontmatter,
   replaceMarkdownBody,
   tagKey,
 } from './features/tags/frontmatter'
+import { moveTagUnderTarget, renameTagInMarkdown } from './features/tags/renameTag'
 import {
   parseFrontmatterProperties,
   setFrontmatterProperties,
@@ -723,6 +725,97 @@ export default function App(): JSX.Element {
     tagNavigation.showTags()
   }, [tagNavigation.showTags])
 
+  /** 标签改名/移动统一入口：把 fromKey（连同整棵子树）改写成 toTag 前缀。
+   * scope='active' 只改当前文档；'all' 改所有含此标签的文档（改盘前弹确认）。
+   * 打开着的标签页走内存更新 + saveTab，未打开的直接 readFile→改写→writeFile。 */
+  const applyTagRename = useCallback(
+    async (fromKey: string, rawNewTag: string, scope: 'all' | 'active'): Promise<void> => {
+      const toTag = normalizeTag(rawNewTag)
+      if (!toTag || tagKey(toTag) === fromKey) return
+
+      if (scope === 'active') {
+        const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeId)
+        if (!tab) return
+        const { changed, content } = renameTagInMarkdown(tab.content, fromKey, toTag)
+        if (!changed) return
+        updateContent(tab.id, content)
+        if (tab.path) await saveTab(tab.id)
+        return
+      }
+
+      const paths = new Set<string>()
+      for (const [key, documents] of Object.entries(tagIndex.tagIndex)) {
+        if (!isTagInSubtree(key, fromKey)) continue
+        for (const document of documents) paths.add(document.path)
+      }
+      if (paths.size === 0) return
+      const message =
+        lang === 'en'
+          ? `Rewrite this tag in ${paths.size} document(s)?`
+          : `将修改 ${paths.size} 个文档里的这个标签，确定？`
+      if (!window.confirm(message)) return
+
+      let failed = 0
+      for (const path of paths) {
+        const openTab = stateRef.current.tabs.find((t) => t.path === path)
+        try {
+          if (openTab) {
+            const { changed, content } = renameTagInMarkdown(openTab.content, fromKey, toTag)
+            if (changed) {
+              updateContent(openTab.id, content)
+              await saveTab(openTab.id)
+            }
+          } else {
+            const file = await desktop.readFile(path)
+            const { changed, content } = renameTagInMarkdown(file.content, fromKey, toTag)
+            if (changed) await desktop.writeFile(path, content, file.version)
+          }
+        } catch {
+          failed += 1
+        }
+      }
+      tagIndex.refresh()
+      if (failed > 0) {
+        void desktop.notify(
+          lang === 'en' ? `${failed} file(s) could not be updated.` : `${failed} 个文件修改失败。`,
+        )
+      }
+    },
+    [tagIndex, updateContent, saveTab, stateRef, lang],
+  )
+
+  const promptRenameTag = useCallback(
+    (fromKey: string, currentLabel: string, scope: 'all' | 'active'): void => {
+      setInputDialog({
+        title: scope === 'active' ? t('在本文档重命名标签') : t('重命名 / 修改分组（用 / 分层）'),
+        initial: currentLabel,
+        confirmText: t('确定'),
+        onSubmit: (value) => void applyTagRename(fromKey, value, scope),
+      })
+    },
+    [applyTagRename],
+  )
+
+  const moveTagUnder = useCallback(
+    (dragKey: string, targetFullLabel: string): void => {
+      void applyTagRename(dragKey, moveTagUnderTarget(dragKey, targetFullLabel), 'all')
+    },
+    [applyTagRename],
+  )
+
+  const openTagContext = useCallback(
+    (key: string, fullLabel: string, x: number, y: number): void => {
+      setCtxMenu({
+        x,
+        y,
+        items: [
+          { label: t('重命名 / 修改分组'), onClick: () => promptRenameTag(key, fullLabel, 'all') },
+        ],
+      })
+    },
+    [promptRenameTag],
+  )
+
   /** 属性面板改动统一入口：用新的属性列表重写 frontmatter、写回 content、存盘。
    * 标签索引的更新交给上面那个 effect（它已经在监听 activeTab.savedContent/version），
    * 不在这里手动调用 upsertDocument，避免维护两份触发路径。写入方式必须走
@@ -1058,6 +1151,8 @@ export default function App(): JSX.Element {
                     onClose={tagNavigation.closeTags}
                     onOpenTag={openDocumentTag}
                     onTogglePin={togglePinnedTag}
+                    onTagContext={openTagContext}
+                    onMoveTag={moveTagUnder}
                   />
                 )}
               </aside>

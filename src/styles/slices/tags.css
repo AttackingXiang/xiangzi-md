@@ -859,6 +859,12 @@ button.tag-chip-label {
   cursor: default;
 }
 
+/* 拖动分组时的落点高亮：目标标签会“接住”被拖来的标签成为它的子级。 */
+.tag-tree-row.drop-target {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 .tag-tree-toggle {
   display: inline-flex;
   align-items: center;
