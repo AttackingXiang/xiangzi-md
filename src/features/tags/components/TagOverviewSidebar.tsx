@@ -73,20 +73,28 @@ export default function TagOverviewSidebar({
     </button>
   )
 
-  const renderNode = (node: TagTreeNode, depth: number): JSX.Element => {
+  // prefix 让置顶区和主树的折叠状态互不影响（同一个标签在两处能各自展开/折叠）。
+  // rootFullLabel 只让置顶区顶层那一行显示完整路径（AI/日常），子级仍显示片段。
+  const renderNode = (
+    node: TagTreeNode,
+    depth: number,
+    prefix = '',
+    rootFullLabel = false,
+  ): JSX.Element => {
     const hasChildren = node.children.length > 0
-    const isCollapsed = collapsed.has(node.key)
+    const collapseId = prefix + node.key
+    const isCollapsed = collapsed.has(collapseId)
     return (
-      <div key={node.key} className="tag-tree-node">
+      <div key={collapseId} className="tag-tree-node">
         <div
           className="tag-overview-item tag-tree-row"
-          style={{ paddingLeft: `${8 + depth * 14}px` }}
+          style={{ paddingLeft: `${8 + depth * 16}px` }}
         >
           {hasChildren ? (
             <button
               type="button"
               className={`tag-tree-toggle${isCollapsed ? '' : ' expanded'}`}
-              onClick={() => toggleCollapsed(node.key)}
+              onClick={() => toggleCollapsed(collapseId)}
               aria-label={isCollapsed ? t('展开') : t('折叠')}
             >
               <ChevronRight size={13} />
@@ -94,13 +102,13 @@ export default function TagOverviewSidebar({
           ) : (
             <span className="tag-tree-toggle-spacer" aria-hidden="true" />
           )}
-          {tagLabel(node, false)}
+          {tagLabel(node, rootFullLabel && depth === 0)}
           <small>{node.totalCount}</small>
           {pinButton(node.key)}
         </div>
         {hasChildren && !isCollapsed && (
           <div className="tag-tree-children">
-            {node.children.map((child) => renderNode(child, depth + 1))}
+            {node.children.map((child) => renderNode(child, depth + 1, prefix))}
           </div>
         )}
       </div>
@@ -136,14 +144,7 @@ export default function TagOverviewSidebar({
             {pinnedNodes.length > 0 && (
               <div className="tag-pinned-section">
                 <div className="tag-section-label">{t('已置顶')}</div>
-                {pinnedNodes.map((node) => (
-                  <div key={node.key} className="tag-overview-item tag-tree-row tag-pinned-row">
-                    <span className="tag-tree-toggle-spacer" aria-hidden="true" />
-                    {tagLabel(node, true)}
-                    <small>{node.totalCount}</small>
-                    {pinButton(node.key)}
-                  </div>
-                ))}
+                {pinnedNodes.map((node) => renderNode(node, 0, 'pin:', true))}
               </div>
             )}
             {tree.map((node) => renderNode(node, 0))}
