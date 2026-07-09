@@ -859,6 +859,12 @@ button.tag-chip-label {
   cursor: default;
 }
 
+/* 当前选中的标签（其文档在中间结果列展示）：整行高亮。 */
+.tag-tree-row.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
 /* 拖动分组时的落点高亮：目标标签会“接住”被拖来的标签成为它的子级。 */
 .tag-tree-row.drop-target {
   background: color-mix(in srgb, var(--accent) 18%, transparent);

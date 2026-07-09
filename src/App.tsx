@@ -256,10 +256,13 @@ export default function App(): JSX.Element {
   // ── Panel widths (drag-to-resize) ──────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState(256)
   const [outlineWidth, setOutlineWidth] = useState(240)
+  const [resultsWidth, setResultsWidth] = useState(300)
   const sidebarWidthRef = useRef(sidebarWidth)
   sidebarWidthRef.current = sidebarWidth
   const outlineWidthRef = useRef(outlineWidth)
   outlineWidthRef.current = outlineWidth
+  const resultsWidthRef = useRef(resultsWidth)
+  resultsWidthRef.current = resultsWidth
 
   const startSidebarResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -267,6 +270,20 @@ export default function App(): JSX.Element {
     const startW = sidebarWidthRef.current
     const onMove = (ev: MouseEvent): void =>
       setSidebarWidth(Math.max(160, Math.min(520, startW + ev.clientX - startX)))
+    const onUp = (): void => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [])
+
+  const startResultsResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = resultsWidthRef.current
+    const onMove = (ev: MouseEvent): void =>
+      setResultsWidth(Math.max(200, Math.min(560, startW + ev.clientX - startX)))
     const onUp = (): void => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
@@ -1146,13 +1163,7 @@ export default function App(): JSX.Element {
       <div className="workspace-shell">
         {sidebarVisible && (
           <div className="sidebar-wrap" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
-            {searchView && folder ? (
-              <SearchPanel
-                root={folder.root}
-                onOpenResult={openSearchResult}
-                onBack={() => setSearchView(false)}
-              />
-            ) : tagNavigation.mode ? (
+            {tagNavigation.mode ? (
               <aside className="sidebar">
                 <SidebarHeader
                   folder={folder}
@@ -1169,30 +1180,19 @@ export default function App(): JSX.Element {
                   onOpenSettings={openSidebarSettings}
                   onRootContext={openRootContext}
                 />
-                {tagNavigation.mode === 'related' && tagNavigation.selectedTag ? (
-                  <RelatedDocumentsSidebar
-                    tag={tagIndex.tagLabels[tagNavigation.selectedTag] ?? tagNavigation.selectedTag}
-                    documents={relatedDocuments}
-                    activePath={activeTab?.path ?? null}
-                    folderName={folder?.name ?? null}
-                    loading={tagIndex.loading}
-                    error={tagIndex.error}
-                    onBack={tagNavigation.showTags}
-                    onOpenDocument={(path, name) => void openPath(path, name)}
-                  />
-                ) : (
-                  <TagOverviewSidebar
-                    tree={tagTree}
-                    pinnedTags={settings.pinnedTags ?? []}
-                    loading={tagIndex.loading}
-                    error={tagIndex.error}
-                    onClose={tagNavigation.closeTags}
-                    onOpenTag={openDocumentTag}
-                    onTogglePin={togglePinnedTag}
-                    onTagContext={openTagContext}
-                    onMoveTag={moveTagUnder}
-                  />
-                )}
+                {/* 标签树常驻左侧；点某个标签后，它的文档在中间“结果列”展示。 */}
+                <TagOverviewSidebar
+                  tree={tagTree}
+                  pinnedTags={settings.pinnedTags ?? []}
+                  activeTag={tagNavigation.selectedTag}
+                  loading={tagIndex.loading}
+                  error={tagIndex.error}
+                  onClose={tagNavigation.closeTags}
+                  onOpenTag={openDocumentTag}
+                  onTogglePin={togglePinnedTag}
+                  onTagContext={openTagContext}
+                  onMoveTag={moveTagUnder}
+                />
               </aside>
             ) : (
               <Sidebar
@@ -1228,9 +1228,39 @@ export default function App(): JSX.Element {
                 onUndo={undoLastOp}
               />
             )}
-            {!searchView && <div className="resize-handle" onMouseDown={startSidebarResize} />}
+            <div className="resize-handle" onMouseDown={startSidebarResize} />
           </div>
         )}
+
+        {/* 中间“结果列”：全文搜索结果 或 点某个标签后的文档列表。可拖宽，关掉即隐藏。 */}
+        {(searchView && folder) ||
+        (tagNavigation.mode === 'related' && tagNavigation.selectedTag) ? (
+          <div className="results-wrap" style={{ width: resultsWidth, minWidth: resultsWidth }}>
+            {searchView && folder ? (
+              <SearchPanel
+                root={folder.root}
+                onOpenResult={openSearchResult}
+                onBack={() => setSearchView(false)}
+              />
+            ) : (
+              <RelatedDocumentsSidebar
+                tag={
+                  tagIndex.tagLabels[tagNavigation.selectedTag ?? ''] ??
+                  tagNavigation.selectedTag ??
+                  ''
+                }
+                documents={relatedDocuments}
+                activePath={activeTab?.path ?? null}
+                folderName={folder?.name ?? null}
+                loading={tagIndex.loading}
+                error={tagIndex.error}
+                onBack={tagNavigation.showTags}
+                onOpenDocument={(path, name) => void openPath(path, name)}
+              />
+            )}
+            <div className="resize-handle" onMouseDown={startResultsResize} />
+          </div>
+        ) : null}
 
         <div className={`main${sidebarVisible ? '' : ' no-sidebar'}`}>
           <TabBar

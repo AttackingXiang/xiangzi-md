@@ -7,6 +7,8 @@ interface Props {
   tree: TagTreeNode[]
   /** 置顶标签的 key（规范化小写） */
   pinnedTags: string[]
+  /** 当前选中的标签 key，高亮对应行（其文档在中间结果列展示） */
+  activeTag?: string | null
   loading: boolean
   error: string | null
   onClose: () => void
@@ -26,6 +28,7 @@ function canDrop(dragKey: string, targetKey: string): boolean {
 export default function TagOverviewSidebar({
   tree,
   pinnedTags,
+  activeTag,
   loading,
   error,
   onClose,
@@ -101,7 +104,9 @@ export default function TagOverviewSidebar({
     return (
       <div key={collapseId} className="tag-tree-node">
         <div
-          className={`tag-overview-item tag-tree-row${dropKey === node.key ? ' drop-target' : ''}`}
+          className={`tag-overview-item tag-tree-row${dropKey === node.key ? ' drop-target' : ''}${
+            activeTag === node.key ? ' active' : ''
+          }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
           draggable
           onDragStart={(event) => {
