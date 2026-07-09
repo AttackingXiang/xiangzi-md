@@ -162,17 +162,20 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const performSave = useCallback(
-    async (id: string): Promise<boolean> => {
+    async (id: string, force = false): Promise<boolean> => {
       const tab = stateRef.current.tabs.find((t) => t.id === id)
       if (!tab) return false
       try {
         if (tab.path) {
           let result
           try {
+            // force：批量标签改名等场景直接覆盖，跳过版本冲突检查/弹窗——写的正是
+            // 我们刚基于当前内容改出来的结果，不该被“外部修改”挡住而悄悄存不进去。
             result = await desktop.writeFile(
               tab.path,
               tab.content,
               savedVersionsRef.current.get(id) ?? tab.version,
+              force,
             )
           } catch (error) {
             const code =
@@ -237,7 +240,8 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
   )
 
   const saveTab = useCallback(
-    (id: string): Promise<boolean> => saveQueuesRef.current.run(id, () => performSave(id)),
+    (id: string, force = false): Promise<boolean> =>
+      saveQueuesRef.current.run(id, () => performSave(id, force)),
     [performSave],
   )
 
