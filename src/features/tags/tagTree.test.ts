@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTagTree, countTagTreeNodes, type TagTreeEntry } from './tagTree'
+import { buildTagTree, countTagTreeNodes, isTagInSubtree, type TagTreeEntry } from './tagTree'
 
 const entry = (key: string, docPaths: string[], label = key): TagTreeEntry => ({
   key,
@@ -63,6 +63,14 @@ describe('buildTagTree', () => {
         children: [],
       },
     ])
+  })
+
+  it('isTagInSubtree matches the tag itself and its descendants, not sibling prefixes', () => {
+    expect(isTagInSubtree('project', 'project')).toBe(true)
+    expect(isTagInSubtree('project/work', 'project')).toBe(true)
+    expect(isTagInSubtree('project/work/urgent', 'project')).toBe(true)
+    expect(isTagInSubtree('projectx', 'project')).toBe(false) // 不能把 projectx 也算进去
+    expect(isTagInSubtree('other', 'project')).toBe(false)
   })
 
   it('countTagTreeNodes counts group placeholders too', () => {

@@ -82,6 +82,12 @@ export function buildTagTree(entries: readonly TagTreeEntry[]): TagTreeNode[] {
   return toTreeNodes(roots, '')
 }
 
+/** 某个标签 key 是否落在 root 这棵子树内——即等于 root 本身，或以 root/ 开头。
+ * 用来实现「点父标签能看到它 + 所有子标签的文档」（前缀匹配，不误伤 rootx）。 */
+export function isTagInSubtree(tag: string, root: string): boolean {
+  return tag === root || tag.startsWith(`${root}/`)
+}
+
 /** 树里的节点总数（含分组占位节点），供“共 N 个标签”之类的统计。 */
 export function countTagTreeNodes(nodes: readonly TagTreeNode[]): number {
   return nodes.reduce((total, node) => total + 1 + countTagTreeNodes(node.children), 0)

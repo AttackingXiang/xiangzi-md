@@ -28,9 +28,6 @@ export default function TagOverviewSidebar({ tree, loading, error, onClose, onOp
   const renderNode = (node: TagTreeNode, depth: number): JSX.Element => {
     const hasChildren = node.children.length > 0
     const isCollapsed = collapsed.has(node.key)
-    // 有文档直接打这个精确标签的才算「真标签」，可点击导航；纯分组占位节点点了只展开。
-    const isRealTag = node.selfCount > 0
-    const count = isRealTag ? node.selfCount : node.totalCount
     return (
       <div key={node.key} className="tag-tree-node">
         <div
@@ -49,26 +46,17 @@ export default function TagOverviewSidebar({ tree, loading, error, onClose, onOp
           ) : (
             <span className="tag-tree-toggle-spacer" aria-hidden="true" />
           )}
-          {isRealTag ? (
-            <button
-              type="button"
-              className="tag-tree-label"
-              onClick={() => onOpenTag(node.fullLabel)}
-              title={`#${node.fullLabel}`}
-            >
-              #{node.segment}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="tag-tree-label tag-tree-group"
-              onClick={() => toggle(node.key)}
-              title={node.fullLabel}
-            >
-              {node.segment}
-            </button>
-          )}
-          <small>{count}</small>
+          {/* 每个节点都可点击导航；点父标签会展示它 + 所有子标签的文档（见 App 里的
+              聚合），所以计数统一用 totalCount（子树去重后的文档总数）。 */}
+          <button
+            type="button"
+            className={`tag-tree-label${hasChildren ? ' tag-tree-group' : ''}`}
+            onClick={() => onOpenTag(node.fullLabel)}
+            title={`#${node.fullLabel}`}
+          >
+            #{node.segment}
+          </button>
+          <small>{node.totalCount}</small>
         </div>
         {hasChildren && !isCollapsed && (
           <div className="tag-tree-children">
