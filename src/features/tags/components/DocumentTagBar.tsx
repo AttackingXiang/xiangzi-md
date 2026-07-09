@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { Plus, Tag } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { normalizeTag, tagKey } from '../frontmatter'
 import TagChip from './TagChip'
@@ -75,6 +75,10 @@ export default function DocumentTagBar({
 
   return (
     <div className="document-tag-bar" aria-label="文档标签">
+      <span className="document-tag-label">
+        <Tag size={13} />
+        {t('标签')}
+      </span>
       <div className="document-tag-list">
         {tags.length === 0 && <span className="document-tag-empty">{t('暂无标签')}</span>}
         {tags.map(({ tag, removable }) => (

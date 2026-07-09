@@ -1,4 +1,5 @@
 import { desktop } from '../platform'
+import { getImageCopyMode } from './copyPreferences'
 import { createTaskQueue } from './asyncPool'
 import { blobPartFromBytes, imageMimeType, xmdAssetPaths } from './asset'
 import { fitImageDimensions } from './imageBudget'
@@ -581,6 +582,9 @@ export function setupRichClipboard(root: HTMLElement): () => void {
     const target = event.target instanceof Node ? event.target : null
     const active = document.activeElement
     if (!target || (!root.contains(target) && (!active || !root.contains(active)))) return
+    // 「复制地址」模式：不拦截，交给编辑器自带的 Markdown 复制，得到 ![alt](路径)
+    // 这类文本引用，而不是把图片字节写进剪贴板。
+    if (getImageCopyMode() === 'address') return
     const snapshot = snapshotFromSelection(root)
     if (!snapshot) return
 

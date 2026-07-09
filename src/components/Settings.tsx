@@ -348,6 +348,39 @@ export default function Settings({
                     onChange={(checked) => onChange({ showToolbar: checked })}
                   />
                 </SettingsCard>
+                <SettingsCard title={en ? 'Copy control' : '复制控制'}>
+                  <SettingRow label={en ? 'Copy images as' : '图片复制为'}>
+                    <select
+                      value={settings.imageCopyMode ?? 'image'}
+                      onChange={(event) =>
+                        onChange({
+                          imageCopyMode: event.target.value as AppSettings['imageCopyMode'],
+                        })
+                      }
+                    >
+                      <option value="image">{en ? 'Image' : '图片'}</option>
+                      <option value="address">{en ? 'Address' : '地址'}</option>
+                    </select>
+                  </SettingRow>
+                  <SettingRow label={en ? 'Copy Mermaid as' : 'Mermaid 复制为'}>
+                    <select
+                      value={settings.mermaidCopyMode ?? 'image'}
+                      onChange={(event) =>
+                        onChange({
+                          mermaidCopyMode: event.target.value as AppSettings['mermaidCopyMode'],
+                        })
+                      }
+                    >
+                      <option value="image">{en ? 'Image' : '图片'}</option>
+                      <option value="source">{en ? 'Source text' : '源文本'}</option>
+                    </select>
+                  </SettingRow>
+                  <p className="settings-hint">
+                    {en
+                      ? 'Applies when the selection contains an image or Mermaid diagram. Defaults to copying the image.'
+                      : '当选中内容包含图片或 Mermaid 图表时生效，默认复制图片。'}
+                  </p>
+                </SettingsCard>
               </SettingsPage>
             )}
 
@@ -427,6 +460,28 @@ export default function Settings({
                     }
                     checked={settings.showRevealButton}
                     onChange={(showRevealButton) => onChange({ showRevealButton })}
+                  />
+                </SettingsCard>
+                <SettingsCard title={en ? 'Sidebar header' : '侧边栏顶部'}>
+                  <ToggleRow
+                    label={en ? 'Show open-folder button' : '显示打开文件夹按钮'}
+                    description={
+                      en
+                        ? 'Hidden by default — you can still open a folder from the start page or with the shortcut.'
+                        : '默认隐藏——仍可从首页或用快捷键打开文件夹。'
+                    }
+                    checked={settings.showOpenFolderButton}
+                    onChange={(showOpenFolderButton) => onChange({ showOpenFolderButton })}
+                  />
+                  <ToggleRow
+                    label={en ? 'Show settings button' : '显示设置按钮'}
+                    description={
+                      en
+                        ? 'Hidden by default — settings stay reachable with ⌘, or the command palette.'
+                        : '默认隐藏——仍可用 ⌘, 或命令面板打开设置。'
+                    }
+                    checked={settings.showSettingsButton}
+                    onChange={(showSettingsButton) => onChange({ showSettingsButton })}
                   />
                 </SettingsCard>
               </SettingsPage>

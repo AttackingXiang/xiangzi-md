@@ -60,6 +60,14 @@ export interface AppSettings {
   showReadingModeControl: boolean
   showSourceModeControl: boolean
   showRevealButton: boolean
+  /** 侧边栏顶部"打开文件夹"按钮是否显示（默认隐藏，仍可用 Welcome 页/快捷键） */
+  showOpenFolderButton: boolean
+  /** 侧边栏顶部"设置"按钮是否显示（默认隐藏，仍可用 ⌘, / 命令面板） */
+  showSettingsButton: boolean
+  /** 复制含图片的内容时：'image' 复制图片（默认），'address' 复制地址 */
+  imageCopyMode: 'image' | 'address'
+  /** 复制 Mermaid 图表时：'image' 复制图片（默认），'source' 复制源码文本 */
+  mermaidCopyMode: 'image' | 'source'
   pandocPath: string
   pandocReferenceDoc: string
   pandocExportArgs: string

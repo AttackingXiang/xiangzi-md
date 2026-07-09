@@ -7,6 +7,10 @@ export interface MarkdownFrontmatter {
   body: string
   raw: string | null
   tags: string[]
+  /** frontmatter 里的 title 字段（如果有）。跟正文 H1 是两个独立概念——有些
+   * 笔记（尤其从别的工具迁移过来的）只在 frontmatter 写了 title，正文没有
+   * H1；这种情况下编辑器需要知道这个值，把它当标题展示出来。 */
+  title: string | null
 }
 
 export function normalizeTag(value: string): string {
@@ -134,6 +138,16 @@ function parseTagsFromRaw(raw: string): string[] {
   return uniqueTags(blockValues)
 }
 
+const TITLE_KEY_RE = /^\s*title\s*:/i
+
+function parseTitleFromRaw(raw: string): string | null {
+  const line = raw.split(/\r?\n/).find((l) => TITLE_KEY_RE.test(l))
+  if (!line) return null
+  const value = stripTrailingComment(line.replace(/^\s*title\s*:\s*/i, ''))
+  const title = unquoteYaml(value).trim()
+  return title || null
+}
+
 /** 至少要有一行形如 "key: value" 的 YAML 映射，才当作 frontmatter 处理——否则
  * 文档开头一段被两条 "---" 分隔线夹住的引言/分隔符（同样匹配 FRONTMATTER_RE）
  * 会被误当成 frontmatter 整段隐藏，WYSIWYG 视图会跟源码模式显示的内容对不上。 */
@@ -143,11 +157,13 @@ function looksLikeYaml(raw: string): boolean {
 
 export function parseMarkdownFrontmatter(markdown: string): MarkdownFrontmatter {
   const match = markdown.match(FRONTMATTER_RE)
-  if (!match || !looksLikeYaml(match[1])) return { body: markdown, raw: null, tags: [] }
+  if (!match || !looksLikeYaml(match[1]))
+    return { body: markdown, raw: null, tags: [], title: null }
   return {
     raw: match[1],
     body: markdown.slice(match[0].length),
     tags: parseTagsFromRaw(match[1]),
+    title: parseTitleFromRaw(match[1]),
   }
 }
 
@@ -239,7 +255,11 @@ export function documentMetaFromMarkdown(
   return {
     path,
     name,
-    title: heading?.replace(/\s+#+\s*$/, '').trim() || name.replace(MARKDOWN_EXTENSION_RE, ''),
+    // 正文 H1 优先；没有 H1 但 frontmatter 写了 title 就用它；两者都没有才退回文件名。
+    title:
+      heading?.replace(/\s+#+\s*$/, '').trim() ||
+      parsed.title ||
+      name.replace(MARKDOWN_EXTENSION_RE, ''),
     excerpt: plainTextExcerpt(parsed.body),
     updatedAt: Math.floor(modifiedNanos / 1_000_000),
     // 标签索引（全部标签/相关文档）里，正文内联 #标签 跟 frontmatter 标签一视同仁。
