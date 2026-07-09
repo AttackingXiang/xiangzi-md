@@ -163,7 +163,7 @@ impl Default for AppSettings {
             ],
             allow_remote_images: false,
             show_toolbar: false,
-            show_selection_toolbar: true,
+            show_selection_toolbar: false,
             show_status_bar: true,
             show_status_path: true,
             show_reading_mode_control: true,
