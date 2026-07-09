@@ -28,7 +28,16 @@ interface BuildNode {
   children: Map<string, BuildNode>
 }
 
-function toTreeNodes(nodes: Map<string, BuildNode>, parentLabel: string): TagTreeNode[] {
+export interface BuildTagTreeOptions {
+  /** 把「含子标签的分组」排在同级前面（默认按文档数排序）。 */
+  groupsFirst?: boolean
+}
+
+function toTreeNodes(
+  nodes: Map<string, BuildNode>,
+  parentLabel: string,
+  options: BuildTagTreeOptions,
+): TagTreeNode[] {
   return Array.from(nodes.values())
     .map((node): TagTreeNode => {
       const fullLabel = parentLabel ? `${parentLabel}/${node.segment}` : node.segment
@@ -38,19 +47,27 @@ function toTreeNodes(nodes: Map<string, BuildNode>, parentLabel: string): TagTre
         fullLabel,
         selfCount: node.selfDocs.size,
         totalCount: node.subtreeDocs.size,
-        children: toTreeNodes(node.children, fullLabel),
+        children: toTreeNodes(node.children, fullLabel, options),
       }
     })
-    .sort(
-      (a, b) =>
+    .sort((a, b) => {
+      if (options.groupsFirst) {
+        const groupDelta = Number(b.children.length > 0) - Number(a.children.length > 0)
+        if (groupDelta !== 0) return groupDelta
+      }
+      return (
         b.totalCount - a.totalCount ||
-        a.segment.localeCompare(b.segment, undefined, { sensitivity: 'base' }),
-    )
+        a.segment.localeCompare(b.segment, undefined, { sensitivity: 'base' })
+      )
+    })
 }
 
 /** 把扁平的标签条目构建成嵌套树。分组占位节点（没有文档直接打它、只因为有后代
  * 才存在）selfCount 为 0；每个节点的 totalCount 是其子树内去重后的文档数。 */
-export function buildTagTree(entries: readonly TagTreeEntry[]): TagTreeNode[] {
+export function buildTagTree(
+  entries: readonly TagTreeEntry[],
+  options: BuildTagTreeOptions = {},
+): TagTreeNode[] {
   const roots = new Map<string, BuildNode>()
   for (const entry of entries) {
     const keySegments = entry.key.split('/').filter(Boolean)
@@ -79,7 +96,23 @@ export function buildTagTree(entries: readonly TagTreeEntry[]): TagTreeNode[] {
     })
     if (leaf) for (const path of entry.docPaths) leaf.selfDocs.add(path)
   }
-  return toTreeNodes(roots, '')
+  return toTreeNodes(roots, '', options)
+}
+
+/** 默认展开层级用：返回深度 ≥ depth 的所有「分组节点」（有子节点）的 key，作为
+ * 需要折叠的集合。depth < 0 表示全部展开（返回空）。深度从 0（顶层）开始。 */
+export function groupKeysToCollapse(nodes: readonly TagTreeNode[], depth: number): string[] {
+  if (depth < 0) return []
+  const keys: string[] = []
+  const walk = (list: readonly TagTreeNode[], current: number): void => {
+    for (const node of list) {
+      if (node.children.length === 0) continue
+      if (current >= depth) keys.push(node.key)
+      walk(node.children, current + 1)
+    }
+  }
+  walk(nodes, 0)
+  return keys
 }
 
 /** 某个标签 key 是否落在 root 这棵子树内——即等于 root 本身，或以 root/ 开头。

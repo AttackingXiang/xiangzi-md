@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildTagTree, countTagTreeNodes, isTagInSubtree, type TagTreeEntry } from './tagTree'
+import {
+  buildTagTree,
+  countTagTreeNodes,
+  groupKeysToCollapse,
+  isTagInSubtree,
+  type TagTreeEntry,
+} from './tagTree'
 
 const entry = (key: string, docPaths: string[], label = key): TagTreeEntry => ({
   key,
@@ -25,6 +31,31 @@ describe('buildTagTree', () => {
     expect(project.totalCount).toBe(3)
     expect(project.children).toHaveLength(1)
     expect(project.children[0].key).toBe('project/work')
+  })
+
+  it('groupsFirst puts tags with children before leaf tags at each level', () => {
+    // zzz 是叶子且文档更多；aaa 有子标签。默认按 totalCount，zzz 在前；groupsFirst 反之。
+    const entries = [entry('zzz', ['1.md', '2.md', '3.md']), entry('aaa/sub', ['4.md'])]
+    const byCount = buildTagTree(entries)
+    expect(byCount.map((n) => n.key)).toEqual(['zzz', 'aaa'])
+    const groupsFirst = buildTagTree(entries, { groupsFirst: true })
+    expect(groupsFirst.map((n) => n.key)).toEqual(['aaa', 'zzz'])
+  })
+
+  it('groupKeysToCollapse returns group nodes at/deeper than the given depth', () => {
+    const tree = buildTagTree([
+      entry('a/b/c', ['1.md']),
+      entry('a/d', ['2.md']),
+      entry('solo', ['3.md']),
+    ])
+    // -1：全部展开（空）
+    expect(groupKeysToCollapse(tree, -1)).toEqual([])
+    // 0：折叠所有分组（solo 是叶子，不算分组）
+    expect(new Set(groupKeysToCollapse(tree, 0))).toEqual(new Set(['a', 'a/b']))
+    // 1：只折叠深度 ≥1 的分组
+    expect(groupKeysToCollapse(tree, 1)).toEqual(['a/b'])
+    // 2：没有深度 ≥2 的分组
+    expect(groupKeysToCollapse(tree, 2)).toEqual([])
   })
 
   it('deduplicates docs across the subtree in totalCount', () => {

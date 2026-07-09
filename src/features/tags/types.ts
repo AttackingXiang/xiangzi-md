@@ -8,5 +8,3 @@ export interface DocumentMeta {
 }
 
 export type TagIndex = Record<string, DocumentMeta[]>
-
-export type TagSidebarMode = 'tags' | 'related' | null

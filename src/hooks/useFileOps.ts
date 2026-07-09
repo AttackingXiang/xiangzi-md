@@ -245,6 +245,31 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     [performSave],
   )
 
+  // 内容已经由调用方直接写盘（如批量标签改名），这里只把结果并回标签页：置为
+  // 干净、更新版本。不走 performSave 的 stateRef 读取——批量循环里 stateRef 可能
+  // 还没随 React 提交刷新，会读到旧内容导致标签页停留在“待保存”。直接用确定的
+  // content/version 落定，保证每个受影响的标签页都变成已保存。
+  const markTabPersisted = useCallback(
+    (id: string, content: string, version: NonNullable<Tab['version']>): void => {
+      savedVersionsRef.current.set(id, version)
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                content,
+                savedContent: content,
+                dirty: false,
+                revision: t.revision + 1,
+                version,
+              }
+            : t,
+        ),
+      )
+    },
+    [],
+  )
+
   const saveAsTab = useCallback(
     async (id: string) => {
       const tab = stateRef.current.tabs.find((t) => t.id === id)
@@ -483,6 +508,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     newFile,
     recoverDraft,
     saveTab,
+    markTabPersisted,
     saveAsTab,
     moveTab,
     toggleTabLock,

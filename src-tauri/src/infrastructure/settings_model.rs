@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 7;
 pub(crate) const MAX_RECENT_ITEMS: usize = 15;
 pub(crate) const MAX_FAVORITES: usize = 32;
+pub(crate) const MAX_TAG_COLLAPSED_KEYS: usize = 4096;
 pub(crate) const MAX_SESSION_FILES: usize = 12;
 pub(crate) const MAX_ASSET_SEARCH_PATHS: usize = 32;
 pub(crate) const MAX_HIDDEN_WORKSPACE_PATHS: usize = 64;
@@ -87,6 +88,16 @@ pub struct AppSettings {
     pub favorite_labels: BTreeMap<String, String>,
     /// 在「全部标签」面板里置顶的标签 key（规范化小写）。
     pub pinned_tags: Vec<String>,
+    /// 「全部标签」树里被折叠的分组 key（含置顶区的 `pin:` 前缀）；空表示全部展开。
+    pub tag_collapsed_keys: Vec<String>,
+    /// 标签树默认展开层级：-1 全部展开（默认），0 仅顶层，N 展开到第 N 层。
+    pub tag_default_expand_depth: i32,
+    /// 是否把「含子标签的分组」排在同级前面（默认按文档数排序）。
+    pub tag_groups_first: bool,
+    /// 中间结果列的排序方式：'updated'（修改时间，默认）或 'name'（名称）。
+    pub tag_result_sort: String,
+    /// 点正文里的标签时是否同时展开左侧「全部标签」树（默认关：只出结果列）。
+    pub tag_click_opens_overview: bool,
     pub session: SessionSettings,
     pub hide_attachment_folders: bool,
     pub asset_search_paths: Vec<String>,
@@ -150,6 +161,11 @@ impl Default for AppSettings {
             favorites_collapsed: false,
             favorite_labels: BTreeMap::new(),
             pinned_tags: Vec::new(),
+            tag_collapsed_keys: Vec::new(),
+            tag_default_expand_depth: -1,
+            tag_groups_first: false,
+            tag_result_sort: "updated".into(),
+            tag_click_opens_overview: false,
             session: SessionSettings::default(),
             hide_attachment_folders: false,
             asset_search_paths: Vec::new(),
@@ -212,6 +228,11 @@ pub struct SettingsPatch {
     pub favorites_collapsed: Option<bool>,
     pub favorite_labels: Option<BTreeMap<String, String>>,
     pub pinned_tags: Option<Vec<String>>,
+    pub tag_collapsed_keys: Option<Vec<String>>,
+    pub tag_default_expand_depth: Option<i32>,
+    pub tag_groups_first: Option<bool>,
+    pub tag_result_sort: Option<String>,
+    pub tag_click_opens_overview: Option<bool>,
     pub session: Option<SessionSettings>,
     pub hide_attachment_folders: Option<bool>,
     pub asset_search_paths: Option<Vec<String>>,

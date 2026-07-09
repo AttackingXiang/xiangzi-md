@@ -227,6 +227,20 @@ export function useSettings() {
     })
   }, [])
 
+  // 折叠/展开某个标签分组，并把整份折叠集合持久化（含置顶区的 pin: 前缀 key）。
+  const toggleTagCollapsed = useCallback((key: string) => {
+    setSettings((prev) => {
+      if (!prev) return prev
+      const current = prev.tagCollapsedKeys ?? []
+      const has = current.includes(key)
+      const tagCollapsedKeys = has ? current.filter((x) => x !== key) : [...current, key]
+      void desktop
+        .setSettings({ tagCollapsedKeys })
+        .catch((error: unknown) => console.error('Tag collapse persistence failed', error))
+      return { ...prev, tagCollapsedKeys }
+    })
+  }, [])
+
   const setFavoriteLabel = useCallback((p: string, value: string) => {
     setSettings((prev) => {
       if (!prev || !prev.favorites.includes(p)) return prev
@@ -251,6 +265,7 @@ export function useSettings() {
     pushRecentFolder,
     toggleFavorite,
     togglePinnedTag,
+    toggleTagCollapsed,
     setFavoritesCollapsed,
     setFavoriteLabel,
   }
