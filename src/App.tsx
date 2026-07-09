@@ -73,11 +73,7 @@ import {
   replaceMarkdownBody,
   tagKey,
 } from './features/tags/frontmatter'
-import {
-  moveTagUnderTarget,
-  renameTagInFiles,
-  renameTagInMarkdown,
-} from './features/tags/renameTag'
+import { moveTagUnderTarget, renameTagInMarkdown } from './features/tags/renameTag'
 import {
   parseFrontmatterProperties,
   setFrontmatterProperties,
@@ -754,14 +750,33 @@ export default function App(): JSX.Element {
       const toTag = normalizeTag(rawNewTag)
       if (!toTag || tagKey(toTag) === fromKey) return
 
+      // 每改完一篇就把它的新 meta 直接并入标签索引（而不是事后整仓重扫）——重扫是
+      // 异步的，容易和刚写的盘抢跑、把旧数据又读回来，导致左侧标签树“没生效”。直接
+      // upsert 用的是我们手上确定的新内容，即时、精确，也更省。
+      const nowNanos = Date.now() * 1_000_000
+      const applyToOpenTab = async (
+        tab: (typeof stateRef.current.tabs)[number],
+      ): Promise<boolean> => {
+        const { changed, content } = renameTagInMarkdown(tab.content, fromKey, toTag)
+        if (!changed) return false
+        updateContent(tab.id, content)
+        if (tab.path) {
+          await saveTab(tab.id, true)
+          tagIndex.upsertDocument(
+            documentMetaFromMarkdown(
+              tab.path,
+              tab.name,
+              content,
+              tab.version?.modifiedNanos ?? nowNanos,
+            ),
+          )
+        }
+        return true
+      }
+
       if (scope === 'active') {
         const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeId)
-        if (!tab) return
-        const { changed, content } = renameTagInMarkdown(tab.content, fromKey, toTag)
-        if (!changed) return
-        updateContent(tab.id, content)
-        if (tab.path) await saveTab(tab.id, true)
-        tagIndex.refresh()
+        if (tab) await applyToOpenTab(tab)
         return
       }
 
@@ -777,43 +792,38 @@ export default function App(): JSX.Element {
           : `将修改 ${paths.size} 个文档里的这个标签，确定？`
       if (!window.confirm(message)) return
 
-      // 打开着的标签页用内存内容改写（避免覆盖未保存的编辑），其余走磁盘。
       const openByPath = new Map<string, (typeof stateRef.current.tabs)[number]>()
       for (const tab of stateRef.current.tabs) if (tab.path) openByPath.set(tab.path, tab)
 
       let changed = 0
       let failed = 0
-      const closedPaths: string[] = []
       for (const path of paths) {
-        const tab = openByPath.get(path)
-        if (!tab) {
-          closedPaths.push(path)
-          continue
-        }
         try {
-          const result = renameTagInMarkdown(tab.content, fromKey, toTag)
-          if (result.changed) {
-            updateContent(tab.id, result.content)
-            if ((await saveTab(tab.id, true)) || !tab.path) changed += 1
-            else failed += 1
+          const tab = openByPath.get(path)
+          if (tab) {
+            if (await applyToOpenTab(tab)) changed += 1
+          } else {
+            // 未打开的文件：读 → 改 → 强制写盘（跳过版本冲突检查——写的正是刚读的内容）。
+            const file = await desktop.readFile(path)
+            const result = renameTagInMarkdown(file.content, fromKey, toTag)
+            if (result.changed) {
+              await desktop.writeFile(path, result.content, null, true)
+              tagIndex.upsertDocument(
+                documentMetaFromMarkdown(
+                  path,
+                  baseName(path),
+                  result.content,
+                  file.version.modifiedNanos,
+                ),
+              )
+              changed += 1
+            }
           }
         } catch {
           failed += 1
         }
       }
 
-      // 未打开的文件：读 → 改 → 强制写盘。用 force 跳过版本冲突检查——写的正是我们
-      // 刚读进来的内容，中间没人动过；不 force 时旧代码会因冲突把大部分文件跳过，
-      // 表现为“每次只改了一条”。
-      const closedResult = await renameTagInFiles(closedPaths, fromKey, toTag, {
-        read: async (path) => (await desktop.readFile(path)).content,
-        write: (path, content) =>
-          desktop.writeFile(path, content, null, true).then(() => undefined),
-      })
-      changed += closedResult.changed
-      failed += closedResult.failed
-
-      tagIndex.refresh()
       void desktop.notify(
         lang === 'en'
           ? `Updated ${changed} document(s)${failed ? `, ${failed} failed` : ''}.`
