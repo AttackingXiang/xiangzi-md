@@ -816,6 +816,22 @@ export default function App(): JSX.Element {
     [promptRenameTag],
   )
 
+  // 文档里右键某个标签 chip：既能全局改，也能只改本文档（默认全改）。
+  const openDocTagContext = useCallback(
+    (tag: string, x: number, y: number): void => {
+      const key = tagKey(tag)
+      setCtxMenu({
+        x,
+        y,
+        items: [
+          { label: t('重命名 / 修改分组'), onClick: () => promptRenameTag(key, tag, 'all') },
+          { label: t('仅在本文档修改'), onClick: () => promptRenameTag(key, tag, 'active') },
+        ],
+      })
+    },
+    [promptRenameTag],
+  )
+
   /** 属性面板改动统一入口：用新的属性列表重写 frontmatter、写回 content、存盘。
    * 标签索引的更新交给上面那个 effect（它已经在监听 activeTab.savedContent/version），
    * 不在这里手动调用 upsertDocument，避免维护两份触发路径。写入方式必须走
@@ -1299,6 +1315,7 @@ export default function App(): JSX.Element {
                           activeTag={tagNavigation.selectedTag}
                           disabled={readingMode}
                           onSelectTag={openDocumentTag}
+                          onTagContext={openDocTagContext}
                           onChange={changeDocumentProperties}
                         />
                         {!hasBodyHeading && activeFrontmatter.title && (

@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { createElement, useEffect, useRef, useState } from 'react'
-import type { FC } from 'react'
+import type { FC, MouseEvent as ReactMouseEvent } from 'react'
 import {
   coerceValue,
   PROPERTY_TYPES,
@@ -31,6 +31,8 @@ interface Props {
   activeTag: string | null
   disabled?: boolean
   onSelectTag: (tag: string) => void
+  /** 右键某个 tags 行里的标签（改名/改分组），x/y 为菜单位置。 */
+  onTagContext?: (tag: string, x: number, y: number) => void
   /** 用整份新属性列表覆盖 frontmatter，返回是否写入成功。 */
   onChange: (next: DocumentProperty[]) => Promise<boolean>
 }
@@ -185,8 +187,16 @@ const ListValueEditor: FC<{
   activeTag: string | null
   disabled: boolean
   onSelectTag: (tag: string) => void
+  onTagContext?: (tag: string, x: number, y: number) => void
   onChange: (next: string[]) => void
-}> = ({ items, inlineTags, asTags, activeTag, disabled, onSelectTag, onChange }) => {
+}> = ({ items, inlineTags, asTags, activeTag, disabled, onSelectTag, onTagContext, onChange }) => {
+  const tagContext = (tag: string) =>
+    onTagContext
+      ? (event: ReactMouseEvent) => {
+          event.preventDefault()
+          onTagContext(tag, event.clientX, event.clientY)
+        }
+      : undefined
   const [adding, setAdding] = useState(false)
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -218,6 +228,7 @@ const ListValueEditor: FC<{
             active={activeTag === tagKey(item)}
             onClick={() => onSelectTag(item)}
             onRemove={disabled ? undefined : () => removeAt(index)}
+            onContextMenu={tagContext(item)}
           />
         ) : (
           <span key={`${item}-${index}`} className="prop-chip">
@@ -242,6 +253,7 @@ const ListValueEditor: FC<{
             tag={tag}
             active={activeTag === tagKey(tag)}
             onClick={() => onSelectTag(tag)}
+            onContextMenu={tagContext(tag)}
           />
         ))}
       {adding ? (
@@ -298,6 +310,7 @@ const PropertyRow: FC<{
   menuOpen: boolean
   onToggleMenu: () => void
   onSelectTag: (tag: string) => void
+  onTagContext?: (tag: string, x: number, y: number) => void
   onPatch: (patch: Partial<DocumentProperty>) => void
   onRemove: () => void
 }> = ({
@@ -309,6 +322,7 @@ const PropertyRow: FC<{
   menuOpen,
   onToggleMenu,
   onSelectTag,
+  onTagContext,
   onPatch,
   onRemove,
 }) => {
@@ -400,6 +414,7 @@ const PropertyRow: FC<{
             activeTag={activeTag}
             disabled={disabled}
             onSelectTag={onSelectTag}
+            onTagContext={isTagsKey(prop.key) ? onTagContext : undefined}
             onChange={(next) => onPatch({ value: next })}
           />
         ) : (
@@ -431,6 +446,7 @@ export default function DocumentPropertyPanel({
   activeTag,
   disabled = false,
   onSelectTag,
+  onTagContext,
   onChange,
 }: Props): JSX.Element {
   const [menuIndex, setMenuIndex] = useState<number | null>(null)
@@ -511,6 +527,7 @@ export default function DocumentPropertyPanel({
               menuOpen={menuIndex === index}
               onToggleMenu={() => setMenuIndex((current) => (current === index ? null : index))}
               onSelectTag={onSelectTag}
+              onTagContext={onTagContext}
               onPatch={(patch) => patchAt(index, patch)}
               onRemove={() => removeAt(index)}
             />
