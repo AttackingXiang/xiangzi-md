@@ -1,0 +1,88 @@
+/** Obsidian 风格的嵌套标签分组：标签按 "/" 拆成层级，a/b、a/c 归到 a 下面。
+ * 纯函数，方便测试；渲染层（TagOverviewSidebar）只负责展开/折叠和点击。 */
+export interface TagTreeNode {
+  /** 完整标签 key（如 project/work），用于导航与展开状态。 */
+  key: string
+  /** 该层显示的片段（如 work），尽量保留原始大小写。 */
+  segment: string
+  /** 完整标签展示名（如 Project/Work），点击导航/悬浮提示用。 */
+  fullLabel: string
+  /** 打了这个「精确」标签的文档数（分组占位节点为 0）。 */
+  selfCount: number
+  /** 本子树内去重后的文档总数（含所有后代标签）。 */
+  totalCount: number
+  children: TagTreeNode[]
+}
+
+export interface TagTreeEntry {
+  key: string
+  label: string
+  docPaths: readonly string[]
+}
+
+interface BuildNode {
+  key: string
+  segment: string
+  selfDocs: Set<string>
+  subtreeDocs: Set<string>
+  children: Map<string, BuildNode>
+}
+
+function toTreeNodes(nodes: Map<string, BuildNode>, parentLabel: string): TagTreeNode[] {
+  return Array.from(nodes.values())
+    .map((node): TagTreeNode => {
+      const fullLabel = parentLabel ? `${parentLabel}/${node.segment}` : node.segment
+      return {
+        key: node.key,
+        segment: node.segment,
+        fullLabel,
+        selfCount: node.selfDocs.size,
+        totalCount: node.subtreeDocs.size,
+        children: toTreeNodes(node.children, fullLabel),
+      }
+    })
+    .sort(
+      (a, b) =>
+        b.totalCount - a.totalCount ||
+        a.segment.localeCompare(b.segment, undefined, { sensitivity: 'base' }),
+    )
+}
+
+/** 把扁平的标签条目构建成嵌套树。分组占位节点（没有文档直接打它、只因为有后代
+ * 才存在）selfCount 为 0；每个节点的 totalCount 是其子树内去重后的文档数。 */
+export function buildTagTree(entries: readonly TagTreeEntry[]): TagTreeNode[] {
+  const roots = new Map<string, BuildNode>()
+  for (const entry of entries) {
+    const keySegments = entry.key.split('/').filter(Boolean)
+    if (keySegments.length === 0) continue
+    const labelSegments = entry.label.split('/')
+    let level = roots
+    let keyPath = ''
+    let leaf: BuildNode | undefined
+    keySegments.forEach((keySeg, i) => {
+      keyPath = keyPath ? `${keyPath}/${keySeg}` : keySeg
+      let node = level.get(keySeg)
+      if (!node) {
+        node = {
+          key: keyPath,
+          // 首个提供该层的条目决定显示大小写；分组占位节点也能借后代拿到原样片段。
+          segment: labelSegments[i]?.trim() || keySeg,
+          selfDocs: new Set(),
+          subtreeDocs: new Set(),
+          children: new Map(),
+        }
+        level.set(keySeg, node)
+      }
+      for (const path of entry.docPaths) node.subtreeDocs.add(path)
+      leaf = node
+      level = node.children
+    })
+    if (leaf) for (const path of entry.docPaths) leaf.selfDocs.add(path)
+  }
+  return toTreeNodes(roots, '')
+}
+
+/** 树里的节点总数（含分组占位节点），供“共 N 个标签”之类的统计。 */
+export function countTagTreeNodes(nodes: readonly TagTreeNode[]): number {
+  return nodes.reduce((total, node) => total + 1 + countTagTreeNodes(node.children), 0)
+}

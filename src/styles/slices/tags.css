@@ -852,6 +852,72 @@ button.tag-chip-label {
   text-align: center;
 }
 
+/* 嵌套标签树：折叠箭头 + 标签名 + 计数。行本身是 div，点击落在里面的按钮上。 */
+.tag-tree-row {
+  justify-content: flex-start;
+  gap: 2px;
+  cursor: default;
+}
+
+.tag-tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tag-tree-toggle svg {
+  transition: transform 0.12s ease;
+}
+
+.tag-tree-toggle.expanded svg {
+  transform: rotate(90deg);
+}
+
+.tag-tree-toggle:hover {
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  color: var(--text-2);
+}
+
+.tag-tree-toggle-spacer {
+  flex-shrink: 0;
+  width: 18px;
+}
+
+.tag-tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 2px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tag-tree-group {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.tag-tree-children {
+  display: flex;
+  flex-direction: column;
+}
+
 .tag-sidebar-state {
   padding: 34px 16px;
   color: var(--text-muted);
