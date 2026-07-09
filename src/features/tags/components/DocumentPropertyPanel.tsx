@@ -18,6 +18,7 @@ import {
   PROPERTY_TYPES,
   propertyTypeLabel,
   type DocumentProperty,
+  type PropertyType,
 } from '../properties'
 import { normalizeTag, tagKey } from '../frontmatter'
 import TagChip from './TagChip'
@@ -36,6 +37,42 @@ interface Props {
 
 function isTagsKey(key: string): boolean {
   return /^tags?$/i.test(key.trim())
+}
+
+/** 「添加属性」时的候选项：常见 frontmatter 键 + 默认类型；已存在的键会被过滤掉，
+ * tags（标签）排第一（仿 Obsidian）。写入的是规范英文键，展示名走 i18n。 */
+const SUGGESTED_PROPERTIES: { key: string; type: PropertyType }[] = [
+  { key: 'tags', type: 'list' },
+  { key: 'aliases', type: 'list' },
+  { key: 'cssclasses', type: 'list' },
+  { key: 'date', type: 'date' },
+  { key: 'created', type: 'date' },
+  { key: 'description', type: 'text' },
+  { key: 'author', type: 'text' },
+  { key: 'publish', type: 'checkbox' },
+]
+
+// 常见键的本地化展示名（i18n 词典以中文为键）；未收录的键直接显示原键名。
+const KEY_LABELS: Record<string, string> = {
+  tags: '标签',
+  aliases: '别名',
+  cssclasses: 'CSS 类',
+  date: '日期',
+  created: '创建日期',
+  description: '描述',
+  author: '作者',
+  publish: '发布',
+}
+
+function suggestionLabel(key: string): string {
+  const label = KEY_LABELS[key]
+  return label ? t(label) : key
+}
+
+function emptyValueForType(type: PropertyType): DocumentProperty['value'] {
+  if (type === 'list') return []
+  if (type === 'checkbox') return false
+  return null
 }
 
 function typeIcon(prop: DocumentProperty): LucideIcon {
@@ -400,6 +437,9 @@ export default function DocumentPropertyPanel({
   const [addingKey, setAddingKey] = useState('')
   const [adding, setAdding] = useState(false)
   const addRef = useRef<HTMLInputElement>(null)
+  // 点候选项时用 onMouseDown 提前处理，会先触发输入框 blur——用这个标记让 blur
+  // 里的“提交输入的键”逻辑让位，避免同时又按输入内容加了一个属性。
+  const suppressAddBlur = useRef(false)
 
   useEffect(() => {
     if (adding) addRef.current?.focus()
@@ -431,18 +471,25 @@ export default function DocumentPropertyPanel({
     setMenuIndex(null)
     emit(properties.filter((_, i) => i !== index))
   }
-  const submitNewKey = (): void => {
-    const key = addingKey.trim()
-    const clash = key && properties.some((p) => p.key.trim().toLowerCase() === key.toLowerCase())
-    if (key && !clash) {
-      emit([
-        ...properties,
-        { key, type: isTagsKey(key) ? 'list' : 'text', value: isTagsKey(key) ? [] : null },
-      ])
+  const present = new Set(properties.map((p) => p.key.trim().toLowerCase()))
+  const addProperty = (key: string, type: PropertyType): void => {
+    if (key && !present.has(key.toLowerCase())) {
+      emit([...properties, { key, type, value: emptyValueForType(type) }])
     }
     setAddingKey('')
     setAdding(false)
   }
+  const submitNewKey = (): void => {
+    const key = addingKey.trim()
+    addProperty(key, isTagsKey(key) ? 'list' : 'text')
+  }
+  // 「添加属性」的候选项：常见键去掉已存在的，再按输入过滤（键名或本地化展示名）。
+  const filter = addingKey.trim().toLowerCase()
+  const suggestions = SUGGESTED_PROPERTIES.filter(
+    (s) =>
+      !present.has(s.key) &&
+      (!filter || s.key.includes(filter) || suggestionLabel(s.key).toLowerCase().includes(filter)),
+  )
 
   // 阅读模式（disabled）下只做只读展示：没有任何属性时整块不渲染，避免出现一张
   // 空卡片；有属性时照常展示，但不给"添加属性"入口。
@@ -479,7 +526,13 @@ export default function DocumentPropertyPanel({
             placeholder={t('属性名称')}
             spellCheck={false}
             onChange={(event) => setAddingKey(event.target.value.replace(/[\r\n:]/g, ''))}
-            onBlur={submitNewKey}
+            onBlur={() => {
+              if (suppressAddBlur.current) {
+                suppressAddBlur.current = false
+                return
+              }
+              submitNewKey()
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault()
@@ -491,6 +544,28 @@ export default function DocumentPropertyPanel({
               }
             }}
           />
+          {suggestions.length > 0 && (
+            <div className="prop-suggest-menu" role="listbox">
+              {suggestions.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  className="prop-suggest-option"
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    suppressAddBlur.current = true
+                    addProperty(s.key, s.type)
+                  }}
+                >
+                  {createElement(typeIcon({ key: s.key, type: s.type, value: null }), { size: 15 })}
+                  <span className="prop-suggest-label">{suggestionLabel(s.key)}</span>
+                  <span className="prop-suggest-key">{s.key}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <button type="button" className="prop-add-button" onClick={() => setAdding(true)}>
