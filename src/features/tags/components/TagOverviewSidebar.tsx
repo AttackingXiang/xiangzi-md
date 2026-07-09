@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, Star, Tag } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getLang, t } from '../../../lib/i18n'
 import { countTagTreeNodes, flattenTagTree, type TagTreeNode } from '../tagTree'
@@ -8,6 +8,8 @@ interface Props {
   tree: TagTreeNode[]
   /** 置顶标签的 key（规范化小写） */
   pinnedTags: string[]
+  /** 已折叠分组的 collapseId 集合（主树用 key，置顶区用 `pin:` 前缀）；持久化 */
+  collapsedKeys: string[]
   /** 当前选中的标签 key，高亮对应行（其文档在中间结果列展示） */
   activeTag?: string | null
   loading: boolean
@@ -15,6 +17,8 @@ interface Props {
   onClose: () => void
   onOpenTag: (tag: string) => void
   onTogglePin: (key: string) => void
+  /** 折叠/展开某个分组（传 collapseId，含 `pin:` 前缀），由上层持久化 */
+  onToggleCollapsed: (collapseId: string) => void
   /** 右键某个标签（改名/改分组） */
   onTagContext: (key: string, fullLabel: string, x: number, y: number) => void
   /** 把 dragKey 拖到 targetFullLabel 下面（快速分组） */
@@ -29,18 +33,44 @@ function canDrop(dragKey: string, targetKey: string): boolean {
 export default function TagOverviewSidebar({
   tree,
   pinnedTags,
+  collapsedKeys,
   activeTag,
   loading,
   error,
   onClose,
   onOpenTag,
   onTogglePin,
+  onToggleCollapsed,
   onTagContext,
   onMoveTag,
 }: Props) {
-  // 折叠的分组 key 集合；默认全部展开。仅存在于本次会话（不跨重开持久化）。
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  // 折叠的分组集合由上层持久化传入（默认空 = 全部展开）；切换即回调保存。
+  const collapsed = new Set(collapsedKeys)
   const [dropKey, setDropKey] = useState<string | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // 选中某个标签（含从正文点标签跳进来）时，把它在左侧标签树里滚动到可见处。
+  // 若它的某个祖先分组是折叠的，先展开祖先——这次改动会让 collapsedKeys 变化、
+  // 重新触发本 effect，届时目标行已渲染，再滚动过去。
+  useEffect(() => {
+    if (!activeTag) return
+    const parts = activeTag.split('/')
+    const collapsedAncestors: string[] = []
+    for (let i = 1; i < parts.length; i++) {
+      const ancestor = parts.slice(0, i).join('/')
+      if (collapsed.has(ancestor)) collapsedAncestors.push(ancestor)
+    }
+    if (collapsedAncestors.length > 0) {
+      for (const ancestor of collapsedAncestors) onToggleCollapsed(ancestor)
+      return
+    }
+    const container = listRef.current
+    if (!container) return
+    const row = Array.from(
+      container.querySelectorAll<HTMLElement>('.tag-tree-row[data-tag-key]'),
+    ).find((el) => el.dataset.tagKey === activeTag)
+    row?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [activeTag, collapsedKeys, onToggleCollapsed])
   // 拖完后短暂压制标签的 click（避免“拖动结束”被当成“点击导航”）。
   const suppressClickRef = useRef(false)
   const total = countTagTreeNodes(tree)
@@ -51,13 +81,8 @@ export default function TagOverviewSidebar({
     .map((key) => flat.get(key))
     .filter((node): node is TagTreeNode => node !== undefined)
 
-  const toggleCollapsed = (key: string): void => {
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+  const toggleCollapsed = (collapseId: string): void => {
+    onToggleCollapsed(collapseId)
   }
 
   // 用指针事件实现拖动分组（WKWebView 的 HTML5 draggable 不可靠，跟大纲/文件树
@@ -212,7 +237,7 @@ export default function TagOverviewSidebar({
           {getLang() === 'en' ? `${total} tags` : `共 ${total} 个标签`}
         </span>
       </div>
-      <div className="tag-overview-list">
+      <div className="tag-overview-list" ref={listRef}>
         {error ? (
           <div className="tag-sidebar-state tag-sidebar-error">{t('标签索引加载失败')}</div>
         ) : loading && !hasTags ? (

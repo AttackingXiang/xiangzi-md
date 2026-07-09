@@ -1,4 +1,4 @@
-import { ArrowLeft, Search, Tag } from 'lucide-react'
+import { ListTree, Search, Tag, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { DocumentMeta } from '../types'
 import RelatedDocumentItem from './RelatedDocumentItem'
@@ -11,7 +11,12 @@ interface Props {
   folderName: string | null
   loading: boolean
   error: string | null
-  onBack: () => void
+  /** 左侧「全部标签」树是否已展开——已展开就不再显示“全部标签”按钮（避免重复） */
+  overviewOpen: boolean
+  /** 展开左侧「全部标签」树 */
+  onShowAllTags: () => void
+  /** 关闭结果列 */
+  onClose: () => void
   onOpenDocument: (path: string, name: string) => void
 }
 
@@ -22,7 +27,9 @@ export default function RelatedDocumentsSidebar({
   folderName,
   loading,
   error,
-  onBack,
+  overviewOpen,
+  onShowAllTags,
+  onClose,
   onOpenDocument,
 }: Props): JSX.Element {
   const [query, setQuery] = useState('')
@@ -49,10 +56,23 @@ export default function RelatedDocumentsSidebar({
   return (
     <div className="tag-panel tag-related-panel">
       <div className="tag-sidebar-heading">
-        <button type="button" className="tag-sidebar-back" onClick={onBack}>
-          <ArrowLeft size={14} />
-          {t('返回标签')}
-        </button>
+        <div className="tag-results-actions">
+          {!overviewOpen && (
+            <button type="button" className="tag-sidebar-back" onClick={onShowAllTags}>
+              <ListTree size={14} />
+              {t('全部标签')}
+            </button>
+          )}
+          <button
+            type="button"
+            className="tag-results-close"
+            onClick={onClose}
+            aria-label={t('关闭结果')}
+            title={t('关闭结果')}
+          >
+            <X size={15} />
+          </button>
+        </div>
         <div className="tag-sidebar-title">
           <Tag size={18} />
           <strong>{getLang() === 'en' ? `Tag: ${tag}` : `标签：${tag}`}</strong>

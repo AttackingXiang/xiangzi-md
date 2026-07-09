@@ -47,6 +47,16 @@ export interface AppSettings {
   favoritesCollapsed: boolean
   /** 「全部标签」面板里置顶的标签 key（规范化小写） */
   pinnedTags: string[]
+  /** 标签树里被折叠的分组 key（含置顶区 `pin:` 前缀）；空表示全部展开 */
+  tagCollapsedKeys: string[]
+  /** 标签树默认展开层级：-1 全部展开（默认），0 仅顶层，N 展开到第 N 层 */
+  tagDefaultExpandDepth: number
+  /** 是否把「含子标签的分组」排在同级前面（默认按文档数排序） */
+  tagGroupsFirst: boolean
+  /** 中间结果列排序：'updated'（修改时间，默认）或 'name'（名称） */
+  tagResultSort: 'updated' | 'name'
+  /** 点正文里的标签时是否同时展开左侧「全部标签」树（默认关：只出结果列） */
+  tagClickOpensOverview: boolean
   favoriteLabels: Record<string, string>
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
   hideAttachmentFolders: boolean

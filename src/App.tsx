@@ -63,7 +63,7 @@ import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
 import type { ThemeName } from './lib/codeSyntaxPalette'
 import { useTagIndex } from './features/tags/useTagIndex'
-import { buildTagTree, isTagInSubtree } from './features/tags/tagTree'
+import { buildTagTree, groupKeysToCollapse, isTagInSubtree } from './features/tags/tagTree'
 import { useTagNavigation } from './features/tags/useTagNavigation'
 import {
   documentMetaFromMarkdown,
@@ -147,6 +147,7 @@ export default function App(): JSX.Element {
     pushRecentFolder,
     toggleFavorite,
     togglePinnedTag,
+    toggleTagCollapsed,
     setFavoritesCollapsed,
     setFavoriteLabel,
   } = useSettings()
@@ -208,6 +209,7 @@ export default function App(): JSX.Element {
     newFile,
     recoverDraft,
     saveTab,
+    markTabPersisted,
     saveAsTab,
     moveTab,
     toggleTabLock,
@@ -668,22 +670,30 @@ export default function App(): JSX.Element {
   const tagIndex = useTagIndex(folder?.root ?? null, treeKey)
   // 选中某个标签时展示的相关文档：父标签聚合它自己 + 所有子标签（前缀 key/）
   // 的文档，去重——跟 Obsidian 一样，点父标签能看到整棵子树下的内容。
+  const resultSort = settings?.tagResultSort ?? 'updated'
   const relatedDocuments = useMemo(() => {
     const key = tagNavigation.selectedTag
     if (!key) return []
     const seen = new Set<string>()
-    return Object.entries(tagIndex.tagIndex)
+    const documents = Object.entries(tagIndex.tagIndex)
       .filter(([tag]) => isTagInSubtree(tag, key))
-      .flatMap(([, documents]) => documents)
+      .flatMap(([, docs]) => docs)
       .filter((document) => {
         if (seen.has(document.path)) return false
         seen.add(document.path)
         return true
       })
-      .sort((a, b) => b.updatedAt - a.updatedAt || a.title.localeCompare(b.title))
-  }, [tagNavigation.selectedTag, tagIndex.tagIndex])
+    return documents.sort(
+      resultSort === 'name'
+        ? (a, b) =>
+            a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }) ||
+            b.updatedAt - a.updatedAt
+        : (a, b) => b.updatedAt - a.updatedAt || a.title.localeCompare(b.title),
+    )
+  }, [tagNavigation.selectedTag, tagIndex.tagIndex, resultSort])
 
   // 标签总览：按 "/" 构建 Obsidian 式嵌套分组树（见 tagTree.ts）。
+  const groupsFirst = settings?.tagGroupsFirst ?? false
   const tagTree = useMemo(
     () =>
       buildTagTree(
@@ -692,13 +702,14 @@ export default function App(): JSX.Element {
           label: tagIndex.tagLabels[key] ?? key,
           docPaths: documents.map((document) => document.path),
         })),
+        { groupsFirst },
       ),
-    [tagIndex.tagIndex, tagIndex.tagLabels],
+    [tagIndex.tagIndex, tagIndex.tagLabels, groupsFirst],
   )
 
   useEffect(() => {
-    tagNavigation.closeTags()
-  }, [folder?.root, tagNavigation.closeTags])
+    tagNavigation.reset()
+  }, [folder?.root, tagNavigation.reset])
 
   useEffect(() => {
     if (!activeTab?.path || !activeTab.version) return
@@ -727,20 +738,24 @@ export default function App(): JSX.Element {
     tagIndex.upsertDocument,
   ])
 
+  // 点标签：默认只出中间结果列，左侧不动；开了「点击标签时展开全部标签」才顺带
+  // 展开左侧标签树（并确保侧栏可见）。从标签树里点标签时树已经开着，openTag 也
+  // 不会把它关掉。
   const openDocumentTag = useCallback(
     (tag: string): void => {
-      setSidebarVisible(true)
       setSearchView(false)
-      tagNavigation.openTag(tag)
+      const openOverview = settings?.tagClickOpensOverview ?? false
+      if (openOverview) setSidebarVisible(true)
+      tagNavigation.openTag(tag, openOverview)
     },
-    [tagNavigation.openTag],
+    [tagNavigation.openTag, settings?.tagClickOpensOverview],
   )
 
   const showAllTags = useCallback((): void => {
     setSidebarVisible(true)
     setSearchView(false)
-    tagNavigation.showTags()
-  }, [tagNavigation.showTags])
+    tagNavigation.showOverview()
+  }, [tagNavigation.showOverview])
 
   /** 标签改名/移动统一入口：把 fromKey（连同整棵子树）改写成 toTag 前缀。
    * scope='active' 只改当前文档；'all' 改所有含此标签的文档（改盘前弹确认）。
@@ -753,24 +768,24 @@ export default function App(): JSX.Element {
       // 每改完一篇就把它的新 meta 直接并入标签索引（而不是事后整仓重扫）——重扫是
       // 异步的，容易和刚写的盘抢跑、把旧数据又读回来，导致左侧标签树“没生效”。直接
       // upsert 用的是我们手上确定的新内容，即时、精确，也更省。
-      const nowNanos = Date.now() * 1_000_000
       const applyToOpenTab = async (
         tab: (typeof stateRef.current.tabs)[number],
       ): Promise<boolean> => {
         const { changed, content } = renameTagInMarkdown(tab.content, fromKey, toTag)
         if (!changed) return false
-        updateContent(tab.id, content)
-        if (tab.path) {
-          await saveTab(tab.id, true)
-          tagIndex.upsertDocument(
-            documentMetaFromMarkdown(
-              tab.path,
-              tab.name,
-              content,
-              tab.version?.modifiedNanos ?? nowNanos,
-            ),
-          )
+        if (!tab.path) {
+          // 未保存的新文档：只更新内存缓冲，等用户真正保存时一起落盘。
+          updateContent(tab.id, content)
+          return true
         }
+        // 已有磁盘文件：直接强制写盘，再把结果并回标签页（置为已保存）。不经过
+        // updateContent + saveTab 的往返——批量改多篇时那条路径依赖 stateRef 同步，
+        // 会让后续标签页停留在“待保存”。
+        const result = await desktop.writeFile(tab.path, content, null, true)
+        markTabPersisted(tab.id, content, result.version)
+        tagIndex.upsertDocument(
+          documentMetaFromMarkdown(tab.path, tab.name, content, result.version.modifiedNanos),
+        )
         return true
       }
 
@@ -830,7 +845,7 @@ export default function App(): JSX.Element {
           : `已更新 ${changed} 个文档${failed ? `，${failed} 个失败` : ''}。`,
       )
     },
-    [tagIndex, updateContent, saveTab, stateRef, lang],
+    [tagIndex, updateContent, markTabPersisted, stateRef, lang],
   )
 
   const promptRenameTag = useCallback(
@@ -1173,7 +1188,7 @@ export default function App(): JSX.Element {
       <div className="workspace-shell">
         {sidebarVisible && (
           <div className="sidebar-wrap" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
-            {tagNavigation.mode ? (
+            {tagNavigation.overviewOpen ? (
               <aside className="sidebar">
                 <SidebarHeader
                   folder={folder}
@@ -1194,12 +1209,14 @@ export default function App(): JSX.Element {
                 <TagOverviewSidebar
                   tree={tagTree}
                   pinnedTags={settings.pinnedTags ?? []}
+                  collapsedKeys={settings.tagCollapsedKeys ?? []}
                   activeTag={tagNavigation.selectedTag}
                   loading={tagIndex.loading}
                   error={tagIndex.error}
-                  onClose={tagNavigation.closeTags}
+                  onClose={tagNavigation.hideOverview}
                   onOpenTag={openDocumentTag}
                   onTogglePin={togglePinnedTag}
+                  onToggleCollapsed={toggleTagCollapsed}
                   onTagContext={openTagContext}
                   onMoveTag={moveTagUnder}
                 />
@@ -1243,8 +1260,7 @@ export default function App(): JSX.Element {
         )}
 
         {/* 中间“结果列”：全文搜索结果 或 点某个标签后的文档列表。可拖宽，关掉即隐藏。 */}
-        {(searchView && folder) ||
-        (tagNavigation.mode === 'related' && tagNavigation.selectedTag) ? (
+        {(searchView && folder) || tagNavigation.selectedTag ? (
           <div className="results-wrap" style={{ width: resultsWidth, minWidth: resultsWidth }}>
             {searchView && folder ? (
               <SearchPanel
@@ -1264,7 +1280,9 @@ export default function App(): JSX.Element {
                 folderName={folder?.name ?? null}
                 loading={tagIndex.loading}
                 error={tagIndex.error}
-                onBack={tagNavigation.showTags}
+                overviewOpen={tagNavigation.overviewOpen}
+                onShowAllTags={tagNavigation.showOverview}
+                onClose={tagNavigation.closeResults}
                 onOpenDocument={(path, name) => void openPath(path, name)}
               />
             )}
@@ -1452,7 +1470,15 @@ export default function App(): JSX.Element {
             backgroundImageError={backgroundImageError}
             initialSection={settingsSection}
             onChange={(patch) => {
-              void saveSettings(patch).catch((error: unknown) => {
+              // 改「默认展开层级」时，按当前标签树重算折叠集合，让新层级立刻生效。
+              const effective =
+                patch.tagDefaultExpandDepth !== undefined
+                  ? {
+                      ...patch,
+                      tagCollapsedKeys: groupKeysToCollapse(tagTree, patch.tagDefaultExpandDepth),
+                    }
+                  : patch
+              void saveSettings(effective).catch((error: unknown) => {
                 const readOnly =
                   typeof error === 'object' &&
                   error !== null &&

@@ -103,8 +103,9 @@ function typeIcon(prop: DocumentProperty): LucideIcon {
 const ScalarValueEditor: FC<{
   prop: DocumentProperty
   disabled: boolean
+  autoFocus?: boolean
   onCommit: (value: DocumentProperty['value']) => void
-}> = ({ prop, disabled, onCommit }) => {
+}> = ({ prop, disabled, autoFocus, onCommit }) => {
   const asText = (): string => {
     if (prop.value === null || prop.value === undefined) return ''
     if (prop.type === 'datetime') return String(prop.value).replace(' ', 'T').slice(0, 16)
@@ -112,9 +113,17 @@ const ScalarValueEditor: FC<{
   }
   const [draft, setDraft] = useState(asText)
   const focused = useRef(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (!focused.current) setDraft(asText())
   }, [prop.value, prop.type])
+  // 刚通过「添加属性」新建的标量属性：自动聚焦值输入框一次，省去再点一下。
+  const mountAutoFocus = useRef(autoFocus)
+  useEffect(() => {
+    if (!mountAutoFocus.current) return
+    mountAutoFocus.current = false
+    if (prop.type !== 'checkbox') inputRef.current?.focus()
+  }, [prop.type])
 
   if (prop.type === 'checkbox') {
     return (
@@ -149,6 +158,7 @@ const ScalarValueEditor: FC<{
 
   return (
     <input
+      ref={inputRef}
       type={inputType}
       className="prop-value-input"
       value={draft}
@@ -186,10 +196,21 @@ const ListValueEditor: FC<{
   asTags: boolean
   activeTag: string | null
   disabled: boolean
+  autoStart?: boolean
   onSelectTag: (tag: string) => void
   onTagContext?: (tag: string, x: number, y: number) => void
   onChange: (next: string[]) => void
-}> = ({ items, inlineTags, asTags, activeTag, disabled, onSelectTag, onTagContext, onChange }) => {
+}> = ({
+  items,
+  inlineTags,
+  asTags,
+  activeTag,
+  disabled,
+  autoStart,
+  onSelectTag,
+  onTagContext,
+  onChange,
+}) => {
   const tagContext = (tag: string) =>
     onTagContext
       ? (event: ReactMouseEvent) => {
@@ -197,7 +218,8 @@ const ListValueEditor: FC<{
           onTagContext(tag, event.clientX, event.clientY)
         }
       : undefined
-  const [adding, setAdding] = useState(false)
+  // autoStart：刚通过「添加属性」新建的列表属性（如标签），直接进入新增输入态。
+  const [adding, setAdding] = useState(Boolean(autoStart) && !disabled)
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -307,6 +329,7 @@ const PropertyRow: FC<{
   inlineTags: string[]
   activeTag: string | null
   disabled: boolean
+  autoEdit: boolean
   menuOpen: boolean
   onToggleMenu: () => void
   onSelectTag: (tag: string) => void
@@ -319,6 +342,7 @@ const PropertyRow: FC<{
   inlineTags,
   activeTag,
   disabled,
+  autoEdit,
   menuOpen,
   onToggleMenu,
   onSelectTag,
@@ -413,6 +437,7 @@ const PropertyRow: FC<{
             asTags={isTagsKey(prop.key)}
             activeTag={activeTag}
             disabled={disabled}
+            autoStart={autoEdit}
             onSelectTag={onSelectTag}
             onTagContext={isTagsKey(prop.key) ? onTagContext : undefined}
             onChange={(next) => onPatch({ value: next })}
@@ -421,6 +446,7 @@ const PropertyRow: FC<{
           <ScalarValueEditor
             prop={prop}
             disabled={disabled}
+            autoFocus={autoEdit}
             onCommit={(value) => onPatch({ value })}
           />
         )}
@@ -452,6 +478,8 @@ export default function DocumentPropertyPanel({
   const [menuIndex, setMenuIndex] = useState<number | null>(null)
   const [addingKey, setAddingKey] = useState('')
   const [adding, setAdding] = useState(false)
+  // 刚新建的属性的 key：让对应行自动进入值编辑态（标签→新增输入，标量→聚焦）。
+  const [autoEditKey, setAutoEditKey] = useState<string | null>(null)
   const addRef = useRef<HTMLInputElement>(null)
   // 点候选项时用 onMouseDown 提前处理，会先触发输入框 blur——用这个标记让 blur
   // 里的“提交输入的键”逻辑让位，避免同时又按输入内容加了一个属性。
@@ -460,6 +488,11 @@ export default function DocumentPropertyPanel({
   useEffect(() => {
     if (adding) addRef.current?.focus()
   }, [adding])
+
+  // 新属性一旦出现在列表里，对应行已消费过 autoEdit，清掉标记避免后续误触发。
+  useEffect(() => {
+    if (autoEditKey && properties.some((p) => p.key === autoEditKey)) setAutoEditKey(null)
+  }, [autoEditKey, properties])
 
   // 点击面板外部时收起类型菜单。
   useEffect(() => {
@@ -491,6 +524,7 @@ export default function DocumentPropertyPanel({
   const addProperty = (key: string, type: PropertyType): void => {
     if (key && !present.has(key.toLowerCase())) {
       emit([...properties, { key, type, value: emptyValueForType(type) }])
+      setAutoEditKey(key) // 新建成功：让这一行自动进入值编辑态
     }
     setAddingKey('')
     setAdding(false)
@@ -524,6 +558,7 @@ export default function DocumentPropertyPanel({
               inlineTags={inlineTags}
               activeTag={activeTag}
               disabled={disabled}
+              autoEdit={autoEditKey !== null && prop.key === autoEditKey}
               menuOpen={menuIndex === index}
               onToggleMenu={() => setMenuIndex((current) => (current === index ? null : index))}
               onSelectTag={onSelectTag}

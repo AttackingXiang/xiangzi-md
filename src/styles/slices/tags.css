@@ -686,6 +686,37 @@ button.tag-chip-label {
   color: var(--accent);
 }
 
+/* 结果列顶部：左“全部标签”按钮 + 右关闭按钮 */
+.tag-results-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tag-results-actions .tag-sidebar-back {
+  margin: 0;
+}
+
+.tag-results-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tag-results-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .tag-sidebar-title {
   display: flex;
   align-items: center;

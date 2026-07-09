@@ -393,6 +393,59 @@ export default function Settings({
                       : '当选中内容包含图片或 Mermaid 图表时生效，默认复制图片。'}
                   </p>
                 </SettingsCard>
+                <SettingsCard title={en ? 'Tags' : '标签'}>
+                  <SettingRow label={en ? 'Default expand level' : '默认展开层级'}>
+                    <select
+                      value={String(settings.tagDefaultExpandDepth ?? -1)}
+                      onChange={(event) =>
+                        onChange({ tagDefaultExpandDepth: Number(event.target.value) })
+                      }
+                    >
+                      <option value="-1">{en ? 'Expand all' : '全部展开'}</option>
+                      <option value="0">{en ? 'Top level only' : '仅顶层'}</option>
+                      <option value="1">{en ? 'Two levels' : '展开两层'}</option>
+                      <option value="2">{en ? 'Three levels' : '展开三层'}</option>
+                    </select>
+                  </SettingRow>
+                  <SettingRow label={en ? 'Results order' : '结果列排序'}>
+                    <select
+                      value={settings.tagResultSort ?? 'updated'}
+                      onChange={(event) =>
+                        onChange({
+                          tagResultSort: event.target.value as AppSettings['tagResultSort'],
+                        })
+                      }
+                    >
+                      <option value="updated">{en ? 'Last modified' : '最近修改'}</option>
+                      <option value="name">{en ? 'Name' : '名称'}</option>
+                    </select>
+                  </SettingRow>
+                  <ToggleRow
+                    label={en ? 'Groups first' : '分组优先置顶'}
+                    description={
+                      en
+                        ? 'Show tags that contain sub-tags before plain tags at each level.'
+                        : '每一层里，把含子标签的分组排在普通标签前面。'
+                    }
+                    checked={settings.tagGroupsFirst ?? false}
+                    onChange={(checked) => onChange({ tagGroupsFirst: checked })}
+                  />
+                  <ToggleRow
+                    label={en ? 'Open all-tags panel on tag click' : '点击标签时展开全部标签'}
+                    description={
+                      en
+                        ? 'When clicking a tag in a document, also open the all-tags tree on the left. Off by default — only the results column opens.'
+                        : '点正文里的标签时，同时在左侧展开「全部标签」树。默认关闭——只打开中间结果列，可用结果列顶部的「全部标签」按钮再展开。'
+                    }
+                    checked={settings.tagClickOpensOverview ?? false}
+                    onChange={(checked) => onChange({ tagClickOpensOverview: checked })}
+                  />
+                  <p className="settings-hint">
+                    {en
+                      ? 'The expand/collapse state of the tag tree is remembered. Changing the default level resets it.'
+                      : '标签树的展开/折叠状态会被记住；改动默认层级会重置为该层级。'}
+                  </p>
+                </SettingsCard>
               </SettingsPage>
             )}
 

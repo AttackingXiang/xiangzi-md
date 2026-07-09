@@ -1,7 +1,8 @@
 use super::settings_model::{
     AppSettings, MAX_ASSET_SEARCH_PATHS, MAX_FAVORITES, MAX_FAVORITE_LABEL_CHARS,
     MAX_HIDDEN_WORKSPACE_PATHS, MAX_PANDOC_ARGS_LENGTH, MAX_PATH_LENGTH, MAX_RECENT_ITEMS,
-    MAX_SESSION_FILES, MAX_SHORTCUT_OVERRIDES, SETTINGS_SCHEMA_VERSION, SHORTCUT_ACTIONS,
+    MAX_SESSION_FILES, MAX_SHORTCUT_OVERRIDES, MAX_TAG_COLLAPSED_KEYS, SETTINGS_SCHEMA_VERSION,
+    SHORTCUT_ACTIONS,
 };
 use crate::domain::{
     error::{AppError, AppResult},
@@ -274,6 +275,11 @@ pub(super) fn limit_collections(settings: &mut AppSettings) {
         .favorite_labels
         .retain(|path, _| favorites.contains(path));
     settings.session.open_files.truncate(MAX_SESSION_FILES);
+    settings.tag_collapsed_keys.truncate(MAX_TAG_COLLAPSED_KEYS);
+    settings.tag_default_expand_depth = settings.tag_default_expand_depth.clamp(-1, 32);
+    if settings.tag_result_sort != "name" {
+        settings.tag_result_sort = "updated".into();
+    }
     settings.asset_search_paths.truncate(MAX_ASSET_SEARCH_PATHS);
     settings
         .hidden_workspace_paths
