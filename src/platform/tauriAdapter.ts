@@ -313,6 +313,7 @@ export const tauriDesktopAdapter: DesktopPort = {
       cancelLabel,
     }),
   onMenuAction: (callback) => subscribe('menu-action', callback),
+  triggerMenuAction: (id) => void invoke('trigger_menu_action', { id }),
   onOpenPath: (callback) =>
     subscribe('open-path', callback, () => {
       void invoke('frontend_ready')

@@ -1,33 +1,26 @@
 import { Circle, Minus, Square, X } from 'lucide-react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { ReactNode } from 'react'
+import TitleBarMenu from './TitleBarMenu'
 import { currentDesktopPlatform } from '../lib/platform'
 import { t } from '../lib/i18n'
+import { runWindowAction } from '../lib/windowActions'
 
-let maximizeLocked = false
+const EMPTY_SHORTCUTS: Record<string, string> = {}
 
 interface Props {
   documentName?: string
   dirty?: boolean
+  shortcuts?: Record<string, string>
+  onOpenAbout?: () => void
 }
 
-async function runWindowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void> {
-  const appWindow = getCurrentWindow()
-  if (action === 'minimize') await appWindow.minimize()
-  else if (action === 'maximize') {
-    if (maximizeLocked) return
-    maximizeLocked = true
-    try {
-      await appWindow.toggleMaximize()
-    } finally {
-      window.setTimeout(() => {
-        maximizeLocked = false
-      }, 260)
-    }
-  } else await appWindow.close()
-}
-
-export default function TitleBar({ documentName, dirty = false }: Props): JSX.Element {
+export default function TitleBar({
+  documentName,
+  dirty = false,
+  shortcuts = EMPTY_SHORTCUTS,
+  onOpenAbout,
+}: Props): JSX.Element {
   const platform = currentDesktopPlatform()
   const isMac = platform === 'macos'
 
@@ -55,6 +48,8 @@ export default function TitleBar({ documentName, dirty = false }: Props): JSX.El
         )
       }}
     >
+      {!isMac && <TitleBarMenu shortcuts={shortcuts} onOpenAbout={onOpenAbout ?? (() => {})} />}
+
       {!isMac && (
         <div className="titlebar-controls" data-titlebar-interactive aria-label={t('窗口控制')}>
           <>

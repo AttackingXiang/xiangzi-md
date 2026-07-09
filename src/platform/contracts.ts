@@ -223,6 +223,7 @@ export interface DesktopPort {
   notify(message: string, title?: string): Promise<void>
   confirm(message: string, title: string, okLabel: string, cancelLabel: string): Promise<boolean>
   onMenuAction(callback: (action: string) => void): () => void
+  triggerMenuAction(id: string): void
   onOpenPath(callback: (path: string) => void): () => void
   notifyQuitOk(): void
 }

@@ -1,5 +1,6 @@
 use crate::domain::error::{AppError, AppResult};
 use crate::infrastructure::lifecycle::LifecycleState;
+use crate::infrastructure::menu;
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -30,6 +31,14 @@ pub fn frontend_ready(app: AppHandle, lifecycle: State<'_, LifecycleState>) {
 pub fn quit_confirmed(app: AppHandle, lifecycle: State<'_, LifecycleState>) {
     lifecycle.confirm_quit();
     app.exit(0);
+}
+
+/// Run a menu action by id, exactly as if it were triggered from the native
+/// menu bar. Used by the custom title-bar menu on platforms without one
+/// (e.g. Windows), so both entry points share the same handling.
+#[tauri::command]
+pub fn trigger_menu_action(app: AppHandle, id: String) {
+    menu::handle_event(&app, &id);
 }
 
 /// Open a file using the OS default application.
