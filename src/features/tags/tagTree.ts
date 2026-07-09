@@ -92,3 +92,16 @@ export function isTagInSubtree(tag: string, root: string): boolean {
 export function countTagTreeNodes(nodes: readonly TagTreeNode[]): number {
   return nodes.reduce((total, node) => total + 1 + countTagTreeNodes(node.children), 0)
 }
+
+/** 把整棵树按 key 摊平成映射，方便按置顶的 key 反查出节点（拿到显示名和计数）。 */
+export function flattenTagTree(nodes: readonly TagTreeNode[]): Map<string, TagTreeNode> {
+  const map = new Map<string, TagTreeNode>()
+  const walk = (list: readonly TagTreeNode[]): void => {
+    for (const node of list) {
+      map.set(node.key, node)
+      walk(node.children)
+    }
+  }
+  walk(nodes)
+  return map
+}

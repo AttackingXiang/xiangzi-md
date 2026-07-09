@@ -24,6 +24,9 @@ const EN: Record<string, string> = {
   标签名称: 'Tag name',
   展开: 'Expand',
   折叠: 'Collapse',
+  已置顶: 'Pinned',
+  置顶: 'Pin',
+  取消置顶: 'Unpin',
   // Document properties panel
   文档属性: 'Document properties',
   添加属性: 'Add property',

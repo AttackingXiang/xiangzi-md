@@ -45,6 +45,8 @@ export interface AppSettings {
   recentFolders: string[]
   favorites: string[]
   favoritesCollapsed: boolean
+  /** 「全部标签」面板里置顶的标签 key（规范化小写） */
+  pinnedTags: string[]
   favoriteLabels: Record<string, string>
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
   hideAttachmentFolders: boolean
