@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, Star, Tag } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { getLang, t } from '../../../lib/i18n'
 import { countTagTreeNodes, flattenTagTree, type TagTreeNode } from '../tagTree'
 
@@ -12,6 +12,15 @@ interface Props {
   onClose: () => void
   onOpenTag: (tag: string) => void
   onTogglePin: (key: string) => void
+  /** 右键某个标签（改名/改分组） */
+  onTagContext: (key: string, fullLabel: string, x: number, y: number) => void
+  /** 把 dragKey 拖到 targetFullLabel 下面（快速分组） */
+  onMoveTag: (dragKey: string, targetFullLabel: string) => void
+}
+
+/** 不能把标签拖到它自己或它的后代上（会造成循环）。 */
+function canDrop(dragKey: string, targetKey: string): boolean {
+  return dragKey !== targetKey && !targetKey.startsWith(`${dragKey}/`)
 }
 
 export default function TagOverviewSidebar({
@@ -22,9 +31,14 @@ export default function TagOverviewSidebar({
   onClose,
   onOpenTag,
   onTogglePin,
+  onTagContext,
+  onMoveTag,
 }: Props) {
   // 折叠的分组 key 集合；默认全部展开。仅存在于本次会话（不跨重开持久化）。
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  // 正在拖动的标签 key（dragover 里判断能否落下时需要它，用 ref 避免频繁重渲染）。
+  const draggingKeyRef = useRef<string | null>(null)
+  const [dropKey, setDropKey] = useState<string | null>(null)
   const total = countTagTreeNodes(tree)
   const pinnedSet = new Set(pinnedTags)
   const flat = flattenTagTree(tree)
@@ -87,8 +101,39 @@ export default function TagOverviewSidebar({
     return (
       <div key={collapseId} className="tag-tree-node">
         <div
-          className="tag-overview-item tag-tree-row"
+          className={`tag-overview-item tag-tree-row${dropKey === node.key ? ' drop-target' : ''}`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
+          draggable
+          onDragStart={(event) => {
+            draggingKeyRef.current = node.key
+            event.dataTransfer.setData('application/x-xmd-tag', node.key)
+            event.dataTransfer.effectAllowed = 'move'
+          }}
+          onDragEnd={() => {
+            draggingKeyRef.current = null
+            setDropKey(null)
+          }}
+          onDragOver={(event) => {
+            const dragging = draggingKeyRef.current
+            if (!dragging || !canDrop(dragging, node.key)) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'move'
+            if (dropKey !== node.key) setDropKey(node.key)
+          }}
+          onDragLeave={() => setDropKey((k) => (k === node.key ? null : k))}
+          onDrop={(event) => {
+            event.preventDefault()
+            const dragging =
+              event.dataTransfer.getData('application/x-xmd-tag') || draggingKeyRef.current
+            draggingKeyRef.current = null
+            setDropKey(null)
+            if (dragging && canDrop(dragging, node.key)) onMoveTag(dragging, node.fullLabel)
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onTagContext(node.key, node.fullLabel, event.clientX, event.clientY)
+          }}
         >
           {hasChildren ? (
             <button
