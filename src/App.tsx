@@ -743,7 +743,8 @@ export default function App(): JSX.Element {
         const { changed, content } = renameTagInMarkdown(tab.content, fromKey, toTag)
         if (!changed) return
         updateContent(tab.id, content)
-        if (tab.path) await saveTab(tab.id)
+        if (tab.path) await saveTab(tab.id, true)
+        tagIndex.refresh()
         return
       }
 
@@ -776,7 +777,7 @@ export default function App(): JSX.Element {
           const result = renameTagInMarkdown(tab.content, fromKey, toTag)
           if (result.changed) {
             updateContent(tab.id, result.content)
-            if ((await saveTab(tab.id)) || !tab.path) changed += 1
+            if ((await saveTab(tab.id, true)) || !tab.path) changed += 1
             else failed += 1
           }
         } catch {
