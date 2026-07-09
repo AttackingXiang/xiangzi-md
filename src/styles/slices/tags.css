@@ -895,10 +895,10 @@ button.tag-chip-label {
 .tag-tree-label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 2px 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -908,14 +908,78 @@ button.tag-chip-label {
   cursor: pointer;
 }
 
-.tag-tree-group {
-  color: var(--text-2);
-  font-weight: 600;
+.tag-tree-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.tag-tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-tree-label:hover .tag-tree-name,
+.tag-tree-label:hover .tag-tree-icon {
+  color: var(--accent-text);
 }
 
 .tag-tree-children {
   display: flex;
   flex-direction: column;
+}
+
+/* 每行末尾的置顶按钮：默认隐藏，悬浮行时出现；已置顶的常显填充星标。 */
+.tag-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.tag-tree-row:hover .tag-pin-btn,
+.tag-pin-btn:focus-visible {
+  opacity: 1;
+}
+
+.tag-pin-btn:hover {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.tag-pin-btn.pinned {
+  opacity: 1;
+  color: var(--accent-text);
+}
+
+/* 置顶区：面板顶部一小块，跟下面完整标签树用分隔线隔开。 */
+.tag-pinned-section {
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--workspace-divider);
+}
+
+.tag-section-label {
+  padding: 4px 9px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .tag-sidebar-state {

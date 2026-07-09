@@ -144,6 +144,7 @@ export default function App(): JSX.Element {
     pushRecentFile,
     pushRecentFolder,
     toggleFavorite,
+    togglePinnedTag,
     setFavoritesCollapsed,
     setFavoriteLabel,
   } = useSettings()
@@ -1051,10 +1052,12 @@ export default function App(): JSX.Element {
                 ) : (
                   <TagOverviewSidebar
                     tree={tagTree}
+                    pinnedTags={settings.pinnedTags ?? []}
                     loading={tagIndex.loading}
                     error={tagIndex.error}
                     onClose={tagNavigation.closeTags}
                     onOpenTag={openDocumentTag}
+                    onTogglePin={togglePinnedTag}
                   />
                 )}
               </aside>

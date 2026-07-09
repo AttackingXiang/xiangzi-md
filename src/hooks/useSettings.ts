@@ -214,6 +214,19 @@ export function useSettings() {
     })
   }, [])
 
+  const togglePinnedTag = useCallback((tagKey: string) => {
+    setSettings((prev) => {
+      if (!prev) return prev
+      const current = prev.pinnedTags ?? []
+      const has = current.includes(tagKey)
+      const pinnedTags = has ? current.filter((x) => x !== tagKey) : [...current, tagKey]
+      void desktop
+        .setSettings({ pinnedTags })
+        .catch((error: unknown) => console.error('Pinned tags persistence failed', error))
+      return { ...prev, pinnedTags }
+    })
+  }, [])
+
   const setFavoriteLabel = useCallback((p: string, value: string) => {
     setSettings((prev) => {
       if (!prev || !prev.favorites.includes(p)) return prev
@@ -237,6 +250,7 @@ export function useSettings() {
     pushRecentFile,
     pushRecentFolder,
     toggleFavorite,
+    togglePinnedTag,
     setFavoritesCollapsed,
     setFavoriteLabel,
   }
