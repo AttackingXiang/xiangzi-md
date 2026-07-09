@@ -1184,7 +1184,12 @@ export default function App(): JSX.Element {
 
   return (
     <div className="app">
-      <TitleBar documentName={activeTab?.name} dirty={activeTab?.dirty} />
+      <TitleBar
+        documentName={activeTab?.name}
+        dirty={activeTab?.dirty}
+        shortcuts={settings.shortcuts}
+        onOpenAbout={() => setSettingsSection('about')}
+      />
       <div className="workspace-shell">
         {sidebarVisible && (
           <div className="sidebar-wrap" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>

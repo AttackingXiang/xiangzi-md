@@ -63,6 +63,42 @@
   margin-left: auto;
 }
 
+.titlebar-menubar {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-menubar-button {
+  position: relative;
+  /* Above .ctx-backdrop (z-index 150) so the button row stays clickable/
+     hoverable while a dropdown's full-screen backdrop is open, letting a
+     click or hover switch straight to a different top-level menu. */
+  z-index: 151;
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1;
+  cursor: default;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.titlebar-menubar-button:hover,
+.titlebar-menubar-button.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
 .titlebar-button {
   width: 44px;
   height: 100%;
