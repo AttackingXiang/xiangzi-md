@@ -1,15 +1,84 @@
-import { ArrowLeft, Tag } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Tag } from 'lucide-react'
+import { useState } from 'react'
 import { getLang, t } from '../../../lib/i18n'
+import { countTagTreeNodes, type TagTreeNode } from '../tagTree'
 
 interface Props {
-  tags: Array<{ key: string; label: string; count: number }>
+  tree: TagTreeNode[]
   loading: boolean
   error: string | null
   onClose: () => void
   onOpenTag: (tag: string) => void
 }
 
-export default function TagOverviewSidebar({ tags, loading, error, onClose, onOpenTag }: Props) {
+export default function TagOverviewSidebar({ tree, loading, error, onClose, onOpenTag }: Props) {
+  // 折叠的分组 key 集合；默认全部展开。仅存在于本次会话（不跨重开持久化）。
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const total = countTagTreeNodes(tree)
+
+  const toggle = (key: string): void => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const renderNode = (node: TagTreeNode, depth: number): JSX.Element => {
+    const hasChildren = node.children.length > 0
+    const isCollapsed = collapsed.has(node.key)
+    // 有文档直接打这个精确标签的才算「真标签」，可点击导航；纯分组占位节点点了只展开。
+    const isRealTag = node.selfCount > 0
+    const count = isRealTag ? node.selfCount : node.totalCount
+    return (
+      <div key={node.key} className="tag-tree-node">
+        <div
+          className="tag-overview-item tag-tree-row"
+          style={{ paddingLeft: `${8 + depth * 14}px` }}
+        >
+          {hasChildren ? (
+            <button
+              type="button"
+              className={`tag-tree-toggle${isCollapsed ? '' : ' expanded'}`}
+              onClick={() => toggle(node.key)}
+              aria-label={isCollapsed ? t('展开') : t('折叠')}
+            >
+              <ChevronRight size={13} />
+            </button>
+          ) : (
+            <span className="tag-tree-toggle-spacer" aria-hidden="true" />
+          )}
+          {isRealTag ? (
+            <button
+              type="button"
+              className="tag-tree-label"
+              onClick={() => onOpenTag(node.fullLabel)}
+              title={`#${node.fullLabel}`}
+            >
+              #{node.segment}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="tag-tree-label tag-tree-group"
+              onClick={() => toggle(node.key)}
+              title={node.fullLabel}
+            >
+              {node.segment}
+            </button>
+          )}
+          <small>{count}</small>
+        </div>
+        {hasChildren && !isCollapsed && (
+          <div className="tag-tree-children">
+            {node.children.map((child) => renderNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="tag-panel tag-overview-panel">
       <div className="tag-sidebar-heading">
@@ -22,28 +91,18 @@ export default function TagOverviewSidebar({ tags, loading, error, onClose, onOp
           <strong>{t('全部标签')}</strong>
         </div>
         <span className="tag-sidebar-count">
-          {getLang() === 'en' ? `${tags.length} tags` : `共 ${tags.length} 个标签`}
+          {getLang() === 'en' ? `${total} tags` : `共 ${total} 个标签`}
         </span>
       </div>
       <div className="tag-overview-list">
         {error ? (
           <div className="tag-sidebar-state tag-sidebar-error">{t('标签索引加载失败')}</div>
-        ) : loading && tags.length === 0 ? (
+        ) : loading && tree.length === 0 ? (
           <div className="tag-sidebar-state">{t('正在加载标签索引')}</div>
-        ) : tags.length === 0 ? (
+        ) : tree.length === 0 ? (
           <div className="tag-sidebar-state">{t('当前工作区还没有标签')}</div>
         ) : (
-          tags.map((tag) => (
-            <button
-              type="button"
-              key={tag.key}
-              className="tag-overview-item"
-              onClick={() => onOpenTag(tag.label)}
-            >
-              <span>#{tag.label}</span>
-              <small>{tag.count}</small>
-            </button>
-          ))
+          tree.map((node) => renderNode(node, 0))
         )}
       </div>
     </div>

@@ -63,6 +63,7 @@ import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
 import type { ThemeName } from './lib/codeSyntaxPalette'
 import { useTagIndex } from './features/tags/useTagIndex'
+import { buildTagTree } from './features/tags/tagTree'
 import { useTagNavigation } from './features/tags/useTagNavigation'
 import {
   documentMetaFromMarkdown,
@@ -645,15 +646,16 @@ export default function App(): JSX.Element {
   })
 
   const tagIndex = useTagIndex(folder?.root ?? null, treeKey)
-  const tagEntries = useMemo(
+  // 标签总览：按 "/" 构建 Obsidian 式嵌套分组树（见 tagTree.ts）。
+  const tagTree = useMemo(
     () =>
-      Object.entries(tagIndex.tagIndex)
-        .map(([key, documents]) => ({
+      buildTagTree(
+        Object.entries(tagIndex.tagIndex).map(([key, documents]) => ({
           key,
           label: tagIndex.tagLabels[key] ?? key,
-          count: documents.length,
-        }))
-        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
+          docPaths: documents.map((document) => document.path),
+        })),
+      ),
     [tagIndex.tagIndex, tagIndex.tagLabels],
   )
 
@@ -1031,7 +1033,7 @@ export default function App(): JSX.Element {
                   />
                 ) : (
                   <TagOverviewSidebar
-                    tags={tagEntries}
+                    tree={tagTree}
                     loading={tagIndex.loading}
                     error={tagIndex.error}
                     onClose={tagNavigation.closeTags}

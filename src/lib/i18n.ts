@@ -22,6 +22,8 @@ const EN: Record<string, string> = {
   添加标签: 'Add tag',
   移除标签: 'Remove tag',
   标签名称: 'Tag name',
+  展开: 'Expand',
+  折叠: 'Collapse',
   // Document properties panel
   文档属性: 'Document properties',
   添加属性: 'Add property',
