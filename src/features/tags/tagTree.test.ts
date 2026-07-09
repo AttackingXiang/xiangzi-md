@@ -51,6 +51,15 @@ describe('buildTagTree', () => {
     expect(tree.map((n) => n.key)).toEqual(['y', 'z', 'x'])
   })
 
+  it('nests a single 3-level tag (Claude/test/wap) all the way down', () => {
+    const tree = buildTagTree([entry('claude/test/wap', ['a.md'], 'Claude/test/wap')])
+    expect(tree.map((n) => n.key)).toEqual(['claude'])
+    const test = tree[0].children[0]
+    expect(test.key).toBe('claude/test')
+    expect(test.children.map((n) => n.key)).toEqual(['claude/test/wap']) // test 下有 wap 分支
+    expect(test.children[0].selfCount).toBe(1)
+  })
+
   it('handles a flat (non-nested) tag as a single leaf', () => {
     const tree = buildTagTree([entry('claude', ['a.md', 'b.md'])])
     expect(tree).toEqual([
