@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import type { MouseEvent } from 'react'
 import { t } from '../../../lib/i18n'
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   removing?: boolean
   onClick?: () => void
   onRemove?: () => void
+  onContextMenu?: (event: MouseEvent) => void
 }
 
 export default function TagChip({
@@ -17,11 +19,17 @@ export default function TagChip({
   removing = false,
   onClick,
   onRemove,
+  onContextMenu,
 }: Props) {
   const className = `tag-chip${active ? ' active' : ''}${compact ? ' compact' : ''}${onRemove ? ' removable' : ''}`
-  if (!onClick && !onRemove) return <span className={className}>#{tag}</span>
+  if (!onClick && !onRemove)
+    return (
+      <span className={className} onContextMenu={onContextMenu}>
+        #{tag}
+      </span>
+    )
   return (
-    <span className={className}>
+    <span className={className} onContextMenu={onContextMenu}>
       {onClick ? (
         <button type="button" className="tag-chip-label" onClick={onClick} title={`#${tag}`}>
           #{tag}
