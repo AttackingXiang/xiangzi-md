@@ -63,7 +63,7 @@ import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
 import type { ThemeName } from './lib/codeSyntaxPalette'
 import { useTagIndex } from './features/tags/useTagIndex'
-import { buildTagTree } from './features/tags/tagTree'
+import { buildTagTree, isTagInSubtree } from './features/tags/tagTree'
 import { useTagNavigation } from './features/tags/useTagNavigation'
 import {
   documentMetaFromMarkdown,
@@ -646,6 +646,23 @@ export default function App(): JSX.Element {
   })
 
   const tagIndex = useTagIndex(folder?.root ?? null, treeKey)
+  // 选中某个标签时展示的相关文档：父标签聚合它自己 + 所有子标签（前缀 key/）
+  // 的文档，去重——跟 Obsidian 一样，点父标签能看到整棵子树下的内容。
+  const relatedDocuments = useMemo(() => {
+    const key = tagNavigation.selectedTag
+    if (!key) return []
+    const seen = new Set<string>()
+    return Object.entries(tagIndex.tagIndex)
+      .filter(([tag]) => isTagInSubtree(tag, key))
+      .flatMap(([, documents]) => documents)
+      .filter((document) => {
+        if (seen.has(document.path)) return false
+        seen.add(document.path)
+        return true
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt || a.title.localeCompare(b.title))
+  }, [tagNavigation.selectedTag, tagIndex.tagIndex])
+
   // 标签总览：按 "/" 构建 Obsidian 式嵌套分组树（见 tagTree.ts）。
   const tagTree = useMemo(
     () =>
@@ -1023,7 +1040,7 @@ export default function App(): JSX.Element {
                 {tagNavigation.mode === 'related' && tagNavigation.selectedTag ? (
                   <RelatedDocumentsSidebar
                     tag={tagIndex.tagLabels[tagNavigation.selectedTag] ?? tagNavigation.selectedTag}
-                    documents={tagIndex.tagIndex[tagNavigation.selectedTag] ?? []}
+                    documents={relatedDocuments}
                     activePath={activeTab?.path ?? null}
                     folderName={folder?.name ?? null}
                     loading={tagIndex.loading}
