@@ -865,6 +865,12 @@ button.tag-chip-label {
   box-shadow: inset 2px 0 var(--accent);
 }
 
+/* 拖动分组进行中：全局抓手光标 + 禁止选中，避免拖动时误选文字。 */
+body.tag-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
 /* 拖动分组时的落点高亮：目标标签会“接住”被拖来的标签成为它的子级。 */
 .tag-tree-row.drop-target {
   background: color-mix(in srgb, var(--accent) 18%, transparent);

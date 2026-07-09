@@ -1,5 +1,6 @@
 import { ArrowLeft, ChevronRight, Star, Tag } from 'lucide-react'
 import { useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getLang, t } from '../../../lib/i18n'
 import { countTagTreeNodes, flattenTagTree, type TagTreeNode } from '../tagTree'
 
@@ -39,9 +40,9 @@ export default function TagOverviewSidebar({
 }: Props) {
   // 折叠的分组 key 集合；默认全部展开。仅存在于本次会话（不跨重开持久化）。
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
-  // 正在拖动的标签 key（dragover 里判断能否落下时需要它，用 ref 避免频繁重渲染）。
-  const draggingKeyRef = useRef<string | null>(null)
   const [dropKey, setDropKey] = useState<string | null>(null)
+  // 拖完后短暂压制标签的 click（避免“拖动结束”被当成“点击导航”）。
+  const suppressClickRef = useRef(false)
   const total = countTagTreeNodes(tree)
   const pinnedSet = new Set(pinnedTags)
   const flat = flattenTagTree(tree)
@@ -57,6 +58,56 @@ export default function TagOverviewSidebar({
       else next.add(key)
       return next
     })
+  }
+
+  // 用指针事件实现拖动分组（WKWebView 的 HTML5 draggable 不可靠，跟大纲/文件树
+  // 一致走 pointer 方案）：拖某个标签落到另一个标签上 → 前者成为后者的子级。
+  const startDrag = (event: ReactPointerEvent, dragKey: string): void => {
+    if (event.button !== 0) return
+    const startX = event.clientX
+    const startY = event.clientY
+    let dragging = false
+    const targetKeyAt = (x: number, y: number): string | null => {
+      const row = document
+        .elementFromPoint(x, y)
+        ?.closest<HTMLElement>('.tag-tree-row[data-tag-key]')
+      return row?.dataset.tagKey ?? null
+    }
+    const cleanup = (): void => {
+      window.removeEventListener('pointermove', onMove, true)
+      window.removeEventListener('pointerup', onUp, true)
+      window.removeEventListener('pointercancel', onUp, true)
+      document.body.classList.remove('tag-dragging')
+      setDropKey(null)
+    }
+    const onMove = (e: PointerEvent): void => {
+      if (!dragging) {
+        if (Math.hypot(e.clientX - startX, e.clientY - startY) < 5) return
+        dragging = true
+        document.body.classList.add('tag-dragging')
+        window.getSelection()?.removeAllRanges()
+      }
+      e.preventDefault()
+      const target = targetKeyAt(e.clientX, e.clientY)
+      setDropKey(target && canDrop(dragKey, target) ? target : null)
+    }
+    const onUp = (e: PointerEvent): void => {
+      const wasDragging = dragging
+      cleanup()
+      if (!wasDragging) return
+      suppressClickRef.current = true
+      window.setTimeout(() => {
+        suppressClickRef.current = false
+      }, 0)
+      const target = targetKeyAt(e.clientX, e.clientY)
+      if (target && canDrop(dragKey, target)) {
+        const node = flat.get(target)
+        if (node) onMoveTag(dragKey, node.fullLabel)
+      }
+    }
+    window.addEventListener('pointermove', onMove, true)
+    window.addEventListener('pointerup', onUp, true)
+    window.addEventListener('pointercancel', onUp, true)
   }
 
   const pinButton = (key: string): JSX.Element => {
@@ -82,7 +133,10 @@ export default function TagOverviewSidebar({
     <button
       type="button"
       className="tag-tree-label"
-      onClick={() => onOpenTag(node.fullLabel)}
+      onClick={() => {
+        if (suppressClickRef.current) return
+        onOpenTag(node.fullLabel)
+      }}
       title={node.fullLabel}
     >
       <Tag size={12} className="tag-tree-icon" />
@@ -108,32 +162,8 @@ export default function TagOverviewSidebar({
             activeTag === node.key ? ' active' : ''
           }`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
-          draggable
-          onDragStart={(event) => {
-            draggingKeyRef.current = node.key
-            event.dataTransfer.setData('application/x-xmd-tag', node.key)
-            event.dataTransfer.effectAllowed = 'move'
-          }}
-          onDragEnd={() => {
-            draggingKeyRef.current = null
-            setDropKey(null)
-          }}
-          onDragOver={(event) => {
-            const dragging = draggingKeyRef.current
-            if (!dragging || !canDrop(dragging, node.key)) return
-            event.preventDefault()
-            event.dataTransfer.dropEffect = 'move'
-            if (dropKey !== node.key) setDropKey(node.key)
-          }}
-          onDragLeave={() => setDropKey((k) => (k === node.key ? null : k))}
-          onDrop={(event) => {
-            event.preventDefault()
-            const dragging =
-              event.dataTransfer.getData('application/x-xmd-tag') || draggingKeyRef.current
-            draggingKeyRef.current = null
-            setDropKey(null)
-            if (dragging && canDrop(dragging, node.key)) onMoveTag(dragging, node.fullLabel)
-          }}
+          data-tag-key={node.key}
+          onPointerDown={(event) => startDrag(event, node.key)}
           onContextMenu={(event) => {
             event.preventDefault()
             event.stopPropagation()
