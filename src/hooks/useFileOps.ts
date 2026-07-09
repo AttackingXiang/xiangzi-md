@@ -272,8 +272,8 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
 
   // ── Content update ─────────────────────────────────────────────────────────
   const updateContent = useCallback((id: string, content: string) => {
-    setTabs((prev) =>
-      prev.map((t) =>
+    setTabs((prev) => {
+      const next = prev.map((t) =>
         t.id === id && content !== t.content
           ? {
               ...t,
@@ -282,8 +282,13 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
               revision: t.revision + 1,
             }
           : t,
-      ),
-    )
+      )
+      // Keep stateRef in sync synchronously (not just on next render) so a
+      // caller can immediately follow updateContent with saveTab and have
+      // performSave read this update via stateRef instead of a stale snapshot.
+      stateRef.current = { ...stateRef.current, tabs: next }
+      return next
+    })
   }, [])
 
   // ── Close ──────────────────────────────────────────────────────────────────

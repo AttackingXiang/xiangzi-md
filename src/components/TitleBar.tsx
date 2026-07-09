@@ -4,16 +4,27 @@ import type { ReactNode } from 'react'
 import { currentDesktopPlatform } from '../lib/platform'
 import { t } from '../lib/i18n'
 
+let maximizeLocked = false
+
 interface Props {
   documentName?: string
   dirty?: boolean
 }
 
 async function runWindowAction(action: 'minimize' | 'maximize' | 'close'): Promise<void> {
-  const window = getCurrentWindow()
-  if (action === 'minimize') await window.minimize()
-  else if (action === 'maximize') await window.toggleMaximize()
-  else await window.close()
+  const appWindow = getCurrentWindow()
+  if (action === 'minimize') await appWindow.minimize()
+  else if (action === 'maximize') {
+    if (maximizeLocked) return
+    maximizeLocked = true
+    try {
+      await appWindow.toggleMaximize()
+    } finally {
+      window.setTimeout(() => {
+        maximizeLocked = false
+      }, 260)
+    }
+  } else await appWindow.close()
 }
 
 export default function TitleBar({ documentName, dirty = false }: Props): JSX.Element {
@@ -23,15 +34,29 @@ export default function TitleBar({ documentName, dirty = false }: Props): JSX.El
   return (
     <header
       className={`titlebar ${isMac ? 'titlebar-mac' : 'titlebar-standard'}`}
-      data-tauri-drag-region
-      onDoubleClick={() =>
+      onPointerDown={(event) => {
+        if (
+          event.button !== 0 ||
+          event.detail !== 1 ||
+          (event.target instanceof Element && event.target.closest('[data-titlebar-interactive]'))
+        )
+          return
+        void getCurrentWindow()
+          .startDragging()
+          .catch((error: unknown) => console.error('Window dragging failed', error))
+      }}
+      onDoubleClick={(event) => {
+        if (event.target instanceof Element && event.target.closest('[data-titlebar-interactive]'))
+          return
+        event.preventDefault()
+        event.stopPropagation()
         void runWindowAction('maximize').catch((error: unknown) =>
           console.error('Window maximize failed', error),
         )
-      }
+      }}
     >
       {!isMac && (
-        <div className="titlebar-controls" aria-label={t('窗口控制')}>
+        <div className="titlebar-controls" data-titlebar-interactive aria-label={t('窗口控制')}>
           <>
             <WindowButton label={t('最小化窗口')} onClick={() => runWindowAction('minimize')}>
               <Minus size={15} />
@@ -50,7 +75,7 @@ export default function TitleBar({ documentName, dirty = false }: Props): JSX.El
         </div>
       )}
 
-      <div className="titlebar-title" data-tauri-drag-region>
+      <div className="titlebar-title">
         <span className="titlebar-app-name">Xiangzi MD</span>
         {documentName && (
           <>

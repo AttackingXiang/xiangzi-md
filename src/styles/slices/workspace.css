@@ -341,6 +341,7 @@
   overflow: hidden;
   background: transparent;
   display: flex;
+  flex-direction: column;
   position: relative;
 }
 
