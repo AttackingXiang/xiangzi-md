@@ -341,7 +341,9 @@
   overflow: hidden;
   background: transparent;
   display: flex;
-  flex-direction: column;
+  /* 横向排布：编辑器（flex:1）+ 拖拽手柄 + 右侧大纲（固定宽度）。用 column 会把
+     大纲挤到正文下方（曾经的回归）。所有编辑器子项都是 flex:1，正是为横向填充设计。 */
+  flex-direction: row;
   position: relative;
 }
 
