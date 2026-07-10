@@ -50,6 +50,7 @@ import { setCopyPreferences } from './lib/copyPreferences'
 import { editorBridge } from './lib/editorBridge'
 import { tablePickerBridge } from './lib/tablePickerBridge'
 import { tableZoomBridge } from './lib/tableZoomBridge'
+import { linkPromptBridge } from './lib/linkPromptBridge'
 import { TextSelection } from '@milkdown/kit/prose/state'
 import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
@@ -444,6 +445,12 @@ export default function App(): JSX.Element {
     confirmText?: string
     onSubmit: (value: string) => void
   } | null>(null)
+  useEffect(() => {
+    linkPromptBridge.setHandler((initial, onSubmit) =>
+      setInputDialog({ title: t('插入链接'), initial, confirmText: t('插入'), onSubmit }),
+    )
+    return () => linkPromptBridge.setHandler(null)
+  }, [])
   const [exportResultPath, setExportResultPath] = useState<string | null>(null)
 
   const updater = useUpdater(settings?.checkUpdatesOnStartup ?? false)

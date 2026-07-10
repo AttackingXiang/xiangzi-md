@@ -17,6 +17,7 @@ import { undo, redo } from 'prosemirror-history'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import { editorBridge } from './editorBridge'
 import { tableZoomBridge } from './tableZoomBridge'
+import { linkPromptBridge } from './linkPromptBridge'
 import {
   fitColumnsToContainer,
   fitColumnsToContents,
@@ -441,20 +442,34 @@ function insertLink(): void {
     exec((s) => s.marks.link && toggleMark(s.marks.link))
     return
   }
-  const href = window.prompt('URL')
-  if (!href?.trim()) return
-  const trimmed = href.trim()
+  // 弹窗是异步的，编辑器届时会失焦，因此在这里就把选区位置固定下来，回调时按快照套用。
+  linkPromptBridge.request('', (href) => applyLink(from, to, empty, href))
+}
+
+/** 校验并规范化 URL（无 scheme 补 https，仅放行 http/https/mailto），返回 null 表示拒绝。 */
+function normalizeLinkHref(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
   // 无 scheme 前缀的输入按 https 处理；scheme 非 http/https/mailto 一律拒绝插入，
   // 防止 javascript:/data: 等危险协议通过手动插入链接绕过前面的外链拦截
   const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed)
-  let url: string
-  if (!schemeMatch) {
-    url = `https://${trimmed}`
-  } else {
-    const scheme = schemeMatch[1].toLowerCase()
-    if (scheme !== 'http' && scheme !== 'https' && scheme !== 'mailto') return
-    url = trimmed
-  }
+  if (!schemeMatch) return `https://${trimmed}`
+  const scheme = schemeMatch[1].toLowerCase()
+  if (scheme !== 'http' && scheme !== 'https' && scheme !== 'mailto') return null
+  return trimmed
+}
+
+/** 弹窗回调：按发起时的选区快照，在当前文档上套用链接。 */
+function applyLink(from: number, to: number, empty: boolean, raw: string): void {
+  const view = editorBridge.get()
+  if (!view) return
+  const linkMark = view.state.schema.marks.link
+  if (!linkMark) return
+  const url = normalizeLinkHref(raw)
+  if (!url) return
+  // 弹窗期间文档可能已被外部改动，夹住快照范围避免越界。
+  const docSize = view.state.doc.content.size
+  if (from > docSize || to > docSize) return
   const tr = view.state.tr
   if (empty) {
     // 空选区：插入 URL 文本本身并加 link mark，而不是把 mark 盲目套在光标后的下一个字符上
