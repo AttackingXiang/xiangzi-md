@@ -636,6 +636,7 @@ export default function App(): JSX.Element {
     inlineOnlyTags,
     hasBodyHeading,
     openDocumentTag,
+    openTreeTag,
     showAllTags,
     openTagContext,
     openDocTagContext,
@@ -652,6 +653,7 @@ export default function App(): JSX.Element {
     markTabPersisted,
     saveTab,
     pushUndo,
+    togglePinnedTag,
     setSidebarVisible,
     setSearchView,
     setInputDialog,
@@ -969,7 +971,7 @@ export default function App(): JSX.Element {
                   loading={tagIndex.loading}
                   error={tagIndex.error}
                   onClose={tagNavigation.hideOverview}
-                  onOpenTag={openDocumentTag}
+                  onOpenTag={openTreeTag}
                   onTogglePin={togglePinnedTag}
                   onToggleCollapsed={toggleTagCollapsed}
                   onTagContext={openTagContext}
@@ -1036,7 +1038,7 @@ export default function App(): JSX.Element {
                 loading={tagIndex.loading}
                 error={tagIndex.error}
                 overviewOpen={tagNavigation.overviewOpen}
-                onShowAllTags={tagNavigation.showOverview}
+                onShowAllTags={showAllTags}
                 onClose={tagNavigation.closeResults}
                 onOpenDocument={(path, name) => void openPath(path, name)}
               />

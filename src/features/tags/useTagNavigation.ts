@@ -13,7 +13,7 @@ export function useTagNavigation() {
 
   const openTag = useCallback((tag: string, openOverview = false): void => {
     setSelectedTag(tagKey(tag))
-    if (openOverview) setOverviewOpen(true)
+    setOverviewOpen(openOverview)
   }, [])
 
   const showOverview = useCallback((): void => setOverviewOpen(true), [])
