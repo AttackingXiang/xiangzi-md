@@ -1,6 +1,6 @@
 use crate::domain::{
     error::{AppError, AppResult},
-    models::{FileNode, FileVersion, Folder, NamedPath, OpenedFile},
+    models::{FileNode, FileVersion, Folder, ListedFile, OpenedFile},
 };
 use crate::infrastructure::settings::AppSettings;
 use std::{
@@ -340,10 +340,12 @@ pub fn open_containing_folder(
 pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
     ensure_allowed(app, path)?;
     let bytes = read_limited(path, MAX_DOCUMENT_BYTES, "读取文件失败")?;
-    let content = String::from_utf8(bytes.clone()).map_err(|error| {
+    // 先用 &bytes 借用计算版本信息，再把 bytes 移入 UTF-8 校验消费掉，
+    // 避免为了同时满足两处使用而整份克隆文件内容（上限达 20MB）。
+    let version = file_version(path, &bytes)?;
+    let content = String::from_utf8(bytes).map_err(|error| {
         AppError::new("file_encoding_invalid", format!("文件不是 UTF-8：{error}"))
     })?;
-    let version = file_version(path, &bytes)?;
     // 授权文档所在目录及有限上层，使相对图片（含上层 assets/）可被渲染层读取。
     authorize_document_context(app, path);
     Ok(OpenedFile {
@@ -376,8 +378,9 @@ pub fn read_binary_file(app: &AppHandle, path: &Path, max_bytes: u64) -> AppResu
     Ok(bytes)
 }
 
-pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<NamedPath>> {
-    ensure_allowed(app, root)?;
+/// 递归收集 root 下的 markdown 文件及其 mtime，供前端做增量扫描。抽成不依赖
+/// AppHandle 的纯函数，方便单测直接用临时目录验证，不必搭建 Tauri app 环境。
+fn walk_markdown_files(root: &Path) -> Vec<ListedFile> {
     let mut files = Vec::new();
     for entry in WalkDir::new(root)
         .follow_links(false)
@@ -387,23 +390,38 @@ pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<NamedPath>> {
     {
         let path = entry.path();
         if entry.file_type().is_file() && is_markdown(path) {
-            files.push(NamedPath {
+            // metadata() 在极端情况下（权限突变、软链目标消失等）可能失败；
+            // 用 0 兜底而不是让单个文件的失败中断整份列表——前端拿到 0 会
+            // 判定“缓存不命中”，退化为照常 readFile，不影响正确性。
+            let modified_nanos = entry
+                .metadata()
+                .ok()
+                .as_ref()
+                .map(modified_nanos)
+                .unwrap_or(0);
+            files.push(ListedFile {
                 path: path_string(path),
                 name: file_name(path),
+                modified_nanos,
             });
             if files.len() >= MAX_LISTED_FILES {
                 break;
             }
         }
     }
-    Ok(files)
+    files
+}
+
+pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<ListedFile>> {
+    ensure_allowed(app, root)?;
+    Ok(walk_markdown_files(root))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         document_scope_dirs, is_ignored, is_visible_text_file, validate_binary_size,
-        DOC_ANCESTOR_AUTH_LEVELS,
+        walk_markdown_files, DOC_ANCESTOR_AUTH_LEVELS,
     };
     use crate::domain::safe_name::validate_item_name;
     use std::path::{Path, PathBuf};
@@ -469,5 +487,21 @@ mod tests {
         );
         assert!(validate_binary_size(4096, 2048).is_err());
         assert!(validate_binary_size(1, 0).is_ok());
+    }
+
+    #[test]
+    fn walk_markdown_files_reports_a_positive_mtime_for_each_listed_file() {
+        // 前端用 modified_nanos 判断“文件是否变过”来决定要不要重读全文；这里只
+        // 验证真实文件系统写入的 mtime 会被如实带出来（非 0 兜底值）。
+        let directory = tempfile::tempdir().expect("temp workspace directory");
+        std::fs::write(directory.path().join("note.md"), "# hello").expect("write note.md");
+        std::fs::write(directory.path().join("ignored.png"), b"not markdown")
+            .expect("write ignored.png");
+
+        let files = walk_markdown_files(directory.path());
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].name, "note.md");
+        assert!(files[0].modified_nanos > 0);
     }
 }

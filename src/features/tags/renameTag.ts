@@ -1,10 +1,11 @@
-import { normalizeTag, parseMarkdownFrontmatter, setFrontmatterTags, tagKey } from './frontmatter'
-
-// 行内 #标签（跟 frontmatter.ts 里的 INLINE_TAG_RE 保持一致）：# 前是行首或空白，
-// # 后紧跟标签字符。捕获组不含开头的 #。
-const INLINE_TAG_RE = /(^|\s)#([\p{L}\p{N}_/-]+)/gmu
-// 代码围栏 / 行内代码：改写行内标签时整段跳过，避免动到 shebang、C 的 #include 等。
-const CODE_SPAN_RE = /```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`/g
+import {
+  CODE_SPAN_RE,
+  INLINE_TAG_RE,
+  normalizeTag,
+  parseMarkdownFrontmatter,
+  setFrontmatterTags,
+  tagKey,
+} from './frontmatter'
 
 /**
  * 把一个标签「按前缀改名/移动」后得到的新标签字符串；不在该子树内则返回 null。

@@ -324,7 +324,6 @@ const ListValueEditor: FC<{
 
 const PropertyRow: FC<{
   prop: DocumentProperty
-  index: number
   siblingKeys: string[]
   inlineTags: string[]
   activeTag: string | null
@@ -551,9 +550,12 @@ export default function DocumentPropertyPanel({
         <div className="prop-rows">
           {properties.map((prop, index) => (
             <PropertyRow
-              key={index}
+              // 属性 key 非空且大小写不敏感唯一（commitKey 拒绝空名/重名，addProperty
+              // 按 present 去重，YAML 解析产出的顶层键本就唯一），用它当 key 才能让
+              // PropertyRow 内部的草稿状态跟着"这一行属性"走，而不是跟着数组下标走，
+              // 避免删除中间行后，后面的行错误继承被删行的本地状态。
+              key={prop.key}
               prop={prop}
-              index={index}
               siblingKeys={properties.filter((_, i) => i !== index).map((p) => p.key)}
               inlineTags={inlineTags}
               activeTag={activeTag}

@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, Star, Tag } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getLang, t } from '../../../lib/i18n'
 import { countTagTreeNodes, flattenTagTree, type TagTreeNode } from '../tagTree'
@@ -45,7 +45,8 @@ export default function TagOverviewSidebar({
   onMoveTag,
 }: Props) {
   // 折叠的分组集合由上层持久化传入（默认空 = 全部展开）；切换即回调保存。
-  const collapsed = new Set(collapsedKeys)
+  // useMemo：与 App.tsx 里 buildTagTree 的 memo 风格保持一致，避免每次渲染都重建整棵树的派生结构。
+  const collapsed = useMemo(() => new Set(collapsedKeys), [collapsedKeys])
   const [dropKey, setDropKey] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -73,13 +74,18 @@ export default function TagOverviewSidebar({
   }, [activeTag, collapsedKeys, onToggleCollapsed])
   // 拖完后短暂压制标签的 click（避免“拖动结束”被当成“点击导航”）。
   const suppressClickRef = useRef(false)
-  const total = countTagTreeNodes(tree)
-  const pinnedSet = new Set(pinnedTags)
-  const flat = flattenTagTree(tree)
+  // 以下派生值都是 O(整棵标签树)，用 useMemo 避免每次渲染（如仅 dropKey 变化）都重算。
+  const total = useMemo(() => countTagTreeNodes(tree), [tree])
+  const pinnedSet = useMemo(() => new Set(pinnedTags), [pinnedTags])
+  const flat = useMemo(() => flattenTagTree(tree), [tree])
   // 已不存在的置顶标签（文档删了/改了标签）自动忽略，不在置顶区显示。
-  const pinnedNodes = pinnedTags
-    .map((key) => flat.get(key))
-    .filter((node): node is TagTreeNode => node !== undefined)
+  const pinnedNodes = useMemo(
+    () =>
+      pinnedTags
+        .map((key) => flat.get(key))
+        .filter((node): node is TagTreeNode => node !== undefined),
+    [pinnedTags, flat],
+  )
 
   const toggleCollapsed = (collapseId: string): void => {
     onToggleCollapsed(collapseId)

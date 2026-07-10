@@ -1,7 +1,13 @@
 import type { DocumentMeta } from './types'
 
 const FRONTMATTER_RE = /^\uFEFF?---[\t ]*\r?\n([\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/
-const MARKDOWN_EXTENSION_RE = /\.(?:md|markdown|mdown|mkd|mdx)$/i
+
+// 以下几个正则被 renameTag.ts / useTagIndex.ts 复用，在此单一定义、导出共享，
+// 避免多处拷贝后悄悄漂移。它们都带 /g 标志，但仓库里只用 String.replace（每次
+// 调用前 lastIndex 会被重置为 0）和 matchAll（内部会克隆正则、不共享 lastIndex）
+// 消费，不存在跨调用的 lastIndex 残留问题；如果以后有人想用手写的 exec 循环，
+// 记得这个前提不成立，要么换成局部的一次性正则，要么自己管理 lastIndex。
+export const MARKDOWN_EXTENSION_RE = /\.(?:md|markdown|mdown|mkd|mdx)$/i
 
 export interface MarkdownFrontmatter {
   body: string
@@ -211,14 +217,16 @@ export function replaceMarkdownBody(markdown: string, body: string): string {
 
 // Obsidian 风格行内标签："#" 前面必须是行首或空白（排除 "foo#bar" 这种词中间的
 // #），"#" 后面必须紧跟标签字符、不能有空格（排除标题 "# Title"）。捕获组本身
-// 不含开头的 "#"。
-const INLINE_TAG_RE = /(^|\s)#([\p{L}\p{N}_/-]+)/gmu
+// 不含开头的 "#"。renameTag.ts 改写正文标签时复用同一份，保证识别规则一致。
+export const INLINE_TAG_RE = /(^|\s)#([\p{L}\p{N}_/-]+)/gmu
+
+// 代码围栏 / 行内代码：三选一交替分支合并成一次 replace，比原来分三趟 replace
+// （``` 再 ~~~ 再行内 `）少产生两份全文中间字符串。renameTag.ts 改写行内标签时
+// 用它跳过代码段，跟这里扫描标签时跳过的范围保持一致。
+export const CODE_SPAN_RE = /```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`/g
 
 function stripCodeForTagScan(body: string): string {
-  return body
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/~~~[\s\S]*?~~~/g, '')
-    .replace(/`[^`\n]*`/g, '')
+  return body.replace(CODE_SPAN_RE, '')
 }
 
 /** 抓取正文里手打的 #标签（跳过代码块/行内代码，避免把 shebang、C 的 #include
@@ -232,8 +240,29 @@ export function extractInlineTags(body: string): string[] {
   return uniqueTags(found)
 }
 
+// 摘要只需要最终 120 字符，没必要对整篇正文（可能几十 MB）做 6 次全文
+// replace——那样每次都会产生一份全文长度的中间字符串。这里先截出一段远超
+// 120 字符上限的前缀（8192 字符足够覆盖开头的标题/加粗/链接等格式字符被剥掉
+// 后仍然凑够 120 个可见字符的情况），后续的 replace 链只在这段有界前缀上跑。
+const EXCERPT_SCAN_LIMIT = 8192
+
+function boundedExcerptSource(body: string): string {
+  if (body.length <= EXCERPT_SCAN_LIMIT) return body
+  let prefix = body.slice(0, EXCERPT_SCAN_LIMIT)
+  // 如果截断点恰好落在一个未闭合的 ``` 代码围栏内部（prefix 里 ``` 出现次数为
+  // 奇数），后面的 replace 链里剥代码块的规则要求成对的 ```……```，缺一半就
+  // 不会生效，围栏内的代码原文会原样漏进摘要。退回到最后一个 ``` 之前，
+  // 让这段前缀里的围栏要么完整闭合、要么整个不出现，不去猜测围栏在哪结束。
+  const fenceCount = prefix.split('```').length - 1
+  if (fenceCount % 2 === 1) {
+    const lastFenceIndex = prefix.lastIndexOf('```')
+    prefix = prefix.slice(0, lastFenceIndex)
+  }
+  return prefix
+}
+
 function plainTextExcerpt(body: string): string {
-  return body
+  return boundedExcerptSource(body)
     .replace(/^\s*#{1,6}\s+.*$/m, '')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')

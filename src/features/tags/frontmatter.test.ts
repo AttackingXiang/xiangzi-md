@@ -126,6 +126,36 @@ describe('frontmatter tags', () => {
     expect(meta.tags).toEqual(['one'])
     expect(meta.updatedAt).toBe(1_700_000_000_000)
   })
+
+  it('excerpts a large plain-text document by only scanning a bounded prefix', () => {
+    // 正文超过 8192 字符的有界扫描窗口，但开头是普通文本——摘要应该跟不做
+    // 任何长度限制时的语义一致：直接取纯文本的前 120 字符。
+    const paragraph = 'Useful summary text. '
+    const body = paragraph.repeat(500) // 远超 8192 字符
+    expect(body.length).toBeGreaterThan(8192)
+    const meta = documentMetaFromMarkdown(
+      '/notes/big.md',
+      'big.md',
+      body,
+      1_700_000_000_000_000_000,
+    )
+    expect(meta.excerpt).toBe(paragraph.repeat(500).replace(/\s+/g, ' ').trim().slice(0, 120))
+  })
+
+  it('does not leak unclosed code-fence content into the excerpt near the scan boundary', () => {
+    // 在 8192 字符边界附近开启一个不闭合的 ``` 代码围栏：有界前缀里的围栏计数
+    // 是奇数（只有开头没有结尾），必须整段截掉，不能把围栏内的代码原文当成
+    // 摘要泄漏出去。
+    const filler = 'x'.repeat(8180)
+    const body = `${filler}\n\`\`\`\nSECRET_CODE_SHOULD_NOT_APPEAR_IN_EXCERPT\n\`\`\`\n`
+    const meta = documentMetaFromMarkdown(
+      '/notes/fence.md',
+      'fence.md',
+      body,
+      1_700_000_000_000_000_000,
+    )
+    expect(meta.excerpt).not.toContain('SECRET_CODE_SHOULD_NOT_APPEAR_IN_EXCERPT')
+  })
 })
 
 describe('inline #tags in the document body', () => {

@@ -175,7 +175,9 @@ export interface DesktopPort {
     suggestedName?: string,
   ): Promise<Pick<OpenedFile, 'path' | 'name' | 'version'> | null>
   readDir(path: string): Promise<FileNode[]>
-  listFiles(root: string): Promise<Array<{ path: string; name: string }>>
+  // modifiedNanos 供 useTagIndex 做增量扫描：mtime 没变的文件直接复用缓存的
+  // meta，不再逐个 readFile 把全文内容搬过 IPC。
+  listFiles(root: string): Promise<Array<{ path: string; name: string; modifiedNanos: number }>>
   createFile(dirPath: string, fileName: string): Promise<{ path: string; name: string }>
   createDir(dirPath: string, name: string): Promise<{ path: string; name: string }>
   rename(oldPath: string, newName: string): Promise<{ path: string; name: string }>

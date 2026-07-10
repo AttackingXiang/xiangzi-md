@@ -2,7 +2,10 @@ use super::blocking;
 use crate::{
     domain::{
         error::AppResult,
-        models::{FileNode, FileVersion, Folder, NamedPath, OpenedFile, PathResult, WriteResult},
+        models::{
+            FileNode, FileVersion, Folder, ListedFile, NamedPath, OpenedFile, PathResult,
+            WriteResult,
+        },
     },
     infrastructure::{settings::SettingsStore, workspace},
 };
@@ -109,7 +112,7 @@ pub async fn read_dir(app: AppHandle, path: String) -> AppResult<Vec<FileNode>> 
 }
 
 #[tauri::command]
-pub async fn list_files(app: AppHandle, root: String) -> AppResult<Vec<NamedPath>> {
+pub async fn list_files(app: AppHandle, root: String) -> AppResult<Vec<ListedFile>> {
     blocking(move || workspace::list_files(&app, &PathBuf::from(root))).await
 }
 

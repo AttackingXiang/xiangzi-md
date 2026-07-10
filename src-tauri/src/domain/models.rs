@@ -43,6 +43,17 @@ pub struct NamedPath {
     pub name: String,
 }
 
+/// `list_files` 专用的返回项：比 `NamedPath` 多带 mtime，供前端做增量扫描
+/// （只重读 mtime 变化过的文件）。不复用/不改动 `NamedPath` 本身，因为它被
+/// create_file/create_dir/rename_item/move_item 等只关心路径+文件名的命令共用。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedFile {
+    pub path: String,
+    pub name: String,
+    pub modified_nanos: u64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WriteResult {

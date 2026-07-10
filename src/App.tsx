@@ -62,23 +62,9 @@ import { useAppCommands } from './hooks/useAppCommands'
 import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
 import type { ThemeName } from './lib/codeSyntaxPalette'
-import { useTagIndex } from './features/tags/useTagIndex'
-import { buildTagTree, groupKeysToCollapse, isTagInSubtree } from './features/tags/tagTree'
-import { useTagNavigation } from './features/tags/useTagNavigation'
-import {
-  documentMetaFromMarkdown,
-  extractInlineTags,
-  normalizeTag,
-  parseMarkdownFrontmatter,
-  replaceMarkdownBody,
-  tagKey,
-} from './features/tags/frontmatter'
-import { moveTagUnderTarget, renameTagInMarkdown } from './features/tags/renameTag'
-import {
-  parseFrontmatterProperties,
-  setFrontmatterProperties,
-  type DocumentProperty,
-} from './features/tags/properties'
+import { groupKeysToCollapse } from './features/tags/tagTree'
+import { replaceMarkdownBody } from './features/tags/frontmatter'
+import { useTagFeature } from './features/tags/useTagFeature'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 
@@ -421,7 +407,6 @@ export default function App(): JSX.Element {
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
   const [readingMode, setReadingMode] = useState(false)
-  const tagNavigation = useTagNavigation()
   // 同样提为 useCallback：TabBar / Outline 用 memo() 包裹后，稳定的回调引用才能让 memo 生效
   const toggleSourceMode = useCallback(() => setSourceMode((v) => !v), [])
   const toggleSidebarVisible = useCallback(() => setSidebarVisible((v) => !v), [setSidebarVisible])
@@ -457,37 +442,6 @@ export default function App(): JSX.Element {
     onSubmit: (value: string) => void
   } | null>(null)
   const [exportResultPath, setExportResultPath] = useState<string | null>(null)
-
-  const activeFrontmatter = useMemo(
-    () => parseMarkdownFrontmatter(activeTab?.content ?? ''),
-    [activeTab?.content],
-  )
-  // 顶部属性面板：解析出 frontmatter 的全部字段（title/tags/aliases/任意自定义键），
-  // 逐行以 Obsidian 风格展示、可编辑。
-  const activeProperties = useMemo(
-    () => parseFrontmatterProperties(activeFrontmatter.raw),
-    [activeFrontmatter.raw],
-  )
-  // 正文里手打的 #标签（只读，展示在 tags 行末尾）——排除掉已经写进 frontmatter
-  // tags 的，避免重复。
-  const inlineOnlyTags = useMemo(() => {
-    const seen = new Set(activeFrontmatter.tags.map(tagKey))
-    return extractInlineTags(activeFrontmatter.body).filter((tag) => !seen.has(tagKey(tag)))
-  }, [activeFrontmatter.tags, activeFrontmatter.body])
-  // 有些笔记（尤其从别的工具迁移过来的）只在 frontmatter 写了 title，正文没有
-  // H1——这种情况下正文没有任何东西看起来像"标题"，需要把 frontmatter 的
-  // title 显示出来占上这个位置，而不是让笔记看起来像没有标题。
-  const hasBodyHeading = useMemo(
-    () => /^\s*#\s+(.+?)\s*$/m.test(activeFrontmatter.body),
-    [activeFrontmatter.body],
-  )
-  const deferredOutlineContent = useDeferredValue(
-    outlineVisible && activeTab ? activeFrontmatter.body : '',
-  )
-  const outline = useMemo(
-    () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
-    [deferredOutlineContent, outlineVisible],
-  )
 
   const updater = useUpdater(settings?.checkUpdatesOnStartup ?? false)
 
@@ -667,264 +621,44 @@ export default function App(): JSX.Element {
     setInputDialog,
   })
 
-  const tagIndex = useTagIndex(folder?.root ?? null, treeKey)
-  // 选中某个标签时展示的相关文档：父标签聚合它自己 + 所有子标签（前缀 key/）
-  // 的文档，去重——跟 Obsidian 一样，点父标签能看到整棵子树下的内容。
-  const resultSort = settings?.tagResultSort ?? 'updated'
-  const relatedDocuments = useMemo(() => {
-    const key = tagNavigation.selectedTag
-    if (!key) return []
-    const seen = new Set<string>()
-    const documents = Object.entries(tagIndex.tagIndex)
-      .filter(([tag]) => isTagInSubtree(tag, key))
-      .flatMap(([, docs]) => docs)
-      .filter((document) => {
-        if (seen.has(document.path)) return false
-        seen.add(document.path)
-        return true
-      })
-    return documents.sort(
-      resultSort === 'name'
-        ? (a, b) =>
-            a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }) ||
-            b.updatedAt - a.updatedAt
-        : (a, b) => b.updatedAt - a.updatedAt || a.title.localeCompare(b.title),
-    )
-  }, [tagNavigation.selectedTag, tagIndex.tagIndex, resultSort])
+  const {
+    tagIndex,
+    tagNavigation,
+    tagTree,
+    relatedDocuments,
+    activeFrontmatter,
+    activeProperties,
+    inlineOnlyTags,
+    hasBodyHeading,
+    openDocumentTag,
+    showAllTags,
+    openTagContext,
+    openDocTagContext,
+    moveTagUnder,
+    changeDocumentProperties,
+  } = useTagFeature({
+    activeTab,
+    folder,
+    settings,
+    treeKey,
+    lang,
+    stateRef,
+    updateContent,
+    markTabPersisted,
+    saveTab,
+    pushUndo,
+    setSidebarVisible,
+    setSearchView,
+    setInputDialog,
+    setCtxMenu,
+  })
 
-  // 标签总览：按 "/" 构建 Obsidian 式嵌套分组树（见 tagTree.ts）。
-  const groupsFirst = settings?.tagGroupsFirst ?? false
-  const tagTree = useMemo(
-    () =>
-      buildTagTree(
-        Object.entries(tagIndex.tagIndex).map(([key, documents]) => ({
-          key,
-          label: tagIndex.tagLabels[key] ?? key,
-          docPaths: documents.map((document) => document.path),
-        })),
-        { groupsFirst },
-      ),
-    [tagIndex.tagIndex, tagIndex.tagLabels, groupsFirst],
+  const deferredOutlineContent = useDeferredValue(
+    outlineVisible && activeTab ? activeFrontmatter.body : '',
   )
-
-  useEffect(() => {
-    tagNavigation.reset()
-  }, [folder?.root, tagNavigation.reset])
-
-  useEffect(() => {
-    if (!activeTab?.path || !activeTab.version) return
-    // 文档不属于当前打开的工作区（比如通过"打开文件"单独打开了外部文件）时不要
-    // 把它并入标签索引——否则切换回这个文件夹后，标签总览/相关文档里会混入
-    // 不属于这个工作区的文档。判定逻辑与 revealActiveFile 里的 isUnderFolder
-    // 保持一致。
-    const root = folder?.root
-    const isUnderFolder =
-      !root || activeTab.path.startsWith(root + '/') || activeTab.path.startsWith(root + '\\')
-    if (!isUnderFolder) return
-    tagIndex.upsertDocument(
-      documentMetaFromMarkdown(
-        activeTab.path,
-        activeTab.name,
-        activeTab.savedContent,
-        activeTab.version.modifiedNanos,
-      ),
-    )
-  }, [
-    activeTab?.name,
-    activeTab?.path,
-    activeTab?.savedContent,
-    activeTab?.version,
-    folder?.root,
-    tagIndex.upsertDocument,
-  ])
-
-  // 点标签：默认只出中间结果列，左侧不动；开了「点击标签时展开全部标签」才顺带
-  // 展开左侧标签树（并确保侧栏可见）。从标签树里点标签时树已经开着，openTag 也
-  // 不会把它关掉。
-  const openDocumentTag = useCallback(
-    (tag: string): void => {
-      setSearchView(false)
-      const openOverview = settings?.tagClickOpensOverview ?? false
-      if (openOverview) setSidebarVisible(true)
-      tagNavigation.openTag(tag, openOverview)
-    },
-    [tagNavigation.openTag, settings?.tagClickOpensOverview],
-  )
-
-  const showAllTags = useCallback((): void => {
-    setSidebarVisible(true)
-    setSearchView(false)
-    tagNavigation.showOverview()
-  }, [tagNavigation.showOverview])
-
-  /** 标签改名/移动统一入口：把 fromKey（连同整棵子树）改写成 toTag 前缀。
-   * scope='active' 只改当前文档；'all' 改所有含此标签的文档（改盘前弹确认）。
-   * 打开着的标签页走内存更新 + saveTab，未打开的直接 readFile→改写→writeFile。 */
-  const applyTagRename = useCallback(
-    async (fromKey: string, rawNewTag: string, scope: 'all' | 'active'): Promise<void> => {
-      const toTag = normalizeTag(rawNewTag)
-      if (!toTag || tagKey(toTag) === fromKey) return
-
-      // 每改完一篇就把它的新 meta 直接并入标签索引（而不是事后整仓重扫）——重扫是
-      // 异步的，容易和刚写的盘抢跑、把旧数据又读回来，导致左侧标签树“没生效”。直接
-      // upsert 用的是我们手上确定的新内容，即时、精确，也更省。
-      const applyToOpenTab = async (
-        tab: (typeof stateRef.current.tabs)[number],
-      ): Promise<boolean> => {
-        const { changed, content } = renameTagInMarkdown(tab.content, fromKey, toTag)
-        if (!changed) return false
-        if (!tab.path) {
-          // 未保存的新文档：只更新内存缓冲，等用户真正保存时一起落盘。
-          updateContent(tab.id, content)
-          return true
-        }
-        // 已有磁盘文件：直接强制写盘，再把结果并回标签页（置为已保存）。不经过
-        // updateContent + saveTab 的往返——批量改多篇时那条路径依赖 stateRef 同步，
-        // 会让后续标签页停留在“待保存”。
-        const result = await desktop.writeFile(tab.path, content, null, true)
-        markTabPersisted(tab.id, content, result.version)
-        tagIndex.upsertDocument(
-          documentMetaFromMarkdown(tab.path, tab.name, content, result.version.modifiedNanos),
-        )
-        return true
-      }
-
-      if (scope === 'active') {
-        const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeId)
-        if (tab) await applyToOpenTab(tab)
-        return
-      }
-
-      const paths = new Set<string>()
-      for (const [key, documents] of Object.entries(tagIndex.tagIndex)) {
-        if (!isTagInSubtree(key, fromKey)) continue
-        for (const document of documents) paths.add(document.path)
-      }
-      if (paths.size === 0) return
-      const message =
-        lang === 'en'
-          ? `Rewrite this tag in ${paths.size} document(s)?`
-          : `将修改 ${paths.size} 个文档里的这个标签，确定？`
-      if (!window.confirm(message)) return
-
-      const openByPath = new Map<string, (typeof stateRef.current.tabs)[number]>()
-      for (const tab of stateRef.current.tabs) if (tab.path) openByPath.set(tab.path, tab)
-
-      let changed = 0
-      let failed = 0
-      for (const path of paths) {
-        try {
-          const tab = openByPath.get(path)
-          if (tab) {
-            if (await applyToOpenTab(tab)) changed += 1
-          } else {
-            // 未打开的文件：读 → 改 → 强制写盘（跳过版本冲突检查——写的正是刚读的内容）。
-            const file = await desktop.readFile(path)
-            const result = renameTagInMarkdown(file.content, fromKey, toTag)
-            if (result.changed) {
-              await desktop.writeFile(path, result.content, null, true)
-              tagIndex.upsertDocument(
-                documentMetaFromMarkdown(
-                  path,
-                  baseName(path),
-                  result.content,
-                  file.version.modifiedNanos,
-                ),
-              )
-              changed += 1
-            }
-          }
-        } catch {
-          failed += 1
-        }
-      }
-
-      void desktop.notify(
-        lang === 'en'
-          ? `Updated ${changed} document(s)${failed ? `, ${failed} failed` : ''}.`
-          : `已更新 ${changed} 个文档${failed ? `，${failed} 个失败` : ''}。`,
-      )
-    },
-    [tagIndex, updateContent, markTabPersisted, stateRef, lang],
-  )
-
-  const promptRenameTag = useCallback(
-    (fromKey: string, currentLabel: string, scope: 'all' | 'active'): void => {
-      setInputDialog({
-        title: scope === 'active' ? t('在本文档重命名标签') : t('重命名 / 修改分组（用 / 分层）'),
-        initial: currentLabel,
-        confirmText: t('确定'),
-        onSubmit: (value) => void applyTagRename(fromKey, value, scope),
-      })
-    },
-    [applyTagRename],
-  )
-
-  const moveTagUnder = useCallback(
-    (dragKey: string, targetFullLabel: string): void => {
-      void applyTagRename(dragKey, moveTagUnderTarget(dragKey, targetFullLabel), 'all')
-    },
-    [applyTagRename],
-  )
-
-  const openTagContext = useCallback(
-    (key: string, fullLabel: string, x: number, y: number): void => {
-      setCtxMenu({
-        x,
-        y,
-        items: [
-          { label: t('重命名 / 修改分组'), onClick: () => promptRenameTag(key, fullLabel, 'all') },
-        ],
-      })
-    },
-    [promptRenameTag],
-  )
-
-  // 文档里右键某个标签 chip：既能全局改，也能只改本文档（默认全改）。
-  const openDocTagContext = useCallback(
-    (tag: string, x: number, y: number): void => {
-      const key = tagKey(tag)
-      setCtxMenu({
-        x,
-        y,
-        items: [
-          { label: t('重命名 / 修改分组'), onClick: () => promptRenameTag(key, tag, 'all') },
-          { label: t('仅在本文档修改'), onClick: () => promptRenameTag(key, tag, 'active') },
-        ],
-      })
-    },
-    [promptRenameTag],
-  )
-
-  /** 属性面板改动统一入口：用新的属性列表重写 frontmatter、写回 content、存盘。
-   * 标签索引的更新交给上面那个 effect（它已经在监听 activeTab.savedContent/version），
-   * 不在这里手动调用 upsertDocument，避免维护两份触发路径。写入方式必须走
-   * updateContent（更新 tab.content 且同步刷新 stateRef）再调用 saveTab，
-   * 不能让 performSave 携带独立的内容快照——那样在保存排队被合并/覆盖时，
-   * 改动会悄悄丢失但调用方仍然收到"保存成功"。
-   * 未保存（无 path）的新文档也允许改属性：只更新内存缓冲，等用户真正保存时
-   * 一起落盘，不弹另存为对话框。每次改动都往撤销栈压一步，支持 Cmd+Z / 侧边栏
-   * 撤销按钮把属性恢复到改动前。 */
-  const changeDocumentProperties = useCallback(
-    async (next: DocumentProperty[]): Promise<boolean> => {
-      const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
-      if (!current) return false
-      const nextContent = setFrontmatterProperties(current.content, next)
-      if (nextContent === current.content) return true
-      const tabId = current.id
-      const previousContent = current.content
-      pushUndo({
-        type: 'restore',
-        run: async () => {
-          updateContent(tabId, previousContent)
-          if (stateRef.current.tabs.find((tab) => tab.id === tabId)?.path) await saveTab(tabId)
-        },
-      })
-      updateContent(tabId, nextContent)
-      if (!current.path) return true
-      return saveTab(tabId)
-    },
-    [pushUndo, saveTab, stateRef, updateContent],
+  const outline = useMemo(
+    () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
+    [deferredOutlineContent, outlineVisible],
   )
 
   const workspaceVisibilityKey = settings
