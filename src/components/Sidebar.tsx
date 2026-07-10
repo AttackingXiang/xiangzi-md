@@ -3,6 +3,7 @@ import { memo, useCallback, type RefObject } from 'react'
 import FileTree from './FileTree'
 import SidebarHeader from './SidebarHeader'
 import type { FileNode, Folder as FolderType } from '../types'
+import type { SortContext } from '../lib/fileTreeSort'
 import { t } from '../lib/i18n'
 import { baseName } from '../lib/path'
 
@@ -12,7 +13,8 @@ interface Props {
   favorites: string[]
   favoritesCollapsed: boolean
   favoriteLabels: Record<string, string>
-  recentFiles: string[]
+  /** 文件树排序方式 + 置顶集合 + 最近打开排名 */
+  sortContext: SortContext
   /** 当前需要在文件树中定位的绝对路径；null 时不触发 */
   revealPath: string | null
   revealRequestId: number | null
@@ -50,6 +52,7 @@ const Sidebar = memo(function Sidebar({
   favorites,
   favoritesCollapsed,
   favoriteLabels,
+  sortContext,
   revealPath,
   revealRequestId,
   onRevealComplete,
@@ -155,6 +158,7 @@ const Sidebar = memo(function Sidebar({
             revealRequestId={revealRequestId}
             onRevealComplete={onRevealComplete}
             hideFolderNames={hideFolderNames}
+            sortContext={sortContext}
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}
             onMove={onMove}

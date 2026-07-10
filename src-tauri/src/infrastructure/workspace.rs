@@ -220,12 +220,20 @@ pub fn read_dir_tree(
         let file_type = entry
             .file_type()
             .map_err(|error| AppError::io("读取目录项类型失败", error))?;
+        // mtime 供前端「最近修改」排序；单项 metadata 失败不应中断整份列表，用 0 兜底。
+        let modified = entry
+            .metadata()
+            .ok()
+            .as_ref()
+            .map(modified_nanos)
+            .unwrap_or(0);
         if file_type.is_dir() {
             nodes.push(FileNode {
                 name: file_name(&path),
                 path: path_string(&path),
                 is_dir: true,
                 openable: false,
+                modified_nanos: modified,
                 children: None,
             });
         } else if file_type.is_file() && (visibility.show_all_files || is_visible_text_file(&path))
@@ -235,6 +243,7 @@ pub fn read_dir_tree(
                 path: path_string(&path),
                 is_dir: false,
                 openable: is_visible_text_file(&path),
+                modified_nanos: modified,
                 children: None,
             });
         }

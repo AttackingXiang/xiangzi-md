@@ -5,6 +5,7 @@ export type {
   Draft,
   DraftSummary,
   FileNode,
+  FileTreeSort,
   FileVersion,
   Folder,
   SearchResult,

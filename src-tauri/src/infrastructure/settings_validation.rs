@@ -1,9 +1,11 @@
 use super::settings_model::{
     AppSettings, MAX_ASSET_SEARCH_PATHS, MAX_FAVORITES, MAX_FAVORITE_LABEL_CHARS,
-    MAX_HIDDEN_WORKSPACE_PATHS, MAX_PANDOC_ARGS_LENGTH, MAX_PATH_LENGTH, MAX_RECENT_ITEMS,
-    MAX_SESSION_FILES, MAX_SHORTCUT_OVERRIDES, MAX_TAG_COLLAPSED_KEYS, SETTINGS_SCHEMA_VERSION,
-    SHORTCUT_ACTIONS,
+    MAX_HIDDEN_WORKSPACE_PATHS, MAX_PANDOC_ARGS_LENGTH, MAX_PATH_LENGTH, MAX_PINNED_FOLDERS,
+    MAX_RECENT_ITEMS, MAX_SESSION_FILES, MAX_SHORTCUT_OVERRIDES, MAX_TAG_COLLAPSED_KEYS,
+    SETTINGS_SCHEMA_VERSION, SHORTCUT_ACTIONS,
 };
+
+const FILE_TREE_SORT_MODES: &[&str] = &["default", "nameDesc", "modified", "opened", "smart"];
 use crate::domain::{
     error::{AppError, AppResult},
     safe_name::is_valid_portable_name,
@@ -30,6 +32,7 @@ pub(super) fn migrate_settings(settings: &mut AppSettings, source_version: u32) 
             4 => migrate_v4_to_v5(settings),
             5 => migrate_v5_to_v6(settings),
             6 => migrate_v6_to_v7(settings),
+            7 => migrate_v7_to_v8(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -50,6 +53,7 @@ fn migrate_v3_to_v4(_settings: &mut AppSettings) {}
 fn migrate_v4_to_v5(_settings: &mut AppSettings) {}
 fn migrate_v5_to_v6(_settings: &mut AppSettings) {}
 fn migrate_v6_to_v7(_settings: &mut AppSettings) {}
+fn migrate_v7_to_v8(_settings: &mut AppSettings) {}
 
 pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !matches!(settings.language.as_str(), "zh" | "en") {
@@ -96,6 +100,12 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
         .favorite_labels
         .retain(|_, label| valid_favorite_label(label));
     settings.hidden_workspace_paths.retain(|path| {
+        !path.trim().is_empty() && path.len() <= MAX_PATH_LENGTH && Path::new(path).is_absolute()
+    });
+    if !FILE_TREE_SORT_MODES.contains(&settings.file_tree_sort.as_str()) {
+        settings.file_tree_sort = "default".into();
+    }
+    settings.pinned_folders.retain(|path| {
         !path.trim().is_empty() && path.len() <= MAX_PATH_LENGTH && Path::new(path).is_absolute()
     });
     if !settings.background_image_path.is_empty() && !valid_background_image_path(settings) {
@@ -152,6 +162,9 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
     if settings.image_max_width > 10_000 {
         return Err(AppError::new("settings_invalid", "图片宽度设置过大"));
     }
+    if !FILE_TREE_SORT_MODES.contains(&settings.file_tree_sort.as_str()) {
+        return Err(AppError::new("settings_invalid", "文件树排序方式无效"));
+    }
     let unique_shortcuts = settings.shortcuts.values().collect::<BTreeSet<_>>();
     if settings.shortcuts.len() > MAX_SHORTCUT_OVERRIDES
         || unique_shortcuts.len() != settings.shortcuts.len()
@@ -170,6 +183,7 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
             .chain(settings.hidden_workspace_paths.iter())
             .chain(settings.recent_files.iter())
             .chain(settings.recent_folders.iter())
+            .chain(settings.pinned_folders.iter())
             .chain(settings.favorites.iter())
             .chain(settings.favorite_labels.keys())
             .chain(settings.session.open_files.iter())
@@ -192,6 +206,13 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
         .any(|path| path.trim().is_empty() || !Path::new(path).is_absolute())
     {
         return Err(AppError::new("settings_invalid", "隐藏目录必须是绝对路径"));
+    }
+    if settings
+        .pinned_folders
+        .iter()
+        .any(|path| path.trim().is_empty() || !Path::new(path).is_absolute())
+    {
+        return Err(AppError::new("settings_invalid", "置顶目录必须是绝对路径"));
     }
     Ok(())
 }
@@ -269,6 +290,7 @@ fn valid_favorite_label(value: &str) -> bool {
 pub(super) fn limit_collections(settings: &mut AppSettings) {
     settings.recent_files.truncate(MAX_RECENT_ITEMS);
     settings.recent_folders.truncate(MAX_RECENT_ITEMS);
+    settings.pinned_folders.truncate(MAX_PINNED_FOLDERS);
     settings.favorites.truncate(MAX_FAVORITES);
     let favorites = settings.favorites.iter().cloned().collect::<BTreeSet<_>>();
     settings

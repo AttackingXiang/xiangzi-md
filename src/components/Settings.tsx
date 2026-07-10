@@ -550,6 +550,29 @@ export default function Settings({
                 }
               >
                 <SettingsCard>
+                  <SettingRow
+                    label={en ? 'File tree sort' : '文件树排序'}
+                    description={
+                      en
+                        ? 'How items are ordered within each folder. Pinned folders always come first.'
+                        : '决定每个文件夹内文件的排列顺序；置顶的文件夹始终排在最前。'
+                    }
+                  >
+                    <select
+                      value={settings.fileTreeSort}
+                      onChange={(event) =>
+                        onChange({
+                          fileTreeSort: event.target.value as AppSettings['fileTreeSort'],
+                        })
+                      }
+                    >
+                      <option value="default">{en ? 'Name (A→Z)' : '名称（A→Z）'}</option>
+                      <option value="nameDesc">{en ? 'Name (Z→A)' : '名称（Z→A）'}</option>
+                      <option value="modified">{en ? 'Recently modified' : '最近修改'}</option>
+                      <option value="opened">{en ? 'Recently opened' : '最近打开'}</option>
+                      <option value="smart">{en ? 'Smart (recommended)' : '智能推荐'}</option>
+                    </select>
+                  </SettingRow>
                   <ToggleRow
                     label={en ? 'Show all files' : '显示全部文件'}
                     description={
@@ -842,10 +865,25 @@ function SettingsCard({ title, children }: { title?: string; children: ReactNode
   )
 }
 
-function SettingRow({ label, children }: { label: string; children: ReactNode }): JSX.Element {
+function SettingRow({
+  label,
+  description,
+  children,
+}: {
+  label: string
+  description?: string
+  children: ReactNode
+}): JSX.Element {
   return (
     <label className="settings-row">
-      <span className="settings-label">{label}</span>
+      {description ? (
+        <span>
+          <span className="settings-label">{label}</span>
+          <small>{description}</small>
+        </span>
+      ) : (
+        <span className="settings-label">{label}</span>
+      )}
       {children}
     </label>
   )

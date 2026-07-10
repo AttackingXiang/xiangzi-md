@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 7;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 8;
 pub(crate) const MAX_RECENT_ITEMS: usize = 15;
 pub(crate) const MAX_FAVORITES: usize = 32;
+pub(crate) const MAX_PINNED_FOLDERS: usize = 64;
 pub(crate) const MAX_TAG_COLLAPSED_KEYS: usize = 4096;
 pub(crate) const MAX_SESSION_FILES: usize = 12;
 pub(crate) const MAX_ASSET_SEARCH_PATHS: usize = 32;
@@ -99,6 +100,11 @@ pub struct AppSettings {
     /// 点正文里的标签时是否同时展开左侧「全部标签」树（默认关：只出结果列）。
     pub tag_click_opens_overview: bool,
     pub session: SessionSettings,
+    /// 文件树排序方式：'default'（文件夹在前、名称升序，默认）、'nameDesc'、
+    /// 'modified'（最近修改）、'opened'（最近打开）、'smart'（智能混合推荐）。
+    pub file_tree_sort: String,
+    /// 在文件树中被置顶的文件夹绝对路径，同级里排在未置顶项之前。
+    pub pinned_folders: Vec<String>,
     pub hide_attachment_folders: bool,
     pub asset_search_paths: Vec<String>,
     pub show_all_files: bool,
@@ -167,6 +173,8 @@ impl Default for AppSettings {
             tag_result_sort: "updated".into(),
             tag_click_opens_overview: false,
             session: SessionSettings::default(),
+            file_tree_sort: "default".into(),
+            pinned_folders: Vec::new(),
             hide_attachment_folders: false,
             asset_search_paths: Vec::new(),
             show_all_files: false,
@@ -234,6 +242,8 @@ pub struct SettingsPatch {
     pub tag_result_sort: Option<String>,
     pub tag_click_opens_overview: Option<bool>,
     pub session: Option<SessionSettings>,
+    pub file_tree_sort: Option<String>,
+    pub pinned_folders: Option<Vec<String>>,
     pub hide_attachment_folders: Option<bool>,
     pub asset_search_paths: Option<Vec<String>>,
     pub show_all_files: Option<bool>,
