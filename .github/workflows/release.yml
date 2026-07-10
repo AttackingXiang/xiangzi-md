@@ -309,7 +309,7 @@ jobs:
       - name: Build signed macOS assets
         if: runner.os == 'macOS' && steps.signing.outputs.apple == 'true'
         id: build-signed-macos
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -323,7 +323,7 @@ jobs:
       - name: Build platform assets
         if: runner.os != 'macOS' || steps.signing.outputs.apple == 'false'
         id: build-platform
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           # 不配置 Apple 证书时不能把空的 APPLE_SIGNING_IDENTITY 传给 Tauri，
           # 否则 macOS Runner 会尝试用空身份 codesign 并在 keychain 阶段失败。
