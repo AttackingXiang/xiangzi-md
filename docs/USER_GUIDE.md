@@ -1,6 +1,6 @@
 # Xiangzi MD 使用说明
 
-> 适用版本：Xiangzi MD 1.2.7（macOS / Windows）
+> 适用于 Xiangzi MD 当前版本（macOS / Windows）
 
 Xiangzi MD 是一个本地优先、所见即所得的跨平台 Markdown 编辑器。文档直接保存在本地文件系统中，不使用私有文档格式，可以继续用 Typora、Obsidian、VS Code 等工具打开。
 
