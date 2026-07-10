@@ -22,7 +22,9 @@ permissions:
   attestations: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  # Manual repairs for different tags must not cancel each other merely because
+  # workflow_dispatch runs from the same default branch.
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -69,6 +71,42 @@ jobs:
           fi
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
+      - name: Verify release identity and version consistency
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(jq -er '.version' package.json)
+          TAURI_VERSION=$(jq -er '.version' src-tauri/tauri.conf.json)
+          CARGO_VERSION=$(awk '
+            /^\[package\]$/ { in_package=1; next }
+            /^\[/ { in_package=0 }
+            in_package && /^version = / {
+              gsub(/^version = "|"$/, ""); print; exit
+            }
+          ' src-tauri/Cargo.toml)
+          LOCK_VERSION=$(awk '
+            $0 == "name = \"xiangzi-md\"" { found=1; next }
+            found && /^version = / {
+              gsub(/^version = "|"$/, ""); print; exit
+            }
+          ' src-tauri/Cargo.lock)
+
+          printf 'tag=%s package=%s tauri=%s cargo=%s lock=%s\n' \
+            "${TAG}" "${PACKAGE_VERSION}" "${TAURI_VERSION}" "${CARGO_VERSION}" "${LOCK_VERSION}"
+          test -n "${LOCK_VERSION}"
+          test "${TAG}" = "v${PACKAGE_VERSION}"
+          test "${PACKAGE_VERSION}" = "${TAURI_VERSION}"
+          test "${PACKAGE_VERSION}" = "${CARGO_VERSION}"
+          test "${PACKAGE_VERSION}" = "${LOCK_VERSION}"
+
+          git fetch origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "::error::${TAG} does not point to a commit contained in origin/main."
+            exit 1
+          fi
+
       - name: Build user-facing update notes
         id: notes
         env:
@@ -80,7 +118,7 @@ jobs:
 
           # 附注 tag 的正文优先：发布者打 tag 时写好的完整更新明细原样作为
           # 发布说明；tag 没有附注正文时才回退到按提交标题自动生成。
-          git tag -l --format='%(contents:body)' "${TAG}" > "${NOTES_FILE}" 2>/dev/null || true
+          git tag -l --format='%(contents)' "${TAG}" > "${NOTES_FILE}" 2>/dev/null || true
 
           if ! grep -q '[^[:space:]]' "${NOTES_FILE}"; then
             : > "${NOTES_FILE}"
