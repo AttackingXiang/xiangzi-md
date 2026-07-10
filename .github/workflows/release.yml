@@ -185,9 +185,6 @@ jobs:
     if: needs.prepare.outputs.publish == 'true'
     strategy:
       fail-fast: false
-      # tauri-action 会读写同一个 Release 和 latest.json；串行发布可避免两个
-      # 平台同时覆盖更新清单，尤其是在修复已有版本时。
-      max-parallel: 1
       matrix:
         include:
           # 钉在 macos-14：macos-latest 已开始轮换到 macOS 26 beta 镜像，
@@ -309,11 +306,11 @@ jobs:
           $config = @{ bundle = @{ windows = @{ certificateThumbprint = $env:WINDOWS_CERTIFICATE_THUMBPRINT; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } } } | ConvertTo-Json -Compress -Depth 4
           "TAURI_CONFIG=$config" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Build and publish signed macOS Release assets
+      - name: Build signed macOS assets
         if: runner.os == 'macOS' && steps.signing.outputs.apple == 'true'
+        id: build-signed-macos
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -321,32 +318,18 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v__VERSION__
-          releaseName: Xiangzi MD v__VERSION__
-          releaseBody: ${{ needs.prepare.outputs.notes }}
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
-      - name: Build and publish Release assets without Apple identity
+      - name: Build platform assets
         if: runner.os != 'macOS' || steps.signing.outputs.apple == 'false'
+        id: build-platform
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 不配置 Apple 证书时不能把空的 APPLE_SIGNING_IDENTITY 传给 Tauri，
           # 否则 macOS Runner 会尝试用空身份 codesign 并在 keychain 阶段失败。
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v__VERSION__
-          releaseName: Xiangzi MD v__VERSION__
-          releaseBody: ${{ needs.prepare.outputs.notes }}
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
       - name: Generate platform SBOM
@@ -382,14 +365,118 @@ jobs:
             SHA256SUMS-${{ matrix.artifact }}.txt
             sbom-${{ matrix.artifact }}.spdx.json
 
-      - name: Upload verification metadata to the release
+      - name: Stage platform release assets
         shell: bash
+        run: |
+          set -euo pipefail
+          install -d release-assets
+          find src-tauri/target -type f \( \
+              -name '*.dmg' -o -name '*-setup.exe' -o \
+              -name '*.app.tar.gz' -o -name '*.sig' \
+            \) -exec cp {} release-assets/ \;
+          cp "SHA256SUMS-${{ matrix.artifact }}.txt" \
+            "sbom-${{ matrix.artifact }}.spdx.json" release-assets/
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
+            test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
+            test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 1
+          else
+            test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
+            test "$(find release-assets -maxdepth 1 -name '*-setup.exe.sig' | wc -l | tr -d ' ')" -eq 1
+          fi
+
+      - name: Upload temporary ${{ matrix.artifact }} artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ matrix.artifact }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish unified GitHub Release
+    needs: [prepare, build]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: production-release
+    timeout-minutes: 20
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Validate the complete release asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*-setup.exe.sig' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name 'SHA256SUMS-*.txt' | wc -l | tr -d ' ')" -eq 2
+          test "$(find release-assets -maxdepth 1 -name 'sbom-*.spdx.json' | wc -l | tr -d ' ')" -eq 2
+
+      - name: Generate the single cross-platform updater manifest
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.tag }}
+          NOTES: ${{ needs.prepare.outputs.notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=${VERSION#v}
+          MAC_ARCHIVE=$(find release-assets -maxdepth 1 -name '*.app.tar.gz' -exec basename {} \;)
+          MAC_SIGNATURE=$(tr -d '\r\n' < "release-assets/${MAC_ARCHIVE}.sig")
+          WINDOWS_INSTALLER=$(find release-assets -maxdepth 1 -name '*-setup.exe' -exec basename {} \;)
+          WINDOWS_SIGNATURE=$(tr -d '\r\n' < "release-assets/${WINDOWS_INSTALLER}.sig")
+          BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          jq -n \
+            --arg version "${VERSION}" \
+            --arg notes "${NOTES}" \
+            --arg pub_date "$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')" \
+            --arg mac_url "${BASE_URL}/${MAC_ARCHIVE}" \
+            --arg mac_signature "${MAC_SIGNATURE}" \
+            --arg windows_url "${BASE_URL}/${WINDOWS_INSTALLER}" \
+            --arg windows_signature "${WINDOWS_SIGNATURE}" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "darwin-aarch64": {signature:$mac_signature,url:$mac_url},
+                "darwin-x86_64": {signature:$mac_signature,url:$mac_url},
+                "darwin-aarch64-app": {signature:$mac_signature,url:$mac_url},
+                "darwin-x86_64-app": {signature:$mac_signature,url:$mac_url},
+                "windows-x86_64": {signature:$windows_signature,url:$windows_url},
+                "windows-x86_64-nsis": {signature:$windows_signature,url:$windows_url}
+              }
+            }' > release-assets/latest.json
+          jq -e '.platforms | length == 6' release-assets/latest.json >/dev/null
+
+      - name: Create or repair the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare.outputs.tag }}
+          NOTES: ${{ needs.prepare.outputs.notes }}
+        shell: bash
         run: |
           set -euo pipefail
-          gh release upload "${TAG}" \
-            "SHA256SUMS-${{ matrix.artifact }}.txt" \
-            "sbom-${{ matrix.artifact }}.spdx.json" \
-            --clobber
+          NOTES_FILE=$(mktemp)
+          printf '%s\n' "${NOTES}" > "${NOTES_FILE}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" \
+              --title "Xiangzi MD ${TAG}" --notes-file "${NOTES_FILE}"
+          else
+            gh release create "${TAG}" \
+              --title "Xiangzi MD ${TAG}" --notes-file "${NOTES_FILE}"
+          fi
+          gh release upload "${TAG}" release-assets/* --clobber
+
+      - name: Attest the unified updater manifest
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: release-assets/latest.json
