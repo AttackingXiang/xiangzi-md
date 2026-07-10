@@ -361,6 +361,10 @@ body {
     var(--bg) calc(100% - var(--bg-image-shade, 0) * 48%),
     transparent
   );
+  /* 与 Tab 栏一样保持扁平透明；workspace-shell 已统一提供背景图遮罩，子栏不应
+     再叠加毛玻璃、白色表面或投影。 */
+  --editor-chrome-bg: transparent;
+  --editor-chrome-border: var(--workspace-divider);
   display: flex;
   flex-direction: column;
   height: 100vh;

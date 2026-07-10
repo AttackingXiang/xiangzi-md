@@ -16,9 +16,9 @@
   flex-wrap: wrap;
   gap: 10px;
   min-height: 20px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--workspace-divider) 82%, transparent);
-  background: color-mix(in srgb, var(--workspace-surface) 55%, transparent);
+  border: 0;
+  border-bottom: 1px solid var(--editor-chrome-border);
+  background: var(--editor-chrome-bg);
   user-select: none;
 }
 
@@ -70,9 +70,9 @@
   /* 贴着标签栏下方，不留那道夹在标签栏下边框和卡片上边框之间的空行 */
   margin: 0 auto;
   padding: 8px 28px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--workspace-divider) 82%, transparent);
-  background: color-mix(in srgb, var(--workspace-surface) 55%, transparent);
+  border: 0;
+  border-bottom: 1px solid var(--editor-chrome-border);
+  background: var(--editor-chrome-bg);
   user-select: none;
 }
 
