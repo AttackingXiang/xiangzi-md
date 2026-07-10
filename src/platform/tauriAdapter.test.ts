@@ -94,20 +94,14 @@ describe('tauriDesktopAdapter', () => {
     expect(invokeMock).toHaveBeenCalledWith('open_folder_path', { root: '/notes/archive' })
   })
 
-  it('requires a native folder choice before parent navigation', async () => {
-    openMock.mockResolvedValueOnce(null)
-    invokeMock.mockResolvedValue(null)
+  it('opens the parent folder directly without showing the native picker', async () => {
+    invokeMock.mockResolvedValueOnce(null).mockResolvedValueOnce(null)
 
     await tauriDesktopAdapter.openParentFolder('/notes/current')
     await tauriDesktopAdapter.openContainingFolder('/outside/a.md')
 
-    expect(openMock).toHaveBeenCalledWith({
-      directory: true,
-      multiple: false,
-      recursive: true,
-      defaultPath: '/notes',
-    })
-    expect(invokeMock).toHaveBeenCalledTimes(1)
+    expect(openMock).not.toHaveBeenCalled()
+    expect(invokeMock).toHaveBeenNthCalledWith(1, 'open_folder_path', { root: '/notes' })
     expect(invokeMock).toHaveBeenCalledWith('open_containing_folder', {
       filePath: '/outside/a.md',
     })
