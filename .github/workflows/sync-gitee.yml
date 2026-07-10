@@ -18,6 +18,7 @@ concurrency:
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout full history
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -56,19 +57,49 @@ jobs:
         run: |
           set -euo pipefail
           git remote add gitee git@gitee.com:tlqgyx/xiangzi-md.git
+
+          retry() {
+            local attempt delay=5
+            for attempt in 1 2 3 4; do
+              "$@" && return 0
+              [ "${attempt}" -eq 4 ] && return 1
+              echo "Attempt ${attempt} failed; retrying in ${delay}s: $*" >&2
+              sleep "${delay}"
+              delay=$((delay * 2))
+            done
+          }
+
           git fetch origin \
             +refs/heads/main:refs/remotes/origin/main \
             +refs/heads/electron-legacy-v0.1:refs/remotes/origin/electron-legacy-v0.1
-          git push gitee refs/remotes/origin/main:refs/heads/main
-          git push gitee refs/remotes/origin/electron-legacy-v0.1:refs/heads/electron-legacy-v0.1
+          retry git push gitee refs/remotes/origin/main:refs/heads/main
+          retry git push gitee refs/remotes/origin/electron-legacy-v0.1:refs/heads/electron-legacy-v0.1
 
           # A tag-triggered run publishes only that tag. Pushing every historical
           # tag makes an unrelated legacy mismatch (currently v1.2.6) fail every
           # future release even after the new tag itself was accepted by Gitee.
           if [ "${REF_TYPE}" = "tag" ]; then
             [[ "${REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]
+            # actions/checkout may create a lightweight local tag at the event
+            # commit. Force-refresh it so an annotated GitHub tag does not fail
+            # with "would clobber existing tag" on this disposable runner.
             git fetch origin \
-              "refs/tags/${REF_NAME}:refs/tags/${REF_NAME}"
-            git push gitee \
-              "refs/tags/${REF_NAME}:refs/tags/${REF_NAME}"
+              "+refs/tags/${REF_NAME}:refs/tags/${REF_NAME}"
+
+            LOCAL_COMMIT=$(git rev-parse "refs/tags/${REF_NAME}^{}")
+            REMOTE_REFS=$(retry git ls-remote --tags gitee \
+              "refs/tags/${REF_NAME}" "refs/tags/${REF_NAME}^{}")
+            REMOTE_COMMIT=$(printf '%s\n' "${REMOTE_REFS}" \
+              | awk '$2 ~ /\^\{\}$/ { print $1; found=1 } END { if (!found) exit 1 }' \
+              || printf '%s\n' "${REMOTE_REFS}" | awk 'NR == 1 { print $1 }')
+
+            if [ -z "${REMOTE_COMMIT}" ]; then
+              retry git push gitee \
+                "refs/tags/${REF_NAME}:refs/tags/${REF_NAME}"
+            elif [ "${REMOTE_COMMIT}" = "${LOCAL_COMMIT}" ]; then
+              echo "Gitee tag ${REF_NAME} already resolves to ${LOCAL_COMMIT}; nothing to do."
+            else
+              echo "::error::Gitee tag ${REF_NAME} already points to ${REMOTE_COMMIT}, but GitHub points to ${LOCAL_COMMIT}. Refusing to rewrite a published tag."
+              exit 1
+            fi
           fi
