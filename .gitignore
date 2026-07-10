@@ -32,3 +32,5 @@ vitest.config.d.ts
 # Local visual-audit captures can contain workspace paths or document text.
 /audit/current-state/*.png
 /audit/final-state/*.png
+# Ad-hoc QA screenshots taken at the repo root during design reviews.
+/qa-*.png

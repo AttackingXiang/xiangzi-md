@@ -329,6 +329,22 @@ const EN: Record<string, string> = {
   图片: 'Image',
   表格: 'Table',
   公式: 'Math',
+  // External link safety prompt
+  '出于安全原因，只能打开 HTTPS 外部链接。':
+    'For security reasons, only HTTPS external links can be opened.',
+  // Static (non-editable) code block — mermaid source/preview toggle
+  切换源码: 'Toggle source',
+  切换预览: 'Toggle preview',
+  // TabBar — pin tab / overflow list
+  取消固定: 'Unpin tab',
+  固定标签: 'Pin tab',
+  '已固定（右键解除固定）': 'Pinned (right-click to unpin)',
+  所有已打开标签: 'All open tabs',
+  // Static code block — language picker
+  '搜索语言…': 'Search language…',
+  '未能识别，请手动选择': 'Not recognized — choose manually',
+  自动: 'Auto',
+  自动检测语言: 'Auto-detect language',
 }
 
 let lang: Lang = 'zh'
@@ -345,4 +361,17 @@ export function getLang(): Lang {
 export function t(zh: string): string {
   if (lang === 'zh') return zh
   return EN[zh] ?? zh
+}
+
+/**
+ * 仅供测试使用：判断某个中文 key 是否在 EN 词典中登记了翻译。
+ * 不影响 t() 的运行时行为（t() 缺失时仍静默回退中文）。
+ */
+export function hasEnglishTranslation(key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(EN, key)
+}
+
+/** 仅供测试使用：返回 EN 词典中登记的全部中文 key（用于死条目检测等覆盖率分析）。 */
+export function getEnglishDictionaryKeys(): string[] {
+  return Object.keys(EN)
 }

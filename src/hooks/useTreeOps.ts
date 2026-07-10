@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { desktop } from '../platform'
 import { getLang, t } from '../lib/i18n'
 import { revealLocationKey } from '../lib/platform'
@@ -91,6 +91,26 @@ export function useTreeOps({
       /* ignore */
     }
   }, [folder?.root, setFolder])
+
+  // 应用没有文件系统 watcher：外部工具（如 Obsidian）在别处改了同一个目录时，
+  // 文件树和标签索引都不会自动更新。折中方案——窗口重新获得焦点时轻量刷新一次：
+  // refreshTree 触发 treeKey+1，进而驱动标签索引按 mtime 增量重扫，代价只是一次
+  // 目录 walk 加上真正变过的文件的重读，很便宜。展开状态不会因此丢失，因为
+  // FileTree 是靠 expandedPathsRef（见上面第 57-58 行的注释）在树重建后恢复展开
+  // 路径，而不是依赖树对象引用不变。10 秒节流是为了避免用户在窗口间来回切换时
+  // 反复触发刷新。
+  const lastFocusRefreshRef = useRef(0)
+  useEffect(() => {
+    const onFocus = (): void => {
+      if (!folder) return
+      const now = Date.now()
+      if (now - lastFocusRefreshRef.current < 10_000) return
+      lastFocusRefreshRef.current = now
+      void refreshTree()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [folder, refreshTree])
 
   const createFileIn = useCallback(
     (dir: string) => {
