@@ -460,6 +460,9 @@ jobs:
       - name: Create or repair the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The publish job only downloads build artifacts and has no checkout,
+          # so gh cannot infer the repository from a local .git directory.
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
           NOTES: ${{ needs.prepare.outputs.notes }}
         shell: bash
