@@ -52,8 +52,8 @@ import {
 } from '@codemirror/language'
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { codeMirrorTheme } from '../lib/codeTheme'
-import { resolveTextLanguage, isJsonFile, isFoldableFile } from '../lib/textLanguages'
-import { unwrapText, wrapText, type TextEnvelope } from '../lib/textFidelity'
+import { resolveTextLanguage, isStandardJsonFile, isFoldableFile } from '../lib/textLanguages'
+import { unwrapText, wrapText, type TextEnvelope, type Eol } from '../lib/textFidelity'
 import { textEditorBridge } from '../lib/textEditorBridge'
 import { getLang, t } from '../lib/i18n'
 
@@ -83,8 +83,8 @@ export interface TextCursorInfo {
   selections: number
   /** 选中字符总数，0 表示无选择 */
   selected: number
-  /** 换行符，用于状态栏展示 LF / CRLF */
-  eol: '\n' | '\r\n'
+  /** 换行符，用于状态栏展示 LF / CRLF / CR */
+  eol: Eol
 }
 
 /** 需要跨标签切换保留的视图状态 */
@@ -106,7 +106,7 @@ interface Props {
   onOpenWithDefaultApp?: () => void
 }
 
-function cursorInfo(state: EditorState, eol: '\n' | '\r\n'): TextCursorInfo {
+function cursorInfo(state: EditorState, eol: Eol): TextCursorInfo {
   const main = state.selection.main
   const line = state.doc.lineAt(main.head)
   const selected = state.selection.ranges.reduce((sum, r) => sum + (r.to - r.from), 0)
@@ -147,7 +147,9 @@ export default function TextEditor({
   onCursorChangeRef.current = onCursorChange
 
   const [wrap, setWrap] = useState(() => resolveTextLanguage(fileName) === null)
-  const isJson = isJsonFile(fileName)
+  // 只有标准 .json 提供格式化/压缩：.json5/.jsonc 允许注释与尾逗号，原生 JSON.parse
+  // 会直接抛错，故不显示这两个按钮。
+  const isJson = isStandardJsonFile(fileName)
   // 只有带折叠结构的语言（JSON/JS/TS/CSS/HTML/XML/YAML）才显示折叠 UI；纯文本、
   // TOML/INI/Shell、SQL 没有折叠范围，隐藏折叠栏与「折叠/展开全部」按钮。
   const foldable = isFoldableFile(fileName)
@@ -210,6 +212,11 @@ export default function TextEditor({
         }
         if (update.docChanged || update.selectionSet) {
           onCursorChangeRef.current?.(cursorInfo(update.state, envelopeRef.current.eol))
+          // 选区变化也要落进缓存，否则跨标签恢复时会用回上次滚动那刻的旧选区。
+          onStateChangeRef.current?.({
+            scrollTop: update.view.scrollDOM.scrollTop,
+            selection: update.state.selection.toJSON(),
+          })
         }
       }),
       EditorView.domEventHandlers({
@@ -253,7 +260,8 @@ export default function TextEditor({
     })
 
     return () => {
-      // 卸载前若还有未提交的编辑，补交一次（与切标签同帧的输入）
+      // 编辑通过 updateListener 在 docChanged 时同步回写，无未提交草稿需补交；
+      // 这里只注销搜索桥并销毁视图。
       textEditorBridge.set(null)
       viewRef.current = null
       view.destroy()

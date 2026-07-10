@@ -13,7 +13,7 @@ import Sidebar from './components/Sidebar'
 import SidebarHeader from './components/SidebarHeader'
 import TabBar from './components/TabBar'
 import SourceEditor from './components/SourceEditor'
-import { classifyFile } from './lib/fileKind'
+import { classifyFile, fileExtension } from './lib/fileKind'
 import { textLanguageLabel } from './lib/textLanguages'
 import { textEditorBridge } from './lib/textEditorBridge'
 import type { TextCursorInfo, TextViewState } from './components/TextEditor'
@@ -1153,7 +1153,9 @@ export default function App(): JSX.Element {
               isTextKind ? (
                 <Suspense fallback={<div className="editor-loading" />}>
                   <TextEditor
-                    key={activeTab.id + '-text'}
+                    // 扩展名进 key：同 id 改扩展名（另存为）时重挂载，让折叠栏 /
+                    // JSON 按钮 / 自动换行默认按新语言重算（这些只在挂载时定型）。
+                    key={activeTab.id + '-text-' + fileExtension(activeTab.name)}
                     content={activeTab.content}
                     fileName={activeTab.name}
                     readOnly={readingMode}

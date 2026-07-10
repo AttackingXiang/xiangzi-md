@@ -120,9 +120,10 @@ export function textLanguageLabel(name: string): string {
   return resolveTextLanguage(name)?.label ?? 'Plain Text'
 }
 
-/** 该文件是否为 JSON 家族（决定是否显示格式化/压缩按钮）。 */
-export function isJsonFile(name: string): boolean {
-  return ['json', 'json5', 'jsonc'].includes(fileExtension(name))
+/** 该文件是否为标准 .json（决定是否显示格式化/压缩按钮）。
+ * .json5/.jsonc 允许注释与尾逗号，原生 JSON.parse 会失败，故不算在内。 */
+export function isStandardJsonFile(name: string): boolean {
+  return fileExtension(name) === 'json'
 }
 
 /** 该文件的语言是否支持折叠（决定是否显示「折叠/展开全部」按钮）。 */

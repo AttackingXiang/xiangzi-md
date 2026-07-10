@@ -10,10 +10,6 @@ export const textEditorBridge = {
   set(fn: (() => void) | null): void {
     openSearch = fn
   },
-  /** 是否有活跃的 TextEditor（用于判断 ⌘F 该走哪套搜索）。 */
-  isActive(): boolean {
-    return openSearch !== null
-  },
   /** 打开当前 TextEditor 的搜索面板；无活跃编辑器时静默返回。 */
   openSearch(): void {
     openSearch?.()

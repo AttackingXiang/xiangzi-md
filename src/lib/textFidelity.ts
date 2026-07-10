@@ -4,11 +4,14 @@
  * 只在编辑器里用规范化文本，回写 tab.content 时再按原样重新组装。未编辑的文件
  * 因此能逐字节 round-trip，脏状态判断（content === savedContent）不被误触发。
  */
+/** 换行符风格：LF、CRLF，或老 Mac 的单 CR */
+export type Eol = '\n' | '\r\n' | '\r'
+
 export interface TextEnvelope {
   /** 原文是否以 UTF-8 BOM 开头 */
   bom: boolean
-  /** 主导换行符：CRLF 文件保存回 CRLF，其余用 LF */
-  eol: '\n' | '\r\n'
+  /** 主导换行符：整份文件按它统一回写。混排文件取多数，并列时优先 LF。 */
+  eol: Eol
 }
 
 export interface UnwrappedText extends TextEnvelope {
@@ -25,13 +28,25 @@ export function unwrapText(raw: string): UnwrappedText {
   const body = bom ? raw.slice(1) : raw
   const crlf = (body.match(/\r\n/g) ?? []).length
   const lfOnly = (body.match(/(?<!\r)\n/g) ?? []).length
-  const eol: '\n' | '\r\n' = crlf > lfOnly ? '\r\n' : '\n'
+  const crOnly = (body.match(/\r(?!\n)/g) ?? []).length
+  // 取出现次数最多的风格；并列时按 LF > CRLF > CR 的顺序优先（严格大于才替换）。
+  let eol: Eol = '\n'
+  let best = lfOnly
+  if (crlf > best) {
+    best = crlf
+    eol = '\r\n'
+  }
+  if (crOnly > best) {
+    eol = '\r'
+  }
   const text = body.replace(/\r\n?/g, '\n')
   return { bom, eol, text }
 }
 
 /** 把编辑器里的 \n 文本按信封重新组装成磁盘原样格式。 */
 export function wrapText(env: TextEnvelope, text: string): string {
-  const body = env.eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text
+  let body = text
+  if (env.eol === '\r\n') body = text.replace(/\n/g, '\r\n')
+  else if (env.eol === '\r') body = text.replace(/\n/g, '\r')
   return env.bom ? BOM_CHAR + body : body
 }
