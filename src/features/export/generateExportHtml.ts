@@ -344,7 +344,8 @@ ${liveStyles}
 </style>
 <style>
 *{scrollbar-width:none}*::-webkit-scrollbar{display:none}
-html,body{margin:0;padding:0;background:var(--bg,#fff)}
+html,body{margin:0;padding:0;height:auto;overflow:visible;background:var(--bg,#fff)}
+.export-view{flex:none;overflow:visible}
 .milkdown{padding:0;background:var(--bg,#fff)}
 .ProseMirror.export-content{max-width:800px;margin:0 auto;padding:48px 40px 80px;outline:none}
 .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content :is(h1,h2,h3,h4,h5,h6){font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei UI','Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif!important}
