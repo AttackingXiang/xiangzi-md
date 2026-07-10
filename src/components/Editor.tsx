@@ -35,6 +35,8 @@ import { codeHighlightPlugin } from '../lib/codeHighlight'
 import { codeBlockView } from '../lib/staticCodeBlock'
 import { codeMirrorTheme } from '../lib/codeTheme'
 import { headingSelectionToolbarPlugin } from '../lib/headingSelectionToolbar'
+import { loadTableLayouts, saveTableLayout, tableSignature } from '../lib/tableLayoutPersistence'
+import type { TableColumnWidthMode } from '../lib/editorCommands'
 
 interface Props {
   content: string
@@ -52,6 +54,9 @@ interface Props {
   focusMode: boolean
   typewriterMode: boolean
   showSelectionToolbar: boolean
+  tableAutoWidth: 'distribute' | 'fit' | 'equal'
+  tableAutoResize: boolean
+  documentKey: string
   /** 文档标签栏（由调用方渲染好传入）。放进滚动视口内部、正文最上方，让它跟
    * 标题、正文一起滚动，而不是钉死在编辑区顶部。Editor 本身不关心标签数据，
    * 只负责把这块内容摆在滚动容器里的正确位置——保持标签逻辑跟编辑器解耦。 */
@@ -99,6 +104,9 @@ export default function Editor({
   focusMode,
   typewriterMode,
   showSelectionToolbar,
+  tableAutoWidth,
+  tableAutoResize,
+  documentKey,
   tagBar,
   readingMode,
   initialScrollTop = 0,
@@ -113,6 +121,10 @@ export default function Editor({
   const crepeRef = useRef<Crepe | null>(null)
   const readingModeRef = useRef(readingMode)
   readingModeRef.current = readingMode
+  const tableAutoWidthRef = useRef(tableAutoWidth)
+  tableAutoWidthRef.current = tableAutoWidth
+  const tableAutoResizeRef = useRef(tableAutoResize)
+  tableAutoResizeRef.current = tableAutoResize
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const contentRef = useRef(content)
@@ -321,6 +333,39 @@ export default function Editor({
     let anchorAdjusting = false
     let navigating = false
     let navSettleTimer: number | null = null
+    let tableAutoWidthTimer: number | null = null
+    let resizedTable: HTMLTableElement | null = null
+    const allTables = (): HTMLTableElement[] =>
+      Array.from(crepeRoot.querySelectorAll<HTMLTableElement>('table.children'))
+    const tableRecord = (table: HTMLTableElement) => {
+      const tables = allTables()
+      const index = tables.indexOf(table)
+      const signature = tableSignature(table)
+      return {
+        index,
+        signature,
+        override: loadTableLayouts(documentKey).find(
+          (record) => record.signature === signature || record.index === index,
+        ),
+      }
+    }
+    const persistTable = (table: HTMLTableElement, mode: TableColumnWidthMode | 'manual'): void => {
+      const { index, signature } = tableRecord(table)
+      if (index < 0) return
+      const widths =
+        mode === 'manual'
+          ? Array.from(table.querySelectorAll<HTMLTableColElement>('col')).map((col) =>
+              Math.round(col.getBoundingClientRect().width),
+            )
+          : undefined
+      saveTableLayout(documentKey, { index, signature, mode, widths })
+    }
+    const selectedTable = (): HTMLTableElement | null => {
+      if (!editorView) return null
+      const dom = editorView.domAtPos(editorView.state.selection.from).node
+      const element = dom instanceof Element ? dom : dom.parentElement
+      return element?.closest<HTMLTableElement>('table.children') ?? null
+    }
     const pickAnchor = (): void => {
       const dom = editorView?.dom
       if (!dom) return
@@ -404,7 +449,20 @@ export default function Editor({
       if (!(event.target instanceof Element)) return
       if (event.target.closest('td, th') && root.querySelector('.ProseMirror.resize-cursor')) {
         userEdited = true
+        resizedTable = event.target.closest<HTMLTableElement>('table.children')
       }
+    }
+    const persistTableResize = (): void => {
+      if (!resizedTable) return
+      const table = resizedTable
+      resizedTable = null
+      requestAnimationFrame(() => persistTable(table, 'manual'))
+    }
+    const persistLayoutOverride = (event: Event): void => {
+      const table = selectedTable()
+      const mode = (event as CustomEvent<{ mode: TableColumnWidthMode }>).detail?.mode
+      if (!table || !['distribute', 'fit', 'equal'].includes(mode)) return
+      persistTable(table, mode)
     }
     const focusEditorFromBlankArea = (event: PointerEvent): void => {
       if (event.button !== 0 || !editorView || !(event.target instanceof Element)) return
@@ -449,6 +507,8 @@ export default function Editor({
     root.addEventListener('pointerdown', clearSelectAllVisual, true)
     root.addEventListener('pointerdown', markEditorControl, true)
     root.addEventListener('mousedown', markTableResize, true)
+    window.addEventListener('mouseup', persistTableResize, true)
+    window.addEventListener('xmd-table-layout-override', persistLayoutOverride)
     root.addEventListener('pointerdown', focusEditorFromBlankArea)
     root.addEventListener('keydown', clearSelectAllOnKey, true)
     const cancelScrollRestore = (): void => {
@@ -495,6 +555,29 @@ export default function Editor({
       if (event.target instanceof Element && event.target.closest('.document-tag-bar')) return
       markUserEdited()
     }
+    const scheduleTableAutoWidth = (): void => {
+      if (!editorView || !tableAutoResizeRef.current) return
+      const $from = editorView.state.selection.$from
+      let inTable = false
+      for (let depth = $from.depth; depth >= 0; depth -= 1) {
+        if ($from.node(depth).type.name === 'table') {
+          inTable = true
+          break
+        }
+      }
+      if (!inTable) return
+      if (tableAutoWidthTimer !== null) clearTimeout(tableAutoWidthTimer)
+      tableAutoWidthTimer = window.setTimeout(() => {
+        tableAutoWidthTimer = null
+        const table = selectedTable()
+        const override = table ? tableRecord(table).override : undefined
+        if (override?.mode === 'manual') return
+        const mode = override?.mode ?? tableAutoWidthRef.current
+        if (mode === 'fit') editorCmd.smartColumnWidth()
+        else if (mode === 'equal') editorCmd.equalColumnWidths()
+        else editorCmd.distributeAutoFit()
+      }, 350)
+    }
     // Arm the anchoring stand-down for the duration of a navigation. The glide
     // fires scroll events; each one pushes the disarm out by 200ms, so anchoring
     // resumes only once the animation has actually settled — at which point the
@@ -521,6 +604,7 @@ export default function Editor({
     root.addEventListener('touchstart', cancelScrollRestore, { passive: true })
     root.addEventListener('pointerdown', cancelScrollRestore, true)
     root.addEventListener('beforeinput', markUserEditedFromDomEvent)
+    root.addEventListener('input', scheduleTableAutoWidth)
     root.addEventListener('paste', markUserEditedFromDomEvent)
     root.addEventListener('cut', markUserEditedFromDomEvent)
     root.addEventListener('drop', markUserEditedFromDomEvent)
@@ -550,6 +634,23 @@ export default function Editor({
         pickAnchor()
         resizeObserver = new ResizeObserver(() => applyAnchor())
         resizeObserver.observe(contentEl)
+        requestAnimationFrame(() => {
+          const records = loadTableLayouts(documentKey)
+          allTables().forEach((table, index) => {
+            const signature = tableSignature(table)
+            const override = records.find(
+              (record) => record.signature === signature || record.index === index,
+            )
+            if (override?.mode === 'manual' && override.widths) {
+              editorCmd.renderTableColumnWidths('fit', table, override.widths)
+            } else {
+              editorCmd.renderTableColumnWidths(
+                override && override.mode !== 'manual' ? override.mode : tableAutoWidthRef.current,
+                table,
+              )
+            }
+          })
+        })
       })
       .catch((error: unknown) => console.error('Editor initialization failed', error))
 
@@ -564,6 +665,8 @@ export default function Editor({
       root.removeEventListener('pointerdown', clearSelectAllVisual, true)
       root.removeEventListener('pointerdown', markEditorControl, true)
       root.removeEventListener('mousedown', markTableResize, true)
+      window.removeEventListener('mouseup', persistTableResize, true)
+      window.removeEventListener('xmd-table-layout-override', persistLayoutOverride)
       root.removeEventListener('pointerdown', focusEditorFromBlankArea)
       root.removeEventListener('keydown', clearSelectAllOnKey, true)
       root.removeEventListener('scroll', onScrollRepick)
@@ -573,12 +676,14 @@ export default function Editor({
       root.removeEventListener('touchstart', cancelScrollRestore)
       root.removeEventListener('pointerdown', cancelScrollRestore, true)
       root.removeEventListener('beforeinput', markUserEditedFromDomEvent)
+      root.removeEventListener('input', scheduleTableAutoWidth)
       root.removeEventListener('paste', markUserEditedFromDomEvent)
       root.removeEventListener('cut', markUserEditedFromDomEvent)
       root.removeEventListener('drop', markUserEditedFromDomEvent)
       window.removeEventListener('xmd-navigate', onNavigateRequest)
       resizeObserver?.disconnect()
       if (navSettleTimer !== null) clearTimeout(navSettleTimer)
+      if (tableAutoWidthTimer !== null) clearTimeout(tableAutoWidthTimer)
       if (scrollRestoreFrame !== null) cancelAnimationFrame(scrollRestoreFrame)
       // Do not persist from passive-effect cleanup. React may already have
       // detached this keyed editor from layout, at which point WebKit reports

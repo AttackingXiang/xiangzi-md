@@ -348,6 +348,62 @@ export default function Settings({
                     onChange={(checked) => onChange({ showToolbar: checked })}
                   />
                 </SettingsCard>
+                <SettingsCard title={en ? 'Tables' : '表格'}>
+                  <div className="table-layout-setting">
+                    <label className="table-layout-setting-row">
+                      <span className="setting-label-with-info">
+                        {en ? 'Table column layout' : '表格列宽布局'}
+                        <span
+                          className="setting-info-icon"
+                          title={
+                            en
+                              ? 'This is the default layout for tables without an individual override.'
+                              : '这是未单独指定布局的表格所使用的默认渲染方式。'
+                          }
+                        >
+                          <Info size={14} />
+                        </span>
+                      </span>
+                      <select
+                        value={settings.tableAutoWidth ?? 'distribute'}
+                        onChange={(event) =>
+                          onChange({
+                            tableAutoWidth: event.target.value as AppSettings['tableAutoWidth'],
+                          })
+                        }
+                      >
+                        <option value="distribute">
+                          {en ? 'Smart fill (recommended)' : '智能占满（推荐）'}
+                        </option>
+                        <option value="fit">{en ? 'Fit to content' : '按内容适配'}</option>
+                        <option value="equal">{en ? 'Equal width' : '等宽分配'}</option>
+                      </select>
+                    </label>
+                    <p className="table-layout-description">
+                      {(settings.tableAutoWidth ?? 'distribute') === 'fit'
+                        ? en
+                          ? 'Fits each column to its content; wide tables may scroll horizontally.'
+                          : '按单元格内容的自然宽度显示，较宽的表格可能出现横向滚动。'
+                        : (settings.tableAutoWidth ?? 'distribute') === 'equal'
+                          ? en
+                            ? 'Gives every column the same width and fills the editor.'
+                            : '所有列使用相同宽度，并铺满编辑区域。'
+                          : en
+                            ? 'Distributes width by content needs and fills the editor.'
+                            : '根据各列内容需求智能分配宽度，并铺满编辑区域。'}
+                    </p>
+                  </div>
+                  <ToggleRow
+                    label={en ? 'Automatically resize while editing' : '编辑时自动调整表格'}
+                    description={
+                      en
+                        ? 'After input pauses in a table cell, reapply that table’s current layout. Individual and manually resized tables keep their overrides.'
+                        : '在表格单元格内停止输入后，按照该表格当前的渲染方式重新调整；单表规则和手动列宽优先保留。'
+                    }
+                    checked={settings.tableAutoResize ?? true}
+                    onChange={(tableAutoResize) => onChange({ tableAutoResize })}
+                  />
+                </SettingsCard>
                 <SettingsCard title={en ? 'Editor overlays' : '编辑器浮层'}>
                   <ToggleRow
                     label={en ? 'Selection toolbar' : '选中文本快捷工具栏'}
@@ -431,7 +487,11 @@ export default function Settings({
                     onChange={(checked) => onChange({ tagGroupsFirst: checked })}
                   />
                   <ToggleRow
-                    label={en ? 'Show all tags when clicking document tags' : '点击文档标签时展示全部标签'}
+                    label={
+                      en
+                        ? 'Show all tags when clicking document tags'
+                        : '点击文档标签时展示全部标签'
+                    }
                     description={
                       en
                         ? 'When clicking a tag inside a document, show the all-tags tree on the left. Off by default — the file tree is hidden and only the results column opens.'
@@ -870,7 +930,7 @@ function SettingRow({
   description,
   children,
 }: {
-  label: string
+  label: ReactNode
   description?: string
   children: ReactNode
 }): JSX.Element {

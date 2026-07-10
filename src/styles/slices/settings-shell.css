@@ -321,3 +321,44 @@
   font-size: 12px;
   word-break: break-all;
 }
+.setting-label-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.setting-info-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.table-layout-setting {
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table-layout-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.table-layout-setting-row select {
+  min-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.table-layout-description {
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}

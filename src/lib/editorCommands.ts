@@ -1,7 +1,7 @@
 import type { Node as ProseNode, NodeType, Schema } from '@milkdown/kit/prose/model'
 import { Selection, type Command, type EditorState } from '@milkdown/kit/prose/state'
 import { toggleMark, setBlockType, wrapIn } from '@milkdown/kit/prose/commands'
-import { wrapInList } from '@milkdown/kit/prose/schema-list'
+import { liftTarget } from '@milkdown/kit/prose/transform'
 import {
   addColumnAfter,
   addColumnBefore,
@@ -17,6 +17,12 @@ import { undo, redo } from 'prosemirror-history'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import { editorBridge } from './editorBridge'
 import { tableZoomBridge } from './tableZoomBridge'
+import {
+  fitColumnsToContainer,
+  fitColumnsToContents,
+  type IntrinsicColumnWidth,
+} from './tableColumnSizing'
+import { toggleListStyleCommand, type ListStyle } from './listCommands'
 
 /** 用当前活跃编辑器执行一个由 schema 构造的命令 */
 function exec(make: (schema: Schema) => Command | false | null | undefined): void {
@@ -35,6 +41,21 @@ function execCommand(command: Command): void {
   editorBridge.markUserEdit()
   command(view.state, view.dispatch)
   view.focus()
+}
+
+/** 引用是开关而不是无限包裹：引用内再次执行时，只解除当前这一层引用。 */
+export function toggleBlockquote(type: NodeType): Command {
+  return (state, dispatch) => {
+    const { $from, $to } = state.selection
+    const quotedRange = $from.blockRange($to, (node) => node.type === type)
+    if (quotedRange) {
+      const target = liftTarget(quotedRange)
+      if (target === null) return false
+      dispatch?.(state.tr.lift(quotedRange, target).scrollIntoView())
+      return true
+    }
+    return wrapIn(type)(state, dispatch)
+  }
 }
 
 export function headingLevelFromState(state: EditorState): number | null {
@@ -96,35 +117,8 @@ function shiftSelectedHeading(direction: 'promote' | 'demote'): void {
   exec((schema) => schema.nodes.heading && setBlockType(schema.nodes.heading, { level: next }))
 }
 
-function taskList(): void {
-  const view = editorBridge.get()
-  const bulletList = view?.state.schema.nodes.bullet_list
-  const listItem = view?.state.schema.nodes.list_item
-  if (!view || !bulletList || !listItem) return
-
-  editorBridge.markUserEdit()
-  wrapInList(bulletList)(view.state, view.dispatch)
-
-  const latest = editorBridge.get()
-  if (!latest) return
-  const { $from, from, to } = latest.state.selection
-  const positions = new Set<number>()
-  for (let depth = $from.depth; depth > 0; depth--) {
-    if ($from.node(depth).type === listItem) positions.add($from.before(depth))
-  }
-  latest.state.doc.nodesBetween(from, to, (node, pos) => {
-    if (node.type === listItem) positions.add(pos)
-  })
-
-  let tr = latest.state.tr
-  for (const pos of positions) {
-    const node = tr.doc.nodeAt(pos)
-    if (node?.type === listItem && node.attrs.checked == null) {
-      tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: false })
-    }
-  }
-  if (tr.docChanged) latest.dispatch(tr)
-  latest.focus()
+function setListStyle(style: ListStyle): void {
+  execCommand(toggleListStyleCommand(style))
 }
 
 function insertTable(rows = 3, columns = 3): void {
@@ -182,6 +176,7 @@ function rewriteColumnWidths(
   const map = TableMap.get(table.node)
   const seen = new Set<number>()
   const tr = view.state.tr
+  let changed = false
   for (const rawPos of map.map) {
     if (seen.has(rawPos)) continue
     seen.add(rawPos)
@@ -190,11 +185,24 @@ function rewriteColumnWidths(
     if (!node) continue
     const colStart = map.colCount(rawPos)
     const colspan = node.attrs.colspan as number
+    const next = compute(colStart, colspan)
+    const current = node.attrs.colwidth as number[] | null
+    if (
+      current === next ||
+      (current !== null &&
+        next !== null &&
+        current.length === next.length &&
+        current.every((width, index) => Math.abs(width - next[index]) < 2))
+    ) {
+      continue
+    }
+    changed = true
     tr.setNodeMarkup(tr.mapping.map(docPos), null, {
       ...node.attrs,
-      colwidth: compute(colStart, colspan),
+      colwidth: next,
     })
   }
+  if (!changed) return
   editorBridge.markUserEdit()
   view.dispatch(tr)
   view.focus()
@@ -221,24 +229,11 @@ function distributeAutoFit(): void {
   if (!tableEl) return
 
   const available = tableAvailableWidth(tableEl, numCols)
-  const natural = measureNaturalColumnWidths(tableEl, numCols)
-  const totalNatural = natural.reduce((sum, w) => sum + w, 0)
-
-  const minCol = Math.min(MIN_AUTO_COLUMN, Math.floor(available / numCols))
-  const widths =
-    totalNatural > 0
-      ? natural.map((w) => Math.max(Math.floor((w / totalNatural) * available), minCol))
-      : Array<number>(numCols).fill(Math.floor(available / numCols))
-
-  // 修正取整误差，让总宽精确等于可用宽度（占满、且不溢出产生滚动条）。
-  const diff = available - widths.reduce((sum, w) => sum + w, 0)
-  if (widths.length > 0) {
-    const widestIdx = widths.reduce((best, w, i) => (w > widths[best] ? i : best), 0)
-    widths[widestIdx] = Math.max(minCol, widths[widestIdx] + diff)
-  }
+  const intrinsic = measureIntrinsicColumnWidths(tableEl, numCols)
+  const widths = fitColumnsToContainer(intrinsic, available)
 
   rewriteColumnWidths((colStart, colspan) =>
-    Array.from({ length: colspan }, (_, i) => widths[colStart + i] ?? minCol),
+    Array.from({ length: colspan }, (_, i) => widths[colStart + i] ?? MIN_AUTO_COLUMN),
   )
 }
 
@@ -256,18 +251,60 @@ function smartColumnWidth(): void {
   const tableEl = activeTableEl(view, table.pos)
   if (!tableEl) return
 
-  const natural = measureNaturalColumnWidths(tableEl, numCols)
-  const widths = natural.map((w) =>
-    Math.min(Math.max(w || MIN_AUTO_COLUMN, MIN_AUTO_COLUMN), MAX_AUTO_COLUMN),
-  )
+  const intrinsic = measureIntrinsicColumnWidths(tableEl, numCols)
+  const widths = fitColumnsToContents(intrinsic, MIN_AUTO_COLUMN, MAX_AUTO_COLUMN)
   rewriteColumnWidths((colStart, colspan) =>
     Array.from({ length: colspan }, (_, i) => widths[colStart + i] ?? MIN_AUTO_COLUMN),
   )
 }
 
-/** 不设置列宽：清除全部列宽，表格回到自适应布局，过宽时可左右滚动。 */
-function clearColumnWidths(): void {
-  rewriteColumnWidths(() => null)
+/** 等宽分配：所有列平均占满表格可用宽度。 */
+function equalColumnWidths(): void {
+  const view = editorBridge.get()
+  if (!view) return
+  const table = findTable(view.state.selection.$from)
+  if (!table) return
+  const numCols = TableMap.get(table.node).width
+  const tableEl = activeTableEl(view, table.pos)
+  if (!tableEl) return
+  const width = Math.floor(tableAvailableWidth(tableEl, numCols) / numCols)
+  const widths = Array<number>(numCols).fill(width)
+  const remainder = tableAvailableWidth(tableEl, numCols) - width * numCols
+  for (let index = 0; index < remainder; index += 1) widths[index] += 1
+  rewriteColumnWidths((colStart, colspan) => widths.slice(colStart, colStart + colspan))
+}
+
+export type TableColumnWidthMode = 'distribute' | 'fit' | 'equal'
+
+/** 首次打开文档时只设置 DOM 列轨道；Markdown 源文件和编辑历史均不受影响。 */
+function renderTableColumnWidths(
+  mode: TableColumnWidthMode,
+  table: HTMLTableElement,
+  savedWidths?: number[],
+): void {
+  const cols = Array.from(table.querySelectorAll<HTMLTableColElement>('col'))
+  if (cols.length === 0) return
+  const available = tableAvailableWidth(table, cols.length)
+  const widths =
+    savedWidths?.length === cols.length
+      ? savedWidths
+      : mode === 'equal'
+        ? fitColumnsToContainer(
+            Array.from({ length: cols.length }, () => ({ min: 1, preferred: 1 })),
+            available,
+          )
+        : mode === 'fit'
+          ? fitColumnsToContents(
+              measureIntrinsicColumnWidths(table, cols.length),
+              MIN_AUTO_COLUMN,
+              MAX_AUTO_COLUMN,
+            )
+          : fitColumnsToContainer(measureIntrinsicColumnWidths(table, cols.length), available)
+  cols.forEach((col, index) => {
+    col.style.width = `${widths[index] ?? MIN_AUTO_COLUMN}px`
+  })
+  table.style.width =
+    mode === 'fit' || savedWidths ? `${widths.reduce((sum, width) => sum + width, 0)}px` : '100%'
 }
 
 /**
@@ -275,33 +312,47 @@ function clearColumnWidths(): void {
  * 使用 table-layout:auto + width:max-content，让浏览器按内容自动排布，
  * 再逐列读取渲染宽度，最后恢复原有内联样式。
  */
-function measureNaturalColumnWidths(table: HTMLTableElement, numCols: number): number[] {
+function measureIntrinsicColumnWidths(
+  table: HTMLTableElement,
+  numCols: number,
+): IntrinsicColumnWidth[] {
   const cols = Array.from(table.querySelectorAll<HTMLTableColElement>('col'))
   const savedColWidths = cols.map((c) => c.style.width)
   const saved = {
     tableLayout: table.style.tableLayout,
     width: table.style.width,
     minWidth: table.style.minWidth,
+    maxWidth: table.style.maxWidth,
   }
   cols.forEach((c) => {
     c.style.width = ''
   })
   table.style.tableLayout = 'auto'
-  table.style.width = 'max-content'
   table.style.minWidth = '0'
+  table.style.maxWidth = 'none'
 
-  const widths = Array<number>(numCols).fill(0)
-  for (const row of Array.from(table.querySelectorAll('tr'))) {
-    let colIdx = 0
-    for (const cell of Array.from(row.children)) {
-      if (!(cell instanceof HTMLElement)) continue
-      const colspan = Number.parseInt(cell.getAttribute('colspan') ?? '1', 10) || 1
-      if (colspan === 1 && colIdx < numCols) {
-        widths[colIdx] = Math.max(widths[colIdx], Math.ceil(cell.getBoundingClientRect().width))
+  const measure = (width: 'min-content' | 'max-content'): number[] => {
+    table.style.width = width
+    const tracks = cols.map((col) => Math.ceil(col.getBoundingClientRect().width))
+    if (tracks.length === numCols && tracks.every((track) => track > 0)) return tracks
+
+    const fallback = Array<number>(numCols).fill(0)
+    for (const row of Array.from(table.querySelectorAll('tr'))) {
+      let colIdx = 0
+      for (const cell of Array.from(row.children)) {
+        if (!(cell instanceof HTMLElement)) continue
+        const colspan = Number.parseInt(cell.getAttribute('colspan') ?? '1', 10) || 1
+        const perColumn = Math.ceil(cell.getBoundingClientRect().width / colspan)
+        for (let offset = 0; offset < colspan && colIdx + offset < numCols; offset += 1) {
+          fallback[colIdx + offset] = Math.max(fallback[colIdx + offset], perColumn)
+        }
+        colIdx += colspan
       }
-      colIdx += colspan
     }
+    return fallback
   }
+  const minimums = measure('min-content')
+  const preferred = measure('max-content')
 
   cols.forEach((c, i) => {
     c.style.width = savedColWidths[i] ?? ''
@@ -309,7 +360,11 @@ function measureNaturalColumnWidths(table: HTMLTableElement, numCols: number): n
   table.style.tableLayout = saved.tableLayout
   table.style.width = saved.width
   table.style.minWidth = saved.minWidth
-  return widths
+  table.style.maxWidth = saved.maxWidth
+  return Array.from({ length: numCols }, (_, index) => ({
+    min: minimums[index] || MIN_AUTO_COLUMN,
+    preferred: Math.max(minimums[index] || 0, preferred[index] || 0, MIN_AUTO_COLUMN),
+  }))
 }
 
 /**
@@ -416,7 +471,11 @@ function insertLink(): void {
 export const editorCmd = {
   bold: () => exec((s) => s.marks.strong && toggleMark(s.marks.strong)),
   italic: () => exec((s) => s.marks.emphasis && toggleMark(s.marks.emphasis)),
-  strike: () => exec((s) => s.marks.strike && toggleMark(s.marks.strike)),
+  strike: () =>
+    exec((s) => {
+      const strike = s.marks.strike_through ?? s.marks.strike
+      return strike && toggleMark(strike)
+    }),
   inlineCode: () => exec((s) => s.marks.inlineCode && toggleMark(s.marks.inlineCode)),
   heading: (level: number) =>
     exec((s) => s.nodes.heading && setBlockType(s.nodes.heading, { level })),
@@ -424,12 +483,12 @@ export const editorCmd = {
   demoteHeading: () => shiftSelectedHeading('demote'),
   paragraph: () => exec((s) => s.nodes.paragraph && setBlockType(s.nodes.paragraph)),
   codeBlock: () => exec((s) => s.nodes.code_block && setBlockType(s.nodes.code_block)),
-  bulletList: () => exec((s) => s.nodes.bullet_list && wrapInList(s.nodes.bullet_list)),
-  orderedList: () => exec((s) => s.nodes.ordered_list && wrapInList(s.nodes.ordered_list)),
-  taskList,
+  bulletList: () => setListStyle('bullet'),
+  orderedList: () => setListStyle('ordered'),
+  taskList: () => setListStyle('task'),
   insertTable,
   insertLink,
-  quote: () => exec((s) => s.nodes.blockquote && wrapIn(s.nodes.blockquote)),
+  quote: () => exec((s) => s.nodes.blockquote && toggleBlockquote(s.nodes.blockquote)),
   undo: () => execCommand(undo),
   redo: () => execCommand(redo),
   addRowBefore: () => execCommand(addRowBefore),
@@ -441,7 +500,8 @@ export const editorCmd = {
   deleteTable: () => execCommand(deleteTable),
   distributeAutoFit,
   smartColumnWidth,
-  clearColumnWidths,
+  equalColumnWidths,
+  renderTableColumnWidths,
   expandTable,
 }
 

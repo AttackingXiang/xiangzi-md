@@ -437,7 +437,8 @@
   padding: 4px;
   border: 1px solid var(--workspace-divider-strong);
   border-radius: 8px;
-  background: var(--workspace-surface);
+  /* 候选项必须盖住正文；workspace-surface 会随背景图片强度变透明。 */
+  background: var(--bg);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 16%, transparent);
 }
 

@@ -27,6 +27,7 @@ import {
   Quote,
   Scissors,
   SquareCode,
+  Strikethrough,
   Table2,
   TableColumnsSplit,
   TableRowsSplit,
@@ -98,20 +99,35 @@ export function useEditorContextMenu(
               onClick: editorCmd.addColumnAfter,
             },
             {
-              label: t('自动分配列宽'),
+              label: t('智能占满表格'),
               icon: <AlignJustify size={sz} />,
-              onClick: editorCmd.distributeAutoFit,
+              onClick: () => {
+                editorCmd.distributeAutoFit()
+                window.dispatchEvent(
+                  new CustomEvent('xmd-table-layout-override', { detail: { mode: 'distribute' } }),
+                )
+              },
               separatorBefore: true,
             },
             {
-              label: t('自动调整列宽'),
+              label: t('按内容适配列宽'),
               icon: <Wand2 size={sz} />,
-              onClick: editorCmd.smartColumnWidth,
+              onClick: () => {
+                editorCmd.smartColumnWidth()
+                window.dispatchEvent(
+                  new CustomEvent('xmd-table-layout-override', { detail: { mode: 'fit' } }),
+                )
+              },
             },
             {
-              label: t('不设置列宽'),
+              label: t('所有列等宽'),
               icon: <Columns size={sz} />,
-              onClick: editorCmd.clearColumnWidths,
+              onClick: () => {
+                editorCmd.equalColumnWidths()
+                window.dispatchEvent(
+                  new CustomEvent('xmd-table-layout-override', { detail: { mode: 'equal' } }),
+                )
+              },
             },
             {
               label: t('放大展开'),
@@ -153,6 +169,12 @@ export function useEditorContextMenu(
               icon: <Italic size={sz} />,
               hint: '⌘I',
               onClick: editorCmd.italic,
+              compactGroup: 'inline-format',
+            },
+            {
+              label: t('删除线'),
+              icon: <Strikethrough size={sz} />,
+              onClick: editorCmd.strike,
               compactGroup: 'inline-format',
             },
             {

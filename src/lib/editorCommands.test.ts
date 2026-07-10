@@ -5,6 +5,7 @@ import {
   headingLevelFromState,
   shiftedHeadingLevel,
   shouldClearHeadingOnBackspace,
+  toggleBlockquote,
 } from './editorCommands'
 
 const schema = new Schema({
@@ -17,7 +18,26 @@ const schema = new Schema({
       content: 'inline*',
       attrs: { level: { default: 1 } },
     },
+    blockquote: { group: 'block', content: 'block+' },
   },
+})
+
+describe('toggleBlockquote', () => {
+  it('wraps a paragraph once, then removes the quote instead of nesting it', () => {
+    const paragraph = schema.node('paragraph', null, [schema.text('Quoted')])
+    const doc = schema.node('doc', null, [paragraph])
+    let state = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, 1),
+    })
+    const command = toggleBlockquote(schema.nodes.blockquote)
+    expect(command(state, (transaction) => (state = state.apply(transaction)))).toBe(true)
+    expect(state.doc.firstChild?.type).toBe(schema.nodes.blockquote)
+
+    expect(command(state, (transaction) => (state = state.apply(transaction)))).toBe(true)
+    expect(state.doc.firstChild?.type).toBe(schema.nodes.paragraph)
+  })
 })
 
 const backspace = {

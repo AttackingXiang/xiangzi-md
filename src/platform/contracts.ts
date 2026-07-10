@@ -76,6 +76,10 @@ export interface AppSettings {
   allowRemoteImages: boolean
   showToolbar: boolean
   showSelectionToolbar: boolean
+  /** 表格单元格输入停顿后采用的自动列宽策略。 */
+  tableAutoWidth: 'distribute' | 'fit' | 'equal'
+  /** 编辑表格内容后是否重新应用当前表格的布局模式。 */
+  tableAutoResize: boolean
   showStatusBar: boolean
   showStatusPath: boolean
   showReadingModeControl: boolean
