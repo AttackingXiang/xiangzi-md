@@ -16,11 +16,16 @@ export function useSettings() {
   const [customCssError, setCustomCssError] = useState(false)
   const [backgroundImageError, setBackgroundImageError] = useState(false)
   const backgroundImageUrlRef = useRef<string | null>(null)
+  const languageSaveRevisionRef = useRef(0)
 
   useEffect(() => {
     void desktop
       .getSettings()
       .then((s) => {
+        // i18n uses a small synchronous store. Update it before publishing the
+        // settings state so the render triggered below already uses the saved
+        // language (including on the initial app render).
+        setLang(s.language)
         setSettings(s)
         setSettingsReady(true)
       })
@@ -163,9 +168,43 @@ export function useSettings() {
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const saveSettings = useCallback(async (patch: Partial<AppSettings>): Promise<AppSettings> => {
-    const next = await desktop.setSettings(patch)
-    setSettings(next)
-    return next
+    const language = patch.language
+    const languageRevision = language === undefined ? null : ++languageSaveRevisionRef.current
+
+    if (language !== undefined) {
+      // Apply language changes before persistence completes. Calling setLang
+      // first is important: the state update causes the render, while setLang
+      // itself intentionally does not have a React subscription.
+      setLang(language)
+      setSettings((previous) => (previous ? { ...previous, language } : previous))
+    }
+
+    try {
+      const next = await desktop.setSettings(patch)
+      if (languageRevision !== null && languageRevision !== languageSaveRevisionRef.current) {
+        return next
+      }
+      setLang(next.language)
+      setSettings(next)
+      return next
+    } catch (error) {
+      if (languageRevision !== null && languageRevision === languageSaveRevisionRef.current) {
+        // Restore the persisted value when an optimistic language update fails.
+        // Reading it back also handles two rapid language changes where an
+        // earlier request may have succeeded or failed independently.
+        try {
+          const persisted = await desktop.getSettings()
+          if (languageRevision === languageSaveRevisionRef.current) {
+            setLang(persisted.language)
+            setSettings(persisted)
+          }
+        } catch {
+          // Keep the optimistic value if the authoritative settings cannot be
+          // read; the caller still receives and reports the original error.
+        }
+      }
+      throw error
+    }
   }, [])
 
   const pushRecentFile = useCallback((p: string) => {
