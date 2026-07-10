@@ -352,28 +352,42 @@ export default function App(): JSX.Element {
     const { tabs, activeId: aid } = stateRef.current
     const tab = tabs.find((tb) => tb.id === aid)
     if (!tab?.path) return
+    const tabPath = tab.path
     setSidebarVisible(true)
     setSearchView(false)
-    const fileParent = dirName(tab.path)
+    const fileParent = dirName(tabPath)
     if (!fileParent) return
     const currentFolder = folderRef.current
+    const favoriteFiles = new Set(settings?.favoriteFiles ?? [])
+    const favoriteRoot = (settings?.favorites ?? [])
+      .filter(
+        (favorite) =>
+          !favoriteFiles.has(favorite) &&
+          (tabPath.startsWith(favorite + '/') || tabPath.startsWith(favorite + '\\')),
+      )
+      .sort((left, right) => right.length - left.length)[0]
     const isUnderFolder =
       currentFolder?.root &&
-      (tab.path.startsWith(currentFolder.root + '/') ||
-        tab.path.startsWith(currentFolder.root + '\\'))
+      (tabPath.startsWith(currentFolder.root + '/') ||
+        tabPath.startsWith(currentFolder.root + '\\'))
     try {
-      if (!isUnderFolder) {
-        const result = await desktop.openContainingFolder(tab.path)
+      if (favoriteRoot && favoriteRoot !== currentFolder?.root) {
+        const result = await desktop.openFolderPath(favoriteRoot)
+        if (!result) return
+        setFolder(result)
+        pushRecentFolder(result.root)
+      } else if (!isUnderFolder) {
+        const result = await desktop.openContainingFolder(tabPath)
         if (!result) return
         setFolder(result)
         pushRecentFolder(result.root)
       }
-      requestReveal(tab.path)
+      requestReveal(tabPath)
     } catch (error) {
       console.error('Reveal active file failed', error)
       void desktop.notify(t('无法定位文件所在目录'))
     }
-  }, [pushRecentFolder, requestReveal])
+  }, [pushRecentFolder, requestReveal, settings?.favoriteFiles, settings?.favorites])
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [sidebarVisible, setSidebarVisible] = useState(true)

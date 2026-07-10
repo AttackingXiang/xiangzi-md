@@ -102,13 +102,7 @@ export const tauriDesktopAdapter: DesktopPort = {
   openParentFolder: async (root) => {
     const parent = dirName(root)
     if (!parent) return null
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      recursive: true,
-      defaultPath: parent,
-    })
-    return selected ? invoke<Folder | null>('open_folder_path', { root: selected }) : null
+    return invoke<Folder | null>('open_folder_path', { root: parent })
   },
   openContainingFolder: (filePath) => invoke<Folder | null>('open_containing_folder', { filePath }),
   openFile: async () => {
