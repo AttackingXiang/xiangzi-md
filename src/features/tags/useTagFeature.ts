@@ -202,8 +202,7 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
       setSearchView(false)
       // 已经手动打开的标签树属于用户当前工作状态，切换文档内的标签时保留它；
       // 只有左侧仍是文件树且设置关闭时，才收起左栏、只展示结果列。
-      const openOverview =
-        tagNavigation.overviewOpen || (settings?.tagClickOpensOverview ?? false)
+      const openOverview = tagNavigation.overviewOpen || (settings?.tagClickOpensOverview ?? false)
       setSidebarVisible(openOverview)
       tagNavigation.openTag(tag, openOverview)
     },
