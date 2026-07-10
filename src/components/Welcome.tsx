@@ -1,6 +1,7 @@
 import { FilePlus2, FolderOpen, FileText, Clock, Folder, RotateCcw } from 'lucide-react'
 import { t } from '../lib/i18n'
 import { baseName, dirName } from '../lib/path'
+import appIcon from '../../src-tauri/icons/icon.png'
 
 interface Props {
   recentFiles: string[]
@@ -44,7 +45,9 @@ export default function Welcome({
     <div className="welcome">
       <div className="welcome-inner">
         <div className="welcome-brand">
-          <div className="welcome-logo">M</div>
+          <div className="welcome-logo" aria-hidden="true">
+            <img src={appIcon} alt="" />
+          </div>
           <div>
             <h1>Xiangzi MD</h1>
             <p className="welcome-sub">{t('所见即所得的 Markdown 编辑器')}</p>
