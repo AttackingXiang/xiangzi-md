@@ -4,7 +4,6 @@ import {
   ChevronRight,
   ExternalLink,
   HeartHandshake,
-  PenLine,
   RefreshCw,
   ScrollText,
   X,
@@ -16,6 +15,7 @@ import licenseText from '../../../LICENSE?raw'
 import alipaySupportQr from '../../assets/support/alipay-support.jpg'
 import paypalSupportQr from '../../assets/support/paypal-support.png'
 import wechatSupportQr from '../../assets/support/wechat-support.jpg'
+import appIcon from '../../../src-tauri/icons/icon.png'
 import { SettingsPage, SettingsCard } from './primitives'
 import { updateStatusText } from './updateStatusText'
 
@@ -44,7 +44,7 @@ export default function AboutSection({ appVersion, updater, en }: Props): JSX.El
       <SettingsPage title={en ? 'About Xiangzi MD' : '关于 Xiangzi MD'}>
         <div className="about-card">
           <div className="about-logo" aria-hidden="true">
-            <PenLine size={24} />
+            <img src={appIcon} alt="" />
           </div>
           <div>
             <h2>Xiangzi MD</h2>
