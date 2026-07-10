@@ -214,6 +214,19 @@ export function useSettings() {
     })
   }, [])
 
+  const togglePinnedFolder = useCallback((path: string) => {
+    setSettings((prev) => {
+      if (!prev) return prev
+      const current = prev.pinnedFolders ?? []
+      const has = current.includes(path)
+      const pinnedFolders = has ? current.filter((x) => x !== path) : [...current, path]
+      void desktop
+        .setSettings({ pinnedFolders })
+        .catch((error: unknown) => console.error('Pinned folders persistence failed', error))
+      return { ...prev, pinnedFolders }
+    })
+  }, [])
+
   const togglePinnedTag = useCallback((tagKey: string) => {
     setSettings((prev) => {
       if (!prev) return prev
@@ -264,6 +277,7 @@ export function useSettings() {
     pushRecentFile,
     pushRecentFolder,
     toggleFavorite,
+    togglePinnedFolder,
     togglePinnedTag,
     toggleTagCollapsed,
     setFavoritesCollapsed,

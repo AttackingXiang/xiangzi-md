@@ -283,6 +283,8 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(tag_click_opens_overview);
     replace_if_some!(favorite_labels);
     replace_if_some!(session);
+    replace_if_some!(file_tree_sort);
+    replace_if_some!(pinned_folders);
     replace_if_some!(hide_attachment_folders);
     replace_if_some!(asset_search_paths);
     replace_if_some!(show_all_files);

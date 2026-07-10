@@ -44,6 +44,7 @@ import { ErrorCode } from './lib/errorCodes'
 import { baseName, dirName } from './lib/path'
 import { revealLocationKey } from './lib/platform'
 import { replaceMovedPath } from './lib/treeDrag'
+import { buildRecentRank, type SortContext } from './lib/fileTreeSort'
 import { parseOutline } from './lib/outline'
 import { setCopyPreferences } from './lib/copyPreferences'
 import { editorBridge } from './lib/editorBridge'
@@ -67,6 +68,7 @@ import { replaceMarkdownBody } from './features/tags/frontmatter'
 import { useTagFeature } from './features/tags/useTagFeature'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
+const EMPTY_STRING_ARRAY: string[] = []
 
 // Guards against two navigations animating at once: a newer call bumps the
 // token so the older rAF loop sees a mismatch and bows out.
@@ -132,6 +134,7 @@ export default function App(): JSX.Element {
     pushRecentFile,
     pushRecentFolder,
     toggleFavorite,
+    togglePinnedFolder,
     togglePinnedTag,
     toggleTagCollapsed,
     setFavoritesCollapsed,
@@ -617,6 +620,8 @@ export default function App(): JSX.Element {
     setTabs,
     openParentFolder,
     chooseFolderFrom,
+    pinnedFolders: settings?.pinnedFolders ?? EMPTY_STRING_ARRAY,
+    togglePinnedFolder,
     setCtxMenu,
     setInputDialog,
   })
@@ -659,6 +664,17 @@ export default function App(): JSX.Element {
   const outline = useMemo(
     () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
     [deferredOutlineContent, outlineVisible],
+  )
+
+  // 文件树排序上下文：排序方式 + 置顶集合 + 最近打开排名。集中在此计算，
+  // 逐层传给 FileTree，避免每个节点各自重建 Set/Map。
+  const fileTreeSortContext = useMemo<SortContext>(
+    () => ({
+      mode: settings?.fileTreeSort ?? 'default',
+      pinnedPaths: new Set(settings?.pinnedFolders ?? []),
+      recentRank: buildRecentRank(settings?.recentFiles ?? []),
+    }),
+    [settings?.fileTreeSort, settings?.pinnedFolders, settings?.recentFiles],
   )
 
   const workspaceVisibilityKey = settings
@@ -967,7 +983,7 @@ export default function App(): JSX.Element {
                 favorites={settings.favorites}
                 favoritesCollapsed={settings.favoritesCollapsed}
                 favoriteLabels={settings.favoriteLabels}
-                recentFiles={settings.recentFiles}
+                sortContext={fileTreeSortContext}
                 revealPath={revealPath}
                 revealRequestId={revealRequestId}
                 onRevealComplete={handleRevealComplete}

@@ -7,6 +7,8 @@ pub struct FileNode {
     pub path: String,
     pub is_dir: bool,
     pub openable: bool,
+    /// 最后修改时间（Unix 纳秒）；供文件树按「最近修改」排序。取不到时为 0。
+    pub modified_nanos: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<FileNode>>,
 }

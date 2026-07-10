@@ -9,8 +9,13 @@ export interface FileNode {
   path: string
   isDir: boolean
   openable: boolean
+  /** 最后修改时间（Unix 纳秒），供文件树「最近修改」排序；取不到时为 0 */
+  modifiedNanos: number
   children?: FileNode[]
 }
+
+/** 文件树排序方式 */
+export type FileTreeSort = 'default' | 'nameDesc' | 'modified' | 'opened' | 'smart'
 
 export interface FileVersion {
   sizeBytes: number
@@ -59,6 +64,10 @@ export interface AppSettings {
   tagClickOpensOverview: boolean
   favoriteLabels: Record<string, string>
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
+  /** 文件树排序：'default'（文件夹在前、名称升序）/'nameDesc'/'modified'/'opened'/'smart' */
+  fileTreeSort: FileTreeSort
+  /** 文件树中置顶的文件夹绝对路径，同级里排在未置顶项之前 */
+  pinnedFolders: string[]
   hideAttachmentFolders: boolean
   assetSearchPaths: string[]
   showAllFiles: boolean

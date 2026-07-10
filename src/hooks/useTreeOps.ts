@@ -25,6 +25,9 @@ interface Deps {
   setTabs: Dispatch<SetStateAction<Tab[]>>
   openParentFolder: (root: string) => void
   chooseFolderFrom: (root: string) => void
+  /** 当前置顶的文件夹路径集合，用于在右键菜单显示「置顶 / 取消置顶」。 */
+  pinnedFolders: string[]
+  togglePinnedFolder: (path: string) => void
   setCtxMenu: (menu: { x: number; y: number; items: MenuItem[] } | null) => void
   setInputDialog: (
     dialog: {
@@ -49,6 +52,8 @@ export function useTreeOps({
   setTabs,
   openParentFolder,
   chooseFolderFrom,
+  pinnedFolders,
+  togglePinnedFolder,
   setCtxMenu,
   setInputDialog,
 }: Deps) {
@@ -251,6 +256,11 @@ export function useTreeOps({
       if (node.isDir) {
         items.push({ label: t('新建文件'), onClick: () => createFileIn(node.path) })
         items.push({ label: t('新建文件夹'), onClick: () => createFolderIn(node.path) })
+        items.push({
+          label: pinnedFolders.includes(node.path) ? t('取消置顶') : t('置顶'),
+          onClick: () => togglePinnedFolder(node.path),
+          separatorBefore: true,
+        })
       } else if (node.openable) {
         items.push({ label: t('打开'), onClick: () => openPath(node.path, node.name) })
         items.push({
@@ -273,7 +283,16 @@ export function useTreeOps({
       })
       setCtxMenu({ x, y, items })
     },
-    [createFileIn, createFolderIn, openPath, renameNode, deleteNode, setCtxMenu],
+    [
+      createFileIn,
+      createFolderIn,
+      openPath,
+      renameNode,
+      deleteNode,
+      pinnedFolders,
+      togglePinnedFolder,
+      setCtxMenu,
+    ],
   )
 
   const openRootContext = useCallback(

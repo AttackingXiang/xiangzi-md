@@ -288,13 +288,6 @@ fn view_menu(
         .build()
 }
 
-fn window_menu(app: &AppHandle, language: &str) -> tauri::Result<Submenu<tauri::Wry>> {
-    SubmenuBuilder::new(app, tr(language, "窗口", "Window"))
-        .minimize_with_text(tr(language, "最小化", "Minimize"))
-        .maximize_with_text(tr(language, "缩放", "Zoom"))
-        .build()
-}
-
 pub fn install(
     app: &AppHandle,
     language: &str,
@@ -305,8 +298,9 @@ pub fn install(
         let file = file_menu(app, language, shortcuts)?;
         let edit = edit_menu(app, language, shortcuts)?;
         let view = view_menu(app, language, shortcuts)?;
-        let window = window_menu(app, language)?;
-        let menu = Menu::with_items(app, &[&application, &file, &edit, &view, &window])?;
+        // No "Window" submenu: the app is single-window, so minimize/zoom there
+        // duplicated the traffic-light controls without adding anything.
+        let menu = Menu::with_items(app, &[&application, &file, &edit, &view])?;
         app.set_menu(menu)?;
         Ok(())
     };

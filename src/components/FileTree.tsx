@@ -1,8 +1,9 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, Folder, LoaderCircle } from 'lucide-react'
 import { desktop } from '../platform'
 import type { FileNode } from '../types'
 import { canDropTreeItem } from '../lib/treeDrag'
+import { sortNodes, type SortContext } from '../lib/fileTreeSort'
 import { t } from '../lib/i18n'
 
 interface Props {
@@ -15,6 +16,8 @@ interface Props {
   onRevealComplete: (requestId: number) => void
   /** 需要从文件树中隐藏的目录名（完整名称匹配，所有层级） */
   hideFolderNames: string[]
+  /** 排序方式 + 置顶集合 + 最近打开排名；逐层套用。 */
+  sortContext: SortContext
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
@@ -33,6 +36,7 @@ export default function FileTree({
   revealRequestId,
   onRevealComplete,
   hideFolderNames,
+  sortContext,
   onOpenFile,
   onNodeContext,
   onMove,
@@ -41,10 +45,13 @@ export default function FileTree({
   expandedPaths,
   onToggleExpanded,
 }: Props): JSX.Element {
-  const visible =
-    hideFolderNames.length > 0
-      ? nodes.filter((n) => !n.isDir || !hideFolderNames.includes(n.name))
-      : nodes
+  const visible = useMemo(() => {
+    const filtered =
+      hideFolderNames.length > 0
+        ? nodes.filter((n) => !n.isDir || !hideFolderNames.includes(n.name))
+        : nodes
+    return sortNodes(filtered, sortContext)
+  }, [nodes, hideFolderNames, sortContext])
 
   return (
     <ul className="file-tree">
@@ -57,6 +64,7 @@ export default function FileTree({
           revealRequestId={revealRequestId}
           onRevealComplete={onRevealComplete}
           hideFolderNames={hideFolderNames}
+          sortContext={sortContext}
           onOpenFile={onOpenFile}
           onNodeContext={onNodeContext}
           onMove={onMove}
@@ -77,6 +85,7 @@ const TreeNode = memo(function TreeNode({
   revealRequestId,
   onRevealComplete,
   hideFolderNames,
+  sortContext,
   onOpenFile,
   onNodeContext,
   onMove,
@@ -91,6 +100,7 @@ const TreeNode = memo(function TreeNode({
   revealRequestId: number | null
   onRevealComplete: (requestId: number) => void
   hideFolderNames: string[]
+  sortContext: SortContext
   onOpenFile: (path: string, name?: string) => void
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
@@ -304,6 +314,7 @@ const TreeNode = memo(function TreeNode({
             revealRequestId={revealRequestId}
             onRevealComplete={onRevealComplete}
             hideFolderNames={hideFolderNames}
+            sortContext={sortContext}
             onOpenFile={onOpenFile}
             onNodeContext={onNodeContext}
             onMove={onMove}
