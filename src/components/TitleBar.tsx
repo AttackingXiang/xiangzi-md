@@ -30,10 +30,15 @@ export default function TitleBar({
       onPointerDown={(event) => {
         if (
           event.button !== 0 ||
-          event.detail !== 1 ||
           (event.target instanceof Element && event.target.closest('[data-titlebar-interactive]'))
         )
           return
+        // Not gated on event.detail: PointerEvent.detail is spec-optional and
+        // Chromium/WebView2 (Windows) reports 0 rather than a click count, so
+        // requiring `=== 1` silently blocked every drag on Windows. Starting
+        // a drag on a double-click's second press is harmless — there's no
+        // pointer movement between clicks, so nothing actually moves, and
+        // the separate onDoubleClick handler below still fires normally.
         void getCurrentWindow()
           .startDragging()
           .catch((error: unknown) => console.error('Window dragging failed', error))

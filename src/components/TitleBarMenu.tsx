@@ -4,7 +4,6 @@ import ContextMenu, { type MenuItem } from './ContextMenu'
 import { clipboardCmd, editorCmd } from '../lib/editorCommands'
 import { t } from '../lib/i18n'
 import { displayShortcut, effectiveShortcut, type ShortcutAction } from '../lib/shortcuts'
-import { runWindowAction } from '../lib/windowActions'
 import { desktop } from '../platform'
 
 interface Props {
@@ -12,7 +11,7 @@ interface Props {
   onOpenAbout: () => void
 }
 
-type MenuId = 'app' | 'file' | 'edit' | 'view' | 'window'
+type MenuId = 'app' | 'file' | 'edit' | 'view'
 
 function hint(shortcuts: Record<string, string>, id: ShortcutAction): string | undefined {
   const binding = effectiveShortcut(shortcuts, id)
@@ -25,7 +24,10 @@ function trigger(id: string): () => void {
 
 function toggleFullscreen(): void {
   const win = getCurrentWindow()
-  void win.isFullscreen().then((fullscreen) => win.setFullscreen(!fullscreen))
+  void win
+    .isFullscreen()
+    .then((fullscreen) => win.setFullscreen(!fullscreen))
+    .catch((error: unknown) => console.error('Toggle fullscreen failed', error))
 }
 
 export default function TitleBarMenu({ shortcuts, onOpenAbout }: Props): JSX.Element {
@@ -156,13 +158,6 @@ export default function TitleBarMenu({ shortcuts, onOpenAbout }: Props): JSX.Ele
         { label: t('放大'), onClick: trigger('zoom-in') },
         { label: t('缩小'), onClick: trigger('zoom-out') },
         { label: t('切换全屏'), onClick: toggleFullscreen, separatorBefore: true },
-      ],
-    },
-    window: {
-      label: t('窗口'),
-      items: [
-        { label: t('最小化'), onClick: () => void runWindowAction('minimize') },
-        { label: t('缩放'), onClick: () => void runWindowAction('maximize') },
       ],
     },
   }
