@@ -29,6 +29,7 @@ const EN: Record<string, string> = {
   取消置顶: 'Unpin',
   '重命名 / 修改分组': 'Rename / regroup',
   '重命名 / 修改分组（用 / 分层）': 'Rename / regroup (use / for nesting)',
+  升级到上一级: 'Promote one level',
   在本文档重命名标签: 'Rename tag in this document',
   仅在本文档修改: 'Only in this document',
   // Editor commands
