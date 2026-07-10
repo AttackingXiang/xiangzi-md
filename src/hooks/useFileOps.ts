@@ -6,6 +6,7 @@ import { createTaskQueue, mapWithConcurrencyLimit } from '../lib/asyncPool'
 import { InFlightCache } from '../lib/inFlightCache'
 import { LatestTaskQueue } from '../lib/latestTask'
 import { completeSave } from '../lib/saveState'
+import { isKnownTextFile } from '../lib/fileKind'
 import type { Draft, Tab } from '../types'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 
@@ -62,6 +63,12 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
       const existing = stateRef.current.tabs.find((t) => t.path === path)
       if (existing) {
         setActiveId(existing.id)
+        return Promise.resolve()
+      }
+      // 与文件树 openable / Rust is_known_text 对齐：Markdown、无扩展名、已知文本
+      // 才放行。挡住最近文件里已变成二进制/未知类型的陈旧条目，避免误进 TextEditor。
+      if (!isKnownTextFile(name ?? path)) {
+        void desktop.notify(t('无法打开该类型的文件：\n') + path)
         return Promise.resolve()
       }
       return openTasksRef.current.getOrCreate(path, () =>

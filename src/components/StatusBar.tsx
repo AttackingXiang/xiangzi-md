@@ -75,7 +75,9 @@ const StatusBar = memo(function StatusBar({
               </span>
             )}
             <span>{textStatus?.language}</span>
-            {cursor && <span>{cursor.eol === '\r\n' ? 'CRLF' : 'LF'}</span>}
+            {cursor && (
+              <span>{cursor.eol === '\r\n' ? 'CRLF' : cursor.eol === '\r' ? 'CR' : 'LF'}</span>
+            )}
             {autoSave && <span>{t('自动保存')}</span>}
             {tab.dirty && <span className="status-dirty">●&nbsp;{t('未保存')}</span>}
           </>
