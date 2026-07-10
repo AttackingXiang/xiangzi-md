@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Folder } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import { memo, useCallback, type RefObject } from 'react'
 import FileTree from './FileTree'
 import SidebarHeader from './SidebarHeader'
@@ -11,6 +11,7 @@ interface Props {
   folder: FolderType | null
   activePath: string | null
   favorites: string[]
+  favoriteFiles: string[]
   favoritesCollapsed: boolean
   favoriteLabels: Record<string, string>
   /** 文件树排序方式 + 置顶集合 + 最近打开排名 */
@@ -50,6 +51,7 @@ const Sidebar = memo(function Sidebar({
   folder,
   activePath,
   favorites,
+  favoriteFiles,
   favoritesCollapsed,
   favoriteLabels,
   sortContext,
@@ -117,25 +119,32 @@ const Sidebar = memo(function Sidebar({
             onClick={() => onFavoritesCollapsedChange(!favoritesCollapsed)}
           >
             {favoritesCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-            <span>{t('收藏目录')}</span>
+            <span>{t('收藏')}</span>
           </button>
           {!favoritesCollapsed &&
-            favorites.map((fav) => (
-              <div
-                key={fav}
-                className={`fav-row${folder?.root === fav ? ' active' : ''}`}
-                title={fav}
-                onClick={() => onOpenFolderPath(fav)}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onFavoriteContext(fav, event.clientX, event.clientY)
-                }}
-              >
-                <Folder size={14} />
-                <span className="fav-name">{favoriteLabels[fav]?.trim() || baseName(fav)}</span>
-              </div>
-            ))}
+            [...favorites]
+              .sort((a, b) => Number(favoriteFiles.includes(a)) - Number(favoriteFiles.includes(b)))
+              .map((fav) => {
+                const isFile = favoriteFiles.includes(fav)
+                return (
+                  <div
+                    key={fav}
+                    className={`fav-row${!isFile && folder?.root === fav ? ' active' : ''}`}
+                    title={fav}
+                    onClick={() =>
+                      isFile ? onOpenFile(fav, baseName(fav)) : onOpenFolderPath(fav)
+                    }
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onFavoriteContext(fav, event.clientX, event.clientY)
+                    }}
+                  >
+                    {isFile ? <FileText size={14} /> : <Folder size={14} />}
+                    <span className="fav-name">{favoriteLabels[fav]?.trim() || baseName(fav)}</span>
+                  </div>
+                )
+              })}
         </div>
       )}
 

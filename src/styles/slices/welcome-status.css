@@ -3,31 +3,37 @@
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 40px;
+  padding: 72px 40px 48px;
+}
+
+.welcome-hero {
+  margin-bottom: 36px;
 }
 
 .welcome-inner {
   width: 100%;
   min-width: 0;
-  max-width: 640px;
+  max-width: 760px;
 }
 
 .welcome-brand {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   margin-bottom: 32px;
+  text-align: left;
 }
 
 .welcome-logo {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  box-shadow: var(--shadow);
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(17, 24, 39, 0.14);
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -40,22 +46,16 @@
 
 .welcome h1 {
   margin: 0;
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.01em;
-}
-
-.welcome-sub {
-  margin: 2px 0 0;
-  color: var(--text-muted);
-  font-size: 14px;
 }
 
 .welcome-actions {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
-  margin-bottom: 36px;
+  margin-bottom: 0;
 }
 
 .draft-recovery-banner {
@@ -97,7 +97,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: center;
   gap: 10px;
+  min-height: 96px;
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -125,8 +127,57 @@
 .welcome-recents {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px;
+  gap: 40px;
   min-width: 0;
+  padding: 0;
+}
+
+.welcome-favorites {
+  min-width: 0;
+  margin: -12px 0 28px;
+  padding: 0;
+}
+
+.favorite-tag-chip {
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.favorite-tag-chip svg {
+  flex: 0 0 auto;
+  color: var(--accent-text);
+}
+
+.favorite-tag-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favorite-tag-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.favorite-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.favorite-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 999px;
 }
 
 .recent-col {
@@ -137,19 +188,18 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .recent-item {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 7px 10px;
+  min-height: 38px;
+  padding: 7px 9px;
   border-radius: 7px;
   cursor: pointer;
   color: var(--text-2);
@@ -193,12 +243,22 @@
 @media (max-width: 760px) {
   .welcome {
     align-items: flex-start;
-    padding: 32px 24px;
+    padding: 40px 24px 32px;
   }
 
   .welcome-recents {
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
+    padding: 0;
+  }
+
+  .welcome-hero {
+    margin-bottom: 30px;
+  }
+
+  .welcome-brand {
+    justify-content: flex-start;
+    text-align: left;
   }
 }
 
