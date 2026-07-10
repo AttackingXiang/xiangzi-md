@@ -34,3 +34,6 @@ vitest.config.d.ts
 /audit/final-state/*.png
 # Ad-hoc QA screenshots taken at the repo root during design reviews.
 /qa-*.png
+
+# Local doc assets that are not meant to be versioned.
+/docs/assets/
