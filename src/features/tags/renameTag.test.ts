@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { moveTagUnderTarget, renamedTag, renameTagInFiles, renameTagInMarkdown } from './renameTag'
+import {
+  moveTagUnderTarget,
+  promoteTagOneLevel,
+  renamedTag,
+  renameTagInFiles,
+  renameTagInMarkdown,
+} from './renameTag'
 import { documentMetaFromMarkdown } from './frontmatter'
 
 describe('renamedTag', () => {
@@ -101,5 +107,16 @@ describe('moveTagUnderTarget', () => {
     expect(moveTagUnderTarget('test', 'project')).toBe('project/test')
     expect(moveTagUnderTarget('a/b', 'c')).toBe('c/b')
     expect(moveTagUnderTarget('claude/test/wap', 'archive')).toBe('archive/wap')
+  })
+})
+
+describe('promoteTagOneLevel', () => {
+  it('removes the immediate parent while preserving higher ancestors and label casing', () => {
+    expect(promoteTagOneLevel('Project/Frontend/React')).toBe('Project/React')
+    expect(promoteTagOneLevel('Project/Frontend')).toBe('Frontend')
+  })
+
+  it('does not promote a top-level tag', () => {
+    expect(promoteTagOneLevel('Project')).toBeNull()
   })
 })

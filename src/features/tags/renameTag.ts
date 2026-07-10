@@ -123,3 +123,16 @@ export function moveTagUnderTarget(dragKey: string, targetFullLabel: string): st
   const leaf = dragKey.split('/').filter(Boolean).pop() ?? dragKey
   return `${targetFullLabel}/${leaf}`
 }
+
+/** 把标签提升到上一级，同时保留标签本身及更高层级的展示大小写。
+ * 例如 Project/Frontend/React -> Project/React，Project/Frontend -> Frontend。
+ * 顶层标签没有可提升的父级，返回 null。 */
+export function promoteTagOneLevel(fullLabel: string): string | null {
+  const segments = normalizeTag(fullLabel)
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+  if (segments.length < 2) return null
+  segments.splice(segments.length - 2, 1)
+  return segments.join('/')
+}

@@ -18,7 +18,7 @@ import {
   parseMarkdownFrontmatter,
   tagKey,
 } from './frontmatter'
-import { moveTagUnderTarget, renameTagInMarkdown } from './renameTag'
+import { moveTagUnderTarget, promoteTagOneLevel, renameTagInMarkdown } from './renameTag'
 import {
   parseFrontmatterProperties,
   setFrontmatterProperties,
@@ -348,16 +348,27 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
   const openTagContext = useCallback(
     (key: string, fullLabel: string, x: number, y: number): void => {
       const pinned = (settings?.pinnedTags ?? []).includes(key)
+      const promotedLabel = promoteTagOneLevel(fullLabel)
+      const items: MenuItem[] = [
+        { label: pinned ? t('取消置顶') : t('置顶'), onClick: () => togglePinnedTag(key) },
+      ]
+      if (promotedLabel) {
+        items.push({
+          label: t('升级到上一级'),
+          onClick: () => void applyTagRename(key, promotedLabel, 'all'),
+        })
+      }
+      items.push({
+        label: t('重命名 / 修改分组'),
+        onClick: () => promptRenameTag(key, fullLabel, 'all'),
+      })
       setCtxMenu({
         x,
         y,
-        items: [
-          { label: pinned ? t('取消置顶') : t('置顶'), onClick: () => togglePinnedTag(key) },
-          { label: t('重命名 / 修改分组'), onClick: () => promptRenameTag(key, fullLabel, 'all') },
-        ],
+        items,
       })
     },
-    [promptRenameTag, setCtxMenu, settings?.pinnedTags, togglePinnedTag],
+    [applyTagRename, promptRenameTag, setCtxMenu, settings?.pinnedTags, togglePinnedTag],
   )
 
   // 文档里右键某个标签 chip：既能全局改，也能只改本文档（默认全改）。
