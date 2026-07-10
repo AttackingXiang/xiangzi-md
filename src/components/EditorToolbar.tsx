@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { Selection } from '@milkdown/kit/prose/state'
 import {
   Bold,
   Italic,
@@ -25,6 +26,8 @@ import {
 } from 'lucide-react'
 import { toolbarStateBridge, type ToolbarActiveState } from '../lib/toolbarStateBridge'
 import { editorCmd } from '../lib/editorCommands'
+import { tablePickerBridge } from '../lib/tablePickerBridge'
+import { editorBridge } from '../lib/editorBridge'
 
 const DEFAULT: ToolbarActiveState = {
   bold: false,
@@ -48,6 +51,7 @@ interface Props {
 
 export default function EditorToolbar({ lang }: Props): JSX.Element {
   const [ts, setTs] = useState<ToolbarActiveState>(DEFAULT)
+  const preservedSelection = useRef<Selection | null>(null)
 
   useEffect(() => {
     toolbarStateBridge.setListener(setTs)
@@ -55,6 +59,26 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
   }, [])
 
   const t = (zh: string, en: string): string => (lang === 'en' ? en : zh)
+
+  const preserveEditorSelection = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    event.preventDefault()
+    preservedSelection.current = editorBridge.get()?.state.selection ?? null
+  }
+
+  const restoreEditorSelection = (): void => {
+    const view = editorBridge.get()
+    const selection = preservedSelection.current
+    preservedSelection.current = null
+    if (!view || !selection || selection.$from.doc !== view.state.doc) return
+    if (!selection.eq(view.state.selection)) {
+      view.dispatch(view.state.tr.setSelection(selection))
+    }
+  }
+
+  const runToolbarAction = (action: () => void): void => {
+    restoreEditorSelection()
+    action()
+  }
 
   const btn = (
     label: string,
@@ -64,14 +88,13 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
     disabled = false,
   ): JSX.Element => (
     <button
+      type="button"
       key={label}
       className={`toolbar-btn${active ? ' is-active' : ''}`}
       title={label}
       disabled={disabled}
-      onMouseDown={(e) => {
-        e.preventDefault()
-        action()
-      }}
+      onMouseDown={preserveEditorSelection}
+      onClick={() => runToolbarAction(action)}
     >
       {icon}
     </button>
@@ -145,9 +168,19 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
 
       <span className="toolbar-sep" />
 
-      {btn(t('插入表格', 'Insert table'), <Table size={15} />, false, () =>
-        editorCmd.insertTable(),
-      )}
+      <button
+        type="button"
+        className="toolbar-btn"
+        title={t('插入表格', 'Insert table')}
+        onMouseDown={preserveEditorSelection}
+        onClick={(e) => {
+          restoreEditorSelection()
+          const rect = e.currentTarget.getBoundingClientRect()
+          tablePickerBridge.request(rect.left, rect.bottom + 8, editorCmd.insertTable)
+        }}
+      >
+        <Table size={15} />
+      </button>
       {btn(t('插入链接', 'Insert link'), <Link size={15} />, ts.link, () =>
         editorCmd.insertLink?.(),
       )}

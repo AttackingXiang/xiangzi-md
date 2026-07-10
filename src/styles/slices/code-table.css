@@ -397,7 +397,13 @@
 
 .milkdown .milkdown-table-block .table-wrapper {
   position: relative;
-  overflow-x: auto;
+  /* Crepe 的行/列添加按钮跨在表格边线上，分别有一半落在表格外。
+     overflow-x:auto 会让纵向 overflow 也计算为 auto，从而裁掉外侧半个按钮。
+     左右用负 margin 保持表格横向对齐；纵向不使用负 margin，确保控制按钮和
+     横向滚动条拥有真实占位，不会覆盖前后的标题或正文。 */
+  margin: 0 -18px;
+  padding: 18px;
+  overflow: auto;
 }
 
 .milkdown .milkdown-table-block {

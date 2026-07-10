@@ -1,5 +1,6 @@
 import type { EditorState } from '@milkdown/kit/prose/state'
 import { undoDepth, redoDepth } from 'prosemirror-history'
+import { listStyleFromState } from './listCommands'
 
 export interface ToolbarActiveState {
   bold: boolean
@@ -50,9 +51,7 @@ export function computeToolbarState(editorState: EditorState): ToolbarActiveStat
   let headingLevel: number | null = null
   let blockquote = false
   let codeBlock = false
-  let bulletList = false
-  let orderedList = false
-  let taskList = false
+  const listStyle = listStyleFromState(editorState)
 
   for (let d = $from.depth; d >= 0; d--) {
     const n = $from.node(d)
@@ -64,34 +63,21 @@ export function computeToolbarState(editorState: EditorState): ToolbarActiveStat
       blockquote = true
     } else if (schema.nodes.code_block && nt === schema.nodes.code_block) {
       codeBlock = true
-    } else if (schema.nodes.bullet_list && nt === schema.nodes.bullet_list) {
-      bulletList = true
-    } else if (schema.nodes.ordered_list && nt === schema.nodes.ordered_list) {
-      orderedList = true
-    }
-  }
-
-  // Task list: bullet_list containing list_item nodes that have checked attr
-  if (bulletList && schema.nodes.list_item) {
-    const listItem = $from.node($from.depth - 1) ?? $from.node($from.depth)
-    if (listItem?.type === schema.nodes.list_item && listItem.attrs.checked != null) {
-      taskList = true
-      bulletList = false
     }
   }
 
   return {
     bold: hasMark('strong'),
     italic: hasMark('emphasis'),
-    strike: hasMark('strike'),
+    strike: hasMark('strike_through') || hasMark('strike'),
     inlineCode: hasMark('inlineCode'),
     link: hasMark('link'),
     headingLevel,
     blockquote,
     codeBlock,
-    bulletList,
-    orderedList,
-    taskList,
+    bulletList: listStyle === 'bullet',
+    orderedList: listStyle === 'ordered',
+    taskList: listStyle === 'task',
     canUndo: undoDepth(editorState) > 0,
     canRedo: redoDepth(editorState) > 0,
   }

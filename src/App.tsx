@@ -1144,6 +1144,9 @@ export default function App(): JSX.Element {
                     focusMode={focusMode}
                     typewriterMode={typewriterMode}
                     showSelectionToolbar={settings.showSelectionToolbar}
+                    tableAutoWidth={settings.tableAutoWidth ?? 'distribute'}
+                    tableAutoResize={settings.tableAutoResize ?? true}
+                    documentKey={activeTab.path ?? activeTab.id}
                     tagBar={
                       <>
                         <DocumentPropertyPanel

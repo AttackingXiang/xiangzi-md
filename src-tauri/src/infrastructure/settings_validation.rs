@@ -69,6 +69,12 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
         settings.editor_width = "full".into();
     }
     if !matches!(
+        settings.table_auto_width.as_str(),
+        "distribute" | "fit" | "equal"
+    ) {
+        settings.table_auto_width = "distribute".into();
+    }
+    if !matches!(
         settings.attachment_mode.as_str(),
         "same" | "subfolder" | "docSubfolder" | "vault" | "vaultSubfolder"
     ) {
@@ -129,6 +135,10 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
             "system" | "light" | "dark" | "warm" | "mint" | "blue" | "summer"
         )
         || !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full")
+        || !matches!(
+            settings.table_auto_width.as_str(),
+            "distribute" | "fit" | "equal"
+        )
         || !matches!(
             settings.attachment_mode.as_str(),
             "same" | "subfolder" | "docSubfolder" | "vault" | "vaultSubfolder"
