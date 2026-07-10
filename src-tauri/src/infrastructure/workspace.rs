@@ -4,7 +4,7 @@ use crate::domain::{
 };
 use crate::infrastructure::settings::AppSettings;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::OsStr,
     fs::{self, File},
     io::Read,
@@ -20,6 +20,38 @@ pub use super::workspace_mutations::{create_dir, create_file, move_item, rename_
 pub use super::workspace_write::{write_binary_file, write_file};
 
 const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx"];
+/// 文件树里可见并可用 TextEditor 打开的纯文本 / 代码 / 结构化数据扩展名。
+/// 与前端 src/lib/textLanguages.ts 的映射保持一致；无扩展名文件另行放行。
+const TEXT_EXTENSIONS: &[&str] = &[
+    "txt",
+    "log",
+    "json",
+    "json5",
+    "jsonc",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "conf",
+    "properties",
+    "xml",
+    "svg",
+    "html",
+    "htm",
+    "css",
+    "js",
+    "mjs",
+    "cjs",
+    "jsx",
+    "ts",
+    "mts",
+    "cts",
+    "tsx",
+    "sql",
+    "sh",
+    "bash",
+    "zsh",
+];
 const IGNORED_DIRECTORIES: &[&str] = &[".git", "node_modules", ".DS_Store", ".obsidian", ".vscode"];
 const MAX_LISTED_FILES: usize = 8_000;
 pub(super) const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
@@ -32,6 +64,9 @@ pub struct WorkspaceVisibility {
     hidden_paths: Vec<PathBuf>,
     /// Exact file/folder name matches hidden when show_all_files is true.
     hidden_name_patterns: Vec<String>,
+    /// 用户勾选「始终显示」的文本/代码扩展名（小写、不含点）。show_all_files 关闭时，
+    /// 只有 Markdown、无扩展名文件，以及命中这个集合的扩展名才出现在文件树里。
+    visible_extensions: HashSet<String>,
 }
 
 impl WorkspaceVisibility {
@@ -48,6 +83,29 @@ impl WorkspaceVisibility {
                 })
                 .collect(),
             hidden_name_patterns: settings.hidden_name_patterns.clone(),
+            visible_extensions: settings
+                .visible_text_extensions
+                .iter()
+                .map(|ext| ext.to_ascii_lowercase())
+                .collect(),
+        }
+    }
+
+    /// 在 show_all_files 关闭时，该文件是否应出现在文件树里。Markdown 与无扩展名
+    /// 文件始终可见；其余按用户勾选的扩展名白名单决定。dotfile 依旧默认隐藏。
+    fn is_whitelisted(&self, path: &Path) -> bool {
+        let name = path.file_name().and_then(OsStr::to_str).unwrap_or("");
+        if name.starts_with('.') {
+            return false;
+        }
+        match path.extension().and_then(OsStr::to_str) {
+            None => true,
+            Some(extension) => {
+                is_markdown(path)
+                    || self
+                        .visible_extensions
+                        .contains(&extension.to_ascii_lowercase())
+            }
         }
     }
 
@@ -122,18 +180,26 @@ fn is_markdown(path: &Path) -> bool {
         })
 }
 
-fn is_visible_text_file(path: &Path) -> bool {
+/// 该文件能否在编辑器里打开（Markdown 走 Milkdown，其余走 TextEditor）。这决定
+/// FileNode.openable，与「是否出现在文件树」相互独立：show_all_files 打开时二进制
+/// 文件也会显示，但 openable 仍为 false。
+fn is_known_text(path: &Path) -> bool {
     // Dotfiles (.gitignore, .env, etc.) are hidden by OS convention;
     // the user opts in to seeing them via show_all_files.
     let name = path.file_name().and_then(OsStr::to_str).unwrap_or("");
     if name.starts_with('.') {
         return false;
     }
-    is_markdown(path)
-        || path
-            .extension()
-            .and_then(OsStr::to_str)
-            .is_none_or(|extension| extension.eq_ignore_ascii_case("txt"))
+    match path.extension().and_then(OsStr::to_str) {
+        // 无扩展名文件（README、LICENSE、Makefile 等）当作纯文本放行。
+        None => true,
+        Some(extension) => {
+            is_markdown(path)
+                || TEXT_EXTENSIONS
+                    .iter()
+                    .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+        }
+    }
 }
 
 fn modified_nanos(metadata: &fs::Metadata) -> u64 {
@@ -236,13 +302,14 @@ pub fn read_dir_tree(
                 modified_nanos: modified,
                 children: None,
             });
-        } else if file_type.is_file() && (visibility.show_all_files || is_visible_text_file(&path))
+        } else if file_type.is_file()
+            && (visibility.show_all_files || visibility.is_whitelisted(&path))
         {
             nodes.push(FileNode {
                 name: file_name(&path),
                 path: path_string(&path),
                 is_dir: false,
-                openable: is_visible_text_file(&path),
+                openable: is_known_text(&path),
                 modified_nanos: modified,
                 children: None,
             });
@@ -429,8 +496,8 @@ pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<ListedFile>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        document_scope_dirs, is_ignored, is_visible_text_file, validate_binary_size,
-        walk_markdown_files, DOC_ANCESTOR_AUTH_LEVELS,
+        document_scope_dirs, is_ignored, is_known_text, validate_binary_size, walk_markdown_files,
+        AppSettings, WorkspaceVisibility, DOC_ANCESTOR_AUTH_LEVELS,
     };
     use crate::domain::safe_name::validate_item_name;
     use std::path::{Path, PathBuf};
@@ -479,13 +546,41 @@ mod tests {
 
     #[test]
     fn filters_tree_entries_consistently() {
-        assert!(is_visible_text_file(Path::new("README.MD")));
-        assert!(is_visible_text_file(Path::new("notes.txt")));
-        assert!(!is_visible_text_file(Path::new("photo.png")));
-        assert!(!is_visible_text_file(Path::new(".gitignore")));
-        assert!(!is_visible_text_file(Path::new(".env")));
+        // is_known_text 决定「能否在编辑器打开」（FileNode.openable），与白名单无关。
+        assert!(is_known_text(Path::new("README.MD")));
+        assert!(is_known_text(Path::new("notes.txt")));
+        assert!(is_known_text(Path::new("config.json")));
+        assert!(is_known_text(Path::new("app.ts")));
+        assert!(is_known_text(Path::new("deploy.yaml")));
+        // 无扩展名文件（LICENSE、Makefile 等）当作纯文本放行。
+        assert!(is_known_text(Path::new("LICENSE")));
+        assert!(!is_known_text(Path::new("photo.png")));
+        assert!(!is_known_text(Path::new("archive.zip")));
+        assert!(!is_known_text(Path::new(".gitignore")));
+        assert!(!is_known_text(Path::new(".env")));
         assert!(is_ignored(Path::new("node_modules")));
         assert!(!is_ignored(Path::new("notes")));
+    }
+
+    #[test]
+    fn whitelist_gates_visibility_by_extension() {
+        // 只勾选 JSON：txt / ts 等未勾选的扩展名在 show_all_files 关闭时应隐藏。
+        let settings = AppSettings {
+            show_all_files: false,
+            visible_text_extensions: vec!["json".into()],
+            ..AppSettings::default()
+        };
+        let visibility = WorkspaceVisibility::from_settings(&settings);
+
+        // Markdown 与无扩展名文件始终可见，无需勾选。
+        assert!(visibility.is_whitelisted(Path::new("README.md")));
+        assert!(visibility.is_whitelisted(Path::new("LICENSE")));
+        // 勾选的 JSON 可见（大小写不敏感），未勾选的 txt / ts 隐藏。
+        assert!(visibility.is_whitelisted(Path::new("config.JSON")));
+        assert!(!visibility.is_whitelisted(Path::new("notes.txt")));
+        assert!(!visibility.is_whitelisted(Path::new("app.ts")));
+        // dotfile 即使扩展名匹配也保持隐藏。
+        assert!(!visibility.is_whitelisted(Path::new(".config.json")));
     }
 
     #[test]

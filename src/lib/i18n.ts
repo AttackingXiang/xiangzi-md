@@ -100,6 +100,18 @@ const EN: Record<string, string> = {
   源码: 'Source',
   所见即所得: 'WYSIWYG',
   自动保存: 'Auto-save',
+  // Text editor (CodeMirror)
+  查找替换: 'Find & replace',
+  自动换行: 'Word wrap',
+  折叠全部: 'Fold all',
+  展开全部: 'Unfold all',
+  '格式化 JSON': 'Format JSON',
+  '压缩 JSON': 'Minify JSON',
+  'JSON 解析失败': 'Invalid JSON',
+  纯文本: 'Plain Text',
+  列: 'Col',
+  个光标: 'cursors',
+  已选: 'selected',
   // Settings
   外观: 'Appearance',
   语言: 'Language',

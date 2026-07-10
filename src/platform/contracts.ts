@@ -71,6 +71,8 @@ export interface AppSettings {
   hideAttachmentFolders: boolean
   assetSearchPaths: string[]
   showAllFiles: boolean
+  /** 始终在文件树中显示的文本/代码扩展名（小写、不含点）；Markdown 与无扩展名文件不受限制 */
+  visibleTextExtensions: string[]
   hiddenWorkspacePaths: string[]
   hiddenNamePatterns: string[]
   allowRemoteImages: boolean

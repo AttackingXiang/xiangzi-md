@@ -108,6 +108,9 @@ pub struct AppSettings {
     pub hide_attachment_folders: bool,
     pub asset_search_paths: Vec<String>,
     pub show_all_files: bool,
+    /// 用户勾选「始终显示」的文本/代码扩展名（小写、不含点）。即便关闭 show_all_files，
+    /// 命中的扩展名也会出现在文件树里。Markdown 与无扩展名文件不受此列表限制。
+    pub visible_text_extensions: Vec<String>,
     pub hidden_workspace_paths: Vec<String>,
     /// Name patterns hidden when show_all_files is true (matches file or folder names exactly).
     pub hidden_name_patterns: Vec<String>,
@@ -181,6 +184,40 @@ impl Default for AppSettings {
             hide_attachment_folders: false,
             asset_search_paths: Vec::new(),
             show_all_files: false,
+            // 默认勾选全部受支持格式，保持「支持即可见」的既有体验；用户可逐项取消。
+            visible_text_extensions: [
+                "txt",
+                "log",
+                "json",
+                "json5",
+                "jsonc",
+                "yaml",
+                "yml",
+                "toml",
+                "ini",
+                "conf",
+                "properties",
+                "xml",
+                "svg",
+                "html",
+                "htm",
+                "css",
+                "js",
+                "mjs",
+                "cjs",
+                "jsx",
+                "ts",
+                "mts",
+                "cts",
+                "tsx",
+                "sql",
+                "sh",
+                "bash",
+                "zsh",
+            ]
+            .iter()
+            .map(|ext| (*ext).to_string())
+            .collect(),
             hidden_workspace_paths: Vec::new(),
             hidden_name_patterns: vec![
                 ".git".into(),
@@ -252,6 +289,7 @@ pub struct SettingsPatch {
     pub hide_attachment_folders: Option<bool>,
     pub asset_search_paths: Option<Vec<String>>,
     pub show_all_files: Option<bool>,
+    pub visible_text_extensions: Option<Vec<String>>,
     pub hidden_workspace_paths: Option<Vec<String>>,
     pub hidden_name_patterns: Option<Vec<String>>,
     pub allow_remote_images: Option<bool>,

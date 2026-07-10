@@ -245,17 +245,17 @@
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border);
+  background: var(--editor-chrome-bg);
+  border-bottom: 1px solid var(--editor-chrome-border);
 }
 
 .find-input {
   flex: 1;
   max-width: 320px;
   height: 30px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid color-mix(in srgb, var(--workspace-divider-strong) 72%, transparent);
   border-radius: 7px;
-  background: var(--bg);
+  background: transparent;
   color: var(--text);
   padding: 0 10px;
   font-size: 13px;
@@ -263,7 +263,9 @@
 }
 
 .find-input:focus {
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--bg-hover) 56%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
 .find-input:disabled {
@@ -284,8 +286,8 @@
 }
 
 .text-btn {
-  border: 1px solid var(--border-strong);
-  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--workspace-divider-strong) 72%, transparent);
+  background: transparent;
   color: var(--text);
   border-radius: 7px;
   height: 30px;
@@ -296,7 +298,7 @@
 }
 
 .text-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
 }
 
 .text-btn:disabled {

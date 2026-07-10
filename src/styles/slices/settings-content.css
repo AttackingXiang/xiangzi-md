@@ -698,3 +698,33 @@
     justify-content: flex-start;
   }
 }
+
+/* ---------- 文件树可见格式白名单（复选框网格） ---------- */
+.format-whitelist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px 12px;
+  margin-top: 4px;
+}
+
+.format-whitelist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.format-whitelist-item input {
+  cursor: pointer;
+}
+
+.format-whitelist-item.is-locked {
+  color: var(--text-muted, color-mix(in srgb, var(--text) 55%, transparent));
+  cursor: default;
+}
+
+.format-whitelist-item.is-locked input {
+  cursor: default;
+}
