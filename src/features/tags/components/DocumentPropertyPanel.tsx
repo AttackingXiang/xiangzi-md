@@ -26,7 +26,10 @@ import { t } from '../../../lib/i18n'
 
 interface Props {
   properties: DocumentProperty[]
-  /** 正文里手打的 #标签（只读展示在 tags 行末尾，不能从这里删——见 DocumentTagBar 注释） */
+  /**
+   * 正文里手打的 #标签（只读展示在 tags 行末尾）。这类标签不能从这里删——正文内容
+   * 本身没法从属性面板改，删除得回正文里手动改字；只有 frontmatter 里的标签可删。
+   */
   inlineTags: string[]
   activeTag: string | null
   disabled?: boolean

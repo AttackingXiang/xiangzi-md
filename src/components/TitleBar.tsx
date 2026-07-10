@@ -1,10 +1,9 @@
 import { Circle, Minus, Square, X } from 'lucide-react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { ReactNode } from 'react'
 import TitleBarMenu from './TitleBarMenu'
 import { currentDesktopPlatform } from '../lib/platform'
 import { t } from '../lib/i18n'
-import { runWindowAction } from '../lib/windowActions'
+import { runWindowAction, startWindowDragging } from '../lib/windowActions'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 
@@ -39,9 +38,9 @@ export default function TitleBar({
         // a drag on a double-click's second press is harmless — there's no
         // pointer movement between clicks, so nothing actually moves, and
         // the separate onDoubleClick handler below still fires normally.
-        void getCurrentWindow()
-          .startDragging()
-          .catch((error: unknown) => console.error('Window dragging failed', error))
+        void startWindowDragging().catch((error: unknown) =>
+          console.error('Window dragging failed', error),
+        )
       }}
       onDoubleClick={(event) => {
         if (event.target instanceof Element && event.target.closest('[data-titlebar-interactive]'))

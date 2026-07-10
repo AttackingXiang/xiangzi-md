@@ -31,6 +31,9 @@ const EN: Record<string, string> = {
   '重命名 / 修改分组（用 / 分层）': 'Rename / regroup (use / for nesting)',
   在本文档重命名标签: 'Rename tag in this document',
   仅在本文档修改: 'Only in this document',
+  // Editor commands
+  插入链接: 'Insert link',
+  插入: 'Insert',
   // Document properties panel
   文档属性: 'Document properties',
   添加属性: 'Add property',

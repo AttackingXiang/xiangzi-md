@@ -56,6 +56,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      # Dead-code / dependency report. Informational: surfaces unused files,
+      # exports and dependencies on each PR without failing the build.
+      - name: Dead-code report (knip)
+        run: npm run knip
+        continue-on-error: true
 
   rust:
     strategy:

@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import ContextMenu, { type MenuItem } from './ContextMenu'
 import { clipboardCmd, editorCmd } from '../lib/editorCommands'
 import { t } from '../lib/i18n'
 import { displayShortcut, effectiveShortcut, type ShortcutAction } from '../lib/shortcuts'
+import { toggleWindowFullscreen } from '../lib/windowActions'
 import { desktop } from '../platform'
 
 interface Props {
@@ -23,11 +23,9 @@ function trigger(id: string): () => void {
 }
 
 function toggleFullscreen(): void {
-  const win = getCurrentWindow()
-  void win
-    .isFullscreen()
-    .then((fullscreen) => win.setFullscreen(!fullscreen))
-    .catch((error: unknown) => console.error('Toggle fullscreen failed', error))
+  void toggleWindowFullscreen().catch((error: unknown) =>
+    console.error('Toggle fullscreen failed', error),
+  )
 }
 
 export default function TitleBarMenu({ shortcuts, onOpenAbout }: Props): JSX.Element {

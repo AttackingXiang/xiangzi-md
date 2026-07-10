@@ -17,3 +17,15 @@ export async function runWindowAction(action: 'minimize' | 'maximize' | 'close')
     }
   } else await appWindow.close()
 }
+
+/** 开始拖动窗口（标题栏按下时调用）。 */
+export async function startWindowDragging(): Promise<void> {
+  await getCurrentWindow().startDragging()
+}
+
+/** 切换全屏。 */
+export async function toggleWindowFullscreen(): Promise<void> {
+  const win = getCurrentWindow()
+  const fullscreen = await win.isFullscreen()
+  await win.setFullscreen(!fullscreen)
+}
