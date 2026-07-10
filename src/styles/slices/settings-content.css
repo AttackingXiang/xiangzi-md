@@ -67,14 +67,18 @@
 }
 
 .about-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 52px;
   height: 52px;
   border-radius: 13px;
-  background: var(--accent);
-  color: #fff;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.about-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .about-card h2,

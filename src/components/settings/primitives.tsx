@@ -47,7 +47,7 @@ export function SettingRow({
   return (
     <label className="settings-row">
       {description ? (
-        <span>
+        <span className="settings-row-copy">
           <span className="settings-label">{label}</span>
           <small>{description}</small>
         </span>
@@ -74,7 +74,7 @@ export function ToggleRow({
 }): JSX.Element {
   return (
     <label className={`settings-row settings-toggle-row${disabled ? ' is-disabled' : ''}`}>
-      <span>
+      <span className="settings-row-copy">
         <span className="settings-label">{label}</span>
         {description && <small>{description}</small>}
       </span>
