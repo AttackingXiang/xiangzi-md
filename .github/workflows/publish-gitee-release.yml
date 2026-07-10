@@ -1,90 +1,68 @@
 name: Publish Gitee Release
-run-name: >-
-  Publish Gitee Release (${{ inputs.tag || github.event.workflow_run.display_title }})
+run-name: Publish Gitee Release (${{ inputs.tag || github.event.workflow_run.display_title }})
 
 on:
   workflow_run:
-    workflows:
-      - Release Desktop
-    types:
-      - completed
+    workflows: [Release Desktop]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing GitHub Release tag to publish or repair (for example v1.4.2)
+        description: Existing GitHub Release tag to publish or repair (for example v1.6.5)
         required: true
+
 permissions:
   contents: read
 
 concurrency:
-  # Gitee release uploads and the shared updater branch are serialized. This
-  # avoids non-fast-forward races when two desktop releases finish together.
+  # Different releases share the Gitee updater branch and must stay ordered.
+  # The Windows/macOS upload matrix inside one release still runs in parallel.
   group: publish-gitee-release
   cancel-in-progress: false
 
 jobs:
-  publish:
+  prepare:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 15
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      release-id: ${{ steps.gitee.outputs.release-id }}
     steps:
-      - name: Checkout main
+      - name: Checkout release commit
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || 'main' }}
 
-      - name: Resolve release tag
+      - name: Resolve and verify release
         id: release
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           if [ "${EVENT_NAME}" = "workflow_run" ]; then
             TAG="v$(jq -r '.version' package.json)"
-          elif [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            TAG="${INPUT_TAG}"
           else
-            TAG="v$(jq -r '.version' package.json)"
+            TAG="${INPUT_TAG}"
           fi
           [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]
-          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
-
-      - name: Download GitHub Release installers
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.release.outputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          install -d artifacts
-          RELEASE=$(curl --fail --silent --show-error \
+          curl --fail --silent --show-error \
             --retry 4 --retry-delay 5 --retry-all-errors \
             --connect-timeout 20 --max-time 120 \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
-          printf '%s' "${RELEASE}" > /tmp/github-release.json
-          mapfile -t ASSETS < <(echo "${RELEASE}" | jq -r \
-            '.assets[] | select(.name == "latest.json" or (.name | test("\\.(dmg|exe|sig|tar\\.gz)$"))) | [.browser_download_url, .name] | @tsv')
-          test "${#ASSETS[@]}" -ge 5
-          for ASSET in "${ASSETS[@]}"; do
-            IFS=$'\t' read -r URL NAME <<< "${ASSET}"
-            FILE="artifacts/${NAME}"
-            curl --fail --location --silent --show-error \
-              --retry 4 --retry-delay 5 --retry-all-errors \
-              --connect-timeout 20 --max-time 300 \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -o "${FILE}" "${URL}"
-          done
-          test "$(find artifacts -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
-          test "$(find artifacts -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
-          test -f artifacts/latest.json
-          test "$(find artifacts -maxdepth 1 -name '*.sig' | wc -l | tr -d ' ')" -ge 2
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            >/tmp/github-release.json
+          jq -e '[.assets[].name | select(test("\\.(dmg|exe|sig|tar\\.gz)$") or . == "latest.json")] | length >= 6' \
+            /tmp/github-release.json >/dev/null
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
-      - name: Upsert Gitee Release installers
+      - name: Ensure Gitee tag and release exist
+        id: gitee
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_PRIVATE_KEY: ${{ secrets.GITEE_PRIVATE_KEY }}
@@ -94,218 +72,241 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GITEE_TOKEN}"
-          OWNER="tlqgyx"
-          REPO="xiangzi-md"
-          API="https://gitee.com/api/v5/repos/${OWNER}/${REPO}"
-          gitee_curl() {
-            curl -H "Authorization: Bearer ${GITEE_TOKEN}" "$@"
-          }
+          test -n "${GITEE_PRIVATE_KEY}"
+          API="https://gitee.com/api/v5/repos/tlqgyx/xiangzi-md"
           retry() {
             local attempt delay=5
             for attempt in 1 2 3 4; do
               "$@" && return 0
               [ "${attempt}" -eq 4 ] && return 1
-              echo "Attempt ${attempt} failed; retrying in ${delay}s: $*" >&2
               sleep "${delay}"
               delay=$((delay * 2))
             done
           }
+          gitee_curl() { curl -H "Authorization: Bearer ${GITEE_TOKEN}" "$@"; }
 
           install -d -m 700 ~/.ssh
           printf '%s\n' "${GITEE_PRIVATE_KEY}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          # 与代码镜像工作流保持一致：secret 可覆盖主机公钥；未配置时使用
-          # 仓库内置、经 ssh-keyscan 核验的 Gitee 公钥，避免发布任务直接退出。
           if [ -n "${GITEE_KNOWN_HOSTS}" ]; then
             printf '%s\n' "${GITEE_KNOWN_HOSTS}" > ~/.ssh/known_hosts
           else
             printf '%s\n' \
               'gitee.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBMuEoYdx6to5oxR60IWj8uoe1aI0X1fKOHWOtLqTg1tsLT1iFwXV5JmFjU46EzeMBV/6EmI1uaRI6HiEPtPtJHE=' \
               'gitee.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEKxHSJ7084RmkJ4YdEi5tngynE8aZe2uEoVVsB/OvYN' \
-              'gitee.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDMzG3r+88lWSDK9fyjcZmYsWGDBDmGoAasKMAmjoFloGt9HRQX2Qp4f9FY2XK/hsHYinvoh5Xytl9iaUNUWMfYR8q6VEMtOO87DgoAFcfKZHt0/nbAg9RoNTKYt6v8tPwYpr7N0JP/01nE4LFsNDnstr6H0bXSAzbKWCETLZfdPV4l2uSpRn3bU0ugoZ0aSKz5Dc/IloBfGCTvkSsxUydMRd/Chpjt6VxncDbp+Fa6pzsseK8OQzrg6Fgc5783EN3EQqZ2skqyCwExtx95BJlfx1B3luZnWfpkwNDnrZRT/Qx0OrWqyf0q6f9uQr+UG1S8qDcUn3e/9onq3rwBri8/' \
               > ~/.ssh/known_hosts
           fi
           chmod 600 ~/.ssh/known_hosts
-          ssh-keygen -F gitee.com -f ~/.ssh/known_hosts >/dev/null
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes"
           git fetch origin "+refs/tags/${TAG}:refs/tags/${TAG}"
-          git remote add gitee git@gitee.com:${OWNER}/${REPO}.git
+          git remote add gitee git@gitee.com:tlqgyx/xiangzi-md.git
+
           LOCAL_COMMIT=$(git rev-parse "refs/tags/${TAG}^{}")
-          REMOTE_REFS=$(retry git ls-remote --tags gitee \
-            "refs/tags/${TAG}" "refs/tags/${TAG}^{}")
+          REMOTE_REFS=$(retry git ls-remote --tags gitee "refs/tags/${TAG}" "refs/tags/${TAG}^{}")
           REMOTE_COMMIT=$(printf '%s\n' "${REMOTE_REFS}" \
             | awk '$2 ~ /\^\{\}$/ { print $1; found=1 } END { if (!found) exit 1 }' \
             || printf '%s\n' "${REMOTE_REFS}" | awk 'NR == 1 { print $1 }')
           if [ -z "${REMOTE_COMMIT}" ]; then
             retry git push gitee "refs/tags/${TAG}:refs/tags/${TAG}"
-          elif [ "${REMOTE_COMMIT}" = "${LOCAL_COMMIT}" ]; then
-            echo "Gitee tag ${TAG} already resolves to ${LOCAL_COMMIT}; continuing repair."
-          else
-            echo "::error::Gitee tag ${TAG} points to ${REMOTE_COMMIT}, but GitHub points to ${LOCAL_COMMIT}. Refusing to rewrite a published tag."
+          elif [ "${REMOTE_COMMIT}" != "${LOCAL_COMMIT}" ]; then
+            echo "::error::Gitee ${TAG} points to ${REMOTE_COMMIT}; GitHub points to ${LOCAL_COMMIT}."
             exit 1
+          else
+            echo "Gitee tag ${TAG} already resolves to ${LOCAL_COMMIT}; continuing repair."
           fi
 
-          echo "Waiting for Gitee tag ${TAG}..."
-          FOUND=""
-          for i in $(seq 1 24); do
-            FOUND=$(gitee_curl --fail --silent --show-error \
-              --retry 3 --retry-delay 5 --retry-all-errors \
-              --connect-timeout 20 --max-time 60 \
-              "${API}/tags?limit=100" \
-              | jq -r --arg tag "${TAG}" '.[] | select(.name == $tag) | .name')
-            [ "${FOUND}" = "${TAG}" ] && break
-            sleep 10
-          done
-          test "${FOUND}" = "${TAG}"
-
-          RELEASE=$(gitee_curl --silent --show-error \
-            --retry 3 --retry-delay 5 --retry-all-errors \
-            --connect-timeout 20 --max-time 60 \
-            "${API}/releases/tags/${TAG}")
-          RELEASE_ID=$(echo "${RELEASE}" | jq -r '.id // empty')
+          RELEASE=$(gitee_curl --silent --show-error --retry 4 --retry-all-errors \
+            --connect-timeout 20 --max-time 60 "${API}/releases/tags/${TAG}")
+          RELEASE_ID=$(printf '%s' "${RELEASE}" | jq -r '.id // empty')
           if [ -z "${RELEASE_ID}" ]; then
-            PAYLOAD=$(jq -n \
-              --arg tag "${TAG}" \
+            PAYLOAD=$(jq -n --arg tag "${TAG}" \
               '{tag_name:$tag,name:$tag,target_commitish:"main",body:"macOS Universal DMG 与 Windows x64 安装包见附件。"}')
             RELEASE=$(gitee_curl --fail --silent --show-error -X POST \
-              --retry 3 --retry-delay 5 --retry-all-errors \
-              --connect-timeout 20 --max-time 60 \
-              "${API}/releases" -H "Content-Type: application/json" -d "${PAYLOAD}")
-            RELEASE_ID=$(echo "${RELEASE}" | jq -r '.id')
+              --retry 4 --retry-all-errors --connect-timeout 20 --max-time 60 \
+              "${API}/releases" -H 'Content-Type: application/json' -d "${PAYLOAD}")
+            RELEASE_ID=$(printf '%s' "${RELEASE}" | jq -r '.id')
           fi
           test -n "${RELEASE_ID}"
+          echo "release-id=${RELEASE_ID}" >> "${GITHUB_OUTPUT}"
 
-          ATTACHMENTS=$(gitee_curl --fail --silent --show-error \
-            --retry 3 --retry-delay 5 --retry-all-errors \
-            --connect-timeout 20 --max-time 60 \
-            "${API}/releases/${RELEASE_ID}/attach_files?per_page=100")
-          declare -A KEPT=()
-          while IFS=$'\t' read -r ATTACHMENT_ID NAME; do
-            case "${NAME}" in
-              *.dmg|*.exe|*.sig|*.tar.gz|latest.json)
-                if [ -f "artifacts/${NAME}" ] && [ -z "${KEPT[${NAME}]+x}" ]; then
-                  KEPT["${NAME}"]=1
-                  continue
+  upload:
+    name: Upload ${{ matrix.target }} assets
+    needs: prepare
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        target: [windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Download ${{ matrix.target }} assets from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d artifacts
+          RELEASE=$(curl --fail --silent --show-error \
+            --retry 4 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 20 --max-time 120 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+          mapfile -t ASSETS < <(printf '%s' "${RELEASE}" | jq -r \
+            '.assets[] | [.browser_download_url,.name] | @tsv' \
+            | while IFS=$'\t' read -r url name; do
+                if { [ "${TARGET}" = windows ] && [[ "${name}" =~ \.exe(\.sig)?$|^latest\.json$ ]]; } || \
+                   { [ "${TARGET}" = macos ] && [[ "${name}" =~ \.dmg$|\.app\.tar\.gz(\.sig)?$ ]]; }; then
+                  printf '%s\t%s\n' "${url}" "${name}"
                 fi
-                echo "Deleting stale installer: ${NAME}"
-                gitee_curl --fail --silent --show-error -X DELETE \
-                  --retry 3 --retry-delay 5 --retry-all-errors \
-                  --connect-timeout 20 --max-time 60 \
-                  "${API}/releases/${RELEASE_ID}/attach_files/${ATTACHMENT_ID}"
-                ;;
-            esac
-          done < <(echo "${ATTACHMENTS}" | jq -r '.[] | [.id, .name] | @tsv')
+              done)
+          test "${#ASSETS[@]}" -ge 2
+          for ASSET in "${ASSETS[@]}"; do
+            IFS=$'\t' read -r URL NAME <<< "${ASSET}"
+            curl --fail --location --silent --show-error \
+              --retry 4 --retry-delay 5 --retry-all-errors \
+              --connect-timeout 20 --max-time 600 \
+              -H "Authorization: Bearer ${GH_TOKEN}" -o "artifacts/${NAME}" "${URL}"
+          done
 
-          # Upload smaller metadata/signature/Windows assets first and the large
-          # DMG last. If Gitee stalls on the DMG, a repair run can skip everything
-          # already present and resume with only the missing attachment.
-          mapfile -t FILES < <(
-            find artifacts -maxdepth 1 -type f ! -name '*.dmg' -print | sort
-            find artifacts -maxdepth 1 -type f -name '*.dmg' -print | sort
-          )
-          for FILE in "${FILES[@]}"; do
-            NAME=$(basename "${FILE}")
-            ATTACHMENTS=$(gitee_curl --fail --silent --show-error \
-              --retry 3 --retry-delay 5 --retry-all-errors \
+      - name: Upload ${{ matrix.target }} assets to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release-id }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://gitee.com/api/v5/repos/tlqgyx/xiangzi-md"
+          gitee_curl() { curl -H "Authorization: Bearer ${GITEE_TOKEN}" "$@"; }
+          attachment_exists() {
+            gitee_curl --fail --silent --show-error --retry 4 --retry-all-errors \
               --connect-timeout 20 --max-time 60 \
-              "${API}/releases/${RELEASE_ID}/attach_files?per_page=100&_=$(date +%s)")
-            if echo "${ATTACHMENTS}" | jq -e --arg name "${NAME}" \
-              '.[] | select(.name == $name)' >/dev/null; then
+              "${API}/releases/${RELEASE_ID}/attach_files?per_page=100&_=$(date +%s)" \
+              | jq -e --arg name "$1" '.[] | select(.name == $name)' >/dev/null
+          }
+
+          for FILE in artifacts/*; do
+            NAME=$(basename "${FILE}")
+            if attachment_exists "${NAME}"; then
               echo "Already uploaded: ${NAME}"
               continue
             fi
-
-            echo "Uploading ${NAME}"
+            echo "Uploading ${NAME} (${TARGET})"
             UPLOADED=""
-            for ATTEMPT in 1 2 3 4; do
+            for ATTEMPT in 1 2; do
               RESPONSE_FILE=$(mktemp)
-              gitee_curl --fail --silent --show-error -X POST \
-                --connect-timeout 20 --max-time 600 \
+              STATS_FILE=$(mktemp)
+              gitee_curl --http1.1 -H 'Expect:' --fail --silent --show-error -X POST \
+                --connect-timeout 30 --max-time 1800 \
+                --write-out $'%{stderr}http=%{http_code} connect=%{time_connect}s tls=%{time_appconnect}s total=%{time_total}s uploaded=%{size_upload} speed=%{speed_upload}B/s\n' \
                 "${API}/releases/${RELEASE_ID}/attach_files" \
-                -F "file=@${FILE}" >"${RESPONSE_FILE}" &
+                -F "file=@${FILE}" >"${RESPONSE_FILE}" 2>"${STATS_FILE}" &
               UPLOAD_PID=$!
-              echo "Watching Gitee while ${NAME} uploads (attempt ${ATTEMPT})"
-              for POLL in $(seq 1 60); do
-                RUNNING=1
+              echo "Watching Gitee while ${NAME} uploads (attempt ${ATTEMPT}, timeout 30m)"
+              for POLL in $(seq 1 180); do
+                if attachment_exists "${NAME}"; then
+                  UPLOADED=1
+                  break
+                fi
                 if ! kill -0 "${UPLOAD_PID}" 2>/dev/null; then
                   set +e
                   wait "${UPLOAD_PID}"
                   CURL_STATUS=$?
                   set -e
-                  RUNNING=""
                   if [ "${CURL_STATUS}" -eq 0 ] && \
                     [ "$(jq -r '.name // empty' "${RESPONSE_FILE}")" = "${NAME}" ]; then
                     UPLOADED=1
-                    break
                   fi
-                fi
-
-                ATTACHMENTS=$(gitee_curl --fail --silent --show-error \
-                  --retry 3 --retry-delay 5 --retry-all-errors \
-                  --connect-timeout 20 --max-time 60 \
-                  "${API}/releases/${RELEASE_ID}/attach_files?per_page=100&_=$(date +%s)")
-                if echo "${ATTACHMENTS}" | jq -e --arg name "${NAME}" \
-                  '.[] | select(.name == $name)' >/dev/null; then
-                  UPLOADED=1
                   break
                 fi
-                [ -n "${RUNNING}" ] || break
                 sleep 10
               done
               kill "${UPLOAD_PID}" 2>/dev/null || true
               wait "${UPLOAD_PID}" 2>/dev/null || true
-              rm -f "${RESPONSE_FILE}"
+              cat "${STATS_FILE}" >&2
+              rm -f "${RESPONSE_FILE}" "${STATS_FILE}"
               [ -z "${UPLOADED}" ] || break
-              sleep $((ATTEMPT * 15))
+              sleep $((ATTEMPT * 20))
             done
             if [ -z "${UPLOADED}" ]; then
-              {
-                echo "## Gitee attachment upload needs repair"
-                echo
-                echo "Failed to upload \`${NAME}\` for \`${TAG}\` after four attempts."
-                echo "Existing attachments were kept. Re-run this workflow with"
-                echo "**Run workflow → tag: ${TAG}** to resume the missing files."
-              } >> "${GITHUB_STEP_SUMMARY}"
+              echo "::error::Failed to upload ${NAME} after two 30-minute attempts. Re-run this workflow for ${TAG}; completed files will be skipped."
               exit 1
             fi
           done
 
-          ATTACHMENTS=$(gitee_curl --fail --silent --show-error \
-            --retry 3 --retry-delay 5 --retry-all-errors \
-            --connect-timeout 20 --max-time 60 \
-            "${API}/releases/${RELEASE_ID}/attach_files?per_page=100&_=$(date +%s)")
-          echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith(".dmg"))' >/dev/null
-          echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith("-setup.exe"))' >/dev/null
-          echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith(".tar.gz"))' >/dev/null
-          echo "${ATTACHMENTS}" | jq -e '.[] | select(.name | endswith(".sig"))' >/dev/null
+  finalize:
+    name: Publish updater manifest
+    needs: [prepare, upload]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Build and push Gitee updater manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_PRIVATE_KEY: ${{ secrets.GITEE_PRIVATE_KEY }}
+          GITEE_KNOWN_HOSTS: ${{ secrets.GITEE_KNOWN_HOSTS }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release-id }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://gitee.com/api/v5/repos/tlqgyx/xiangzi-md"
+          gitee_curl() { curl -H "Authorization: Bearer ${GITEE_TOKEN}" "$@"; }
+          retry() { for i in 1 2 3 4; do "$@" && return 0; [ "$i" = 4 ] && return 1; sleep $((i * 10)); done; }
 
-          echo "Building the stable Gitee updater manifest"
-          echo "${ATTACHMENTS}" > /tmp/gitee-attachments.json
+          curl --fail --silent --show-error --retry 4 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            >/tmp/github-release.json
+          curl --fail --location --silent --show-error --retry 4 --retry-all-errors \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -o /tmp/latest.json \
+            "$(jq -r '.assets[] | select(.name == "latest.json") | .browser_download_url' /tmp/github-release.json)"
+          gitee_curl --fail --silent --show-error --retry 4 --retry-all-errors \
+            "${API}/releases/${RELEASE_ID}/attach_files?per_page=100&_=$(date +%s)" \
+            >/tmp/gitee-attachments.json
+          jq -e '.[] | select(.name | endswith(".dmg"))' /tmp/gitee-attachments.json >/dev/null
+          jq -e '.[] | select(.name | endswith("-setup.exe"))' /tmp/gitee-attachments.json >/dev/null
+          jq -e '.[] | select(.name | endswith(".app.tar.gz"))' /tmp/gitee-attachments.json >/dev/null
           jq --slurpfile attachments /tmp/gitee-attachments.json \
              --slurpfile github /tmp/github-release.json '
             .platforms |= with_entries(
               .value.url as $github_url |
-              ($github[0].assets[] | select(.browser_download_url == $github_url) | .name) as $asset_name |
-              ($attachments[0][] | select(.name == $asset_name) |
+              ($github[0].assets[] | select(.browser_download_url == $github_url) | .name) as $name |
+              ($attachments[0][] | select(.name == $name) |
                 (.browser_download_url // .download_url // empty)) as $gitee_url |
-              if ($gitee_url | length) == 0
-              then error("Missing Gitee updater asset: " + $asset_name)
-              else .value.url = $gitee_url
-              end
+              if ($gitee_url | length) == 0 then error("Missing Gitee updater asset: " + $name)
+              else .value.url = $gitee_url end
             )
-          ' artifacts/latest.json > /tmp/latest.gitee.json
-          jq -e '.platforms | length >= 2' /tmp/latest.gitee.json >/dev/null
+          ' /tmp/latest.json >/tmp/latest.gitee.json
 
-          rm -rf /tmp/xiangzi-updater-manifest
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${GITEE_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [ -n "${GITEE_KNOWN_HOSTS}" ]; then
+            printf '%s\n' "${GITEE_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            printf '%s\n' \
+              'gitee.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBMuEoYdx6to5oxR60IWj8uoe1aI0X1fKOHWOtLqTg1tsLT1iFwXV5JmFjU46EzeMBV/6EmI1uaRI6HiEPtPtJHE=' \
+              'gitee.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEKxHSJ7084RmkJ4YdEi5tngynE8aZe2uEoVVsB/OvYN' \
+              > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes"
           retry git clone --depth 1 --branch updater \
             git@gitee.com:tlqgyx/xiangzi-md.git /tmp/xiangzi-updater-manifest
           cd /tmp/xiangzi-updater-manifest
           CURRENT_VERSION=$(jq -r '.version // "0.0.0"' latest.json 2>/dev/null || echo 0.0.0)
           NEW_VERSION=${TAG#v}
-          HIGHEST_VERSION=$(printf '%s\n%s\n' "${CURRENT_VERSION}" "${NEW_VERSION}" \
-            | sort -V | tail -1)
-          if [ "${HIGHEST_VERSION}" != "${NEW_VERSION}" ]; then
-            echo "Updater already advertises ${CURRENT_VERSION}; repair ${NEW_VERSION} will not downgrade it."
+          HIGHEST=$(printf '%s\n%s\n' "${CURRENT_VERSION}" "${NEW_VERSION}" | sort -V | tail -1)
+          if [ "${HIGHEST}" != "${NEW_VERSION}" ]; then
+            echo "Updater already advertises ${CURRENT_VERSION}; refusing to downgrade to ${NEW_VERSION}."
             exit 0
           fi
           cp /tmp/latest.gitee.json latest.json
