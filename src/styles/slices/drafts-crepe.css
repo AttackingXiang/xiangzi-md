@@ -176,15 +176,13 @@
 }
 
 .milkdown .milkdown-slash-menu .menu-group li.hover,
-.milkdown .milkdown-slash-menu .menu-group li.active,
-.milkdown .milkdown-slash-menu .menu-group li:hover {
+.milkdown .milkdown-slash-menu .menu-group li.active {
   background: var(--bg-active) !important;
   color: var(--accent-text) !important;
 }
 
 .milkdown .milkdown-slash-menu .menu-group li.hover svg,
-.milkdown .milkdown-slash-menu .menu-group li.active svg,
-.milkdown .milkdown-slash-menu .menu-group li:hover svg {
+.milkdown .milkdown-slash-menu .menu-group li.active svg {
   color: var(--accent-text) !important;
   fill: var(--accent-text) !important;
 }
