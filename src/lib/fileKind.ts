@@ -15,9 +15,34 @@ export const MARKDOWN_EXTENSIONS = ['md', 'markdown', 'mdown', 'mkd', 'mdx'] as 
  * 这份决定前端是否放行打开，两者对齐才不会「树里不可点、却能从最近文件打开」。
  */
 export const KNOWN_TEXT_EXTENSIONS = new Set([
-  'txt', 'log', 'json', 'json5', 'jsonc', 'yaml', 'yml', 'toml', 'ini', 'conf',
-  'properties', 'xml', 'svg', 'html', 'htm', 'css', 'js', 'mjs', 'cjs', 'jsx',
-  'ts', 'mts', 'cts', 'tsx', 'sql', 'sh', 'bash', 'zsh',
+  'txt',
+  'log',
+  'json',
+  'json5',
+  'jsonc',
+  'yaml',
+  'yml',
+  'toml',
+  'ini',
+  'conf',
+  'properties',
+  'xml',
+  'svg',
+  'html',
+  'htm',
+  'css',
+  'js',
+  'mjs',
+  'cjs',
+  'jsx',
+  'ts',
+  'mts',
+  'cts',
+  'tsx',
+  'sql',
+  'sh',
+  'bash',
+  'zsh',
 ])
 
 /** 取文件名的小写扩展名（不含点）；无扩展名返回空串。 */
@@ -44,7 +69,5 @@ export function isKnownTextFile(name: string): boolean {
   if (base.startsWith('.')) return false
   const ext = fileExtension(name)
   if (ext === '') return true
-  return (
-    (MARKDOWN_EXTENSIONS as readonly string[]).includes(ext) || KNOWN_TEXT_EXTENSIONS.has(ext)
-  )
+  return (MARKDOWN_EXTENSIONS as readonly string[]).includes(ext) || KNOWN_TEXT_EXTENSIONS.has(ext)
 }
