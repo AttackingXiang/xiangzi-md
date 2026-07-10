@@ -49,6 +49,8 @@ export interface AppSettings {
   recentFiles: string[]
   recentFolders: string[]
   favorites: string[]
+  /** 收藏中属于文件的路径；未列出的收藏按文件夹处理，以兼容旧设置。 */
+  favoriteFiles: string[]
   favoritesCollapsed: boolean
   /** 「全部标签」面板里置顶的标签 key（规范化小写） */
   pinnedTags: string[]

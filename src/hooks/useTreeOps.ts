@@ -28,6 +28,8 @@ interface Deps {
   /** 当前置顶的文件夹路径集合，用于在右键菜单显示「置顶 / 取消置顶」。 */
   pinnedFolders: string[]
   togglePinnedFolder: (path: string) => void
+  favorites: string[]
+  toggleFavorite: (path: string, isFile?: boolean) => void
   setCtxMenu: (menu: { x: number; y: number; items: MenuItem[] } | null) => void
   setInputDialog: (
     dialog: {
@@ -54,6 +56,8 @@ export function useTreeOps({
   chooseFolderFrom,
   pinnedFolders,
   togglePinnedFolder,
+  favorites,
+  toggleFavorite,
   setCtxMenu,
   setInputDialog,
 }: Deps) {
@@ -273,6 +277,13 @@ export function useTreeOps({
           onClick: () => void desktop.openWithDefault(node.path),
         })
       }
+      items.push({
+        label: favorites.includes(node.path)
+          ? t('取消收藏')
+          : t(node.isDir ? '收藏文件夹' : '收藏文件'),
+        onClick: () => toggleFavorite(node.path, !node.isDir),
+        separatorBefore: true,
+      })
       items.push({ label: t('重命名'), onClick: () => renameNode(node), separatorBefore: true })
       items.push({ label: t(revealLocationKey()), onClick: () => desktop.reveal(node.path) })
       items.push({
@@ -291,6 +302,8 @@ export function useTreeOps({
       deleteNode,
       pinnedFolders,
       togglePinnedFolder,
+      favorites,
+      toggleFavorite,
       setCtxMenu,
     ],
   )

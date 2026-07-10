@@ -5,6 +5,10 @@ const EN: Record<string, string> = {
   // Sidebar
   资源管理器: 'Explorer',
   收藏目录: 'Favorites',
+  收藏: 'Favorites',
+  收藏文件夹: 'Add folder to favorites',
+  收藏文件: 'Add file to favorites',
+  收藏标签: 'Favorite tags',
   收起收藏目录: 'Collapse favorites',
   展开收藏目录: 'Expand favorites',
   自定义收藏名称: 'Rename favorite',

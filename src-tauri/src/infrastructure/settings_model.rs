@@ -85,6 +85,7 @@ pub struct AppSettings {
     pub recent_files: Vec<String>,
     pub recent_folders: Vec<String>,
     pub favorites: Vec<String>,
+    pub favorite_files: Vec<String>,
     pub favorites_collapsed: bool,
     pub favorite_labels: BTreeMap<String, String>,
     /// 在「全部标签」面板里置顶的标签 key（规范化小写）。
@@ -170,6 +171,7 @@ impl Default for AppSettings {
             recent_files: Vec::new(),
             recent_folders: Vec::new(),
             favorites: Vec::new(),
+            favorite_files: Vec::new(),
             favorites_collapsed: false,
             favorite_labels: BTreeMap::new(),
             pinned_tags: Vec::new(),
@@ -275,6 +277,7 @@ pub struct SettingsPatch {
     pub recent_files: Option<Vec<String>>,
     pub recent_folders: Option<Vec<String>>,
     pub favorites: Option<Vec<String>>,
+    pub favorite_files: Option<Vec<String>>,
     pub favorites_collapsed: Option<bool>,
     pub favorite_labels: Option<BTreeMap<String, String>>,
     pub pinned_tags: Option<Vec<String>>,

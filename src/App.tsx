@@ -648,6 +648,8 @@ export default function App(): JSX.Element {
     chooseFolderFrom,
     pinnedFolders: settings?.pinnedFolders ?? EMPTY_STRING_ARRAY,
     togglePinnedFolder,
+    favorites: settings?.favorites ?? EMPTY_STRING_ARRAY,
+    toggleFavorite,
     setCtxMenu,
     setInputDialog,
   })
@@ -1014,6 +1016,7 @@ export default function App(): JSX.Element {
                 folder={folder}
                 activePath={activeTab?.path ?? null}
                 favorites={settings.favorites}
+                favoriteFiles={settings.favoriteFiles ?? []}
                 favoritesCollapsed={settings.favoritesCollapsed}
                 favoriteLabels={settings.favoriteLabels}
                 sortContext={fileTreeSortContext}
@@ -1229,11 +1232,14 @@ export default function App(): JSX.Element {
               <Welcome
                 recentFiles={settings.recentFiles}
                 recentFolders={settings.recentFolders}
+                pinnedTags={settings.pinnedTags ?? []}
+                tagLabels={tagIndex.tagLabels}
                 onOpenFolder={openFolder}
                 onOpenFile={openFile}
                 onNewFile={newFile}
                 onOpenRecentFile={(p) => openPath(p, baseName(p))}
                 onOpenRecentFolder={openFolderByPath}
+                onOpenPinnedTag={openTreeTag}
                 draftCount={draftSummaries.length}
                 onOpenDrafts={() => setDraftRecoveryOpen(true)}
               />

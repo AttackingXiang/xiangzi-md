@@ -304,6 +304,9 @@ pub(super) fn limit_collections(settings: &mut AppSettings) {
     settings.favorites.truncate(MAX_FAVORITES);
     let favorites = settings.favorites.iter().cloned().collect::<BTreeSet<_>>();
     settings
+        .favorite_files
+        .retain(|path| favorites.contains(path));
+    settings
         .favorite_labels
         .retain(|path, _| favorites.contains(path));
     settings.session.open_files.truncate(MAX_SESSION_FILES);

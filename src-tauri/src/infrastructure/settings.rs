@@ -274,6 +274,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(recent_files);
     replace_if_some!(recent_folders);
     replace_if_some!(favorites);
+    replace_if_some!(favorite_files);
     replace_if_some!(favorites_collapsed);
     replace_if_some!(pinned_tags);
     replace_if_some!(tag_collapsed_keys);

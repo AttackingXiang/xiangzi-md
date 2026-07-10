@@ -229,17 +229,23 @@ export function useSettings() {
     })
   }, [])
 
-  const toggleFavorite = useCallback((p: string) => {
+  const toggleFavorite = useCallback((p: string, isFile = false) => {
     setSettings((prev) => {
       if (!prev) return prev
       const has = prev.favorites.includes(p)
       const favorites = has ? prev.favorites.filter((x) => x !== p) : [...prev.favorites, p]
+      const currentFavoriteFiles = prev.favoriteFiles ?? []
+      const favoriteFiles = has
+        ? currentFavoriteFiles.filter((x) => x !== p)
+        : isFile
+          ? [...currentFavoriteFiles.filter((x) => x !== p), p]
+          : currentFavoriteFiles.filter((x) => x !== p)
       const favoriteLabels = { ...prev.favoriteLabels }
       if (has) delete favoriteLabels[p]
       void desktop
-        .setSettings({ favorites, favoriteLabels })
+        .setSettings({ favorites, favoriteFiles, favoriteLabels })
         .catch((error: unknown) => console.error('Favorites persistence failed', error))
-      return { ...prev, favorites, favoriteLabels }
+      return { ...prev, favorites, favoriteFiles, favoriteLabels }
     })
   }, [])
 
