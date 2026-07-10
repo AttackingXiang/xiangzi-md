@@ -1,0 +1,51 @@
+name: Bug 反馈
+description: 报告可以稳定复现的问题
+title: '[Bug] '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 感谢反馈。请勿上传包含隐私或敏感信息的文档。
+  - type: input
+    id: version
+    attributes:
+      label: Xiangzi MD 版本
+      placeholder: 例如 1.6.2
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: 操作系统
+      options:
+        - macOS（Apple Silicon）
+        - macOS（Intel）
+        - Windows 11
+        - Windows 10
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请按顺序说明如何触发问题。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 补充信息
+      description: 可附不含隐私的截图、日志或其他说明。
