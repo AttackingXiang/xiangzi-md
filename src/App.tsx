@@ -13,8 +13,13 @@ import Sidebar from './components/Sidebar'
 import SidebarHeader from './components/SidebarHeader'
 import TabBar from './components/TabBar'
 import SourceEditor from './components/SourceEditor'
+import { classifyFile } from './lib/fileKind'
+import { textLanguageLabel } from './lib/textLanguages'
+import { textEditorBridge } from './lib/textEditorBridge'
+import type { TextCursorInfo, TextViewState } from './components/TextEditor'
 
 const Editor = lazy(() => import('./components/Editor'))
+const TextEditor = lazy(() => import('./components/TextEditor'))
 const Settings = lazy(() => import('./components/Settings'))
 const UpdateNotice = lazy(() => import('./components/UpdateNotice'))
 const EditorToolbar = lazy(() => import('./components/EditorToolbar'))
@@ -374,6 +379,12 @@ export default function App(): JSX.Element {
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [outlineVisible, setOutlineVisible] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
+  // 非 Markdown 文件走 CodeMirror TextEditor：按当前标签名判定内核。
+  const activeKind = activeTab ? classifyFile(activeTab.name) : 'markdown'
+  const isTextKind = activeKind === 'text'
+  // TextEditor 的滚动/选区状态按标签缓存；光标位置提给底部状态栏展示。
+  const textViewStates = useRef(new Map<string, TextViewState>())
+  const [textCursor, setTextCursor] = useState<TextCursorInfo | null>(null)
   const captureActiveScroll = useCallback((): void => {
     if (!activeId) return
     if (sourceMode) {
@@ -405,6 +416,14 @@ export default function App(): JSX.Element {
   const [findInitial, setFindInitial] = useState('')
   const [findLine, setFindLine] = useState<number | undefined>(undefined)
   const [findMatchIndex, setFindMatchIndex] = useState<number | undefined>(undefined)
+  // 文本文件的「查找替换」走 CodeMirror 自带面板（已汉化 + 贴合主题），不弹
+  // Markdown 的 FindBar。⌘F/命令都会把 showFind 置真，这里改成打开 CM 搜索并复位。
+  useEffect(() => {
+    if (showFind && isTextKind) {
+      textEditorBridge.openSearch()
+      setShowFind(false)
+    }
+  }, [showFind, isTextKind])
   const [searchView, setSearchView] = useState(false)
   const openSidebarSearch = useCallback(() => setSearchView(true), [setSearchView])
   const [showPalette, setShowPalette] = useState(false)
@@ -687,7 +706,7 @@ export default function App(): JSX.Element {
   )
 
   const workspaceVisibilityKey = settings
-    ? `${settings.showAllFiles}:${settings.hiddenWorkspacePaths.join('\0')}`
+    ? `${settings.showAllFiles}:${settings.visibleTextExtensions.join(',')}:${settings.hiddenWorkspacePaths.join('\0')}`
     : ''
   useEffect(() => {
     if (!workspaceVisibilityKey) return
@@ -1076,7 +1095,7 @@ export default function App(): JSX.Element {
             showRevealButton={settings.showRevealButton}
           />
 
-          {showFind && (
+          {showFind && !isTextKind && (
             <FindBar
               initialQuery={findInitial}
               initialLine={findLine}
@@ -1090,7 +1109,7 @@ export default function App(): JSX.Element {
             />
           )}
 
-          {settings.showToolbar && !sourceMode && !readingMode && activeTab && (
+          {settings.showToolbar && !isTextKind && !sourceMode && !readingMode && activeTab && (
             <Suspense fallback={null}>
               <EditorToolbar lang={settings.language} />
             </Suspense>
@@ -1131,7 +1150,25 @@ export default function App(): JSX.Element {
             }}
           >
             {activeTab ? (
-              sourceMode ? (
+              isTextKind ? (
+                <Suspense fallback={<div className="editor-loading" />}>
+                  <TextEditor
+                    key={activeTab.id + '-text'}
+                    content={activeTab.content}
+                    fileName={activeTab.name}
+                    readOnly={readingMode}
+                    initialState={textViewStates.current.get(activeTab.id)}
+                    onStateChange={(state) => textViewStates.current.set(activeTab.id, state)}
+                    onCursorChange={setTextCursor}
+                    onChange={(raw) => updateContent(activeTab.id, raw)}
+                    onOpenWithDefaultApp={
+                      activeTab.path
+                        ? () => void desktop.openWithDefault(activeTab.path as string)
+                        : undefined
+                    }
+                  />
+                </Suspense>
+              ) : sourceMode ? (
                 <SourceEditor
                   key={activeTab.id + '-src'}
                   content={activeTab.content}
@@ -1200,7 +1237,7 @@ export default function App(): JSX.Element {
               />
             )}
 
-            {outlineVisible && activeTab && (
+            {outlineVisible && activeTab && !isTextKind && (
               <>
                 <div className="resize-handle" onMouseDown={startOutlineResize} />
                 <Outline
@@ -1224,7 +1261,12 @@ export default function App(): JSX.Element {
               readingMode={readingMode}
               showPath={settings.showStatusPath}
               showReadingModeControl={settings.showReadingModeControl}
-              showSourceModeControl={settings.showSourceModeControl}
+              showSourceModeControl={settings.showSourceModeControl && !isTextKind}
+              textStatus={
+                isTextKind
+                  ? { info: textCursor, language: textLanguageLabel(activeTab?.name ?? '') }
+                  : null
+              }
               onToggleReading={toggleReadingMode}
               onToggleSource={toggleSourceMode}
             />

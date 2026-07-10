@@ -2,6 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { desktop } from '../../platform'
 import type { AppSettings } from '../../types'
+import { TEXT_FORMAT_GROUPS, isGroupEnabled, toggleGroup } from '../../lib/textFormats'
 import { SettingsPage, SettingsCard, SettingRow, ToggleRow } from './primitives'
 import type { SectionProps } from './types'
 
@@ -57,6 +58,37 @@ export default function FilesSection({ settings, onChange, en }: SectionProps): 
           checked={settings.allowRemoteImages}
           onChange={(checked) => onChange({ allowRemoteImages: checked })}
         />
+      </SettingsCard>
+      <SettingsCard title={en ? 'Always-visible formats' : '始终显示的格式'}>
+        <p className="settings-hint">
+          {en
+            ? 'Checked formats always appear in the file tree, even when “Show all files” is off. Markdown and extensionless files are always shown.'
+            : '勾选的格式始终显示在文件树中，即使关闭「显示全部文件」也生效。Markdown 与无扩展名文件始终显示。'}
+        </p>
+        <div className="format-whitelist">
+          <label className="format-whitelist-item is-locked">
+            <input type="checkbox" checked disabled />
+            <span>Markdown</span>
+          </label>
+          {TEXT_FORMAT_GROUPS.map((group) => (
+            <label key={group.id} className="format-whitelist-item">
+              <input
+                type="checkbox"
+                checked={isGroupEnabled(group, settings.visibleTextExtensions)}
+                onChange={(event) =>
+                  onChange({
+                    visibleTextExtensions: toggleGroup(
+                      group,
+                      settings.visibleTextExtensions,
+                      event.target.checked,
+                    ),
+                  })
+                }
+              />
+              <span>{en ? group.labelEn : group.label}</span>
+            </label>
+          ))}
+        </div>
       </SettingsCard>
       {settings.showAllFiles && (
         <>

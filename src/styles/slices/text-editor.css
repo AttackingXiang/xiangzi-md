@@ -1,0 +1,172 @@
+/* ---------- 纯文本 / 代码编辑器（CodeMirror 6） ---------- */
+.text-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.text-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.text-editor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--code-btn-color, var(--text));
+  cursor: pointer;
+}
+
+.text-editor-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.text-editor-btn.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.text-editor-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.text-editor-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 4px;
+  background: var(--border);
+}
+
+/* 把右侧按钮（用默认应用打开）顶到工具栏最右端 */
+.text-editor-spacer {
+  margin-left: auto;
+}
+
+.text-editor-host {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.text-editor-host .cm-editor {
+  height: 100%;
+  font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 14px;
+}
+
+.text-editor-host .cm-editor.cm-focused {
+  outline: none;
+}
+
+.text-editor-host .cm-scroller {
+  line-height: 1.6;
+}
+
+.text-editor-host .cm-content {
+  padding: 8px 0;
+}
+
+/* 选区配色跟 Markdown 文档、静态代码块统一到同一份 --code-selection-bg（随主题变化）。
+   TextEditor 用 drawSelection() 画选区层，其 .cm-selectionBackground 默认会落到
+   CodeMirror 自带的深色选区值（focused 时的 #233 尤其发黑）；这里用更高优先级覆盖
+   掉那条内置规则，避免出现整块发黑的选中效果。 */
+.text-editor-host .cm-selectionBackground {
+  background: var(--code-selection-bg) !important;
+}
+
+/* 兜底：若某些浏览器仍走原生选区（drawSelection 未接管），也保持同色。 */
+.text-editor-host .cm-content ::selection {
+  background: var(--code-selection-bg);
+}
+
+/* CodeMirror 自带的查找/替换面板：跟 Tab、编辑器工具栏和属性栏保持同一层
+   扁平透明表面，不额外叠一张白色卡片。文案汉化见 TextEditor 的 phrases 注入。 */
+.text-editor-host .cm-editor .cm-panels {
+  background: var(--editor-chrome-bg);
+  color: var(--text);
+  border-bottom: 1px solid var(--editor-chrome-border);
+  box-shadow: none;
+}
+
+.text-editor-host .cm-editor .cm-panel.cm-search {
+  padding: 8px 10px;
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.text-editor-host .cm-editor .cm-panel.cm-search label {
+  color: var(--text-2);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.text-editor-host .cm-editor .cm-textfield {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--workspace-divider-strong) 72%, transparent);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  box-shadow: none;
+}
+
+.text-editor-host .cm-editor .cm-textfield:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--bg-hover) 56%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.text-editor-host .cm-editor .cm-button {
+  background: transparent;
+  background-image: none !important;
+  border: 1px solid color-mix(in srgb, var(--workspace-divider-strong) 72%, transparent);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  box-shadow: none;
+}
+
+.text-editor-host .cm-editor .cm-button:hover {
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+}
+
+.text-editor-host .cm-editor .cm-panel.cm-search input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.text-editor-host .cm-editor .cm-panel.cm-search [name='close'] {
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  background: transparent;
+  border-radius: 5px;
+}
+
+.text-editor-host .cm-editor .cm-panel.cm-search [name='close']:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+}

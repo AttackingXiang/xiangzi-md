@@ -288,6 +288,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(hide_attachment_folders);
     replace_if_some!(asset_search_paths);
     replace_if_some!(show_all_files);
+    replace_if_some!(visible_text_extensions);
     replace_if_some!(hidden_workspace_paths);
     replace_if_some!(hidden_name_patterns);
     replace_if_some!(allow_remote_images);

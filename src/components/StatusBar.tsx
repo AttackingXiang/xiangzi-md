@@ -1,7 +1,14 @@
 import { memo, useMemo } from 'react'
 import { BookOpen, Code2, Eye } from 'lucide-react'
 import type { Tab } from '../types'
+import type { TextCursorInfo } from './TextEditor'
 import { t } from '../lib/i18n'
+
+/** 文本文件的状态栏信息（Markdown 文档为 null） */
+export interface TextStatus {
+  info: TextCursorInfo | null
+  language: string
+}
 
 interface Props {
   tab: Tab | null
@@ -13,6 +20,7 @@ interface Props {
   showPath: boolean
   showReadingModeControl: boolean
   showSourceModeControl: boolean
+  textStatus: TextStatus | null
   onToggleReading: () => void
   onToggleSource: () => void
 }
@@ -33,20 +41,46 @@ const StatusBar = memo(function StatusBar({
   showPath,
   showReadingModeControl,
   showSourceModeControl,
+  textStatus,
   onToggleReading,
   onToggleSource,
 }: Props): JSX.Element {
-  // App 每次击键都会重渲染，字数/字符数统计避免在每次渲染时重算，只在内容变化时重算
+  const isText = textStatus !== null
+  // App 每次击键都会重渲染，字数统计只在内容变化时重算；文本文件不做字数统计
   const content = tab?.content ?? ''
-  const wordCount = useMemo(() => countWords(content), [content])
+  const wordCount = useMemo(() => (isText ? 0 : countWords(content)), [content, isText])
   const charCount = content.length
+  const cursor = textStatus?.info ?? null
   return (
     <div className="statusbar">
       <span className="status-left">
         {showPath ? (tab ? (tab.path ?? t('未保存')) : t('就绪')) : ''}
       </span>
       <span className="status-right">
-        {tab && (
+        {tab && isText && (
+          <>
+            {cursor && (
+              <span>
+                {t('行')} {cursor.line}, {t('列')} {cursor.col}
+              </span>
+            )}
+            {cursor && cursor.selections > 1 && (
+              <span>
+                {cursor.selections} {t('个光标')}
+              </span>
+            )}
+            {cursor && cursor.selected > 0 && (
+              <span>
+                {t('已选')} {cursor.selected}
+              </span>
+            )}
+            <span>{textStatus?.language}</span>
+            {cursor && <span>{cursor.eol === '\r\n' ? 'CRLF' : 'LF'}</span>}
+            {autoSave && <span>{t('自动保存')}</span>}
+            {tab.dirty && <span className="status-dirty">●&nbsp;{t('未保存')}</span>}
+          </>
+        )}
+        {tab && !isText && (
           <>
             <span>
               {wordCount} {t('字')}
