@@ -52,6 +52,7 @@ export interface UseTagFeatureDeps {
   markTabPersisted: ReturnType<typeof useFileOps>['markTabPersisted']
   saveTab: ReturnType<typeof useFileOps>['saveTab']
   pushUndo: ReturnType<typeof useTreeOps>['pushUndo']
+  togglePinnedTag: (tagKey: string) => void
   setSidebarVisible: Dispatch<SetStateAction<boolean>>
   setSearchView: Dispatch<SetStateAction<boolean>>
   setInputDialog: Dispatch<SetStateAction<InputDialogState>>
@@ -86,6 +87,7 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
     markTabPersisted,
     saveTab,
     pushUndo,
+    togglePinnedTag,
     setSidebarVisible,
     setSearchView,
     setInputDialog,
@@ -193,17 +195,34 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
     tagIndex.upsertDocument,
   ])
 
-  // 点标签：默认只出中间结果列，左侧不动；开了「点击标签时展开全部标签」才顺带
-  // 展开左侧标签树（并确保侧栏可见）。从标签树里点标签时树已经开着，openTag 也
-  // 不会把它关掉。
+  // 点正文里的标签：默认隐藏文件树，只留下中间结果列；开了「点击标签时展开全部
+  // 标签」才在左侧展示标签树。标签树自身的点击走 openTreeTag，始终保留标签树。
   const openDocumentTag = useCallback(
     (tag: string): void => {
       setSearchView(false)
-      const openOverview = settings?.tagClickOpensOverview ?? false
-      if (openOverview) setSidebarVisible(true)
+      // 已经手动打开的标签树属于用户当前工作状态，切换文档内的标签时保留它；
+      // 只有左侧仍是文件树且设置关闭时，才收起左栏、只展示结果列。
+      const openOverview =
+        tagNavigation.overviewOpen || (settings?.tagClickOpensOverview ?? false)
+      setSidebarVisible(openOverview)
       tagNavigation.openTag(tag, openOverview)
     },
-    [tagNavigation.openTag, settings?.tagClickOpensOverview],
+    [
+      setSearchView,
+      setSidebarVisible,
+      tagNavigation.openTag,
+      tagNavigation.overviewOpen,
+      settings?.tagClickOpensOverview,
+    ],
+  )
+
+  const openTreeTag = useCallback(
+    (tag: string): void => {
+      setSearchView(false)
+      setSidebarVisible(true)
+      tagNavigation.openTag(tag, true)
+    },
+    [setSearchView, setSidebarVisible, tagNavigation.openTag],
   )
 
   const showAllTags = useCallback((): void => {
@@ -329,15 +348,17 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
 
   const openTagContext = useCallback(
     (key: string, fullLabel: string, x: number, y: number): void => {
+      const pinned = (settings?.pinnedTags ?? []).includes(key)
       setCtxMenu({
         x,
         y,
         items: [
+          { label: pinned ? t('取消置顶') : t('置顶'), onClick: () => togglePinnedTag(key) },
           { label: t('重命名 / 修改分组'), onClick: () => promptRenameTag(key, fullLabel, 'all') },
         ],
       })
     },
-    [promptRenameTag],
+    [promptRenameTag, setCtxMenu, settings?.pinnedTags, togglePinnedTag],
   )
 
   // 文档里右键某个标签 chip：既能全局改，也能只改本文档（默认全改）。
@@ -397,6 +418,7 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
     inlineOnlyTags,
     hasBodyHeading,
     openDocumentTag,
+    openTreeTag,
     showAllTags,
     openTagContext,
     openDocTagContext,

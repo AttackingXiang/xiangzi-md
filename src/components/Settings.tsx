@@ -431,11 +431,11 @@ export default function Settings({
                     onChange={(checked) => onChange({ tagGroupsFirst: checked })}
                   />
                   <ToggleRow
-                    label={en ? 'Open all-tags panel on tag click' : '点击标签时展开全部标签'}
+                    label={en ? 'Show all tags when clicking document tags' : '点击文档标签时展示全部标签'}
                     description={
                       en
-                        ? 'When clicking a tag in a document, also open the all-tags tree on the left. Off by default — only the results column opens.'
-                        : '点正文里的标签时，同时在左侧展开「全部标签」树。默认关闭——只打开中间结果列，可用结果列顶部的「全部标签」按钮再展开。'
+                        ? 'When clicking a tag inside a document, show the all-tags tree on the left. Off by default — the file tree is hidden and only the results column opens.'
+                        : '点文档内部的标签时，在左侧展示「全部标签」树。默认关闭——文件树会隐藏，只打开中间结果列。'
                     }
                     checked={settings.tagClickOpensOverview ?? false}
                     onChange={(checked) => onChange({ tagClickOpensOverview: checked })}
