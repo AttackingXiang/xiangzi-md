@@ -5,7 +5,13 @@ import { AArrowDown, AArrowUp, type LucideIcon } from 'lucide-react'
 import { desktop } from '../platform'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import type { ToolbarFeatureConfig } from '@milkdown/crepe/feature/toolbar'
-import { commandsCtx, editorViewCtx } from '@milkdown/kit/core'
+import {
+  commandsCtx,
+  editorViewCtx,
+  editorViewOptionsCtx,
+  parserCtx,
+  schemaCtx,
+} from '@milkdown/kit/core'
 import {
   clearTextInCurrentBlockCommand,
   hardbreakFilterNodes,
@@ -14,6 +20,7 @@ import { tablePickerBridge } from '../lib/tablePickerBridge'
 import { editorCmd, shouldClearHeadingOnBackspace } from '../lib/editorCommands'
 import { AllSelection, TextSelection } from '@milkdown/kit/prose/state'
 import type { EditorView } from '@milkdown/kit/prose/view'
+import { DOMParser, DOMSerializer } from '@milkdown/kit/prose/model'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import {
@@ -37,6 +44,11 @@ import { codeMirrorTheme } from '../lib/codeTheme'
 import { headingSelectionToolbarPlugin } from '../lib/headingSelectionToolbar'
 import { loadTableLayouts, saveTableLayout, tableSignature } from '../lib/tableLayoutPersistence'
 import type { TableColumnWidthMode } from '../lib/editorCommands'
+import {
+  preservePlainTextLineBreaks,
+  sanitizePastedHtml,
+  shouldPreservePlainTextLineBreaks,
+} from '../lib/pasteHandling'
 
 interface Props {
   content: string
@@ -166,6 +178,8 @@ export default function Editor({
         file.name || 'image.png',
         buf,
       )
+      // File inputs and async uploads do not emit a ProseMirror beforeinput event.
+      editorBridge.markUserEdit()
       return relPath
     }
 
@@ -278,6 +292,27 @@ export default function Editor({
     // hard_break 事务，这里通过覆盖上下文将 table 从禁止列表移除。
     crepe.editor.config((ctx) => {
       ctx.update(hardbreakFilterNodes.key, (nodes) => nodes.filter((n) => n !== 'table'))
+      ctx.update(editorViewOptionsCtx, (previous) => ({
+        ...previous,
+        transformPastedHTML: (html, view) =>
+          sanitizePastedHtml(previous.transformPastedHTML?.(html, view) ?? html),
+        handlePaste: (view, event, slice) => {
+          if (previous.handlePaste?.(view, event, slice)) return true
+          const clipboard = event.clipboardData
+          if (!clipboard || clipboard.getData('text/html')) return false
+          const text = clipboard.getData('text/plain')
+          if (clipboard.getData('vscode-editor-data') || !shouldPreservePlainTextLineBreaks(text))
+            return false
+
+          const parsed = ctx.get(parserCtx)(preservePlainTextLineBreaks(text))
+          if (!parsed || typeof parsed === 'string') return false
+          const schema = ctx.get(schemaCtx)
+          const dom = DOMSerializer.fromSchema(schema).serializeFragment(parsed.content)
+          const parsedSlice = DOMParser.fromSchema(schema).parseSlice(dom)
+          view.dispatch(view.state.tr.replaceSelection(parsedSlice).scrollIntoView())
+          return true
+        },
+      }))
     })
 
     // 注入标题快捷键（⌘1~6 / ⌘0）、专注模式装饰、查找替换
@@ -412,6 +447,7 @@ export default function Editor({
       window.getSelection()?.removeAllRanges()
     }
     const clearSelectAllOnKey = (event: KeyboardEvent): void => {
+      if (event.isComposing) return
       // shouldClearHeadingOnBackspace 判断的是 ProseMirror 自己记的上一次选区，
       // 跟这次按键事件真正的 DOM target 无关——标签栏挪进这个滚动容器之后，
       // 在标签栏的输入框里按 Backspace 也会经过这里；如果上次光标恰好停在
@@ -439,7 +475,7 @@ export default function Editor({
       if (!(event.target instanceof Element)) return
       if (
         event.target.closest(
-          '.milkdown-toolbar button, .milkdown-block-handle button, .milkdown-slash-menu button, [role="menuitem"]',
+          '.milkdown-toolbar button, .milkdown-block-handle button, .milkdown-slash-menu button, [role="menuitem"], .image-resize-handle',
         )
       ) {
         userEdited = true

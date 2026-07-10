@@ -83,7 +83,7 @@ export function shiftedHeadingLevel(level: number, direction: 'promote' | 'demot
 type HeadingBackspaceEvent = Pick<
   KeyboardEvent,
   'key' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'
->
+> & { isComposing?: boolean }
 
 /**
  * Whether Backspace is being used at the very start of a heading to clear its
@@ -96,6 +96,7 @@ export function shouldClearHeadingOnBackspace(
 ): boolean {
   if (
     event.key !== 'Backspace' ||
+    event.isComposing ||
     event.altKey ||
     event.ctrlKey ||
     event.metaKey ||

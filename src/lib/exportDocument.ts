@@ -1,5 +1,4 @@
 const EXPORT_WIDTH = 920
-const MAX_EXPORT_HEIGHT = 20_000
 const RENDER_CHUNK_HEIGHT = 4_000
 const PDF_PAGE_WIDTH_PT = 595.28
 const PDF_PAGE_HEIGHT_PT = 841.89
@@ -62,7 +61,8 @@ function waitForImage(image: HTMLImageElement, index: number): Promise<void> {
       else resolve()
     }
     const loaded = (): void => finish()
-    const failed = (): void => finish()
+    const failed = (): void =>
+      finish(new Error(`导出图片加载失败（第 ${index + 1} 张）：${deferredSource ?? image.src}`))
     const timeout = window.setTimeout(
       () => finish(new Error(`导出图片加载超时（第 ${index + 1} 张）`)),
       EXPORT_IMAGE_LOAD_TIMEOUT_MS,
@@ -102,6 +102,10 @@ async function waitForAssets(doc: Document): Promise<void> {
   }
 }
 
+export function measuredExportHeight(measured: number): number {
+  return Math.max(1, Math.ceil(measured) + 20)
+}
+
 function documentHeight(doc: Document): number {
   const body = doc.body
   const root = doc.documentElement
@@ -111,7 +115,7 @@ function documentHeight(doc: Document): number {
     root.scrollHeight,
     root.offsetHeight,
   )
-  return Math.max(1, Math.min(MAX_EXPORT_HEIGHT, Math.ceil(measured) + 20))
+  return measuredExportHeight(measured)
 }
 
 async function createExportFrame(html: string): Promise<ExportFrame> {

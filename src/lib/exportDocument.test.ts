@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { imageFormatForPath, planPdfPages } from './exportDocument'
+import { imageFormatForPath, measuredExportHeight, planPdfPages } from './exportDocument'
 
 describe('exportDocument', () => {
   it('selects JPEG only for JPEG file extensions', () => {
@@ -23,5 +23,9 @@ describe('exportDocument', () => {
       { top: 1_000, height: 1_000 },
       { top: 2_000, height: 100 },
     ])
+  })
+
+  it('does not truncate documents taller than the former 20,000px limit', () => {
+    expect(measuredExportHeight(42_345.2)).toBe(42_366)
   })
 })

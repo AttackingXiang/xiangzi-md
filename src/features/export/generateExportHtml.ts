@@ -58,6 +58,51 @@ const EXPORT_RESIZE_CONCURRENCY = 1
 const MAX_SINGLE_EXPORT_IMAGE_BYTES = 64 * 1024 * 1024
 const EXPORT_CONTENT_WIDTH = 800
 
+export interface MarkdownCodeBlock {
+  lang: string
+  code: string
+}
+
+/** Read CommonMark fenced and indented code blocks without assuming exactly three backticks. */
+export function markdownCodeBlocks(markdown: string): MarkdownCodeBlock[] {
+  const lines = markdown.replace(/\r\n?/g, '\n').split('\n')
+  const blocks: MarkdownCodeBlock[] = []
+  for (let index = 0; index < lines.length; ) {
+    const opening = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(lines[index])
+    if (opening) {
+      const marker = opening[2][0]
+      const length = opening[2].length
+      const info = opening[3].trim()
+      const code: string[] = []
+      index += 1
+      const closing = new RegExp(`^ {0,3}${marker === '`' ? '`' : '~'}{${length},}\\s*$`)
+      while (index < lines.length && !closing.test(lines[index])) code.push(lines[index++])
+      if (index < lines.length) index += 1
+      blocks.push({ lang: info.split(/\s+/, 1)[0].toLowerCase(), code: code.join('\n') + '\n' })
+      continue
+    }
+
+    if (/^(?: {4}|\t)/.test(lines[index])) {
+      const code: string[] = []
+      while (index < lines.length) {
+        const line = lines[index]
+        if (/^(?: {4}|\t)/.test(line)) {
+          code.push(line.startsWith('\t') ? line.slice(1) : line.slice(4))
+          index += 1
+        } else if (line === '') {
+          code.push('')
+          index += 1
+        } else break
+      }
+      while (code.at(-1) === '') code.pop()
+      blocks.push({ lang: '', code: code.join('\n') + '\n' })
+      continue
+    }
+    index += 1
+  }
+  return blocks
+}
+
 /** Build a self-contained HTML string that renders identically to the app view */
 export async function generateExportHTML(
   title: string,
@@ -73,13 +118,7 @@ export async function generateExportHTML(
   // ── Reading-view: pre-render all Mermaid diagrams ─────────────────────
   // Parse markdown source to know the language of every code block (including
   // lazy-not-yet-visible ones whose DOM hasn't been initialized yet).
-  const mdBlocks: Array<{ lang: string; code: string }> = []
-  if (mdContent) {
-    const re = /^```(\S*)\s*\n([\s\S]*?)^```/gm
-    let m: RegExpExecArray | null
-    while ((m = re.exec(mdContent)) !== null)
-      mdBlocks.push({ lang: m[1].toLowerCase(), code: m[2] })
-  }
+  const mdBlocks = mdContent ? markdownCodeBlocks(mdContent) : []
 
   const liveBlocks = Array.from(pm.querySelectorAll<HTMLElement>('.milkdown-code-block'))
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
@@ -164,6 +203,17 @@ export async function generateExportHTML(
     '.fold-btn', // heading fold toggle injected by headingFoldPlugin
   ].join(', ')
   clone.querySelectorAll(MILKDOWN_UI).forEach((el) => el.remove())
+  // Export the complete document regardless of the editor's transient fold state.
+  clone
+    .querySelectorAll('.heading-fold-hidden')
+    .forEach((el) => el.classList.remove('heading-fold-hidden'))
+  // An unfinished image is an editor control, not document content.
+  clone.querySelectorAll('.milkdown-image-inline').forEach((node) => {
+    if (node.querySelector('.empty-image-inline')) node.remove()
+  })
+  clone.querySelectorAll('.milkdown-image-block').forEach((node) => {
+    if (node.querySelector(':scope > .image-edit')) node.remove()
+  })
   clone.querySelectorAll('.selectedCell, .ProseMirror-selectednode').forEach((el) => {
     el.classList.remove('selectedCell', 'ProseMirror-selectednode')
   })

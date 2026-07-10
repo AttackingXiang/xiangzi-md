@@ -13,6 +13,7 @@ import { copySvgMarkupAsImage } from './richClipboard'
 import { getMermaidCopyMode } from './copyPreferences'
 import { t } from './i18n'
 import { autoDetectLanguage } from './languageDetection'
+import { editorBridge } from './editorBridge'
 
 // ---------- language list for picker ----------
 
@@ -254,6 +255,7 @@ class StaticCodeBlockView implements NodeView {
   private setLanguage(lang: string): void {
     const pos = this._getPos()
     if (pos === undefined) return
+    editorBridge.markUserEdit()
     this._view.dispatch(
       this._view.state.tr.setNodeMarkup(pos, undefined, {
         ...this._view.state.doc.nodeAt(pos)?.attrs,

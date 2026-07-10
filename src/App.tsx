@@ -872,7 +872,12 @@ export default function App(): JSX.Element {
       if (!isUndo || !canUndo) return
       // Let the editor handle its own undo when focused.
       const active = document.activeElement
-      if (active && (active.closest('.milkdown') || active.closest('.cm-editor'))) return
+      if (
+        active?.closest(
+          '.milkdown, .cm-editor, .source-editor, input, textarea, [contenteditable="true"]',
+        )
+      )
+        return
       e.preventDefault()
       void undoLastOp()
     }
