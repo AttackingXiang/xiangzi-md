@@ -138,7 +138,9 @@ jobs:
       matrix:
         target: [windows, macos]
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    # 单文件最坏 2 次 × 40 分钟 = 80 分钟,加上确认与重试间隔约 82.5 分钟,
+    # 留出余量,避免第二次尝试的尾部被 job 超时拦腰砍断。
+    timeout-minutes: 100
     steps:
       - name: Download ${{ matrix.target }} assets from GitHub Release
         env:
@@ -201,14 +203,16 @@ jobs:
             for ATTEMPT in 1 2; do
               RESPONSE_FILE=$(mktemp)
               STATS_FILE=$(mktemp)
-              gitee_curl --http1.1 -H 'Expect:' --fail --silent --show-error -X POST \
-                --connect-timeout 30 --max-time 1800 \
+              # --fail-with-body(而非 --fail):4xx 仍返回失败退出码,但保留
+              # Gitee 的响应体,好在日志里看到 400 的具体原因。
+              gitee_curl --http1.1 -H 'Expect:' --fail-with-body --silent --show-error -X POST \
+                --connect-timeout 30 --max-time 2400 \
                 --write-out $'%{stderr}http=%{http_code} connect=%{time_connect}s tls=%{time_appconnect}s total=%{time_total}s uploaded=%{size_upload} speed=%{speed_upload}B/s\n' \
                 "${API}/releases/${RELEASE_ID}/attach_files" \
                 -F "file=@${FILE}" >"${RESPONSE_FILE}" 2>"${STATS_FILE}" &
               UPLOAD_PID=$!
-              echo "Watching Gitee while ${NAME} uploads (attempt ${ATTEMPT}, timeout 30m)"
-              for POLL in $(seq 1 180); do
+              echo "Watching Gitee while ${NAME} uploads (attempt ${ATTEMPT}, timeout 40m)"
+              for POLL in $(seq 1 240); do
                 if attachment_exists "${NAME}"; then
                   UPLOADED=1
                   break
@@ -221,6 +225,21 @@ jobs:
                   if [ "${CURL_STATUS}" -eq 0 ] && \
                     [ "$(jq -r '.name // empty' "${RESPONSE_FILE}")" = "${NAME}" ]; then
                     UPLOADED=1
+                  else
+                    # Gitee frequently returns HTTP 400 *after* the whole file
+                    # was uploaded over the slow cross-border link, and its
+                    # attach_files listing is eventually consistent, so the
+                    # attachment may still have landed. Confirm before burning
+                    # another ~40-minute attempt on a file that is already there.
+                    echo "Upload of ${NAME} reported curl status ${CURL_STATUS}; confirming whether it landed on Gitee anyway"
+                    for CONFIRM in 1 2 3 4 5 6; do
+                      if attachment_exists "${NAME}"; then
+                        echo "${NAME} is present on Gitee despite the reported error; treating as uploaded"
+                        UPLOADED=1
+                        break
+                      fi
+                      sleep 10
+                    done
                   fi
                   break
                 fi
@@ -229,12 +248,19 @@ jobs:
               kill "${UPLOAD_PID}" 2>/dev/null || true
               wait "${UPLOAD_PID}" 2>/dev/null || true
               cat "${STATS_FILE}" >&2
+              # 打印 Gitee 的响应体(成功时是附件 JSON,失败时是错误说明),
+              # 便于诊断 400 到底是什么原因;截断以防意外的超长响应。
+              if [ -s "${RESPONSE_FILE}" ]; then
+                echo "Gitee response body for ${NAME} (attempt ${ATTEMPT}):" >&2
+                head -c 2000 "${RESPONSE_FILE}" >&2
+                echo >&2
+              fi
               rm -f "${RESPONSE_FILE}" "${STATS_FILE}"
               [ -z "${UPLOADED}" ] || break
               sleep $((ATTEMPT * 20))
             done
             if [ -z "${UPLOADED}" ]; then
-              echo "::error::Failed to upload ${NAME} after two 30-minute attempts. Re-run this workflow for ${TAG}; completed files will be skipped."
+              echo "::error::Failed to upload ${NAME} after two 40-minute attempts. Re-run this workflow for ${TAG}; completed files will be skipped."
               exit 1
             fi
           done
