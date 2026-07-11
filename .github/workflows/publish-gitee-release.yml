@@ -279,12 +279,22 @@ jobs:
             .platforms |= with_entries(
               .value.url as $github_url |
               ($github[0].assets[] | select(.browser_download_url == $github_url) | .name) as $name |
-              ($attachments[0][] | select(.name == $name) |
-                (.browser_download_url // .download_url // empty)) as $gitee_url |
-              if ($gitee_url | length) == 0 then error("Missing Gitee updater asset: " + $name)
-              else .value.url = $gitee_url end
+              # Gitee normalizes spaces in uploaded attachment names to dots
+              # ("Xiangzi MD.app.tar.gz" -> "Xiangzi.MD.app.tar.gz").
+              ($name | gsub(" "; ".")) as $normalized_name |
+              ([
+                $attachments[0][] |
+                select(.name == $name or .name == $normalized_name) |
+                (.browser_download_url // .download_url // empty)
+              ][0] // error("Missing Gitee updater asset: " + $name)) as $gitee_url |
+              .value.url = $gitee_url
             )
           ' /tmp/latest.json >/tmp/latest.gitee.json
+          jq -e --arg version "${TAG#v}" '
+            .version == $version and
+            (.platforms | length) == 6 and
+            ([.platforms[].url | startswith("https://gitee.com/")] | all)
+          ' /tmp/latest.gitee.json >/dev/null
 
           install -d -m 700 ~/.ssh
           printf '%s\n' "${GITEE_PRIVATE_KEY}" > ~/.ssh/id_ed25519

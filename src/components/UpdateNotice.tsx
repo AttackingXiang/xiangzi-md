@@ -1,4 +1,4 @@
-import { ArrowDownToLine, CheckCircle2, RefreshCw, X } from 'lucide-react'
+import { AlertCircle, ArrowDownToLine, CheckCircle2, RefreshCw, X } from 'lucide-react'
 import type { UpdaterController } from '../hooks/useUpdater'
 import { getLang } from '../lib/i18n'
 import { extractUpdateHighlights } from '../lib/updateNotes'
@@ -9,7 +9,8 @@ interface Props {
 
 export default function UpdateNotice({ updater }: Props): JSX.Element | null {
   const { state } = updater
-  if (!['available', 'downloading'].includes(state.phase)) return null
+  const failed = state.phase === 'error' && Boolean(state.version)
+  if (!['available', 'downloading'].includes(state.phase) && !failed) return null
   const en = getLang() === 'en'
   const downloading = state.phase === 'downloading'
   const highlights = extractUpdateHighlights(state.notes)
@@ -23,7 +24,9 @@ export default function UpdateNotice({ updater }: Props): JSX.Element | null {
         aria-labelledby="update-title"
       >
         <header className="modal-header">
-          <span id="update-title">{en ? 'Update available' : '发现新版本'}</span>
+          <span id="update-title">
+            {failed ? (en ? 'Update failed' : '更新失败') : en ? 'Update available' : '发现新版本'}
+          </span>
           {!downloading && (
             <button
               className="icon-btn sm"
@@ -36,7 +39,13 @@ export default function UpdateNotice({ updater }: Props): JSX.Element | null {
         </header>
         <div className="update-content">
           <div className="update-icon" aria-hidden="true">
-            {downloading ? <RefreshCw size={22} /> : <ArrowDownToLine size={22} />}
+            {downloading ? (
+              <RefreshCw size={22} />
+            ) : failed ? (
+              <AlertCircle size={22} />
+            ) : (
+              <ArrowDownToLine size={22} />
+            )}
           </div>
           <div className="update-copy">
             <h2>Xiangzi MD {state.version}</h2>
@@ -49,6 +58,13 @@ export default function UpdateNotice({ updater }: Props): JSX.Element | null {
                   ? 'A new version is ready'
                   : '新版本已准备好'}
             </p>
+            {failed && (
+              <p className="update-error" role="alert">
+                {en
+                  ? `The update could not be downloaded or installed. ${state.error ?? 'Check your network and try again.'}`
+                  : `更新包下载或安装失败。${state.error ?? '请检查网络后重试。'}`}
+              </p>
+            )}
             {highlights.length > 0 && (
               <section className="update-notes" aria-label={en ? "What's new" : '本次更新'}>
                 <h3>{en ? "What's new" : '本次更新'}</h3>
@@ -79,7 +95,13 @@ export default function UpdateNotice({ updater }: Props): JSX.Element | null {
             </button>
             <button className="primary-btn" onClick={() => void updater.install()}>
               <CheckCircle2 size={15} />
-              {en ? 'Update and restart' : '更新并重启'}
+              {failed
+                ? en
+                  ? 'Retry update'
+                  : '重试更新'
+                : en
+                  ? 'Update and restart'
+                  : '更新并重启'}
             </button>
           </footer>
         )}

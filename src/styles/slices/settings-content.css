@@ -520,6 +520,14 @@
   margin: 0;
 }
 
+.update-error {
+  margin: 10px 0 0;
+  color: var(--danger, #c33);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .update-notes {
   max-height: 140px;
   margin-top: 12px;
