@@ -1,8 +1,8 @@
 use super::settings_model::{
-    AppSettings, MAX_ASSET_SEARCH_PATHS, MAX_FAVORITES, MAX_FAVORITE_LABEL_CHARS,
+    AppSettings, RecentDoc, MAX_ASSET_SEARCH_PATHS, MAX_FAVORITES, MAX_FAVORITE_LABEL_CHARS,
     MAX_HIDDEN_WORKSPACE_PATHS, MAX_PANDOC_ARGS_LENGTH, MAX_PATH_LENGTH, MAX_PINNED_FOLDERS,
-    MAX_RECENT_ITEMS, MAX_SESSION_FILES, MAX_SHORTCUT_OVERRIDES, MAX_TAG_COLLAPSED_KEYS,
-    SETTINGS_SCHEMA_VERSION, SHORTCUT_ACTIONS,
+    MAX_RECENT_DOCS, MAX_RECENT_ITEMS, MAX_SESSION_FILES, MAX_SHORTCUT_OVERRIDES,
+    MAX_TAG_COLLAPSED_KEYS, SETTINGS_SCHEMA_VERSION, SHORTCUT_ACTIONS,
 };
 
 const FILE_TREE_SORT_MODES: &[&str] = &["default", "nameDesc", "modified", "opened", "smart"];
@@ -33,6 +33,7 @@ pub(super) fn migrate_settings(settings: &mut AppSettings, source_version: u32) 
             5 => migrate_v5_to_v6(settings),
             6 => migrate_v6_to_v7(settings),
             7 => migrate_v7_to_v8(settings),
+            8 => migrate_v8_to_v9(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -54,6 +55,27 @@ fn migrate_v4_to_v5(_settings: &mut AppSettings) {}
 fn migrate_v5_to_v6(_settings: &mut AppSettings) {}
 fn migrate_v6_to_v7(_settings: &mut AppSettings) {}
 fn migrate_v7_to_v8(_settings: &mut AppSettings) {}
+
+/// v8→v9：把纯 MRU 的 recent_files 灌进 frecency 语料 recent_docs，让老用户升级后立即
+/// 有打分原料。open_count 一律 1，last_opened_nanos 按 MRU 次序递减造一个单调时间戳
+/// （队首最新），last_edited_nanos 置 0。已有 recent_docs 时不覆盖。
+fn migrate_v8_to_v9(settings: &mut AppSettings) {
+    if !settings.recent_docs.is_empty() {
+        return;
+    }
+    let count = settings.recent_files.len() as i64;
+    settings.recent_docs = settings
+        .recent_files
+        .iter()
+        .enumerate()
+        .map(|(index, path)| RecentDoc {
+            path: path.clone(),
+            open_count: 1,
+            last_opened_nanos: count - index as i64,
+            last_edited_nanos: 0,
+        })
+        .collect();
+}
 
 pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !matches!(settings.language.as_str(), "zh" | "en") {
@@ -111,6 +133,9 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !FILE_TREE_SORT_MODES.contains(&settings.file_tree_sort.as_str()) {
         settings.file_tree_sort = "default".into();
     }
+    settings
+        .recent_docs
+        .retain(|doc| !doc.path.trim().is_empty() && doc.path.len() <= MAX_PATH_LENGTH);
     settings.pinned_folders.retain(|path| {
         !path.trim().is_empty() && path.len() <= MAX_PATH_LENGTH && Path::new(path).is_absolute()
     });
@@ -300,6 +325,13 @@ fn valid_favorite_label(value: &str) -> bool {
 pub(super) fn limit_collections(settings: &mut AppSettings) {
     settings.recent_files.truncate(MAX_RECENT_ITEMS);
     settings.recent_folders.truncate(MAX_RECENT_ITEMS);
+    // 语料库超限时按最近打开时间保留最新的一批。
+    if settings.recent_docs.len() > MAX_RECENT_DOCS {
+        settings
+            .recent_docs
+            .sort_by(|a, b| b.last_opened_nanos.cmp(&a.last_opened_nanos));
+        settings.recent_docs.truncate(MAX_RECENT_DOCS);
+    }
     settings.pinned_folders.truncate(MAX_PINNED_FOLDERS);
     settings.favorites.truncate(MAX_FAVORITES);
     let favorites = settings.favorites.iter().cloned().collect::<BTreeSet<_>>();
@@ -314,6 +346,9 @@ pub(super) fn limit_collections(settings: &mut AppSettings) {
     settings.tag_default_expand_depth = settings.tag_default_expand_depth.clamp(-1, 32);
     if settings.tag_result_sort != "name" {
         settings.tag_result_sort = "updated".into();
+    }
+    if !matches!(settings.tag_tree_sort.as_str(), "name" | "nameDesc" | "smart") {
+        settings.tag_tree_sort = "count".into();
     }
     settings.asset_search_paths.truncate(MAX_ASSET_SEARCH_PATHS);
     settings

@@ -10,6 +10,8 @@ import type { useFileOps } from '../../hooks/useFileOps'
 import type { useTreeOps } from '../../hooks/useTreeOps'
 import { useTagIndex } from './useTagIndex'
 import { buildTagTree, isTagInSubtree } from './tagTree'
+import { buildFrecencyRank } from '../../lib/recency'
+import { useNow } from '../../hooks/useNow'
 import { useTagNavigation } from './useTagNavigation'
 import {
   documentMetaFromMarkdown,
@@ -149,19 +151,39 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
   }, [tagNavigation.selectedTag, tagIndex.tagIndex, resultSort])
 
   // 标签总览：按 "/" 构建 Obsidian 式嵌套分组树（见 tagTree.ts）。
-  const groupsFirst = settings?.tagGroupsFirst ?? false
-  const tagTree = useMemo(
-    () =>
-      buildTagTree(
-        Object.entries(tagIndex.tagIndex).map(([key, documents]) => ({
-          key,
-          label: tagIndex.tagLabels[key] ?? key,
-          docPaths: documents.map((document) => document.path),
-        })),
-        { groupsFirst },
-      ),
-    [tagIndex.tagIndex, tagIndex.tagLabels, groupsFirst],
-  )
+  const groupsFirst = settings?.tagGroupsFirst ?? true
+  const tagTreeSort = settings?.tagTreeSort ?? 'count'
+  const recentDocs = settings?.recentDocs
+  const activePath = activeTab?.path ?? null
+  const now = useNow()
+  const tagTree = useMemo(() => {
+    const smart = tagTreeSort === 'smart'
+    // smart 才需要近期信号：frecency 排名（含当前活动文档加权）+ 文档修改时间。
+    const openTabPaths = activePath ? new Set([activePath]) : undefined
+    const recentRank = smart
+      ? buildFrecencyRank(recentDocs ?? [], now, openTabPaths)
+      : undefined
+    const mtimeByPath = smart
+      ? new Map(tagIndex.documents.map((document) => [document.path, document.updatedAt]))
+      : undefined
+    return buildTagTree(
+      Object.entries(tagIndex.tagIndex).map(([key, documents]) => ({
+        key,
+        label: tagIndex.tagLabels[key] ?? key,
+        docPaths: documents.map((document) => document.path),
+      })),
+      { groupsFirst, sort: tagTreeSort, recentRank, mtimeByPath },
+    )
+  }, [
+    tagIndex.tagIndex,
+    tagIndex.tagLabels,
+    tagIndex.documents,
+    groupsFirst,
+    tagTreeSort,
+    recentDocs,
+    activePath,
+    now,
+  ])
 
   useEffect(() => {
     tagNavigation.reset()

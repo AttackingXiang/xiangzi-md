@@ -17,6 +17,17 @@ export interface FileNode {
 /** 文件树排序方式 */
 export type FileTreeSort = 'default' | 'nameDesc' | 'modified' | 'opened' | 'smart'
 
+/** 单个文档的 frecency 记录：文件树/标签树「智能推荐」排序的原料。 */
+export interface RecentDoc {
+  path: string
+  /** 累计有效打开次数 */
+  openCount: number
+  /** 最近一次有效打开（Unix 纳秒） */
+  lastOpenedNanos: number
+  /** 最近一次保存/编辑（Unix 纳秒）；0 表示从未编辑 */
+  lastEditedNanos: number
+}
+
 export interface FileVersion {
   sizeBytes: number
   modifiedNanos: number
@@ -48,6 +59,8 @@ export interface AppSettings {
   shortcuts: Record<string, string>
   recentFiles: string[]
   recentFolders: string[]
+  /** frecency 打分语料库；recentFiles 是它按最近打开时间派生出的前 15 镜像 */
+  recentDocs: RecentDoc[]
   favorites: string[]
   /** 收藏中属于文件的路径；未列出的收藏按文件夹处理，以兼容旧设置。 */
   favoriteFiles: string[]
@@ -58,8 +71,10 @@ export interface AppSettings {
   tagCollapsedKeys: string[]
   /** 标签树默认展开层级：-1 全部展开（默认），0 仅顶层，N 展开到第 N 层 */
   tagDefaultExpandDepth: number
-  /** 是否把「含子标签的分组」排在同级前面（默认按文档数排序） */
+  /** 是否把「含子标签的分组」排在同级前面（与 tagTreeSort 正交） */
   tagGroupsFirst: boolean
+  /** 标签树同级排序：'count'（文档数倒序，默认）/'name'/'nameDesc'/'smart'（智能推荐） */
+  tagTreeSort: 'count' | 'name' | 'nameDesc' | 'smart'
   /** 中间结果列排序：'updated'（修改时间，默认）或 'name'（名称） */
   tagResultSort: 'updated' | 'name'
   /** 点正文里的标签时是否同时展开左侧「全部标签」树（默认关：只出结果列） */

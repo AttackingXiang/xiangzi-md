@@ -34,16 +34,20 @@ function recoveredDraftName(name: string, lang: 'zh' | 'en'): string {
 }
 
 interface Deps {
-  pushRecentFile: (p: string) => void
   lang: 'zh' | 'en'
   requestCloseDecision: (tabs: Tab[], reason?: CloseReason) => Promise<CloseDecision>
+  /** 保存成功后记一次编辑，喂给 frecency 的「最近修改」信号（见 recordDocEdit）。 */
+  recordDocEdit: (p: string) => void
 }
 
 /**
  * All tab and file operations: open, save, close, new, update content.
  * Extracted from App.tsx to keep concerns separate.
+ *
+ * 注：「最近打开」不在这里记录——打开一个文件是否算数由 App 层的停留门控决定
+ * （见 recordDocOpen 的调用），避免误点/快速翻找污染 frecency 语料。
  */
-export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps) {
+export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) {
   const [tabs, setTabs] = useState<Tab[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const openQueueRef = useRef(createTaskQueue(2))
@@ -97,11 +101,10 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
           }
           setTabs((prev) => [...prev, tab])
           setActiveId(tab.id)
-          pushRecentFile(file.path)
         }),
       )
     },
-    [pushRecentFile],
+    [],
   )
 
   const openFile = useCallback(async () => {
@@ -124,8 +127,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
     }
     setTabs((prev) => [...prev, tab])
     setActiveId(tab.id)
-    pushRecentFile(file.path)
-  }, [pushRecentFile])
+  }, [])
 
   const newFile = useCallback(() => {
     const name = newUntitledName(stateRef.current.tabs, lang)
@@ -212,6 +214,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
               current.id === id ? completeSave(current, tab, result.version) : current,
             ),
           )
+          recordDocEdit(tab.path)
           return true
         } else {
           const result = await desktop.saveAs(tab.content, tab.name)
@@ -229,7 +232,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
                   : t,
               ),
             )
-            pushRecentFile(result.path)
+            recordDocEdit(result.path)
             return true
           }
           return false
@@ -243,7 +246,7 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
         return false
       }
     },
-    [pushRecentFile],
+    [recordDocEdit],
   )
 
   const saveTab = useCallback(
@@ -297,13 +300,13 @@ export function useFileOps({ pushRecentFile, lang, requestCloseDecision }: Deps)
                 : t,
             ),
           )
-          pushRecentFile(result.path)
+          recordDocEdit(result.path)
         }
       } catch {
         await desktop.notify(t('另存为失败。'))
       }
     },
-    [pushRecentFile],
+    [recordDocEdit],
   )
 
   // ── Content update ─────────────────────────────────────────────────────────

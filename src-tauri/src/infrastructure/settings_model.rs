@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 8;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 9;
 pub(crate) const MAX_RECENT_ITEMS: usize = 15;
+/// frecency 语料库上限：比展示用的 recent_files（15）大，保留更长的打开历史用于打分。
+pub(crate) const MAX_RECENT_DOCS: usize = 100;
 pub(crate) const MAX_FAVORITES: usize = 32;
 pub(crate) const MAX_PINNED_FOLDERS: usize = 64;
 pub(crate) const MAX_TAG_COLLAPSED_KEYS: usize = 4096;
@@ -59,6 +61,19 @@ pub struct SessionSettings {
     pub active_path: Option<String>,
 }
 
+/// 单个文档的 frecency 记录：文件树/标签树「智能推荐」排序的原料。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct RecentDoc {
+    pub path: String,
+    /// 累计有效打开次数。
+    pub open_count: u32,
+    /// 最近一次有效打开（Unix 纳秒）。
+    pub last_opened_nanos: i64,
+    /// 最近一次保存/编辑（Unix 纳秒）；0 表示从未编辑。
+    pub last_edited_nanos: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
@@ -84,6 +99,8 @@ pub struct AppSettings {
     pub shortcuts: BTreeMap<String, String>,
     pub recent_files: Vec<String>,
     pub recent_folders: Vec<String>,
+    /// frecency 打分语料库；recent_files 是它按最近打开时间派生出的前 15 镜像。
+    pub recent_docs: Vec<RecentDoc>,
     pub favorites: Vec<String>,
     pub favorite_files: Vec<String>,
     pub favorites_collapsed: bool,
@@ -94,8 +111,10 @@ pub struct AppSettings {
     pub tag_collapsed_keys: Vec<String>,
     /// 标签树默认展开层级：-1 全部展开（默认），0 仅顶层，N 展开到第 N 层。
     pub tag_default_expand_depth: i32,
-    /// 是否把「含子标签的分组」排在同级前面（默认按文档数排序）。
+    /// 是否把「含子标签的分组」排在同级前面（与 tag_tree_sort 正交）。
     pub tag_groups_first: bool,
+    /// 标签树同级排序：'count'（文档数倒序，默认）、'name'（名称升序）、'nameDesc'（名称降序）。
+    pub tag_tree_sort: String,
     /// 中间结果列的排序方式：'updated'（修改时间，默认）或 'name'（名称）。
     pub tag_result_sort: String,
     /// 点正文里的标签时是否同时展开左侧「全部标签」树（默认关：只出结果列）。
@@ -170,6 +189,7 @@ impl Default for AppSettings {
             shortcuts: BTreeMap::new(),
             recent_files: Vec::new(),
             recent_folders: Vec::new(),
+            recent_docs: Vec::new(),
             favorites: Vec::new(),
             favorite_files: Vec::new(),
             favorites_collapsed: false,
@@ -177,7 +197,8 @@ impl Default for AppSettings {
             pinned_tags: Vec::new(),
             tag_collapsed_keys: Vec::new(),
             tag_default_expand_depth: -1,
-            tag_groups_first: false,
+            tag_groups_first: true,
+            tag_tree_sort: "count".into(),
             tag_result_sort: "updated".into(),
             tag_click_opens_overview: false,
             session: SessionSettings::default(),
@@ -276,6 +297,7 @@ pub struct SettingsPatch {
     pub shortcuts: Option<BTreeMap<String, String>>,
     pub recent_files: Option<Vec<String>>,
     pub recent_folders: Option<Vec<String>>,
+    pub recent_docs: Option<Vec<RecentDoc>>,
     pub favorites: Option<Vec<String>>,
     pub favorite_files: Option<Vec<String>>,
     pub favorites_collapsed: Option<bool>,
@@ -284,6 +306,7 @@ pub struct SettingsPatch {
     pub tag_collapsed_keys: Option<Vec<String>>,
     pub tag_default_expand_depth: Option<i32>,
     pub tag_groups_first: Option<bool>,
+    pub tag_tree_sort: Option<String>,
     pub tag_result_sort: Option<String>,
     pub tag_click_opens_overview: Option<bool>,
     pub session: Option<SessionSettings>,

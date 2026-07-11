@@ -30,6 +30,9 @@ interface Deps {
   togglePinnedFolder: (path: string) => void
   favorites: string[]
   toggleFavorite: (path: string, isFile?: boolean) => void
+  /** 路径移动/删除后同步 frecency 语料的钩子（见 recordDocRename/recordDocRemove）。 */
+  recordDocRename: (oldPath: string, newPath: string) => void
+  recordDocRemove: (path: string) => void
   setCtxMenu: (menu: { x: number; y: number; items: MenuItem[] } | null) => void
   setInputDialog: (
     dialog: {
@@ -58,6 +61,8 @@ export function useTreeOps({
   togglePinnedFolder,
   favorites,
   toggleFavorite,
+  recordDocRename,
+  recordDocRemove,
   setCtxMenu,
   setInputDialog,
 }: Deps) {
@@ -75,19 +80,24 @@ export function useTreeOps({
   }, [])
 
   /** Update expandedPaths when a path moves (rename or file-system move). */
-  const updateExpandedAfterMove = useCallback((oldPath: string, newPath: string): void => {
-    const updated = new Set<string>()
-    for (const p of expandedPathsRef.current) {
-      if (p === oldPath) {
-        updated.add(newPath)
-      } else if (p.startsWith(oldPath + '/') || p.startsWith(oldPath + '\\')) {
-        updated.add(newPath + p.slice(oldPath.length))
-      } else {
-        updated.add(p)
+  const updateExpandedAfterMove = useCallback(
+    (oldPath: string, newPath: string): void => {
+      const updated = new Set<string>()
+      for (const p of expandedPathsRef.current) {
+        if (p === oldPath) {
+          updated.add(newPath)
+        } else if (p.startsWith(oldPath + '/') || p.startsWith(oldPath + '\\')) {
+          updated.add(newPath + p.slice(oldPath.length))
+        } else {
+          updated.add(p)
+        }
       }
-    }
-    expandedPathsRef.current = updated
-  }, [])
+      expandedPathsRef.current = updated
+      // 同一处顺带把 frecency 语料里的旧路径改写掉，避免重命名/移动后残留失效记录。
+      recordDocRename(oldPath, newPath)
+    },
+    [recordDocRename],
+  )
 
   const refreshTree = useCallback(async () => {
     const root = folder?.root
@@ -246,11 +256,13 @@ export function useTreeOps({
           closeTabsWithoutPrompt,
           refreshTree,
         })
+        // 删除成功后清掉该路径（及其后代）在 frecency 语料里的记录。
+        recordDocRemove(node.path)
       } catch {
         window.alert(t('删除失败'))
       }
     },
-    [tabs, confirmCloseTabs, closeTabsWithoutPrompt, refreshTree],
+    [tabs, confirmCloseTabs, closeTabsWithoutPrompt, refreshTree, recordDocRemove],
   )
 
   // ── Context menus ──────────────────────────────────────────────────────────

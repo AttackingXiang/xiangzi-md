@@ -1,5 +1,7 @@
 /** Obsidian 风格的嵌套标签分组：标签按 "/" 拆成层级，a/b、a/c 归到 a 下面。
  * 纯函数，方便测试；渲染层（TagOverviewSidebar）只负责展开/折叠和点击。 */
+import { recencyBlend } from '../../lib/recency'
+
 export interface TagTreeNode {
   /** 完整标签 key（如 project/work），用于导航与展开状态。 */
   key: string
@@ -29,8 +31,41 @@ interface BuildNode {
 }
 
 export interface BuildTagTreeOptions {
-  /** 把「含子标签的分组」排在同级前面（默认按文档数排序）。 */
+  /** 把「含子标签的分组」排在同级前面（与 sort 正交：只决定分组是否顶到前面）。 */
   groupsFirst?: boolean
+  /**
+   * 同级排序维度：'count' 文档数倒序（默认）、'name' 名称升序、'nameDesc' 名称降序、
+   * 'smart' 智能推荐（按子树内文档的最近打开 + 最近修改综合评分）。
+   */
+  sort?: 'count' | 'name' | 'nameDesc' | 'smart'
+  /** smart 用：文档 path → 最近打开排名（0 最近）。缺省视为都没打开。 */
+  recentRank?: ReadonlyMap<string, number>
+  /** smart 用：文档 path → 修改时间（只比较相对大小，单位不限）。缺省视为 0。 */
+  mtimeByPath?: ReadonlyMap<string, number>
+}
+
+const EMPTY_RANK: ReadonlyMap<string, number> = new Map()
+const EMPTY_MTIME: ReadonlyMap<string, number> = new Map()
+
+/**
+ * 由子树内文档集算出 smart 评分：聚合出「最小 rank + 最新 mtime」两路信号后，交给共用的
+ * recencyBlend（与文件树 smart 同一套权重公式，见 lib/recency.ts）。
+ */
+function smartTagScore(
+  docs: ReadonlySet<string>,
+  recentRank: ReadonlyMap<string, number>,
+  mtimeByPath: ReadonlyMap<string, number>,
+  newest: number,
+): number {
+  let rank: number | undefined
+  let mtime = 0
+  for (const path of docs) {
+    const r = recentRank.get(path)
+    if (r !== undefined && (rank === undefined || r < rank)) rank = r
+    const m = mtimeByPath.get(path) ?? 0
+    if (m > mtime) mtime = m
+  }
+  return recencyBlend(rank, mtime, newest)
 }
 
 function toTreeNodes(
@@ -38,28 +73,66 @@ function toTreeNodes(
   parentLabel: string,
   options: BuildTagTreeOptions,
 ): TagTreeNode[] {
-  return Array.from(nodes.values())
-    .map((node): TagTreeNode => {
-      const fullLabel = parentLabel ? `${parentLabel}/${node.segment}` : node.segment
-      return {
-        key: node.key,
-        segment: node.segment,
-        fullLabel,
-        selfCount: node.selfDocs.size,
-        totalCount: node.subtreeDocs.size,
-        children: toTreeNodes(node.children, fullLabel, options),
+  // 先建好本层节点，同时保留各自的子树文档集（smart 评分要用，映射成 TagTreeNode 后就没了）。
+  const built = Array.from(nodes.values()).map((node) => {
+    const fullLabel = parentLabel ? `${parentLabel}/${node.segment}` : node.segment
+    const treeNode: TagTreeNode = {
+      key: node.key,
+      segment: node.segment,
+      fullLabel,
+      selfCount: node.selfDocs.size,
+      totalCount: node.subtreeDocs.size,
+      children: toTreeNodes(node.children, fullLabel, options),
+    }
+    return { treeNode, docs: node.subtreeDocs }
+  })
+
+  const byName = (a: (typeof built)[number], b: (typeof built)[number]): number =>
+    a.treeNode.segment.localeCompare(b.treeNode.segment, undefined, { sensitivity: 'base' })
+  // 分组优先：把含子标签的分组顶到前面；与排序维度正交。
+  const byGroup = (a: (typeof built)[number], b: (typeof built)[number]): number =>
+    options.groupsFirst
+      ? Number(b.treeNode.children.length > 0) - Number(a.treeNode.children.length > 0)
+      : 0
+
+  if (options.sort === 'smart') {
+    const recentRank = options.recentRank ?? EMPTY_RANK
+    const mtimeByPath = options.mtimeByPath ?? EMPTY_MTIME
+    // 同级归一化用的分母：本层各节点子树里的最新 mtime。
+    let newest = 0
+    for (const { docs } of built) {
+      for (const path of docs) {
+        const m = mtimeByPath.get(path) ?? 0
+        if (m > newest) newest = m
       }
-    })
-    .sort((a, b) => {
-      if (options.groupsFirst) {
-        const groupDelta = Number(b.children.length > 0) - Number(a.children.length > 0)
-        if (groupDelta !== 0) return groupDelta
-      }
-      return (
-        b.totalCount - a.totalCount ||
-        a.segment.localeCompare(b.segment, undefined, { sensitivity: 'base' })
-      )
-    })
+    }
+    const scores = built.map(({ docs }) => smartTagScore(docs, recentRank, mtimeByPath, newest))
+    return built
+      .map((item, index) => ({ item, score: scores[index] }))
+      .sort((a, b) => {
+        const g = byGroup(a.item, b.item)
+        if (g !== 0) return g
+        if (a.score !== b.score) return b.score - a.score
+        return byName(a.item, b.item)
+      })
+      .map(({ item }) => item.treeNode)
+  }
+
+  built.sort((a, b) => {
+    const g = byGroup(a, b)
+    if (g !== 0) return g
+    const name = byName(a, b)
+    switch (options.sort) {
+      case 'name':
+        return name || b.treeNode.totalCount - a.treeNode.totalCount
+      case 'nameDesc':
+        return -name || b.treeNode.totalCount - a.treeNode.totalCount
+      case 'count':
+      default:
+        return b.treeNode.totalCount - a.treeNode.totalCount || name
+    }
+  })
+  return built.map(({ treeNode }) => treeNode)
 }
 
 /** 把扁平的标签条目构建成嵌套树。分组占位节点（没有文档直接打它、只因为有后代

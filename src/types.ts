@@ -8,6 +8,7 @@ export type {
   FileTreeSort,
   FileVersion,
   Folder,
+  RecentDoc,
   SearchResult,
 } from './platform/contracts'
 

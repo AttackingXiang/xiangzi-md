@@ -3,7 +3,28 @@ import { desktop } from '../platform'
 import { setLang } from '../lib/i18n'
 import { bytesToBlobUrl } from '../lib/backgroundImage'
 import { applyThemeShade } from '../lib/themeShade'
-import type { AppSettings } from '../types'
+import type { AppSettings, RecentDoc } from '../types'
+
+/** frecency 语料库上限，与 Rust 端 MAX_RECENT_DOCS 保持一致。 */
+const RECENT_DOCS_CAP = 100
+/** recentFiles 派生镜像长度（供 Welcome「最近文件」等旧消费者，纯近因语义）。 */
+const RECENT_FILES_MIRROR = 15
+/** 同一文件在此毫秒数内重复触发只刷新时间、不累加 openCount，避免切 tab 反复计数。 */
+const OPEN_COUNT_COOLDOWN_MS = 60_000
+
+/** candidate 是否等于 base，或位于 base 目录之下（兼容 '/' 与 '\\' 分隔符）。 */
+function isPathAtOrUnder(candidate: string, base: string): boolean {
+  return candidate === base || candidate.startsWith(base + '/') || candidate.startsWith(base + '\\')
+}
+
+/** 按最近打开时间倒序截断到上限，并派生出 recentFiles 前若干镜像。 */
+function normalizeRecentDocs(docs: RecentDoc[]): { recentDocs: RecentDoc[]; recentFiles: string[] } {
+  const recentDocs = [...docs]
+    .sort((a, b) => b.lastOpenedNanos - a.lastOpenedNanos)
+    .slice(0, RECENT_DOCS_CAP)
+  const recentFiles = recentDocs.slice(0, RECENT_FILES_MIRROR).map((doc) => doc.path)
+  return { recentDocs, recentFiles }
+}
 
 /**
  * Manages all app settings: load from disk, apply side effects (theme, width,
@@ -207,14 +228,94 @@ export function useSettings() {
     }
   }, [])
 
-  const pushRecentFile = useCallback((p: string) => {
+  // 记录一次「有效打开」：命中则刷新 lastOpened（冷却外才 +1 openCount），否则新建。
+  // 同时重算 recentFiles 镜像并持久化。门控（停留够久/首次编辑）在 App 层，这里只落库。
+  const recordDocOpen = useCallback((p: string) => {
+    const nowNanos = Date.now() * 1_000_000
+    const cooldownNanos = OPEN_COUNT_COOLDOWN_MS * 1_000_000
     setSettings((prev) => {
       if (!prev) return prev
-      const recentFiles = [p, ...prev.recentFiles.filter((x) => x !== p)].slice(0, 15)
+      const hit = prev.recentDocs.find((doc) => doc.path === p)
+      const next = hit
+        ? prev.recentDocs.map((doc) =>
+            doc.path === p
+              ? {
+                  ...doc,
+                  openCount:
+                    doc.openCount + (nowNanos - doc.lastOpenedNanos > cooldownNanos ? 1 : 0),
+                  lastOpenedNanos: nowNanos,
+                }
+              : doc,
+          )
+        : [
+            { path: p, openCount: 1, lastOpenedNanos: nowNanos, lastEditedNanos: 0 },
+            ...prev.recentDocs,
+          ]
+      const { recentDocs, recentFiles } = normalizeRecentDocs(next)
       void desktop
-        .setSettings({ recentFiles })
-        .catch((error: unknown) => console.error('Recent files persistence failed', error))
-      return { ...prev, recentFiles }
+        .setSettings({ recentDocs, recentFiles })
+        .catch((error: unknown) => console.error('Recent docs persistence failed', error))
+      return { ...prev, recentDocs, recentFiles }
+    })
+  }, [])
+
+  // 记录一次编辑/保存：刷新 lastEdited（编辑是强信号，缺记录则连打开一起补上）。
+  const recordDocEdit = useCallback((p: string) => {
+    const nowNanos = Date.now() * 1_000_000
+    setSettings((prev) => {
+      if (!prev) return prev
+      const hit = prev.recentDocs.find((doc) => doc.path === p)
+      const next = hit
+        ? prev.recentDocs.map((doc) =>
+            doc.path === p ? { ...doc, lastEditedNanos: nowNanos } : doc,
+          )
+        : [
+            {
+              path: p,
+              openCount: 1,
+              lastOpenedNanos: nowNanos,
+              lastEditedNanos: nowNanos,
+            },
+            ...prev.recentDocs,
+          ]
+      const { recentDocs, recentFiles } = normalizeRecentDocs(next)
+      void desktop
+        .setSettings({ recentDocs, recentFiles })
+        .catch((error: unknown) => console.error('Recent docs persistence failed', error))
+      return { ...prev, recentDocs, recentFiles }
+    })
+  }, [])
+
+  // 重命名/移动文件或文件夹后，改写 recentDocs 里命中的路径（含文件夹前缀下的所有后代）。
+  const recordDocRename = useCallback((oldPath: string, newPath: string) => {
+    setSettings((prev) => {
+      if (!prev) return prev
+      let changed = false
+      const remapped = prev.recentDocs.map((doc) => {
+        if (!isPathAtOrUnder(doc.path, oldPath)) return doc
+        changed = true
+        return { ...doc, path: newPath + doc.path.slice(oldPath.length) }
+      })
+      if (!changed) return prev
+      const { recentDocs, recentFiles } = normalizeRecentDocs(remapped)
+      void desktop
+        .setSettings({ recentDocs, recentFiles })
+        .catch((error: unknown) => console.error('Recent docs persistence failed', error))
+      return { ...prev, recentDocs, recentFiles }
+    })
+  }, [])
+
+  // 删除文件或文件夹后，移除 recentDocs 里该路径及其后代的记录。
+  const recordDocRemove = useCallback((p: string) => {
+    setSettings((prev) => {
+      if (!prev) return prev
+      const kept = prev.recentDocs.filter((doc) => !isPathAtOrUnder(doc.path, p))
+      if (kept.length === prev.recentDocs.length) return prev
+      const { recentDocs, recentFiles } = normalizeRecentDocs(kept)
+      void desktop
+        .setSettings({ recentDocs, recentFiles })
+        .catch((error: unknown) => console.error('Recent docs persistence failed', error))
+      return { ...prev, recentDocs, recentFiles }
     })
   }, [])
 
@@ -319,7 +420,10 @@ export function useSettings() {
     customCssError,
     backgroundImageError,
     saveSettings,
-    pushRecentFile,
+    recordDocOpen,
+    recordDocEdit,
+    recordDocRename,
+    recordDocRemove,
     pushRecentFolder,
     toggleFavorite,
     togglePinnedFolder,

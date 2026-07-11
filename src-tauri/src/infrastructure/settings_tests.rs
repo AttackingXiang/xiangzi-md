@@ -31,6 +31,42 @@ fn legacy_settings_receive_current_defaults() {
 }
 
 #[test]
+fn migrates_recent_files_into_frecency_corpus() {
+    // schema 8：只有 recent_files 的 MRU；升级到 9 应灌进 recent_docs。
+    let loaded = parse_settings(
+        r#"{"schemaVersion":8,"recentFiles":["/a.md","/b.md","/c.md"]}"#,
+    )
+    .expect("v8 settings parse");
+    let mut settings = loaded.settings;
+    migrate_settings(&mut settings, loaded.schema_version).expect("v8→v9 migration");
+    assert_eq!(settings.schema_version, SETTINGS_SCHEMA_VERSION);
+
+    let paths: Vec<&str> = settings.recent_docs.iter().map(|d| d.path.as_str()).collect();
+    assert_eq!(paths, ["/a.md", "/b.md", "/c.md"]);
+    // 每项 open_count=1、未编辑；队首 last_opened 最大（最新）。
+    assert!(settings.recent_docs.iter().all(|d| d.open_count == 1 && d.last_edited_nanos == 0));
+    assert!(
+        settings.recent_docs[0].last_opened_nanos > settings.recent_docs[2].last_opened_nanos
+    );
+    // recent_files 镜像保持不变，供旧消费者。
+    assert_eq!(settings.recent_files, vec!["/a.md", "/b.md", "/c.md"]);
+}
+
+#[test]
+fn keeps_existing_recent_docs_over_recent_files_on_migration() {
+    // 已有 recent_docs 时不该被 recent_files 覆盖。
+    let loaded = parse_settings(
+        r#"{"schemaVersion":8,"recentFiles":["/old.md"],"recentDocs":[{"path":"/kept.md","openCount":9,"lastOpenedNanos":42,"lastEditedNanos":7}]}"#,
+    )
+    .expect("v8 settings parse");
+    let mut settings = loaded.settings;
+    migrate_settings(&mut settings, loaded.schema_version).expect("v8→v9 migration");
+    assert_eq!(settings.recent_docs.len(), 1);
+    assert_eq!(settings.recent_docs[0].path, "/kept.md");
+    assert_eq!(settings.recent_docs[0].open_count, 9);
+}
+
+#[test]
 fn rejects_settings_from_a_newer_schema_without_downgrading_them() {
     let future = SETTINGS_SCHEMA_VERSION + 1;
     let loaded = parse_settings(&format!(r#"{{"schemaVersion":{future},"language":"en"}}"#))

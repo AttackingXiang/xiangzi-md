@@ -49,7 +49,8 @@ import { ErrorCode } from './lib/errorCodes'
 import { baseName, dirName } from './lib/path'
 import { revealLocationKey } from './lib/platform'
 import { replaceMovedPath } from './lib/treeDrag'
-import { buildRecentRank, type SortContext } from './lib/fileTreeSort'
+import type { SortContext } from './lib/fileTreeSort'
+import { buildFrecencyRank } from './lib/recency'
 import { parseOutline } from './lib/outline'
 import { setCopyPreferences } from './lib/copyPreferences'
 import { editorBridge } from './lib/editorBridge'
@@ -59,6 +60,7 @@ import { linkPromptBridge } from './lib/linkPromptBridge'
 import { TextSelection } from '@milkdown/kit/prose/state'
 import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
+import { useNow } from './hooks/useNow'
 import { useFileOps } from './hooks/useFileOps'
 import { useTreeOps } from './hooks/useTreeOps'
 import { useUpdater } from './hooks/useUpdater'
@@ -75,6 +77,8 @@ import { useTagFeature } from './features/tags/useTagFeature'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 const EMPTY_STRING_ARRAY: string[] = []
+/** 「最近打开」门控停留阈值：切到某文件停留超过这个毫秒数才算一次有效打开。 */
+const DWELL_MS = 2500
 
 // Guards against two navigations animating at once: a newer call bumps the
 // token so the older rAF loop sees a mismatch and bows out.
@@ -137,7 +141,10 @@ export default function App(): JSX.Element {
     customCssError,
     backgroundImageError,
     saveSettings,
-    pushRecentFile,
+    recordDocOpen,
+    recordDocEdit,
+    recordDocRename,
+    recordDocRemove,
     pushRecentFolder,
     toggleFavorite,
     togglePinnedFolder,
@@ -217,7 +224,7 @@ export default function App(): JSX.Element {
     restoreSession,
     confirmCloseTabs,
     closeTabsWithoutPrompt,
-  } = useFileOps({ pushRecentFile, lang, requestCloseDecision })
+  } = useFileOps({ lang, requestCloseDecision, recordDocEdit })
 
   const getCurrentTabs = useCallback((): Tab[] => stateRef.current.tabs, [stateRef])
   const {
@@ -664,6 +671,8 @@ export default function App(): JSX.Element {
     togglePinnedFolder,
     favorites: settings?.favorites ?? EMPTY_STRING_ARRAY,
     toggleFavorite,
+    recordDocRename,
+    recordDocRemove,
     setCtxMenu,
     setInputDialog,
   })
@@ -710,16 +719,34 @@ export default function App(): JSX.Element {
     [deferredOutlineContent, outlineVisible],
   )
 
-  // 文件树排序上下文：排序方式 + 置顶集合 + 最近打开排名。集中在此计算，
-  // 逐层传给 FileTree，避免每个节点各自重建 Set/Map。
-  const fileTreeSortContext = useMemo<SortContext>(
-    () => ({
+  // frecency 衰减用的“现在”，周期刷新；避免在 render 里直接调 Date.now()。
+  const now = useNow()
+  // 文件树排序上下文：排序方式 + 置顶集合 + frecency 排名。集中在此计算，
+  // 逐层传给 FileTree，避免每个节点各自重建 Set/Map。排名由 recentDocs 语料按
+  // frecency 算出，并把当前打开的 tab 加权置顶（见 lib/recency.ts）。
+  const fileTreeSortContext = useMemo<SortContext>(() => {
+    const openTabPaths = new Set(tabs.flatMap((tab) => (tab.path ? [tab.path] : [])))
+    return {
       mode: settings?.fileTreeSort ?? 'default',
       pinnedPaths: new Set(settings?.pinnedFolders ?? []),
-      recentRank: buildRecentRank(settings?.recentFiles ?? []),
-    }),
-    [settings?.fileTreeSort, settings?.pinnedFolders, settings?.recentFiles],
-  )
+      recentRank: buildFrecencyRank(settings?.recentDocs ?? [], now, openTabPaths),
+    }
+  }, [settings?.fileTreeSort, settings?.pinnedFolders, settings?.recentDocs, tabPathsKey, tabs, now])
+
+  // 「最近打开」门控：切到某文件后停留 ≥ DWELL_MS 才算一次有效打开，过滤误点/快速翻找。
+  // 依赖 activeTab?.path（原始值，敲字不变），切换/关闭会清掉计时器。
+  const activeTabPath = activeTab?.path ?? null
+  useEffect(() => {
+    if (!activeTabPath) return
+    const id = setTimeout(() => recordDocOpen(activeTabPath), DWELL_MS)
+    return () => clearTimeout(id)
+  }, [activeTabPath, recordDocOpen])
+
+  // 首次编辑 = 强交互信号，立刻记录，跳过停留门控。dirty 由 false→true 只触发一次。
+  const activeTabDirty = activeTab?.dirty ?? false
+  useEffect(() => {
+    if (activeTabPath && activeTabDirty) recordDocOpen(activeTabPath)
+  }, [activeTabPath, activeTabDirty, recordDocOpen])
 
   const workspaceVisibilityKey = settings
     ? `${settings.showAllFiles}:${settings.visibleTextExtensions.join(',')}:${settings.hiddenWorkspacePaths.join('\0')}`

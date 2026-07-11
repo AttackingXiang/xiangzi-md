@@ -82,6 +82,45 @@ describe('buildTagTree', () => {
     expect(tree.map((n) => n.key)).toEqual(['y', 'z', 'x'])
   })
 
+  it('sort=name orders siblings by name asc (count as tiebreak)', () => {
+    const entries = [entry('x', ['1.md']), entry('y', ['1.md', '2.md']), entry('z', ['1.md'])]
+    expect(buildTagTree(entries, { sort: 'name' }).map((n) => n.key)).toEqual(['x', 'y', 'z'])
+  })
+
+  it('sort=nameDesc orders siblings by name desc', () => {
+    const entries = [entry('x', ['1.md']), entry('y', ['1.md', '2.md']), entry('z', ['1.md'])]
+    expect(buildTagTree(entries, { sort: 'nameDesc' }).map((n) => n.key)).toEqual(['z', 'y', 'x'])
+  })
+
+  it('sort=smart ranks tags by most-recently-opened doc, then by newest mtime', () => {
+    // low 只有一篇没打开的旧文档；high 有一篇最近打开的文档
+    const entries = [entry('low', ['old.md']), entry('high', ['fresh.md'])]
+    const recentRank = new Map([['fresh.md', 0]])
+    const mtimeByPath = new Map([
+      ['old.md', 10],
+      ['fresh.md', 5],
+    ])
+    const out = buildTagTree(entries, { sort: 'smart', recentRank, mtimeByPath })
+    expect(out.map((n) => n.key)).toEqual(['high', 'low'])
+  })
+
+  it('sort=smart falls back to mtime when nothing was opened', () => {
+    const entries = [entry('older', ['a.md']), entry('newer', ['b.md'])]
+    const mtimeByPath = new Map([
+      ['a.md', 1],
+      ['b.md', 99],
+    ])
+    const out = buildTagTree(entries, { sort: 'smart', mtimeByPath })
+    expect(out.map((n) => n.key)).toEqual(['newer', 'older'])
+  })
+
+  it('groupsFirst stays orthogonal to sort=name', () => {
+    // zzz 叶子、aaa 有子标签；分组优先应把 aaa 顶到前，即使 name 升序会让 aaa 本就在前
+    const entries = [entry('zzz', ['1.md']), entry('aaa/child', ['2.md'])]
+    const out = buildTagTree(entries, { sort: 'name', groupsFirst: true })
+    expect(out.map((n) => n.key)).toEqual(['aaa', 'zzz'])
+  })
+
   it('nests a single 3-level tag (Claude/test/wap) all the way down', () => {
     const tree = buildTagTree([entry('claude/test/wap', ['a.md'], 'Claude/test/wap')])
     expect(tree.map((n) => n.key)).toEqual(['claude'])

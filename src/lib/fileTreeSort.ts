@@ -1,4 +1,5 @@
 import type { FileNode, FileTreeSort } from '../types'
+import { recencyBlend } from './recency'
 
 export interface SortContext {
   mode: FileTreeSort
@@ -73,27 +74,6 @@ function byNameAsc(a: FileNode, b: FileNode): number {
 }
 
 /**
- * 「智能推荐」评分：越大越靠前。融合两路近期信号——
- *   - 最近打开：命中 rank 时给强权重（1.0），按排名线性衰减；
- *   - 最近修改：按 mtime 归一化后给中等权重（0.5）。
- * 两者都缺失（从没打开、mtime 为 0）自然落到 0，退回名称排序兜底。
- */
-function smartScore(sig: NodeSignal, newest: number): number {
-  const OPEN_WEIGHT = 1
-  const MODIFIED_WEIGHT = 0.5
-  const RECENT_WINDOW = 30
-
-  let score = 0
-  if (sig.rank !== undefined) {
-    score += OPEN_WEIGHT * Math.max(0, (RECENT_WINDOW - sig.rank) / RECENT_WINDOW)
-  }
-  if (newest > 0 && sig.mtime > 0) {
-    score += MODIFIED_WEIGHT * (sig.mtime / newest)
-  }
-  return score
-}
-
-/**
  * 按选定模式排序单层节点。所有模式都保持「文件夹在前」，并把置顶文件夹提到最上；
  * 文件夹的近期排序信号来自其内部文件（见 resolveSignal），因此与文件共用同一逻辑。
  * 返回新数组，不修改入参。
@@ -130,8 +110,8 @@ export function sortNodes(nodes: readonly FileNode[], ctx: SortContext): FileNod
         return byNameAsc(a, b)
       }
       case 'smart': {
-        const sa = smartScore(sig(a), newest)
-        const sb = smartScore(sig(b), newest)
+        const sa = recencyBlend(sig(a).rank, sig(a).mtime, newest)
+        const sb = recencyBlend(sig(b).rank, sig(b).mtime, newest)
         if (sa !== sb) return sb - sa
         return byNameAsc(a, b)
       }

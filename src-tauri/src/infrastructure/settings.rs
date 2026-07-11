@@ -273,6 +273,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(shortcuts);
     replace_if_some!(recent_files);
     replace_if_some!(recent_folders);
+    replace_if_some!(recent_docs);
     replace_if_some!(favorites);
     replace_if_some!(favorite_files);
     replace_if_some!(favorites_collapsed);
@@ -280,6 +281,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(tag_collapsed_keys);
     replace_if_some!(tag_default_expand_depth);
     replace_if_some!(tag_groups_first);
+    replace_if_some!(tag_tree_sort);
     replace_if_some!(tag_result_sort);
     replace_if_some!(tag_click_opens_overview);
     replace_if_some!(favorite_labels);
