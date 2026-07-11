@@ -104,7 +104,7 @@ fn patch_only_changes_explicit_fields() {
 #[test]
 fn accepts_every_built_in_theme_preset_and_rejects_unknown_ones() {
     let mut settings = AppSettings::default();
-    for theme in ["system", "light", "dark", "warm", "mint", "blue", "summer"] {
+    for theme in ["system", "light", "dark", "warm", "mint", "blue", "summer", "sakura"] {
         settings.theme = theme.into();
         assert!(
             validate_settings(&settings).is_ok(),

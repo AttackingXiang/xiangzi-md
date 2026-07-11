@@ -312,6 +312,56 @@
   color-scheme: light;
 }
 
+/* 樱粉：柔和樱花玫瑰色调，代码配色以玫红为主色、辅以青绿对比 */
+[data-theme='sakura'] {
+  --bg: #fdf4f7;
+  --bg-sidebar: #faebf1;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f8e0ea;
+  --bg-active: #f4d3e1;
+  --border: #f4dce6;
+  --border-strong: #e9c2d5;
+  --text: #3d2230;
+  --text-2: #6b4658;
+  --text-muted: #b189a0;
+  --accent: #d6417f;
+  --accent-text: #b82f6a;
+  --shadow: 0 8px 30px rgba(120, 30, 70, 0.12);
+
+  --diagram-node-bg: #f6d6e4;
+  --diagram-node-border: #d6417f;
+
+  --code-card-bg: #fbeef4;
+  --code-card-border: #f0d6e2;
+  --code-header-bg: #f7e3ec;
+  --code-lang-color: #a86b85;
+  --code-lang-hover-color: #6e3350;
+  --code-btn-color: #c896ac;
+  --code-btn-hover-color: #8a3f60;
+  --code-btn-hover-bg: #f0d6e2;
+  --code-text: #3d2230;
+  --code-selection-bg: #f6cfe0;
+  --code-inline-text: #0f766e;
+
+  --code-keyword: #be185d;
+  --code-string: #2e8b57;
+  --code-comment: #a08894;
+  --code-number: #0e7490;
+  --code-function: #7c3aed;
+  --code-type: #b45309;
+  --code-property: #15803d;
+  --code-variable: #2f1a26;
+  --code-tag: #15803d;
+  --code-operator: #8a6076;
+  --code-meta: #a08894;
+  --code-link: #0e7490;
+  --code-invalid: #be185d;
+  --code-diff-added: #15803d;
+  --code-diff-removed: #be185d;
+
+  color-scheme: light;
+}
+
 * {
   box-sizing: border-box;
 }

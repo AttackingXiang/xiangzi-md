@@ -35,7 +35,7 @@ export interface AppSettings {
   attachmentFolder: string
   imageMaxWidth: number
   language: 'zh' | 'en'
-  theme: 'system' | 'light' | 'dark' | 'warm' | 'mint' | 'blue' | 'summer'
+  theme: 'system' | 'light' | 'dark' | 'warm' | 'mint' | 'blue' | 'summer' | 'sakura'
   editorWidth: 'normal' | 'wide' | 'full'
   customCssPath: string
   backgroundImagePath: string

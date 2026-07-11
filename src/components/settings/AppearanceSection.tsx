@@ -47,6 +47,7 @@ export default function AppearanceSection({
             <option value="mint">{t('浅绿')}</option>
             <option value="blue">{t('蓝调')}</option>
             <option value="summer">{t('夏日')}</option>
+            <option value="sakura">{t('樱粉')}</option>
           </select>
         </SettingRow>
         <SettingRow label={t('编辑区宽度')}>
@@ -66,7 +67,7 @@ export default function AppearanceSection({
             <input
               type="range"
               aria-label={t('主题深浅')}
-              min={-50}
+              min={-10}
               max={50}
               step={5}
               value={settings.themeShade}

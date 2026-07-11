@@ -18,6 +18,7 @@ const THEME_SELECTORS: Record<ThemeName, string> = {
   mint: "[data-theme='mint']",
   blue: "[data-theme='blue']",
   summer: "[data-theme='summer']",
+  sakura: "[data-theme='sakura']",
 }
 
 function extractBlock(selector: string): string {

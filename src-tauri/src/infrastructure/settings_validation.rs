@@ -61,7 +61,7 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     }
     if !matches!(
         settings.theme.as_str(),
-        "system" | "light" | "dark" | "warm" | "mint" | "blue" | "summer"
+        "system" | "light" | "dark" | "warm" | "mint" | "blue" | "summer" | "sakura"
     ) {
         settings.theme = "system".into();
     }
@@ -132,7 +132,7 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
     if !matches!(settings.language.as_str(), "zh" | "en")
         || !matches!(
             settings.theme.as_str(),
-            "system" | "light" | "dark" | "warm" | "mint" | "blue" | "summer"
+            "system" | "light" | "dark" | "warm" | "mint" | "blue" | "summer" | "sakura"
         )
         || !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full")
         || !matches!(

@@ -35,10 +35,12 @@ function mixColor(expression: string): string {
 export function applyThemeShade(shade: number): void {
   const root = document.documentElement
   for (const name of SHADE_VARS) root.style.removeProperty(name)
-  if (shade === 0) return
+  // 加深最多 10%，变亮最多 50%——防止历史上存过的更深值仍被应用。
+  const clamped = Math.min(50, Math.max(-10, shade))
+  if (clamped === 0) return
 
-  const mixWith = shade > 0 ? 'white' : 'black'
-  const amount = Math.min(Math.abs(shade), 50)
+  const mixWith = clamped > 0 ? 'white' : 'black'
+  const amount = Math.abs(clamped)
   const style = getComputedStyle(root)
   for (const name of SHADE_VARS) {
     const base = style.getPropertyValue(name).trim()

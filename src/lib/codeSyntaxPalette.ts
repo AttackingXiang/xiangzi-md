@@ -7,7 +7,7 @@
  * --code-keyword 等 CSS 变量为准；这里的常量仅供 mermaid 主题变量（需要
  * JS 侧的字面量颜色，无法直接吃 CSS 变量）在运行时读取当前 --code-* 计算值。
  */
-export type ThemeName = 'light' | 'dark' | 'warm' | 'mint' | 'blue' | 'summer'
+export type ThemeName = 'light' | 'dark' | 'warm' | 'mint' | 'blue' | 'summer' | 'sakura'
 
 export interface CodeSyntaxPalette {
   keyword: string

@@ -131,6 +131,7 @@ const EN: Record<string, string> = {
   浅绿: 'Mint',
   蓝调: 'Blue',
   夏日: 'Summer',
+  樱粉: 'Sakura',
   编辑区宽度: 'Editor width',
   适中: 'Normal',
   较宽: 'Wide',
