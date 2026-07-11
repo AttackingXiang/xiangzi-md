@@ -412,6 +412,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # GitHub normalizes spaces in uploaded asset names to dots. Do that
+          # before generating latest.json so the manifest and uploaded assets
+          # always use the exact same deterministic names.
+          while IFS= read -r -d '' source; do
+            target="${source// /.}"
+            if [ "${source}" != "${target}" ]; then
+              test ! -e "${target}"
+              mv "${source}" "${target}"
+            fi
+          done < <(find release-assets -maxdepth 1 -type f -name '* *' -print0)
+          if find release-assets -maxdepth 1 -type f -name '* *' | grep -q .; then
+            echo '::error::Release asset names must not contain spaces.'
+            exit 1
+          fi
           test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
           test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
           test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
@@ -434,9 +448,7 @@ jobs:
           WINDOWS_INSTALLER=$(find release-assets -maxdepth 1 -name '*-setup.exe' -exec basename {} \;)
           WINDOWS_SIGNATURE=$(tr -d '\r\n' < "release-assets/${WINDOWS_INSTALLER}.sig")
           BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
-          # Release asset names may contain spaces. Encode each filename as a URL
-          # path segment; an unescaped space lets update checks succeed but makes
-          # the subsequent package download fail before it reaches the network.
+          # Encode the final, normalized asset names as URL path segments.
           MAC_ARCHIVE_URL=$(jq -rn --arg value "${MAC_ARCHIVE}" '$value | @uri')
           WINDOWS_INSTALLER_URL=$(jq -rn --arg value "${WINDOWS_INSTALLER}" '$value | @uri')
           jq -n \
@@ -484,6 +496,57 @@ jobs:
               --title "Xiangzi MD ${TAG}" --notes-file "${NOTES_FILE}"
           fi
           gh release upload "${TAG}" release-assets/* --clobber
+
+      - name: Verify every published asset and updater URL
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
+          RELEASE_JSON=$(mktemp)
+          DOWNLOADED=$(mktemp)
+
+          # Release assets can be briefly eventually consistent after upload.
+          for attempt in 1 2 3 4 5; do
+            curl --fail --silent --show-error --retry 3 --retry-all-errors \
+              -H "Authorization: Bearer ${GH_TOKEN}" "${API}" -o "${RELEASE_JSON}"
+            remote_count=$(jq '.assets | length' "${RELEASE_JSON}")
+            local_count=$(find release-assets -maxdepth 1 -type f | wc -l | tr -d ' ')
+            [ "${remote_count}" -eq "${local_count}" ] && break
+            [ "${attempt}" -eq 5 ] && { echo "::error::Expected ${local_count} assets, found ${remote_count}."; exit 1; }
+            sleep $((attempt * 3))
+          done
+
+          # Download every asset through its public browser_download_url. A 200
+          # alone is insufficient: also require the downloaded byte count to
+          # match the size recorded by the GitHub Release API.
+          while IFS=$'\t' read -r name url expected_size; do
+            echo "Verifying ${name} (${expected_size} bytes)"
+            curl --fail --location --silent --show-error \
+              --retry 4 --retry-all-errors --connect-timeout 20 --max-time 1800 \
+              "${url}" -o "${DOWNLOADED}"
+            actual_size=$(stat -c '%s' "${DOWNLOADED}")
+            if [ "${actual_size}" -ne "${expected_size}" ]; then
+              echo "::error::${name}: expected ${expected_size} bytes, downloaded ${actual_size}."
+              exit 1
+            fi
+          done < <(jq -r '.assets[] | [.name, .browser_download_url, (.size | tostring)] | @tsv' "${RELEASE_JSON}")
+
+          # Finally verify that all six updater entries resolve to an asset that
+          # was just downloaded successfully. This catches filename drift even
+          # when every Release asset itself is healthy.
+          jq -e '.platforms | length == 6' release-assets/latest.json >/dev/null
+          while IFS= read -r updater_url; do
+            jq -e --arg url "${updater_url}" \
+              '[.assets[].browser_download_url] | index($url) != null' \
+              "${RELEASE_JSON}" >/dev/null || {
+                echo "::error::Updater URL does not match a published asset: ${updater_url}"
+                exit 1
+              }
+          done < <(jq -r '.platforms[].url' release-assets/latest.json | sort -u)
 
       - name: Attest the unified updater manifest
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
