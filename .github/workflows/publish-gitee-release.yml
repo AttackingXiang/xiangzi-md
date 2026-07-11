@@ -30,7 +30,7 @@ jobs:
       release-id: ${{ steps.gitee.outputs.release-id }}
     steps:
       - name: Checkout release commit
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || 'main' }}
@@ -272,7 +272,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build and push Gitee updater manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
