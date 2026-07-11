@@ -269,8 +269,10 @@ jobs:
     name: Publish updater manifest
     needs: [prepare, upload]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Build and push Gitee updater manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -351,3 +353,13 @@ jobs:
           git add latest.json
           git diff --cached --quiet || git commit -m "chore: publish ${TAG} updater manifest"
           retry git push origin HEAD:refs/heads/updater
+
+      - name: Prune old Gitee attachments
+        # 发布成功后修剪历史附件，保留最新 10 个版本，避免再次撞上 1GB 配额。
+        # best-effort：修剪失败不影响本次发布的结论。
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          KEEP: "10"
+          DRY_RUN: "false"
+        shell: bash
+        run: bash scripts/prune-gitee-attachments.sh || echo "::warning::修剪旧附件失败（非致命），可手动运行 Cleanup Gitee Attachments 工作流。"
