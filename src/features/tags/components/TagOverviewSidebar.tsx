@@ -192,7 +192,7 @@ export default function TagOverviewSidebar({
           className={`tag-overview-item tag-tree-row${dropKey === node.key ? ' drop-target' : ''}${
             activeTag === node.key ? ' active' : ''
           }`}
-          style={{ paddingLeft: `${8 + depth * 16}px` }}
+          style={{ paddingLeft: `${4 + depth * 14}px` }}
           data-tag-key={node.key}
           onPointerDown={(event) => startDrag(event, node.key)}
           onContextMenu={(event) => {
