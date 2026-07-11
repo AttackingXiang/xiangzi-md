@@ -18,7 +18,10 @@ function isPathAtOrUnder(candidate: string, base: string): boolean {
 }
 
 /** 按最近打开时间倒序截断到上限，并派生出 recentFiles 前若干镜像。 */
-function normalizeRecentDocs(docs: RecentDoc[]): { recentDocs: RecentDoc[]; recentFiles: string[] } {
+function normalizeRecentDocs(docs: RecentDoc[]): {
+  recentDocs: RecentDoc[]
+  recentFiles: string[]
+} {
   const recentDocs = [...docs]
     .sort((a, b) => b.lastOpenedNanos - a.lastOpenedNanos)
     .slice(0, RECENT_DOCS_CAP)

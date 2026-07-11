@@ -731,7 +731,14 @@ export default function App(): JSX.Element {
       pinnedPaths: new Set(settings?.pinnedFolders ?? []),
       recentRank: buildFrecencyRank(settings?.recentDocs ?? [], now, openTabPaths),
     }
-  }, [settings?.fileTreeSort, settings?.pinnedFolders, settings?.recentDocs, tabPathsKey, tabs, now])
+  }, [
+    settings?.fileTreeSort,
+    settings?.pinnedFolders,
+    settings?.recentDocs,
+    tabPathsKey,
+    tabs,
+    now,
+  ])
 
   // 「最近打开」门控：切到某文件后停留 ≥ DWELL_MS 才算一次有效打开，过滤误点/快速翻找。
   // 依赖 activeTab?.path（原始值，敲字不变），切换/关闭会清掉计时器。

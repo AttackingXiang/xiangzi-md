@@ -329,7 +329,7 @@ pub(super) fn limit_collections(settings: &mut AppSettings) {
     if settings.recent_docs.len() > MAX_RECENT_DOCS {
         settings
             .recent_docs
-            .sort_by(|a, b| b.last_opened_nanos.cmp(&a.last_opened_nanos));
+            .sort_by_key(|d| std::cmp::Reverse(d.last_opened_nanos));
         settings.recent_docs.truncate(MAX_RECENT_DOCS);
     }
     settings.pinned_folders.truncate(MAX_PINNED_FOLDERS);
@@ -347,7 +347,10 @@ pub(super) fn limit_collections(settings: &mut AppSettings) {
     if settings.tag_result_sort != "name" {
         settings.tag_result_sort = "updated".into();
     }
-    if !matches!(settings.tag_tree_sort.as_str(), "name" | "nameDesc" | "smart") {
+    if !matches!(
+        settings.tag_tree_sort.as_str(),
+        "name" | "nameDesc" | "smart"
+    ) {
         settings.tag_tree_sort = "count".into();
     }
     settings.asset_search_paths.truncate(MAX_ASSET_SEARCH_PATHS);

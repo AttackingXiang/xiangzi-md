@@ -160,9 +160,7 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
     const smart = tagTreeSort === 'smart'
     // smart 才需要近期信号：frecency 排名（含当前活动文档加权）+ 文档修改时间。
     const openTabPaths = activePath ? new Set([activePath]) : undefined
-    const recentRank = smart
-      ? buildFrecencyRank(recentDocs ?? [], now, openTabPaths)
-      : undefined
+    const recentRank = smart ? buildFrecencyRank(recentDocs ?? [], now, openTabPaths) : undefined
     const mtimeByPath = smart
       ? new Map(tagIndex.documents.map((document) => [document.path, document.updatedAt]))
       : undefined

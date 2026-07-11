@@ -62,50 +62,47 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null
 
   // ── Open ───────────────────────────────────────────────────────────────────
-  const openPath = useCallback(
-    (path: string, name?: string): Promise<void> => {
-      const existing = stateRef.current.tabs.find((t) => t.path === path)
-      if (existing) {
-        setActiveId(existing.id)
-        return Promise.resolve()
-      }
-      // 与文件树 openable / Rust is_known_text 对齐：Markdown、无扩展名、已知文本
-      // 才放行。挡住最近文件里已变成二进制/未知类型的陈旧条目，避免误进 TextEditor。
-      if (!isKnownTextFile(name ?? path)) {
-        void desktop.notify(t('无法打开该类型的文件：\n') + path)
-        return Promise.resolve()
-      }
-      return openTasksRef.current.getOrCreate(path, () =>
-        openQueueRef.current.run(async () => {
-          const openedWhileQueued = stateRef.current.tabs.find((tab) => tab.path === path)
-          if (openedWhileQueued) {
-            setActiveId(openedWhileQueued.id)
-            return
-          }
-          let file
-          try {
-            file = await desktop.readFile(path)
-          } catch {
-            await desktop.notify(t('文件不存在或无法打开：\n') + path)
-            return
-          }
-          const tab: Tab = {
-            id: newTabId(),
-            path: file.path,
-            name: name ?? file.name,
-            content: file.content,
-            savedContent: file.content,
-            dirty: false,
-            revision: 0,
-            version: file.version,
-          }
-          setTabs((prev) => [...prev, tab])
-          setActiveId(tab.id)
-        }),
-      )
-    },
-    [],
-  )
+  const openPath = useCallback((path: string, name?: string): Promise<void> => {
+    const existing = stateRef.current.tabs.find((t) => t.path === path)
+    if (existing) {
+      setActiveId(existing.id)
+      return Promise.resolve()
+    }
+    // 与文件树 openable / Rust is_known_text 对齐：Markdown、无扩展名、已知文本
+    // 才放行。挡住最近文件里已变成二进制/未知类型的陈旧条目，避免误进 TextEditor。
+    if (!isKnownTextFile(name ?? path)) {
+      void desktop.notify(t('无法打开该类型的文件：\n') + path)
+      return Promise.resolve()
+    }
+    return openTasksRef.current.getOrCreate(path, () =>
+      openQueueRef.current.run(async () => {
+        const openedWhileQueued = stateRef.current.tabs.find((tab) => tab.path === path)
+        if (openedWhileQueued) {
+          setActiveId(openedWhileQueued.id)
+          return
+        }
+        let file
+        try {
+          file = await desktop.readFile(path)
+        } catch {
+          await desktop.notify(t('文件不存在或无法打开：\n') + path)
+          return
+        }
+        const tab: Tab = {
+          id: newTabId(),
+          path: file.path,
+          name: name ?? file.name,
+          content: file.content,
+          savedContent: file.content,
+          dirty: false,
+          revision: 0,
+          version: file.version,
+        }
+        setTabs((prev) => [...prev, tab])
+        setActiveId(tab.id)
+      }),
+    )
+  }, [])
 
   const openFile = useCallback(async () => {
     const file = await desktop.openFile()

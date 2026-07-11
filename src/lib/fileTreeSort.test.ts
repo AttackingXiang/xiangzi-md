@@ -94,10 +94,9 @@ describe('sortNodes', () => {
     const collapsedB = node({ name: 'beta', path: '/w/beta', isDir: true })
     const recentRank = buildRecentRank(['/w/beta/deep/note.md', '/w/alpha/x.md'])
     // beta 的内部文件更近（rank 0）→ beta 在前
-    expect(names(sortNodes([collapsedA, collapsedB], ctx({ mode: 'opened', recentRank })))).toEqual([
-      'beta',
-      'alpha',
-    ])
+    expect(names(sortNodes([collapsedA, collapsedB], ctx({ mode: 'opened', recentRank })))).toEqual(
+      ['beta', 'alpha'],
+    )
   })
 
   it('modified: folder inherits the newest mtime among its inner files', () => {
@@ -114,7 +113,10 @@ describe('sortNodes', () => {
       isDir: true,
       children: [node({ name: 'y.md', path: '/w/beta/y.md', modifiedNanos: 90 })],
     })
-    expect(names(sortNodes([treeOld, treeNew], ctx({ mode: 'modified' })))).toEqual(['beta', 'alpha'])
+    expect(names(sortNodes([treeOld, treeNew], ctx({ mode: 'modified' })))).toEqual([
+      'beta',
+      'alpha',
+    ])
   })
 
   it('pins folders to the top of their group regardless of mode', () => {
