@@ -86,7 +86,8 @@ tag 必须满足 `vX.Y.Z` 格式，版本必须与五处应用版本一致，且
 1. `Resolve release version`：校验 tag、五处版本和 main 祖先关系，生成发布说明。
 2. `Release gate`：macOS 和 Windows 并行执行前端与 Rust 门禁。
 3. `Build`：macOS Universal 和 Windows x64 并行构建、签名，生成校验和、SBOM、attestation，并上传 7 天保留的临时 Actions Artifact。
-4. `Publish unified GitHub Release`：等待两个平台完成，验证完整产物集，生成唯一的跨平台 `latest.json`，创建 GitHub Release 并统一上传所有附件。
+4. `Publish unified GitHub Release`：等待两个平台完成，验证完整产物集，将附件文件名中的空格统一规范化为点号，再根据最终文件名生成唯一的跨平台 `latest.json`，创建 GitHub Release 并统一上传所有附件。
+5. `Verify every published asset and updater URL`：从 GitHub 的公开下载地址逐个完整下载所有 Release 附件，要求 HTTP 成功且下载字节数与 GitHub API 记录一致；随后校验 `latest.json` 六个平台中的 URL 必须精确对应已发布附件。任何 404、超时、大小不符或名称漂移都会让发布失败。
 
 最终 `latest.json` 必须包含：
 
@@ -125,6 +126,8 @@ Release Desktop 成功后自动触发：
 - DMG、EXE、`.app.tar.gz` 和两个 `.sig` 齐全
 - 两份 SHA256SUMS 和两份 SBOM 齐全
 - `latest.json` 版本正确且包含六个平台键
+- Release Desktop 中 `Verify every published asset and updater URL` 成功
+- 将 `latest.json` 中 macOS 和 Windows 的 URL 放入浏览器或 `curl -fL` 时均能下载，不能只确认更新弹窗能够出现
 
 检查 Gitee Release：
 
@@ -141,6 +144,13 @@ Release Desktop 成功后自动触发：
 ### GitHub Release 构建或汇总失败
 
 在 `Release Desktop` 选择 **Run workflow**，输入现有 tag，并开启 `force`。修复运行会重新构建并用 `--clobber` 更新同名 Release 附件。
+
+如果客户端能够检测到新版本，但点击更新后无法下载，优先检查：
+
+1. `latest.json` 中对应平台的 URL 是否返回 HTTP 200。
+2. URL 的最后一段文件名是否与 GitHub Release 页面显示的附件名完全一致。
+3. 不要假设空格编码为 `%20` 后就一定有效；GitHub 可能把上传附件名中的空格规范化为点号。
+4. `Verify every published asset and updater URL` 是否确实成功；不要只看 macOS/Windows 构建 job。
 
 ### Gitee 附件上传失败
 
