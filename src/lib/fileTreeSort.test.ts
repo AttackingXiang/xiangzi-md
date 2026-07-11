@@ -65,6 +65,58 @@ describe('sortNodes', () => {
     ])
   })
 
+  it('opened: folders rank by their most-recently-opened inner file', () => {
+    // dirA 内含 c.md（rank 高/更近），dirB 内含 b.md（rank 低/更旧）
+    const treeA = node({
+      name: 'alpha',
+      path: '/w/alpha',
+      isDir: true,
+      children: [node({ name: 'c.md', path: '/w/alpha/c.md' })],
+    })
+    const treeB = node({
+      name: 'beta',
+      path: '/w/beta',
+      isDir: true,
+      children: [node({ name: 'b.md', path: '/w/beta/b.md' })],
+    })
+    const recentRank = buildRecentRank(['/w/alpha/c.md', '/w/beta/b.md'])
+    // alpha 的内部文件更近 → alpha 排在 beta 前；文件夹整体仍在文件前
+    expect(names(sortNodes([treeB, treeA, fileA], ctx({ mode: 'opened', recentRank })))).toEqual([
+      'alpha',
+      'beta',
+      'a.md',
+    ])
+  })
+
+  it('opened: folder ranks from global recentRank even when children are not loaded', () => {
+    // 懒加载场景：文件夹节点没有 children，但 recentRank 里有它内部文件的记录
+    const collapsedA = node({ name: 'alpha', path: '/w/alpha', isDir: true })
+    const collapsedB = node({ name: 'beta', path: '/w/beta', isDir: true })
+    const recentRank = buildRecentRank(['/w/beta/deep/note.md', '/w/alpha/x.md'])
+    // beta 的内部文件更近（rank 0）→ beta 在前
+    expect(names(sortNodes([collapsedA, collapsedB], ctx({ mode: 'opened', recentRank })))).toEqual([
+      'beta',
+      'alpha',
+    ])
+  })
+
+  it('modified: folder inherits the newest mtime among its inner files', () => {
+    // 文件夹自身 mtime 都是 0，靠内部文件冒泡
+    const treeOld = node({
+      name: 'alpha',
+      path: '/w/alpha',
+      isDir: true,
+      children: [node({ name: 'x.md', path: '/w/alpha/x.md', modifiedNanos: 10 })],
+    })
+    const treeNew = node({
+      name: 'beta',
+      path: '/w/beta',
+      isDir: true,
+      children: [node({ name: 'y.md', path: '/w/beta/y.md', modifiedNanos: 90 })],
+    })
+    expect(names(sortNodes([treeOld, treeNew], ctx({ mode: 'modified' })))).toEqual(['beta', 'alpha'])
+  })
+
   it('pins folders to the top of their group regardless of mode', () => {
     const pinnedPaths = new Set(['/w/beta'])
     const out = names(sortNodes(input, ctx({ pinnedPaths })))

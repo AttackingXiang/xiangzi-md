@@ -17,38 +17,94 @@ export function buildRecentRank(recentFiles: readonly string[]): Map<string, num
   return rank
 }
 
+/**
+ * 参与排序的近期信号。文件用自身数据；文件夹没有「打开」概念，其信号由内部
+ * 文件聚合而来（见 resolveSignal），从而与文件走同一套排序逻辑。
+ */
+interface NodeSignal {
+  /** 最近打开排名（越小越近）；无记录为 undefined。文件夹取子孙文件里的最小值。 */
+  rank: number | undefined
+  /** 修改时间（Unix 纳秒）。文件夹取自身与子孙文件里的最大值。 */
+  mtime: number
+}
+
+/** path 是否位于 dir 目录之内（任意层级）。兼容 '/' 与 '\\' 分隔符。 */
+function isInsideDir(path: string, dir: string): boolean {
+  if (!path.startsWith(dir)) return false
+  const next = path.charCodeAt(dir.length)
+  return next === 47 /* '/' */ || next === 92 /* '\\' */
+}
+
+/**
+ * 计算单个节点的排序信号。文件夹「往里看」聚合内部文件——
+ *   - rank：取内部文件里最小（最近）的最近打开排名；直接用全局 recentRank 做
+ *     路径前缀匹配，因此不依赖文件树是否已懒加载出该文件夹的 children；全没打开则 undefined。
+ *   - mtime：取文件夹自身 mtime 与已加载子孙文件 mtime 的最大值（自身作兜底下限）。
+ *     受懒加载限制，未展开的文件夹只能拿到自身 mtime——与原「最近修改」行为一致，无回退。
+ * 于是文件夹在 opened/modified/smart 三种模式下都按「内部最活跃的文件」排序。
+ */
+function resolveSignal(node: FileNode, recentRank: ReadonlyMap<string, number>): NodeSignal {
+  if (!node.isDir) {
+    return { rank: recentRank.get(node.path), mtime: node.modifiedNanos }
+  }
+
+  // rank：全局 recentRank（≤15 条）前缀匹配，无需 children 已加载。
+  let rank: number | undefined
+  for (const [path, r] of recentRank) {
+    if (isInsideDir(path, node.path) && (rank === undefined || r < rank)) rank = r
+  }
+
+  // mtime：尽力遍历已加载的子孙文件，自身 mtime 作下限。
+  let mtime = node.modifiedNanos
+  const stack: FileNode[] = node.children ? [...node.children] : []
+  while (stack.length > 0) {
+    const child = stack.pop() as FileNode
+    if (child.isDir) {
+      if (child.children) stack.push(...child.children)
+      continue
+    }
+    if (child.modifiedNanos > mtime) mtime = child.modifiedNanos
+  }
+  return { rank, mtime }
+}
+
 function byNameAsc(a: FileNode, b: FileNode): number {
   return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
 }
 
 /**
  * 「智能推荐」评分：越大越靠前。融合两路近期信号——
- *   - 最近打开：命中 recentRank 时给强权重（1.0），按排名线性衰减；
+ *   - 最近打开：命中 rank 时给强权重（1.0），按排名线性衰减；
  *   - 最近修改：按 mtime 归一化后给中等权重（0.5）。
  * 两者都缺失（从没打开、mtime 为 0）自然落到 0，退回名称排序兜底。
  */
-function smartScore(node: FileNode, ctx: SortContext, newest: number): number {
+function smartScore(sig: NodeSignal, newest: number): number {
   const OPEN_WEIGHT = 1
   const MODIFIED_WEIGHT = 0.5
   const RECENT_WINDOW = 30
 
   let score = 0
-  const rank = ctx.recentRank.get(node.path)
-  if (rank !== undefined) {
-    score += OPEN_WEIGHT * Math.max(0, (RECENT_WINDOW - rank) / RECENT_WINDOW)
+  if (sig.rank !== undefined) {
+    score += OPEN_WEIGHT * Math.max(0, (RECENT_WINDOW - sig.rank) / RECENT_WINDOW)
   }
-  if (newest > 0 && node.modifiedNanos > 0) {
-    score += MODIFIED_WEIGHT * (node.modifiedNanos / newest)
+  if (newest > 0 && sig.mtime > 0) {
+    score += MODIFIED_WEIGHT * (sig.mtime / newest)
   }
   return score
 }
 
 /**
  * 按选定模式排序单层节点。所有模式都保持「文件夹在前」，并把置顶文件夹提到最上；
+ * 文件夹的近期排序信号来自其内部文件（见 resolveSignal），因此与文件共用同一逻辑。
  * 返回新数组，不修改入参。
  */
 export function sortNodes(nodes: readonly FileNode[], ctx: SortContext): FileNode[] {
-  const newest = nodes.reduce((max, n) => (n.modifiedNanos > max ? n.modifiedNanos : max), 0)
+  const signals = new Map<string, NodeSignal>()
+  for (const node of nodes) signals.set(node.path, resolveSignal(node, ctx.recentRank))
+  let newest = 0
+  for (const s of signals.values()) if (s.mtime > newest) newest = s.mtime
+
+  const sig = (node: FileNode): NodeSignal => signals.get(node.path) as NodeSignal
 
   const compare = (a: FileNode, b: FileNode): number => {
     // 文件夹始终排在文件之前，各模式只决定同类之间的次序。
@@ -58,25 +114,24 @@ export function sortNodes(nodes: readonly FileNode[], ctx: SortContext): FileNod
       case 'nameDesc':
         return -byNameAsc(a, b)
       case 'modified': {
-        if (a.modifiedNanos !== b.modifiedNanos) return b.modifiedNanos - a.modifiedNanos
+        const ma = sig(a).mtime
+        const mb = sig(b).mtime
+        if (ma !== mb) return mb - ma
         return byNameAsc(a, b)
       }
       case 'opened': {
-        // 文件夹不参与「打开」记录，按名称排。
-        if (!a.isDir) {
-          const ra = ctx.recentRank.get(a.path)
-          const rb = ctx.recentRank.get(b.path)
-          if (ra !== undefined || rb !== undefined) {
-            if (ra === undefined) return 1
-            if (rb === undefined) return -1
-            if (ra !== rb) return ra - rb
-          }
+        const ra = sig(a).rank
+        const rb = sig(b).rank
+        if (ra !== undefined || rb !== undefined) {
+          if (ra === undefined) return 1
+          if (rb === undefined) return -1
+          if (ra !== rb) return ra - rb
         }
         return byNameAsc(a, b)
       }
       case 'smart': {
-        const sa = smartScore(a, ctx, newest)
-        const sb = smartScore(b, ctx, newest)
+        const sa = smartScore(sig(a), newest)
+        const sb = smartScore(sig(b), newest)
         if (sa !== sb) return sb - sa
         return byNameAsc(a, b)
       }
