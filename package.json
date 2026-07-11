@@ -1,7 +1,7 @@
 {
   "name": "xiangzi-md",
   "private": true,
-  "version": "1.6.15",
+  "version": "1.6.16",
   "description": "Xiangzi MD — 一个本地优先、所见即所得的 Markdown 编辑器",
   "author": "guoxiangzi",
   "license": "MIT",
