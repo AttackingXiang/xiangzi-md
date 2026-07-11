@@ -359,7 +359,7 @@ jobs:
         # best-effort：修剪失败不影响本次发布的结论。
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-          KEEP: "10"
-          DRY_RUN: "false"
+          KEEP: '10'
+          DRY_RUN: 'false'
         shell: bash
         run: bash scripts/prune-gitee-attachments.sh || echo "::warning::修剪旧附件失败（非致命），可手动运行 Cleanup Gitee Attachments 工作流。"

@@ -8,7 +8,7 @@ on:
       keep:
         description: 保留最新多少个版本的附件
         required: false
-        default: "10"
+        default: '10'
       dry_run:
         description: 仅打印将删除的内容而不实际删除
         type: boolean
