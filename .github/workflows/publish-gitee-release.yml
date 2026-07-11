@@ -275,12 +275,12 @@ jobs:
           jq -e '.[] | select(.name | endswith("-setup.exe"))' /tmp/gitee-attachments.json >/dev/null
           jq -e '.[] | select(.name | endswith(".app.tar.gz"))' /tmp/gitee-attachments.json >/dev/null
           jq --slurpfile attachments /tmp/gitee-attachments.json \
-             --slurpfile github /tmp/github-release.json '
+             '
             .platforms |= with_entries(
               .value.url as $github_url |
-              ($github[0].assets[] | select(.browser_download_url == $github_url) | .name) as $name |
-              # Gitee normalizes spaces in uploaded attachment names to dots
-              # ("Xiangzi MD.app.tar.gz" -> "Xiangzi.MD.app.tar.gz").
+              # The manifest is generated before upload and can contain spaces,
+              # while both GitHub and Gitee normalize those spaces to dots.
+              ($github_url | split("/")[-1] | gsub("%20"; " ")) as $name |
               ($name | gsub(" "; ".")) as $normalized_name |
               ([
                 $attachments[0][] |
