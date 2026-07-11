@@ -434,13 +434,18 @@ jobs:
           WINDOWS_INSTALLER=$(find release-assets -maxdepth 1 -name '*-setup.exe' -exec basename {} \;)
           WINDOWS_SIGNATURE=$(tr -d '\r\n' < "release-assets/${WINDOWS_INSTALLER}.sig")
           BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          # Release asset names may contain spaces. Encode each filename as a URL
+          # path segment; an unescaped space lets update checks succeed but makes
+          # the subsequent package download fail before it reaches the network.
+          MAC_ARCHIVE_URL=$(jq -rn --arg value "${MAC_ARCHIVE}" '$value | @uri')
+          WINDOWS_INSTALLER_URL=$(jq -rn --arg value "${WINDOWS_INSTALLER}" '$value | @uri')
           jq -n \
             --arg version "${VERSION}" \
             --arg notes "${NOTES}" \
             --arg pub_date "$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')" \
-            --arg mac_url "${BASE_URL}/${MAC_ARCHIVE}" \
+            --arg mac_url "${BASE_URL}/${MAC_ARCHIVE_URL}" \
             --arg mac_signature "${MAC_SIGNATURE}" \
-            --arg windows_url "${BASE_URL}/${WINDOWS_INSTALLER}" \
+            --arg windows_url "${BASE_URL}/${WINDOWS_INSTALLER_URL}" \
             --arg windows_signature "${WINDOWS_SIGNATURE}" \
             '{
               version: $version,
@@ -456,6 +461,7 @@ jobs:
               }
             }' > release-assets/latest.json
           jq -e '.platforms | length == 6' release-assets/latest.json >/dev/null
+          jq -e '[.platforms[].url | test("[[:space:]]")] | any | not' release-assets/latest.json >/dev/null
 
       - name: Create or repair the GitHub Release
         env:
