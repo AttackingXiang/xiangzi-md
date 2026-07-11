@@ -46,3 +46,12 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(unix)'.dependencies]
 xattr = "1"
+
+# 为体积优化的发布 profile：显著缩小原生二进制，跨境上传更容易钻过 Gitee
+# 网关的请求时长上限。对功能无影响；代价是 CI 编译因 LTO 变慢几分钟。
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true
