@@ -403,7 +403,14 @@
      横向滚动条拥有真实占位，不会覆盖前后的标题或正文。 */
   margin: 0 -18px;
   padding: 18px;
-  overflow: auto;
+  box-sizing: border-box;
+  max-width: calc(100% + 36px);
+  /* Wide/manual-width tables scroll inside their own wrapper. Keep horizontal
+     overflow from escaping into the ProseMirror document; clipping the vertical
+     axis also avoids creating a second vertical scrolling surface in WebKit. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
 }
 
 .milkdown .milkdown-table-block {

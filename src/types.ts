@@ -17,6 +17,8 @@ export interface OutlineItem {
   text: string
   /** 第几个标题（用于在 DOM 中定位） */
   index: number
+  /** 标题行在完整 Markdown 中的字符偏移，用于虚拟编辑器定位未挂载块。 */
+  offset: number
 }
 
 export interface Tab {

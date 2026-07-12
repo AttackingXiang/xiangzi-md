@@ -297,6 +297,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(allow_remote_images);
     replace_if_some!(show_toolbar);
     replace_if_some!(show_selection_toolbar);
+    replace_if_some!(large_document_threshold_kb);
     replace_if_some!(table_auto_width);
     replace_if_some!(table_auto_resize);
     replace_if_some!(show_status_bar);

@@ -1,5 +1,6 @@
 import { $prose } from '@milkdown/kit/utils'
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state'
+import type { Transaction } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view'
 import type { Node } from '@milkdown/kit/prose/model'
 
@@ -9,6 +10,11 @@ interface HeadingFoldState {
 }
 
 const headingFoldKey = new PluginKey<HeadingFoldState>('xmd-heading-fold')
+
+/** Progressive loading appends content at the end without changing existing
+ * heading positions. Rebuilding every fold decoration after every append makes
+ * loading quadratic, so the loader marks those transactions with this meta. */
+export const HEADING_FOLD_PROGRESSIVE_META = 'xmd-heading-fold-progressive'
 
 /** Returns the document position just past the section owned by this heading. */
 function getSectionEnd(doc: Node, headingPos: number, level: number): number {
@@ -87,6 +93,28 @@ function buildFoldDecos(doc: Node, folded: Set<number>): DecorationSet {
   return DecorationSet.create(doc, decos)
 }
 
+function topLevelNodeType(doc: Node, pos: number): string | null {
+  if (doc.childCount === 0) return null
+  const safePos = Math.max(0, Math.min(pos, doc.content.size))
+  const $pos = doc.resolve(safePos)
+  return $pos.depth > 0 ? $pos.node(1).type.name : ($pos.nodeAfter?.type.name ?? null)
+}
+
+/** Most input transactions only change text inside one existing block. In that
+ * case mapping the existing widgets is enough; scanning every top-level node on
+ * every keystroke makes editing large documents unusable. */
+function headingStructureMayHaveChanged(
+  tr: Transaction,
+  oldDoc: Node,
+  newDoc: Node,
+  oldSelectionFrom: number,
+): boolean {
+  if (oldDoc.childCount !== newDoc.childCount) return true
+  const oldType = topLevelNodeType(oldDoc, oldSelectionFrom)
+  const newType = topLevelNodeType(newDoc, tr.selection.from)
+  return oldType !== newType
+}
+
 export const headingFoldPlugin = $prose(
   () =>
     new Plugin({
@@ -96,7 +124,19 @@ export const headingFoldPlugin = $prose(
           folded: new Set<number>(),
           decos: buildFoldDecos(doc, new Set<number>()),
         }),
-        apply(tr, old, _, { doc }) {
+        apply(tr, old, oldState, { doc }) {
+          const progressive = tr.getMeta(HEADING_FOLD_PROGRESSIVE_META) as
+            | 'append'
+            | 'finalize'
+            | undefined
+
+          if (progressive === 'append') {
+            return {
+              folded: old.folded,
+              decos: old.decos.map(tr.mapping, tr.doc),
+            }
+          }
+
           // Toggle meta dispatched by fold button click
           const meta = tr.getMeta(headingFoldKey) as number | undefined
           let nextFolded = old.folded
@@ -118,10 +158,18 @@ export const headingFoldPlugin = $prose(
             nextFolded = remapped
           }
 
-          const shouldRebuild = toggled || tr.docChanged
+          const shouldRebuild =
+            toggled ||
+            progressive === 'finalize' ||
+            (tr.docChanged &&
+              headingStructureMayHaveChanged(tr, oldState.doc, doc, oldState.selection.from))
           return {
             folded: nextFolded,
-            decos: shouldRebuild ? buildFoldDecos(doc, nextFolded) : old.decos,
+            decos: shouldRebuild
+              ? buildFoldDecos(doc, nextFolded)
+              : tr.docChanged
+                ? old.decos.map(tr.mapping, tr.doc)
+                : old.decos,
           }
         },
       },

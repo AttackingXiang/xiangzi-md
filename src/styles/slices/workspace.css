@@ -354,6 +354,43 @@
   overflow-y: auto;
 }
 
+.virtual-wysiwyg-editor {
+  flex: 1;
+  height: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+.virtual-wysiwyg-spacer {
+  position: relative;
+  min-width: 0;
+}
+
+.virtual-markdown-chunk {
+  position: absolute;
+  inset: 0 0 auto;
+  min-width: 0;
+}
+
+.virtual-markdown-chunk .wysiwyg-editor.embedded-editor {
+  display: block;
+  overflow: visible;
+  flex: none;
+}
+
+.virtual-markdown-chunk .embedded-editor .milkdown,
+.virtual-markdown-chunk .embedded-editor .milkdown .ProseMirror {
+  min-height: 0;
+}
+
+.virtual-markdown-chunk .embedded-editor .milkdown .ProseMirror {
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+
 /* 阅读模式：转成文本选择光标，弱化编辑态视觉 */
 .wysiwyg-editor.reading-mode .ProseMirror {
   cursor: default;

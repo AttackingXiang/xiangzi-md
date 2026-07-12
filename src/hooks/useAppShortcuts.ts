@@ -27,6 +27,11 @@ export function useAppShortcuts(
       if (!binding) return
       const action = activeBindings.get(binding)
       if (action) {
+        if (action === 'select-all' && event.target instanceof Element) {
+          const editableControl = event.target.closest('input, textarea, [contenteditable="true"]')
+          const insideDocument = event.target.closest('.ProseMirror')
+          if (editableControl && !insideDocument) return
+        }
         event.preventDefault()
         event.stopPropagation()
         dispatch(action)

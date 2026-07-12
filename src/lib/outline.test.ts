@@ -5,9 +5,9 @@ describe('parseOutline', () => {
   it('parses ATX headings at all levels', () => {
     const result = parseOutline('# H1\n## H2\n### H3')
     expect(result).toEqual([
-      { level: 1, text: 'H1', index: 0 },
-      { level: 2, text: 'H2', index: 1 },
-      { level: 3, text: 'H3', index: 2 },
+      { level: 1, text: 'H1', index: 0, offset: 0 },
+      { level: 2, text: 'H2', index: 1, offset: 5 },
+      { level: 3, text: 'H3', index: 2, offset: 11 },
     ])
   })
 
@@ -21,8 +21,8 @@ describe('parseOutline', () => {
     const md = '# Real\n```\n# Fake\n```\n## Also real'
     const result = parseOutline(md)
     expect(result).toEqual([
-      { level: 1, text: 'Real', index: 0 },
-      { level: 2, text: 'Also real', index: 1 },
+      { level: 1, text: 'Real', index: 0, offset: 0 },
+      { level: 2, text: 'Also real', index: 1, offset: 22 },
     ])
   })
 
@@ -34,14 +34,14 @@ describe('parseOutline', () => {
 
   it('strips trailing ATX markers', () => {
     const result = parseOutline('## Clean ##')
-    expect(result).toEqual([{ level: 2, text: 'Clean', index: 0 }])
+    expect(result).toEqual([{ level: 2, text: 'Clean', index: 0, offset: 0 }])
   })
 
   it('does not treat --- thematic breaks as headings', () => {
     const md = 'Some paragraph\n---\n## Real heading'
     const result = parseOutline(md)
     // Only the ATX heading should appear; --- is a thematic break, not a heading
-    expect(result).toEqual([{ level: 2, text: 'Real heading', index: 0 }])
+    expect(result).toEqual([{ level: 2, text: 'Real heading', index: 0, offset: 19 }])
   })
 
   it('returns empty array for content with no headings', () => {

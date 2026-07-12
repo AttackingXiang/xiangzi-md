@@ -16,6 +16,7 @@ import {
 import { undo, redo } from 'prosemirror-history'
 import type { EditorView } from '@milkdown/kit/prose/view'
 import { editorBridge } from './editorBridge'
+import { largeDocumentBridge } from '../features/large-document/bridge'
 import { tableZoomBridge } from './tableZoomBridge'
 import { linkPromptBridge } from './linkPromptBridge'
 import {
@@ -505,8 +506,12 @@ export const editorCmd = {
   insertTable,
   insertLink,
   quote: () => exec((s) => s.nodes.blockquote && toggleBlockquote(s.nodes.blockquote)),
-  undo: () => execCommand(undo),
-  redo: () => execCommand(redo),
+  undo: () => {
+    if (!largeDocumentBridge.get()?.undo()) execCommand(undo)
+  },
+  redo: () => {
+    if (!largeDocumentBridge.get()?.redo()) execCommand(redo)
+  },
   addRowBefore: () => execCommand(addRowBefore),
   addRowAfter: () => execCommand(addRowAfter),
   addColumnBefore: () => execCommand(addColumnBefore),
@@ -523,10 +528,19 @@ export const editorCmd = {
 
 /** 剪贴板操作（依赖编辑器内当前选区，菜单项以 mousedown preventDefault 保留选区） */
 export const clipboardCmd = {
-  copy: () => document.execCommand('copy'),
-  cut: () => document.execCommand('cut'),
+  copy: () => {
+    if (!largeDocumentBridge.get()?.copy()) document.execCommand('copy')
+  },
+  cut: () => {
+    if (!largeDocumentBridge.get()?.cut()) document.execCommand('cut')
+  },
   paste: () => document.execCommand('paste'),
   selectAll: () => {
+    const largeDocument = largeDocumentBridge.get()
+    if (largeDocument) {
+      largeDocument.selectAll()
+      return
+    }
     const request = new Event('xmd-select-all', { cancelable: true })
     if (!window.dispatchEvent(request)) return
     if (

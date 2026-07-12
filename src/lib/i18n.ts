@@ -2,6 +2,7 @@ export type Lang = 'zh' | 'en'
 
 /** 中文 -> 英文 词典；以中文原文为键。zh 直接返回原文，en 查表（缺失则回退中文） */
 const EN: Record<string, string> = {
+  加载中: 'Loading',
   // Sidebar
   资源管理器: 'Explorer',
   收藏目录: 'Favorites',

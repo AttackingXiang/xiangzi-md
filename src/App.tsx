@@ -19,6 +19,7 @@ import { textEditorBridge } from './lib/textEditorBridge'
 import type { TextCursorInfo, TextViewState } from './components/TextEditor'
 
 const Editor = lazy(() => import('./components/Editor'))
+const VirtualizedEditor = lazy(() => import('./components/VirtualizedEditor'))
 const TextEditor = lazy(() => import('./components/TextEditor'))
 const Settings = lazy(() => import('./components/Settings'))
 const UpdateNotice = lazy(() => import('./components/UpdateNotice'))
@@ -74,6 +75,7 @@ import type { ThemeName } from './lib/codeSyntaxPalette'
 import { groupKeysToCollapse } from './features/tags/tagTree'
 import { replaceMarkdownBody } from './features/tags/frontmatter'
 import { useTagFeature } from './features/tags/useTagFeature'
+import { largeDocumentBridge } from './features/large-document/bridge'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 const EMPTY_STRING_ARRAY: string[] = []
@@ -718,6 +720,10 @@ export default function App(): JSX.Element {
     () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
     [deferredOutlineContent, outlineVisible],
   )
+  const ActiveWysiwygEditor =
+    activeFrontmatter.body.length > (settings?.largeDocumentThresholdKb ?? 100) * 1024
+      ? VirtualizedEditor
+      : Editor
 
   // frecency 衰减用的“现在”，周期刷新；避免在 render 里直接调 Date.now()。
   const now = useNow()
@@ -823,45 +829,63 @@ export default function App(): JSX.Element {
   )
 
   // ── Outline navigation ─────────────────────────────────────────────────────
-  const scrollToHeading = useCallback((index: number) => {
-    const els = document.querySelectorAll(
-      '.milkdown h1, .milkdown h2, .milkdown h3, .milkdown h4, .milkdown h5, .milkdown h6',
-    )
-    const el = els[index] as HTMLElement | undefined
-    if (!el) return
-    const container = el.closest<HTMLElement>('.wysiwyg-editor')
-    if (!container) return
-    // Cancel editor scroll-restoration and suppress typewriter re-centering.
-    window.dispatchEvent(new Event('xmd-navigate'))
-    // Move the caret into the target heading. Outline items are not focusable,
-    // so clicking one leaves the editor focused with its caret at the old,
-    // now off-screen position. WebKit (and ProseMirror's scrollToSelection)
-    // then asynchronously reveal that caret a moment after we settle — this is
-    // the intermittent "slides down after navigation" bug. Placing the caret at
-    // the heading makes any later scroll-to-caret target the heading we already
-    // scrolled to, so it becomes a no-op. Dispatch WITHOUT scrollIntoView() so
-    // ProseMirror stays in "preserve" mode and does not fight the animation
-    // below (a plain setSelection only writes the DOM selection, which does not
-    // itself scroll in WebKit).
-    const view = editorBridge.get()
-    if (view) {
-      try {
-        const pos = view.posAtDOM(el, 0)
-        view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos))))
-      } catch {
-        // posAtDOM can throw while the DOM is mid-update; fall back to scroll-only.
+  const scrollToHeading = useCallback(
+    (index: number) => {
+      const virtualScroller = document.querySelector<HTMLElement>('.virtual-wysiwyg-editor')
+      const item = outline[index]
+      if (virtualScroller && item) {
+        window.dispatchEvent(
+          new CustomEvent('xmd-virtual-outline-navigate', {
+            detail: { headingIndex: index, markdownOffset: item.offset },
+          }),
+        )
+        return
       }
-    }
-    // Use a rAF-based animation instead of scrollIntoView({ behavior: 'smooth' }).
-    // ProseMirror's resetScrollPos mechanism saves/restores scrollTop on every
-    // transaction; any direct scrollTop assignment cancels a CSS smooth-scroll
-    // animation. Our rAF runs in the rendering phase, after event-handler
-    // dispatches, so it overrides any mid-frame interference each tick.
-    smoothScrollTo(container, el)
-  }, [])
+      const els = document.querySelectorAll(
+        '.milkdown h1, .milkdown h2, .milkdown h3, .milkdown h4, .milkdown h5, .milkdown h6',
+      )
+      const el = els[index] as HTMLElement | undefined
+      if (!el) return
+      const container = el.closest<HTMLElement>('.wysiwyg-editor')
+      if (!container) return
+      // Cancel editor scroll-restoration and suppress typewriter re-centering.
+      window.dispatchEvent(new Event('xmd-navigate'))
+      // Move the caret into the target heading. Outline items are not focusable,
+      // so clicking one leaves the editor focused with its caret at the old,
+      // now off-screen position. WebKit (and ProseMirror's scrollToSelection)
+      // then asynchronously reveal that caret a moment after we settle — this is
+      // the intermittent "slides down after navigation" bug. Placing the caret at
+      // the heading makes any later scroll-to-caret target the heading we already
+      // scrolled to, so it becomes a no-op. Dispatch WITHOUT scrollIntoView() so
+      // ProseMirror stays in "preserve" mode and does not fight the animation
+      // below (a plain setSelection only writes the DOM selection, which does not
+      // itself scroll in WebKit).
+      const view = editorBridge.get()
+      if (view) {
+        try {
+          const pos = view.posAtDOM(el, 0)
+          view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos))))
+        } catch {
+          // posAtDOM can throw while the DOM is mid-update; fall back to scroll-only.
+        }
+      }
+      // Use a rAF-based animation instead of scrollIntoView({ behavior: 'smooth' }).
+      // ProseMirror's resetScrollPos mechanism saves/restores scrollTop on every
+      // transaction; any direct scrollTop assignment cancels a CSS smooth-scroll
+      // animation. Our rAF runs in the rendering phase, after event-handler
+      // dispatches, so it overrides any mid-frame interference each tick.
+      smoothScrollTo(container, el)
+    },
+    [outline],
+  )
 
   const reorderSection = useCallback((fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return
+    const largeDocument = largeDocumentBridge.get()
+    if (largeDocument) {
+      largeDocument.reorderHeading(fromIndex, toIndex)
+      return
+    }
     void import('./lib/outlineReorder')
       .then(({ reorderHeadingSections }) => {
         reorderHeadingSections(fromIndex, toIndex)
@@ -1234,7 +1258,7 @@ export default function App(): JSX.Element {
                 />
               ) : (
                 <Suspense fallback={<div className="editor-loading" />}>
-                  <Editor
+                  <ActiveWysiwygEditor
                     key={activeTab.id + '-' + resolvedTheme + '-' + settings.showSelectionToolbar}
                     content={activeFrontmatter.body}
                     docDir={activeDocDir}

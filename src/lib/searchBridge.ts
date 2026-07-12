@@ -7,6 +7,7 @@ import {
   replaceAll,
 } from 'prosemirror-search'
 import { editorBridge } from './editorBridge'
+import { virtualSearchBridge } from './virtualSearchBridge'
 
 /** 当前是否有可用的所见即所得编辑器（用于决定走 PM 搜索还是源码原生查找） */
 export function hasEditor(): boolean {
@@ -31,6 +32,11 @@ function setQuery(text: string, replace: string): boolean {
 
 /** 设置查询并跳到下一个匹配 */
 export function searchFind(text: string, replace = ''): void {
+  const virtual = virtualSearchBridge.get()
+  if (virtual) {
+    virtual.find(text)
+    return
+  }
   if (!setQuery(text, replace)) return
   const view = editorBridge.get()
   if (view) {
@@ -40,6 +46,11 @@ export function searchFind(text: string, replace = ''): void {
 }
 
 export function searchNext(): void {
+  const virtual = virtualSearchBridge.get()
+  if (virtual) {
+    virtual.next()
+    return
+  }
   const view = editorBridge.get()
   // 不调用 view.focus()：保持焦点在查找框，避免回车落到编辑器替换选中文本
   if (view) {
@@ -49,6 +60,11 @@ export function searchNext(): void {
 }
 
 export function searchPrev(): void {
+  const virtual = virtualSearchBridge.get()
+  if (virtual) {
+    virtual.prev()
+    return
+  }
   const view = editorBridge.get()
   if (view) {
     findPrev(view.state, view.dispatch)
@@ -57,12 +73,22 @@ export function searchPrev(): void {
 }
 
 export function searchReplace(text: string, replace: string): void {
+  const virtual = virtualSearchBridge.get()
+  if (virtual) {
+    virtual.replace(text, replace)
+    return
+  }
   if (!setQuery(text, replace)) return
   const view = editorBridge.get()
   if (view) replaceNext(view.state, view.dispatch)
 }
 
 export function searchReplaceAll(text: string, replace: string): void {
+  const virtual = virtualSearchBridge.get()
+  if (virtual) {
+    virtual.replaceAll(text, replace)
+    return
+  }
   if (!setQuery(text, replace)) return
   const view = editorBridge.get()
   if (view) replaceAll(view.state, view.dispatch)
@@ -70,7 +96,18 @@ export function searchReplaceAll(text: string, replace: string): void {
 
 /** 关闭查找时清除高亮 */
 export function searchClear(): void {
+  const virtual = virtualSearchBridge.get()
+  if (virtual) virtual.clear()
   const view = editorBridge.get()
   if (!view) return
   view.dispatch(setSearchState(view.state.tr, new SearchQuery({ search: '' })))
+}
+
+/** Highlight a query only in the currently mounted virtual chunk. */
+export function searchMountedEditor(text: string, localOccurrence = 0): void {
+  if (!setQuery(text, '')) return
+  const view = editorBridge.get()
+  if (!view) return
+  for (let i = 0; i <= localOccurrence; i += 1) findNext(view.state, view.dispatch)
+  scrollActiveIntoView()
 }

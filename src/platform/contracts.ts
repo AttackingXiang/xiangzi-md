@@ -95,6 +95,8 @@ export interface AppSettings {
   allowRemoteImages: boolean
   showToolbar: boolean
   showSelectionToolbar: boolean
+  /** 启用虚拟化大文档编辑器的文件大小阈值，单位 KiB。 */
+  largeDocumentThresholdKb: number
   /** 表格单元格输入停顿后采用的自动列宽策略。 */
   tableAutoWidth: 'distribute' | 'fit' | 'equal'
   /** 编辑表格内容后是否重新应用当前表格的布局模式。 */

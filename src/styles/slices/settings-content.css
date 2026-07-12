@@ -740,3 +740,14 @@
 .format-whitelist-item.is-locked input {
   cursor: default;
 }
+.settings-number-with-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.settings-number-with-unit input {
+  width: 84px;
+}

@@ -6,17 +6,23 @@ export function parseOutline(markdown: string): OutlineItem[] {
   const lines = markdown.split('\n')
   let inFence = false
   let index = 0
+  let offset = 0
   for (const line of lines) {
     if (/^\s*(```|~~~)/.test(line)) {
       inFence = !inFence
+      offset += line.length + 1
       continue
     }
-    if (inFence) continue
+    if (inFence) {
+      offset += line.length + 1
+      continue
+    }
     const m = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line)
     if (m) {
-      items.push({ level: m[1].length, text: m[2].trim(), index })
+      items.push({ level: m[1].length, text: m[2].trim(), index, offset })
       index++
     }
+    offset += line.length + 1
   }
   return items
 }

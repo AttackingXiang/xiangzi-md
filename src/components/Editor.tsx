@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { AArrowDown, AArrowUp, type LucideIcon } from 'lucide-react'
@@ -32,7 +32,7 @@ import {
 import { resizableTableView, tableColumnResizingPlugin } from '../lib/resizableTable'
 import { focusPlugin } from '../lib/focusPlugin'
 import { searchPlugin } from '../lib/searchPlugin'
-import { headingFoldPlugin } from '../lib/headingFold'
+import { HEADING_FOLD_PROGRESSIVE_META, headingFoldPlugin } from '../lib/headingFold'
 import { toolbarStatePlugin } from '../lib/toolbarStatePlugin'
 import { editorBridge } from '../lib/editorBridge'
 import { t } from '../lib/i18n'
@@ -49,8 +49,9 @@ import {
   sanitizePastedHtml,
   shouldPreservePlainTextLineBreaks,
 } from '../lib/pasteHandling'
+import { splitMarkdownIntoChunks } from '../lib/markdownChunker'
 
-interface Props {
+export interface EditorProps {
   content: string
   /** 当前文档所在目录（用于解析相对图片路径、保存附件）；新建未保存为 null */
   docDir: string | null
@@ -78,6 +79,15 @@ interface Props {
   initialScrollTop?: number
   onScrollTopChange?: (scrollTop: number) => void
   onChange: (markdown: string) => void
+  /** 编辑器完成首次解析和挂载后通知嵌入式虚拟容器。 */
+  onReady?: () => void
+  /** Render inside an outer virtual scroller instead of owning the scrollport. */
+  embedded?: boolean
+  /**
+   * The outer large-document controller owns history.  Its undo/redo shortcut
+   * must flush this editor's pending serialization before it changes source.
+   */
+  sourceManaged?: boolean
 }
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
@@ -124,7 +134,10 @@ export default function Editor({
   initialScrollTop = 0,
   onScrollTopChange,
   onChange,
-}: Props): JSX.Element {
+  onReady,
+  embedded = false,
+  sourceManaged = false,
+}: EditorProps): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
   // rootRef 是滚动视口本身（.wysiwyg-editor，overflow-y: auto），文档标签栏和
   // Crepe 的挂载点都是它的子元素——这样标签栏会跟正文一起滚动，而不是钉死在
@@ -154,11 +167,18 @@ export default function Editor({
   assetSearchPathsRef.current = assetSearchPaths
   const allowRemoteImagesRef = useRef(allowRemoteImages)
   allowRemoteImagesRef.current = allowRemoteImages
+  const [loadingProgress, setLoadingProgress] = useState<number | null>(null)
 
   useEffect(() => {
     const root = rootRef.current
     const crepeRoot = crepeMountRef.current
     if (!root || !crepeRoot) return
+
+    const PROGRESSIVE_THRESHOLD = 100_000
+    const CHUNK_BYTES = 50_000
+    const progressiveChunks =
+      content.length > PROGRESSIVE_THRESHOLD ? splitMarkdownIntoChunks(content, CHUNK_BYTES) : null
+    const initialValue = progressiveChunks ? progressiveChunks[0] : content
 
     const upload = async (file: File): Promise<string> => {
       const dir = docDirRef.current
@@ -187,7 +207,7 @@ export default function Editor({
     const remoteObjectUrls = new Set<string>()
     const crepe = new Crepe({
       root: crepeRoot,
-      defaultValue: content,
+      defaultValue: initialValue,
       features: {
         [CrepeFeature.Toolbar]: showSelectionToolbar,
       },
@@ -332,18 +352,53 @@ export default function Editor({
     let ready = false
     let userEdited = false
     let baselineMarkdown = content
+    let markdownSerializeTimer: number | null = null
+    let markdownIdleCallback: number | null = null
     let scrollRestoreFrame: number | null = null
     let restoringScroll = true
+    const flushSourceManagedChange = (): boolean => {
+      if (!ready || destroyed || !userEdited) return false
+      if (markdownSerializeTimer !== null) {
+        clearTimeout(markdownSerializeTimer)
+        markdownSerializeTimer = null
+      }
+      if (markdownIdleCallback !== null && typeof cancelIdleCallback === 'function') {
+        cancelIdleCallback(markdownIdleCallback)
+        markdownIdleCallback = null
+      }
+      const markdown = crepe.getMarkdown()
+      if (markdown === baselineMarkdown) return false
+      baselineMarkdown = markdown
+      onChangeRef.current(markdown)
+      return true
+    }
     crepe.on((listener) => {
-      listener.markdownUpdated((_ctx, markdown) => {
-        // 初始化阶段 Milkdown 会规范化 Markdown；以 create 完成后的内容为基线，
-        // 只有真实输入/编辑操作发生后才提交，避免异步初始化把刚打开的文件标脏。
-        if (!ready || destroyed) return
-        if (!userEdited) {
-          baselineMarkdown = markdown
-          return
+      // Do not use markdownUpdated here: Milkdown serializes the complete document
+      // for that event after every 200 ms pause. On a 1 MB document that blocks the
+      // same main thread as typing and scrolling. Observe cheap document changes,
+      // then serialize once the user has actually been idle for a while.
+      listener.updated(() => {
+        if (!ready || destroyed || !userEdited) return
+        if (markdownSerializeTimer !== null) clearTimeout(markdownSerializeTimer)
+        if (markdownIdleCallback !== null && typeof cancelIdleCallback === 'function') {
+          cancelIdleCallback(markdownIdleCallback)
+          markdownIdleCallback = null
         }
-        onChangeRef.current(markdown)
+        markdownSerializeTimer = window.setTimeout(() => {
+          markdownSerializeTimer = null
+          const serialize = (): void => {
+            markdownIdleCallback = null
+            if (destroyed || !userEdited) return
+            const markdown = crepe.getMarkdown()
+            baselineMarkdown = markdown
+            onChangeRef.current(markdown)
+          }
+          if (typeof requestIdleCallback === 'function') {
+            markdownIdleCallback = requestIdleCallback(serialize, { timeout: 2000 })
+          } else {
+            serialize()
+          }
+        }, 800)
       })
     })
 
@@ -366,6 +421,7 @@ export default function Editor({
     let anchorEl: Element | null = null
     let anchorOffset = 0
     let anchorAdjusting = false
+    let anchorPickFrame: number | null = null
     let navigating = false
     let navSettleTimer: number | null = null
     let tableAutoWidthTimer: number | null = null
@@ -437,7 +493,14 @@ export default function Editor({
     const onScrollRepick = (): void => {
       // A real user scroll redefines what should stay anchored; our own anchor
       // correction and any in-flight navigation animation must not.
-      if (!anchorAdjusting && !restoringScroll && !navigating) pickAnchor()
+      if (anchorAdjusting || restoringScroll || navigating || anchorPickFrame !== null) return
+      // elementFromPoint/getBoundingClientRect force layout. Wheel and momentum scrolling
+      // can emit several events per frame, so never run this hot-path more than once per
+      // rendered frame (especially important for very large ProseMirror documents).
+      anchorPickFrame = requestAnimationFrame(() => {
+        anchorPickFrame = null
+        if (!anchorAdjusting && !restoringScroll && !navigating) pickAnchor()
+      })
     }
 
     const disposeRichClipboard = setupRichClipboard(root)
@@ -546,6 +609,11 @@ export default function Editor({
     window.addEventListener('mouseup', persistTableResize, true)
     window.addEventListener('xmd-table-layout-override', persistLayoutOverride)
     root.addEventListener('pointerdown', focusEditorFromBlankArea)
+    const activateEditorBridge = (): void => {
+      if (editorView) editorBridge.activate(editorView)
+    }
+    root.addEventListener('focusin', activateEditorBridge)
+    root.addEventListener('pointerdown', activateEditorBridge, true)
     root.addEventListener('keydown', clearSelectAllOnKey, true)
     const cancelScrollRestore = (): void => {
       restoringScroll = false
@@ -644,6 +712,18 @@ export default function Editor({
     root.addEventListener('paste', markUserEditedFromDomEvent)
     root.addEventListener('cut', markUserEditedFromDomEvent)
     root.addEventListener('drop', markUserEditedFromDomEvent)
+    const interceptSourceHistory = (event: KeyboardEvent): void => {
+      if (!sourceManaged || event.isComposing || !(event.metaKey || event.ctrlKey)) return
+      if (event.key.toLowerCase() !== 'z') return
+      event.preventDefault()
+      event.stopPropagation()
+      // The full-document controller records exact source operations. Flush the
+      // local delayed serialization first, then let it invert/reapply that op.
+      flushSourceManagedChange()
+      if (event.shiftKey) editorCmd.redo()
+      else editorCmd.undo()
+    }
+    root.addEventListener('keydown', interceptSourceHistory, true)
     window.addEventListener('xmd-navigate', onNavigateRequest)
     // Emulated scroll anchoring: when the content's height changes (images,
     // mermaid SVGs loading), hold the block the reader is looking at in place
@@ -651,7 +731,7 @@ export default function Editor({
     let resizeObserver: ResizeObserver | null = null
     void crepe
       .create()
-      .then(() => {
+      .then(async () => {
         if (destroyed) {
           void crepe.destroy()
           return
@@ -659,34 +739,85 @@ export default function Editor({
         // 暴露 ProseMirror 视图给查找/替换
         crepe.editor.action((ctx) => {
           editorView = ctx.get(editorViewCtx)
-          editorBridge.set(editorView, markUserEdited)
+          editorBridge.register(editorView, markUserEdited)
         })
-        baselineMarkdown = crepe.getMarkdown()
-        ready = true
-        crepe.setReadonly(readingModeRef.current)
-        restoreScroll()
-        const contentEl = editorView?.dom
-        if (!contentEl) return
-        pickAnchor()
-        resizeObserver = new ResizeObserver(() => applyAnchor())
-        resizeObserver.observe(contentEl)
-        requestAnimationFrame(() => {
-          const records = loadTableLayouts(documentKey)
-          allTables().forEach((table, index) => {
-            const signature = tableSignature(table)
-            const override = records.find(
-              (record) => record.signature === signature || record.index === index,
-            )
-            if (override?.mode === 'manual' && override.widths) {
-              editorCmd.renderTableColumnWidths('fit', table, override.widths)
-            } else {
-              editorCmd.renderTableColumnWidths(
-                override && override.mode !== 'manual' ? override.mode : tableAutoWidthRef.current,
-                table,
+
+        const finalize = (): void => {
+          baselineMarkdown = crepe.getMarkdown()
+          ready = true
+          crepe.setReadonly(readingModeRef.current)
+          restoreScroll()
+          const contentEl = editorView?.dom
+          if (!contentEl) return
+          pickAnchor()
+          resizeObserver = new ResizeObserver(() => applyAnchor())
+          resizeObserver.observe(contentEl)
+          requestAnimationFrame(() => {
+            const records = loadTableLayouts(documentKey)
+            allTables().forEach((table, index) => {
+              const signature = tableSignature(table)
+              const override = records.find(
+                (record) => record.signature === signature || record.index === index,
               )
+              if (override?.mode === 'manual' && override.widths) {
+                editorCmd.renderTableColumnWidths('fit', table, override.widths)
+              } else {
+                editorCmd.renderTableColumnWidths(
+                  override && override.mode !== 'manual'
+                    ? override.mode
+                    : tableAutoWidthRef.current,
+                  table,
+                )
+              }
+            })
+          })
+          onReady?.()
+        }
+
+        if (!progressiveChunks) {
+          finalize()
+          return
+        }
+
+        // 大文档分片挂载：首片已随 Crepe 创建同步渲染，剩余片段在空闲时间
+        // 逐个追加，避免一次性把整份 Markdown 交给 ProseMirror 解析/布局
+        // 导致主线程长时间冻结。ready 在整个追加过程中保持 false，
+        // markdownUpdated 监听器因此不会把加载过程当成用户编辑上报。
+        setLoadingProgress(0)
+        const yieldToBrowser = (): Promise<void> =>
+          new Promise<void>((resolve) => {
+            if (typeof requestIdleCallback === 'function') {
+              requestIdleCallback(() => resolve(), { timeout: 100 })
+            } else {
+              setTimeout(resolve, 0)
             }
           })
-        })
+
+        for (let i = 1; i < progressiveChunks.length; i += 1) {
+          if (destroyed) return
+          crepe.editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx)
+            const parsed = ctx.get(parserCtx)(progressiveChunks[i])
+            if (!parsed) return
+            const tr = view.state.tr
+            tr.insert(view.state.doc.content.size, parsed.content)
+            tr.setMeta('addToHistory', false)
+            tr.setMeta(HEADING_FOLD_PROGRESSIVE_META, 'append')
+            view.dispatch(tr)
+          })
+          setLoadingProgress(i / (progressiveChunks.length - 1))
+          await yieldToBrowser()
+        }
+        if (destroyed) return
+        // Build heading fold widgets once for the complete document. Doing this
+        // after every append scans an ever-growing document and becomes quadratic.
+        editorView?.dispatch(
+          editorView.state.tr
+            .setMeta('addToHistory', false)
+            .setMeta(HEADING_FOLD_PROGRESSIVE_META, 'finalize'),
+        )
+        setLoadingProgress(null)
+        finalize()
       })
       .catch((error: unknown) => console.error('Editor initialization failed', error))
 
@@ -704,6 +835,8 @@ export default function Editor({
       window.removeEventListener('mouseup', persistTableResize, true)
       window.removeEventListener('xmd-table-layout-override', persistLayoutOverride)
       root.removeEventListener('pointerdown', focusEditorFromBlankArea)
+      root.removeEventListener('focusin', activateEditorBridge)
+      root.removeEventListener('pointerdown', activateEditorBridge, true)
       root.removeEventListener('keydown', clearSelectAllOnKey, true)
       root.removeEventListener('scroll', onScrollRepick)
       root.removeEventListener('scroll', onNavScroll)
@@ -716,11 +849,17 @@ export default function Editor({
       root.removeEventListener('paste', markUserEditedFromDomEvent)
       root.removeEventListener('cut', markUserEditedFromDomEvent)
       root.removeEventListener('drop', markUserEditedFromDomEvent)
+      root.removeEventListener('keydown', interceptSourceHistory, true)
       window.removeEventListener('xmd-navigate', onNavigateRequest)
       resizeObserver?.disconnect()
       if (navSettleTimer !== null) clearTimeout(navSettleTimer)
       if (tableAutoWidthTimer !== null) clearTimeout(tableAutoWidthTimer)
+      if (markdownSerializeTimer !== null) clearTimeout(markdownSerializeTimer)
+      if (markdownIdleCallback !== null && typeof cancelIdleCallback === 'function') {
+        cancelIdleCallback(markdownIdleCallback)
+      }
       if (scrollRestoreFrame !== null) cancelAnimationFrame(scrollRestoreFrame)
+      if (anchorPickFrame !== null) cancelAnimationFrame(anchorPickFrame)
       // Do not persist from passive-effect cleanup. React may already have
       // detached this keyed editor from layout, at which point WebKit reports
       // scrollTop as 0 and would overwrite the position captured on pointerdown.
@@ -735,7 +874,7 @@ export default function Editor({
           // 编辑器已进入销毁流程时，不再读取状态。
         }
       }
-      if (editorBridge.get() === editorView) editorBridge.set(null)
+      if (editorView) editorBridge.unregister(editorView)
       editorView = undefined
       crepeRef.current = null
       void crepe.destroy()
@@ -852,9 +991,31 @@ export default function Editor({
   }, [typewriterMode])
 
   return (
-    <div className={`wysiwyg-editor${focusMode ? ' focus-mode' : ''}`} ref={rootRef}>
+    <div
+      className={`wysiwyg-editor${focusMode ? ' focus-mode' : ''}${embedded ? ' embedded-editor' : ''}`}
+      ref={rootRef}
+    >
       {tagBar}
       <div className="crepe-mount" ref={crepeMountRef} />
+      {loadingProgress !== null && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 12,
+            right: 12,
+            padding: '4px 10px',
+            borderRadius: 6,
+            background: 'rgba(0, 0, 0, 0.6)',
+            color: '#fff',
+            fontSize: 12,
+            lineHeight: '18px',
+            pointerEvents: 'none',
+            zIndex: 1000,
+          }}
+        >
+          {t('加载中')} {Math.round(loadingProgress * 100)}%
+        </div>
+      )}
     </div>
   )
 }
