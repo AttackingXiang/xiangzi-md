@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { localImagePath, replaceClipboardImagePlaceholders } from './richClipboard'
+import {
+  CLIPBOARD_CHROME_SELECTOR,
+  localImagePath,
+  replaceClipboardImagePlaceholders,
+} from './richClipboard'
 
 describe('richClipboard', () => {
   it('embeds every copied image instead of leaving a local path', () => {
@@ -27,5 +31,23 @@ describe('richClipboard', () => {
 
   it('does not treat remote images as local files', () => {
     expect(localImagePath('https://example.com/image.png')).toBeNull()
+  })
+
+  describe('CLIPBOARD_CHROME_SELECTOR', () => {
+    // 测试运行在 node 环境、无 DOM，故这里守选择器清单本身：确保会被 querySelectorAll
+    // 剥掉的 nodeView 装饰包含列表编号与代码块头部，避免它们作为字面文本混进剪贴板。
+    it('strips list-item labels so ordered numbers are not copied as literal text', () => {
+      expect(CLIPBOARD_CHROME_SELECTOR).toContain('.label-wrapper')
+    })
+
+    it('strips code-block header chrome', () => {
+      expect(CLIPBOARD_CHROME_SELECTOR).toContain('.xmd-code-header')
+    })
+
+    it('keeps stripping the pre-existing editor overlays', () => {
+      for (const selector of ['.milkdown-block-handle', '.milkdown-toolbar', '.fold-btn']) {
+        expect(CLIPBOARD_CHROME_SELECTOR).toContain(selector)
+      }
+    })
   })
 })
