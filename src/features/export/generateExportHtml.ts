@@ -401,10 +401,9 @@ html,body{margin:0;padding:0;height:auto;overflow:visible;background:var(--bg,#f
 .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content :is(h1,h2,h3,h4,h5,h6){font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei UI','Microsoft YaHei','Noto Sans CJK SC',Arial,sans-serif!important}
 .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content :is(h1,h2,h3,h4,h5,h6) *{font-family:inherit!important;line-height:inherit}
 .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content :is(h1,h2,h3,h4,h5,h6) strong{font-weight:inherit}
-.wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading{display:flex!important;align-items:center!important;flex-wrap:wrap}
-.wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading::before{align-self:center;flex:none}
+.wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading{display:flex!important;align-items:baseline!important;flex-wrap:wrap}
+.wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading::before{align-self:baseline;flex:none}
 .wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading-run{display:inline-block;flex:none;line-height:1!important;font-weight:inherit!important;white-space:pre}
-.wysiwyg-editor.export-view .milkdown .ProseMirror.export-content .xmd-export-heading-latin{transform:translateY(-0.28em)}
 html[data-heading-number='on'] .export-view .milkdown :is(h1,h2,h3,h4,h5,h6)::before{color:inherit;font-family:inherit;font-size:inherit;font-weight:inherit;line-height:inherit;letter-spacing:inherit}
 .mermaid-export svg{max-width:100%;height:auto}
 ${EXPORT_CODE_STYLES}
