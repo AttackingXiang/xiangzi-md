@@ -25,7 +25,11 @@ Xiangzi MD focuses on the entire path from writing to delivery:
 - **Your files remain yours**: Xiangzi MD reads and writes local Markdown without accounts, cloud lock-in, or proprietary formats. Continue using Typora, Obsidian, VS Code, or Git whenever you want.
 - **Edit one file or manage a project**: folder workspaces, tabs, full-text search, an outline, a command palette, and session restoration are included in one lightweight desktop app.
 
-![Mermaid, KaTeX, and syntax highlighting](docs/images/user-guide/02-rich-rendering.png)
+![Document properties, tags, customization options, and the formatting toolbar](docs/images/user-guide/02-rich-rendering.png)
+
+![Lists, tasks, tables, and rich Markdown formatting](docs/images/user-guide/03-code-table.png)
+
+![TypeScript and JSON syntax highlighting with a rendered Mermaid diagram](docs/images/user-guide/04-code-mermaid.png)
 
 ## How is it different?
 

@@ -1,6 +1,28 @@
+---
+title: Xiangzi MD 渲染效果示例
+tags:
+  - "Xiangzi MD"
+  - "Markdown"
+  - "渲染示例"
+aliases:
+  - "Rendering Showcase"
+created: 2026-07-12
+description: 展示文档属性、个性化界面、所见即所得编辑、代码、图表、公式与多格式导出的完整示例。
+publish: true
+---
+
 # Xiangzi MD 渲染效果示例
 
-这是一份用于体验 Xiangzi MD 所见即所得编辑与导出效果的示例文档。
+这是一份用于体验 Xiangzi MD 所见即所得编辑与导出效果的示例文档。文档顶部同时展示了与 Obsidian 兼容的 YAML 属性和标签，它们仍会原样保存在 Markdown 文件中。
+
+正文标签也可以直接参与文档组织：#Markdown #技术写作 #本地优先
+
+## 个性化工作区
+
+- 可设置自定义**背景图片**，让写作空间更有个人辨识度。
+- 可调整界面**主题色**与明暗外观，也可以使用简洁的无背景主题。
+- 可按需显示顶部**格式工具栏**，快速插入标题、列表、引用、代码、表格和链接。
+- 支持自定义 CSS、专注模式、阅读模式和打字机模式。
 
 ## 文本样式
 
@@ -33,6 +55,8 @@
 
 ## 代码高亮
 
+代码块支持语言识别、语法高亮、自动换行和一键复制，适合 README、技术方案与接口文档。
+
 ```typescript
 type DocumentStatus = 'draft' | 'published'
 
@@ -43,7 +67,17 @@ function describe(title: string, status: DocumentStatus): string {
 console.log(describe('Xiangzi MD', 'published'))
 ```
 
+```json
+{
+  "editor": "Xiangzi MD",
+  "localFirst": true,
+  "export": ["HTML", "PDF", "PNG", "JPEG", "Word"]
+}
+```
+
 ## Mermaid 图表
+
+Mermaid 在编辑器内直接渲染，预览状态下复制即可得到图片，也可以切换为复制源代码。
 
 ```mermaid
 flowchart LR

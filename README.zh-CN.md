@@ -25,7 +25,11 @@ Xiangzi MD 想解决的是从写作到交付的整段流程：
 - **文件仍然属于你**：直接读写本地 Markdown，没有账号体系、云端绑定和私有格式，随时可以换回 Typora、Obsidian、VS Code 或 Git。
 - **既能写单篇，也能管项目**：文件夹工作区、多标签页、全文搜索、大纲、命令面板和会话恢复都在一个轻量桌面应用中。
 
-![Mermaid、KaTeX 与代码高亮](docs/images/user-guide/02-rich-rendering.png)
+![文档属性、标签、个性化设置与顶部格式工具栏](docs/images/user-guide/02-rich-rendering.png)
+
+![列表、任务、表格与 Markdown 富文本格式](docs/images/user-guide/03-code-table.png)
+
+![TypeScript、JSON 代码高亮与 Mermaid 图表渲染](docs/images/user-guide/04-code-mermaid.png)
 
 ## 和同类软件有什么不同
 
