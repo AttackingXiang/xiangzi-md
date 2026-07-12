@@ -1,0 +1,105 @@
+name: Sync to Gitee
+
+on:
+  push:
+    branches:
+      - main
+      - electron-legacy-v0.1
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-gitee
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Gitee SSH key
+        env:
+          GITEE_PRIVATE_KEY: ${{ secrets.GITEE_PRIVATE_KEY }}
+          GITEE_KNOWN_HOSTS: ${{ secrets.GITEE_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "${GITEE_PRIVATE_KEY}"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${GITEE_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # gitee.com 主机公钥钉在仓库里（公钥非机密，进版本控制可审查）；
+          # 若配置了 GITEE_KNOWN_HOSTS secret 则以其为准，便于将来轮换。
+          if [ -n "${GITEE_KNOWN_HOSTS}" ]; then
+            printf '%s\n' "${GITEE_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            printf '%s\n' \
+              'gitee.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBMuEoYdx6to5oxR60IWj8uoe1aI0X1fKOHWOtLqTg1tsLT1iFwXV5JmFjU46EzeMBV/6EmI1uaRI6HiEPtPtJHE=' \
+              'gitee.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEKxHSJ7084RmkJ4YdEi5tngynE8aZe2uEoVVsB/OvYN' \
+              'gitee.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDMzG3r+88lWSDK9fyjcZmYsWGDBDmGoAasKMAmjoFloGt9HRQX2Qp4f9FY2XK/hsHYinvoh5Xytl9iaUNUWMfYR8q6VEMtOO87DgoAFcfKZHt0/nbAg9RoNTKYt6v8tPwYpr7N0JP/01nE4LFsNDnstr6H0bXSAzbKWCETLZfdPV4l2uSpRn3bU0ugoZ0aSKz5Dc/IloBfGCTvkSsxUydMRd/Chpjt6VxncDbp+Fa6pzsseK8OQzrg6Fgc5783EN3EQqZ2skqyCwExtx95BJlfx1B3luZnWfpkwNDnrZRT/Qx0OrWqyf0q6f9uQr+UG1S8qDcUn3e/9onq3rwBri8/' \
+              > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -F gitee.com -f ~/.ssh/known_hosts >/dev/null
+
+      - name: Mirror branches and the current release tag
+        env:
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          git remote add gitee git@gitee.com:tlqgyx/xiangzi-md.git
+
+          retry() {
+            local attempt delay=5
+            for attempt in 1 2 3 4; do
+              "$@" && return 0
+              [ "${attempt}" -eq 4 ] && return 1
+              echo "Attempt ${attempt} failed; retrying in ${delay}s: $*" >&2
+              sleep "${delay}"
+              delay=$((delay * 2))
+            done
+          }
+
+          git fetch origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/electron-legacy-v0.1:refs/remotes/origin/electron-legacy-v0.1
+          retry git push gitee refs/remotes/origin/main:refs/heads/main
+          retry git push gitee refs/remotes/origin/electron-legacy-v0.1:refs/heads/electron-legacy-v0.1
+
+          # A tag-triggered run publishes only that tag. Pushing every historical
+          # tag makes an unrelated legacy mismatch (currently v1.2.6) fail every
+          # future release even after the new tag itself was accepted by Gitee.
+          if [ "${REF_TYPE}" = "tag" ]; then
+            [[ "${REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]
+            # actions/checkout may create a lightweight local tag at the event
+            # commit. Force-refresh it so an annotated GitHub tag does not fail
+            # with "would clobber existing tag" on this disposable runner.
+            git fetch origin \
+              "+refs/tags/${REF_NAME}:refs/tags/${REF_NAME}"
+
+            LOCAL_COMMIT=$(git rev-parse "refs/tags/${REF_NAME}^{}")
+            REMOTE_REFS=$(retry git ls-remote --tags gitee \
+              "refs/tags/${REF_NAME}" "refs/tags/${REF_NAME}^{}")
+            REMOTE_COMMIT=$(printf '%s\n' "${REMOTE_REFS}" \
+              | awk '$2 ~ /\^\{\}$/ { print $1; found=1 } END { if (!found) exit 1 }' \
+              || printf '%s\n' "${REMOTE_REFS}" | awk 'NR == 1 { print $1 }')
+
+            if [ -z "${REMOTE_COMMIT}" ]; then
+              retry git push gitee \
+                "refs/tags/${REF_NAME}:refs/tags/${REF_NAME}"
+            elif [ "${REMOTE_COMMIT}" = "${LOCAL_COMMIT}" ]; then
+              echo "Gitee tag ${REF_NAME} already resolves to ${LOCAL_COMMIT}; nothing to do."
+            else
+              echo "::error::Gitee tag ${REF_NAME} already points to ${REMOTE_COMMIT}, but GitHub points to ${LOCAL_COMMIT}. Refusing to rewrite a published tag."
+              exit 1
+            fi
+          fi

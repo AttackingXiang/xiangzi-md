@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+src-tauri/target
+*.local
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+vitest.config.js
+vitest.config.d.ts
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local visual-audit captures can contain workspace paths or document text.
+/audit/current-state/*.png
+/audit/final-state/*.png
+# Ad-hoc QA screenshots taken at the repo root during design reviews.
+/qa-*.png
+
+# Local Playwright CLI sessions and snapshots.
+/.playwright-cli/
+
+# Local doc assets that are not meant to be versioned.
+/docs/assets/

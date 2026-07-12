@@ -1,0 +1,57 @@
+[package]
+name = "xiangzi-md"
+version = "1.6.20"
+description = "Xiangzi MD — a local-first Markdown editor"
+authors = ["guoxiangzi"]
+license = "GPL-3.0-only"
+repository = "https://github.com/AttackingXiang/xiangzi-md"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "xiangzi_md_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-persisted-scope = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-single-instance = "2"
+dirs = "6"
+mime_guess = "2"
+pathdiff = "0.2"
+percent-encoding = "2"
+tempfile = "3"
+trash = "5"
+url = "2"
+walkdir = "2"
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"
+blake3 = "1"
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "rustls-no-provider"] }
+# docx 是 zip，用于导出后字体后处理（deflate 读写）
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(unix)'.dependencies]
+xattr = "1"
+
+# 为体积优化的发布 profile：显著缩小原生二进制，跨境上传更容易钻过 Gitee
+# 网关的请求时长上限。对功能无影响；代价是 CI 编译因 LTO 变慢几分钟。
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true

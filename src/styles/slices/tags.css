@@ -1,0 +1,1064 @@
+/* 文档标签栏：仿 Obsidian 属性面板，正文顶部一张独立的卡片。现在是
+   .wysiwyg-editor（滚动视口本身）内部的第一个子节点，跟 .crepe-mount
+   （Crepe 的挂载点）是兄弟节点——这样它会跟标题、正文一起滚动，而不是钉死
+   在编辑区顶部。外层用跟正文一样的 max-width + 40px 内边距对齐到标题左
+   边缘，卡片本身的描边会比标题文字略宽一圈，看起来像"框住"了这一行属性，
+   而不是一条光秃秃贴着标题的工具条。 */
+.document-tag-bar {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--editor-max-width, 860px);
+  margin: 14px auto 0;
+  padding: 9px 40px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 20px;
+  border: 0;
+  border-bottom: 1px solid var(--editor-chrome-border);
+  background: var(--editor-chrome-bg);
+  user-select: none;
+}
+
+/* 卡片紧接着正文时，把标题原本给"顶部留白"用的 padding-top 收紧一些，
+   让标题看起来是紧跟在这张属性卡片（或下面那个 frontmatter title 兜底）下面，
+   而不是隔着一大截空白。用 ~ 而不是 + ，因为卡片和 .crepe-mount 之间可能还
+   夹着 .document-title-fallback。 */
+/* 顶部有属性面板时，收紧正文的巨大顶部留白（默认 72px），让标题紧跟在面板下方，
+   而不是隔着一大截空白。用 :has() 直接钉在滚动视口上，不依赖 ~ 兄弟链，避免因
+   crepe 内部 DOM 结构变化而失效。 */
+.document-tag-bar ~ .crepe-mount .milkdown .ProseMirror,
+.document-properties ~ .crepe-mount .milkdown .ProseMirror,
+.wysiwyg-editor:has(.document-properties) .milkdown .ProseMirror {
+  padding-top: 18px;
+}
+
+/* 有些笔记只在 frontmatter 写了 title、正文没有 H1——这里原样照抄 H1 的排版
+   （字号、粗细、下边框），把 frontmatter 的 title 摆在正文本该是标题的位置，
+   这样笔记看起来不会像"没有标题"。这段文字本身不可编辑，要改标题得去改
+   frontmatter（源码模式，或以后给这里加内联编辑）。 */
+.document-title-fallback {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--editor-max-width, 860px);
+  margin: 0 auto;
+  padding: 20px 40px 0.18em;
+  border-bottom: 1px solid var(--border-strong);
+  /* .document-title-fallback 是 .milkdown 的兄弟节点而不是后代，够不着
+     --crepe-font-title（只在 .milkdown 上定义），这里直接抄一份同样的字体栈。 */
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif;
+  color: var(--text);
+  letter-spacing: -0.015em;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.28;
+  cursor: default;
+}
+
+/* ── 文档属性面板（仿 Obsidian）─────────────────────────────────────────
+   跟 .document-tag-bar 一样是 .wysiwyg-editor 滚动视口内的第一个子节点，跟
+   标题、正文一起滚动。每个 frontmatter 字段一行：类型图标 + 键名 + 值编辑器。 */
+.document-properties {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--editor-max-width, 860px);
+  /* 贴着标签栏下方，不留那道夹在标签栏下边框和卡片上边框之间的空行 */
+  margin: 0 auto;
+  padding: 8px 28px;
+  border: 0;
+  border-bottom: 1px solid var(--editor-chrome-border);
+  background: var(--editor-chrome-bg);
+  user-select: none;
+}
+
+.prop-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.prop-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 30px;
+  padding: 1px 0;
+}
+
+.prop-key {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 168px;
+  min-height: 30px;
+  color: var(--text-muted);
+}
+
+.prop-type-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.prop-type-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+  color: var(--text-2);
+}
+
+.prop-key-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  outline: 0;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+}
+
+.prop-key-input:hover:not(:disabled),
+.prop-key-input:focus {
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+}
+
+.prop-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+}
+
+.prop-value-input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  outline: 0;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.prop-value-input:hover:not(:disabled),
+.prop-value-input:focus {
+  background: color-mix(in srgb, var(--bg-hover) 70%, transparent);
+}
+
+.prop-value-input[type='number'] {
+  width: auto;
+  max-width: 160px;
+}
+
+/* 阅读模式（disabled）下把输入框还原成普通只读文本：WKWebView 默认会用
+   -webkit-text-fill-color 把 disabled 文字变灰，这里显式改回正常颜色。 */
+.prop-key-input:disabled,
+.prop-value-input:disabled,
+.prop-type-button:disabled {
+  opacity: 1;
+  cursor: default;
+  background: transparent;
+}
+
+.prop-value-input:disabled {
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+}
+
+.prop-key-input:disabled {
+  color: var(--text-2);
+  -webkit-text-fill-color: var(--text-2);
+}
+
+.prop-type-button:disabled {
+  color: var(--text-muted);
+}
+
+.prop-value-complex {
+  padding: 0 6px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.prop-value-checkbox {
+  width: 15px;
+  height: 15px;
+  margin: 0 6px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* 值列的列表编辑器（tags / aliases / 任意多值属性） */
+.prop-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 0;
+}
+
+.prop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 200px;
+  height: 23px;
+  padding: 0 4px 0 9px;
+  border: 1px solid var(--workspace-divider-strong);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--workspace-surface) 78%, transparent);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1;
+}
+
+.prop-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.prop-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.prop-chip-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+
+.prop-list-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px dashed var(--workspace-divider-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.prop-row:hover .prop-list-add,
+.prop-list-add:focus-visible {
+  opacity: 1;
+}
+
+.prop-list-add:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--workspace-divider));
+}
+
+.prop-list-add-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 23px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--workspace-surface) 80%, transparent);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.prop-list-add-editor input {
+  width: 96px;
+  border: 0;
+  outline: 0;
+  padding: 0 0 0 1px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+/* 删除整行 */
+.prop-row-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.prop-row:hover .prop-row-remove,
+.prop-row-remove:focus-visible {
+  opacity: 0.75;
+}
+
+.prop-row-remove:hover {
+  opacity: 1;
+  color: var(--danger, #c2414b);
+  background: color-mix(in srgb, var(--danger, #c2414b) 12%, transparent);
+}
+
+/* 类型切换菜单 */
+.prop-type-menu {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  z-index: 20;
+  min-width: 132px;
+  padding: 4px;
+  border: 1px solid var(--workspace-divider-strong);
+  border-radius: 8px;
+  background: var(--workspace-surface);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.prop-type-option {
+  display: block;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prop-type-option:hover {
+  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  color: var(--text);
+}
+
+.prop-type-option.active {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* 新增属性 */
+.prop-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.prop-add-button:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+}
+
+.prop-add-button:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+
+.prop-add-editor {
+  position: relative;
+  margin-top: 3px;
+  padding: 2px 0 2px 28px;
+}
+
+.prop-add-editor input {
+  height: 26px;
+  width: 168px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 5px;
+  outline: 0;
+  padding: 0 6px;
+  background: color-mix(in srgb, var(--workspace-surface) 80%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+/* 「添加属性」候选下拉：紧贴输入框下方，仿 Obsidian 的属性名建议列表。 */
+.prop-suggest-menu {
+  position: absolute;
+  top: 100%;
+  left: 28px;
+  z-index: 20;
+  min-width: 200px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--workspace-divider-strong);
+  border-radius: 8px;
+  /* 候选项必须盖住正文；workspace-surface 会随背景图片强度变透明。 */
+  background: var(--bg);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.prop-suggest-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prop-suggest-option:hover {
+  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  color: var(--text);
+}
+
+.prop-suggest-option svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.prop-suggest-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prop-suggest-key {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.document-tag-label {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.document-tag-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+  gap: 7px;
+}
+
+.document-tag-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 180px;
+  height: 25px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--workspace-surface));
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1;
+}
+
+/* .tag-chip 现在总是外层 span（容纳标签文字 + 可选的删除按钮），真正可点击
+   的是里面的 .tag-chip-label（有 onClick 时是 button，否则是纯展示 span）。 */
+.tag-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+}
+
+button.tag-chip-label {
+  cursor: pointer;
+}
+
+.tag-chip:has(button.tag-chip-label) {
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s ease;
+}
+
+.tag-chip:has(button.tag-chip-label:hover) {
+  background: color-mix(in srgb, var(--accent) 14%, var(--workspace-surface));
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  transform: translateY(-1px);
+}
+
+.tag-chip.active {
+  background: color-mix(in srgb, var(--accent) 19%, var(--workspace-surface));
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  color: var(--accent-text);
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.tag-chip.compact {
+  height: 19px;
+  max-width: 96px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.tag-chip.removable {
+  padding-right: 4px;
+}
+
+.tag-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.tag-chip-remove:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.tag-chip-remove:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.tag-add-button,
+.tag-add-editor {
+  height: 25px;
+  border: 1px solid var(--workspace-divider-strong);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--workspace-surface) 76%, transparent);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.tag-add-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.tag-add-button:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--workspace-divider));
+}
+
+.tag-add-button:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+
+.tag-add-editor {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--accent-text);
+}
+
+.tag-add-editor:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.tag-add-editor input {
+  width: 108px;
+  border: 0;
+  outline: 0;
+  padding: 0 0 0 2px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* 标签总览 / 相关文档面板：作为 body 挂在共享的 SidebarHeader（当前文件夹那一行）
+   下面，自己撑满剩余高度、内部列表滚动。 */
+.tag-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tag-sidebar-heading {
+  flex: 0 0 auto;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--workspace-divider);
+}
+
+.tag-sidebar-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 10px;
+  padding: 3px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tag-sidebar-back:hover {
+  color: var(--accent);
+}
+
+/* 结果列顶部：左“全部标签”按钮 + 右关闭按钮 */
+.tag-results-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tag-results-actions .tag-sidebar-back {
+  margin: 0;
+}
+
+.tag-results-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tag-results-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tag-sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.tag-sidebar-title svg {
+  flex-shrink: 0;
+  color: var(--accent-text);
+}
+
+.tag-sidebar-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.tag-sidebar-count {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.tag-search-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 10px 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--workspace-divider-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--workspace-surface) 72%, transparent);
+  color: var(--text-muted);
+}
+
+.tag-search-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.tag-search-wrap input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.tag-related-list,
+.tag-overview-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 5px 6px 10px;
+}
+
+/* 标签树的横、纵滚动条仅在鼠标或键盘焦点位于树内时显示。 */
+.tag-overview-list {
+  scrollbar-color: transparent transparent;
+}
+
+.tag-overview-list::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.tag-overview-list:hover,
+.tag-overview-list:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent) transparent;
+}
+
+.tag-overview-list:hover::-webkit-scrollbar-thumb,
+.tag-overview-list:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+
+.related-document-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 5px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.related-document-item:hover {
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+  border-color: var(--workspace-divider);
+}
+
+.related-document-item.active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.related-document-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.related-document-title-row svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.related-document-title-row strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.related-document-title-row time {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.related-document-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.related-document-tags {
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.tag-overview-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.tag-overview-item:hover {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.tag-overview-item small {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* 嵌套标签树：折叠箭头 + 标签名 + 计数。行本身是 div，点击落在里面的按钮上。 */
+.tag-tree-row {
+  justify-content: flex-start;
+  gap: 2px;
+  cursor: default;
+}
+
+/* 当前选中的标签（其文档在中间结果列展示）：整行高亮。 */
+.tag-tree-row.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+/* 拖动分组进行中：全局抓手光标 + 禁止选中，避免拖动时误选文字。 */
+body.tag-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* 拖动分组时的落点高亮：目标标签会“接住”被拖来的标签成为它的子级。 */
+.tag-tree-row.drop-target {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.tag-tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tag-tree-toggle svg {
+  transition: transform 0.12s ease;
+}
+
+.tag-tree-toggle.expanded svg {
+  transform: rotate(90deg);
+}
+
+.tag-tree-toggle:hover {
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  color: var(--text-2);
+}
+
+.tag-tree-toggle-spacer {
+  flex-shrink: 0;
+  width: 18px;
+}
+
+.tag-tree-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 2px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tag-tree-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.tag-tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-tree-label:hover .tag-tree-name,
+.tag-tree-label:hover .tag-tree-icon {
+  color: var(--accent-text);
+}
+
+.tag-tree-children {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 每行末尾的置顶按钮：默认隐藏，悬浮行时出现；已置顶的常显填充星标。 */
+.tag-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.tag-tree-row:hover .tag-pin-btn,
+.tag-pin-btn:focus-visible {
+  opacity: 1;
+}
+
+.tag-pin-btn:hover {
+  color: var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.tag-pin-btn.pinned {
+  opacity: 1;
+  color: var(--accent-text);
+}
+
+/* 置顶区：面板顶部一小块，跟下面完整标签树用分隔线隔开。 */
+.tag-pinned-section {
+  margin-bottom: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--workspace-divider);
+}
+
+.tag-section-label {
+  padding: 4px 9px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tag-sidebar-state {
+  padding: 34px 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.tag-sidebar-error {
+  color: var(--danger, #c2414b);
+}

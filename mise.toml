@@ -1,0 +1,12 @@
+[tools]
+node = "22"
+rust = "stable"
+
+[tasks.check]
+run = "npm run check && npm run rust:check"
+
+[tasks.dev]
+run = "npm run tauri:dev"
+
+[tasks.build]
+run = "npm run tauri:build"

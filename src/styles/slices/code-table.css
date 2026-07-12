@@ -1,0 +1,510 @@
+/* ---------- 代码块（静态渲染，无 CodeMirror） ---------- */
+
+/* 整体卡片：统一浅背景，不分区 */
+.wysiwyg-editor .milkdown .xmd-code-block {
+  position: relative;
+  margin: 4px 0 16px;
+  border: 1px solid var(--code-card-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--code-card-bg) var(--code-block-opacity, 30%), transparent);
+  font-family: 'JetBrains Mono', 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+.wysiwyg-editor .milkdown .xmd-code-block:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* 顶部栏：同色背景，仅用极细分隔线区分，高度 ≤ 36px */
+.wysiwyg-editor .milkdown .xmd-code-header {
+  height: 34px;
+  padding: 0 10px 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--code-header-bg) var(--code-block-opacity, 30%), transparent);
+  border-bottom: 1px solid var(--code-card-border);
+}
+
+/* 语言标签：纯文字，不带边框/背景，避免输入框感 */
+.wysiwyg-editor .milkdown .xmd-lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--code-lang-color);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: color 0.12s;
+  user-select: none;
+}
+
+.wysiwyg-editor .milkdown .xmd-lang-btn:hover {
+  color: var(--code-lang-hover-color);
+}
+
+.wysiwyg-editor .milkdown .xmd-lang-btn svg {
+  opacity: 0.45;
+  flex-shrink: 0;
+}
+
+/* 右侧按钮组 */
+.wysiwyg-editor .milkdown .xmd-code-btns {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.wysiwyg-editor .milkdown .xmd-code-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--code-btn-color);
+  cursor: pointer;
+  transition:
+    background 0.1s,
+    color 0.1s;
+}
+
+.wysiwyg-editor .milkdown .xmd-code-btn:hover {
+  color: var(--code-btn-hover-color);
+  background: var(--code-btn-hover-bg);
+}
+
+.wysiwyg-editor .milkdown .xmd-code-btn svg {
+  display: block;
+}
+
+/* 代码区：与卡片同色背景，零分区感 */
+.wysiwyg-editor .milkdown .xmd-code-pre {
+  margin: 0;
+  padding: 14px 18px;
+  overflow-x: auto;
+  background: transparent;
+}
+
+.wysiwyg-editor .milkdown .xmd-code-content {
+  display: block;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--code-text);
+  white-space: pre;
+  outline: none;
+  caret-color: var(--accent);
+  tab-size: 2;
+}
+
+/* 代码块内选中色 */
+.wysiwyg-editor .milkdown .xmd-code-content ::selection {
+  background: var(--code-selection-bg);
+}
+
+/* Mermaid 预览区 */
+.wysiwyg-editor .milkdown .xmd-mermaid-preview {
+  padding: 20px 16px;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.wysiwyg-editor .milkdown .xmd-mermaid-preview svg {
+  max-width: 100%;
+}
+
+.wysiwyg-editor .milkdown .xmd-mermaid-preview .mermaid-error {
+  color: #cf222e;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  text-align: left;
+  padding: 8px 12px;
+  background: color-mix(in srgb, #cf222e 8%, var(--bg-sidebar));
+  border-radius: 6px;
+}
+
+/* 语言选择浮层 */
+.xmd-lang-picker {
+  display: none;
+  position: fixed;
+  z-index: 9999;
+  width: 200px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 6px 6px 4px;
+  overflow: hidden;
+}
+
+.xmd-lang-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.xmd-lang-search {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.xmd-lang-search:focus {
+  border-color: var(--accent);
+}
+
+.xmd-lang-auto-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--crepe-font-default, sans-serif);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.1s,
+    color 0.1s,
+    border-color 0.1s;
+}
+
+.xmd-lang-auto-btn:hover {
+  background: var(--bg-active);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.xmd-lang-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.xmd-lang-item {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.xmd-lang-item:hover,
+.xmd-lang-item.active {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ── 语法高亮 token 色 ──
+   一律引用 --code-* 变量（foundation.css），随 [data-theme] 自动切换，
+   不再为每个主题各写一份完整选择器。tok-variableName.tok-definition /
+   tok-propertyName.tok-definition 曾各自硬编码一份颜色，数值其实等于基础
+   的 variable / property 槽位，统一后成了多余的重复规则，一并去掉。 */
+.wysiwyg-editor .milkdown .xmd-code-content .tok-keyword {
+  color: var(--code-keyword);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-invalid {
+  color: var(--code-invalid);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-atom,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-bool,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-number,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-attributeName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-labelName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-literal {
+  color: var(--code-number);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-string,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-string2 {
+  color: var(--code-string);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-meta {
+  color: var(--code-meta);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName2,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName3 {
+  color: var(--code-variable);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-propertyName {
+  color: var(--code-property);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-typeName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-namespace,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-className {
+  color: var(--code-type);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-macroName,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-variableName.tok-function,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-propertyName.tok-function {
+  color: var(--code-function);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-operator,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-punctuation {
+  color: var(--code-operator);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-tagName {
+  color: var(--code-tag);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-link,
+.wysiwyg-editor .milkdown .xmd-code-content .tok-url {
+  color: var(--code-link);
+  text-decoration: underline;
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-heading {
+  font-weight: 600;
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-emphasis {
+  font-style: italic;
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-strong {
+  font-weight: 700;
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-inserted {
+  color: var(--code-diff-added);
+  background: color-mix(in srgb, var(--code-diff-added) 10%, transparent);
+}
+.wysiwyg-editor .milkdown .xmd-code-content .tok-deleted {
+  color: var(--code-diff-removed);
+  background: color-mix(in srgb, var(--code-diff-removed) 10%, transparent);
+}
+
+/* ── Crepe CSS 变量覆盖（最高优先级：.wysiwyg-editor .milkdown 比 .milkdown 更具体） ── */
+/* 通过覆盖 --crepe-color-surface 变量让 Crepe/CM 的所有 surface 颜色变浅。
+   直接引用 --code-* 静态代码块色板（foundation.css），与上方 .xmd-code-block
+   共用同一套值，不再各themes各写一份、也不必为每个新增主题单独适配。 */
+.wysiwyg-editor .milkdown {
+  --crepe-color-surface: color-mix(
+    in srgb,
+    var(--code-card-bg) var(--code-block-opacity, 30%),
+    transparent
+  );
+  --crepe-color-surface-low: color-mix(
+    in srgb,
+    var(--code-header-bg) var(--code-block-opacity, 30%),
+    transparent
+  );
+  --crepe-color-inline-area: var(--code-card-border);
+}
+
+/* ── Crepe/CM NodeView 高优先级覆盖（3 层选择器，优先级高于 Crepe 的 2 层） ── */
+.wysiwyg-editor .milkdown .milkdown-code-block {
+  background: color-mix(
+    in srgb,
+    var(--code-card-bg) var(--code-block-opacity, 30%),
+    transparent
+  ) !important;
+  border: 1px solid var(--code-card-border) !important;
+  border-radius: 6px !important;
+  padding: 0 !important;
+  margin: 4px 0 16px !important;
+  overflow: hidden !important;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace !important;
+}
+
+/* CM 内部所有层：全部透明，让上层背景色透出 */
+.wysiwyg-editor .milkdown .milkdown-code-block .cm-editor,
+.wysiwyg-editor .milkdown .milkdown-code-block .cm-scroller,
+.wysiwyg-editor .milkdown .milkdown-code-block .cm-content,
+.wysiwyg-editor .milkdown .milkdown-code-block .cm-line {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.wysiwyg-editor .milkdown .milkdown-code-block .cm-gutters {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-right: none !important;
+}
+
+/* Crepe 工具栏 */
+.wysiwyg-editor .milkdown .milkdown-code-block .tools {
+  padding: 4px 8px !important;
+  background: color-mix(
+    in srgb,
+    var(--code-header-bg) var(--code-block-opacity, 30%),
+    transparent
+  ) !important;
+  border-bottom: 1px solid var(--code-card-border) !important;
+  min-height: 34px !important;
+}
+
+.wysiwyg-editor .milkdown .milkdown-code-block .language-button {
+  opacity: 1 !important;
+  background: transparent !important;
+  color: var(--code-lang-color) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  margin-bottom: 0 !important;
+  padding: 2px 4px !important;
+}
+
+.wysiwyg-editor .milkdown .milkdown-code-block .tools-button-group > button {
+  opacity: 1 !important;
+  background: transparent !important;
+  color: var(--code-btn-color) !important;
+}
+
+/* 行内代码 */
+.milkdown code:not(.xmd-code-content) {
+  background: var(--code-header-bg);
+  border: 1px solid var(--code-card-border);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--code-inline-text);
+}
+
+/* ---------- 表格 ---------- */
+/* 编译后的 Crepe 主题缺失了 ProseMirror 表格的核心布局规则，这里补全：
+   固定布局让列宽稳定、内容自动换行不被裁剪，表格始终撑满容器宽度 */
+.milkdown .milkdown-table-block table,
+.milkdown table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.milkdown .milkdown-table-block .table-wrapper {
+  position: relative;
+  /* Crepe 的行/列添加按钮跨在表格边线上，分别有一半落在表格外。
+     overflow-x:auto 会让纵向 overflow 也计算为 auto，从而裁掉外侧半个按钮。
+     左右用负 margin 保持表格横向对齐；纵向不使用负 margin，确保控制按钮和
+     横向滚动条拥有真实占位，不会覆盖前后的标题或正文。 */
+  margin: 0 -18px;
+  padding: 18px;
+  overflow: auto;
+}
+
+.milkdown .milkdown-table-block {
+  position: relative;
+}
+
+.milkdown .milkdown-table-block th,
+.milkdown .milkdown-table-block td,
+.milkdown th,
+.milkdown td {
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* 行/列拖动重排时的落点指示线 */
+.milkdown .milkdown-table-block .xmd-table-drop-line {
+  position: absolute;
+  z-index: 20;
+  background: var(--accent, #4c7dff);
+  border-radius: 2px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #4c7dff) 35%, transparent);
+}
+
+/* ---------- 表格「放大展开」弹窗 ---------- */
+.table-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: color-mix(in srgb, #000 45%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.table-zoom-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-width: min(96vw, 1400px);
+  max-height: 90vh;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.table-zoom-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.table-zoom-close:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.table-zoom-scroll {
+  overflow: auto;
+  padding: 44px 28px 28px;
+}
+
+/* 弹窗内表格：按原列宽比例（colgroup 百分比）占满弹窗宽度，内容照常换行 */
+.table-zoom-content table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table-zoom-content th,
+.table-zoom-content td {
+  border: 1px solid var(--border-strong, var(--border));
+  padding: 8px 12px;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.table-zoom-content th {
+  background: var(--bg-hover);
+  font-weight: 600;
+}

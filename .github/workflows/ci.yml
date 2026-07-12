@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  metadata:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Verify all application versions match
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(jq -er '.version' package.json)
+          TAURI_VERSION=$(jq -er '.version' src-tauri/tauri.conf.json)
+          CARGO_VERSION=$(awk '
+            /^\[package\]$/ { in_package=1; next }
+            /^\[/ { in_package=0 }
+            in_package && /^version = / {
+              gsub(/^version = "|"$/, ""); print; exit
+            }
+          ' src-tauri/Cargo.toml)
+          LOCK_VERSION=$(awk '
+            $0 == "name = \"xiangzi-md\"" { found=1; next }
+            found && /^version = / {
+              gsub(/^version = "|"$/, ""); print; exit
+            }
+          ' src-tauri/Cargo.lock)
+          printf 'package=%s tauri=%s cargo=%s lock=%s\n' \
+            "${PACKAGE_VERSION}" "${TAURI_VERSION}" "${CARGO_VERSION}" "${LOCK_VERSION}"
+          test -n "${LOCK_VERSION}"
+          test "${PACKAGE_VERSION}" = "${TAURI_VERSION}"
+          test "${PACKAGE_VERSION}" = "${CARGO_VERSION}"
+          test "${PACKAGE_VERSION}" = "${LOCK_VERSION}"
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      # Dead-code / dependency report. Informational: surfaces unused files,
+      # exports and dependencies on each PR without failing the build.
+      - name: Dead-code report (knip)
+        run: npm run knip
+        continue-on-error: true
+
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: src-tauri
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked

@@ -1,0 +1,554 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build
+        required: true
+        type: string
+      force:
+        description: Rebuild and repair an existing version release
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  # Manual repairs for different tags must not cancel each other merely because
+  # workflow_dispatch runs from the same default branch.
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      tag: ${{ steps.release.outputs.tag }}
+      notes: ${{ steps.notes.outputs.body }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Publish only once per package version
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          FORCE_RELEASE: ${{ inputs.force }}
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then TAG="${INPUT_TAG}"; fi
+          [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]
+          test "${TAG}" = "v$(jq -r '.version' package.json)"
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${FORCE_RELEASE}" = "true" ]; then
+            echo "Repair mode enabled for ${TAG}; existing release assets will be rebuilt."
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+          elif curl -sf -o /dev/null \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"; then
+            # 以 GitHub Release 是否存在为准。之前检查的是 tag 是否存在于远端，
+            # 而 tag push 触发的 run 里 tag 必然已存在，导致推 tag 永远不发布。
+            echo "Version ${TAG} is already released; CI will still validate this commit."
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify release identity and version consistency
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(jq -er '.version' package.json)
+          TAURI_VERSION=$(jq -er '.version' src-tauri/tauri.conf.json)
+          CARGO_VERSION=$(awk '
+            /^\[package\]$/ { in_package=1; next }
+            /^\[/ { in_package=0 }
+            in_package && /^version = / {
+              gsub(/^version = "|"$/, ""); print; exit
+            }
+          ' src-tauri/Cargo.toml)
+          LOCK_VERSION=$(awk '
+            $0 == "name = \"xiangzi-md\"" { found=1; next }
+            found && /^version = / {
+              gsub(/^version = "|"$/, ""); print; exit
+            }
+          ' src-tauri/Cargo.lock)
+
+          printf 'tag=%s package=%s tauri=%s cargo=%s lock=%s\n' \
+            "${TAG}" "${PACKAGE_VERSION}" "${TAURI_VERSION}" "${CARGO_VERSION}" "${LOCK_VERSION}"
+          test -n "${LOCK_VERSION}"
+          test "${TAG}" = "v${PACKAGE_VERSION}"
+          test "${PACKAGE_VERSION}" = "${TAURI_VERSION}"
+          test "${PACKAGE_VERSION}" = "${CARGO_VERSION}"
+          test "${PACKAGE_VERSION}" = "${LOCK_VERSION}"
+
+          git fetch origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "::error::${TAG} does not point to a commit contained in origin/main."
+            exit 1
+          fi
+
+      - name: Build user-facing update notes
+        id: notes
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES_FILE="$(mktemp)"
+
+          # 附注 tag 的正文优先：发布者打 tag 时写好的完整更新明细原样作为
+          # 发布说明；tag 没有附注正文时才回退到按提交标题自动生成。
+          git tag -l --format='%(contents)' "${TAG}" > "${NOTES_FILE}" 2>/dev/null || true
+
+          if ! grep -q '[^[:space:]]' "${NOTES_FILE}"; then
+            : > "${NOTES_FILE}"
+            echo '## 本次更新' >> "${NOTES_FILE}"
+            # sed -n 2p：跳过当前正在发布的 tag 本身，取上一个版本作为区间起点
+            PREVIOUS_TAG="$(git tag --merged HEAD --list 'v*' --sort=-v:refname | sed -n '2p' || true)"
+            if [ -n "${PREVIOUS_TAG}" ]; then
+              RANGE="${PREVIOUS_TAG}..HEAD"
+            else
+              RANGE="HEAD~20..HEAD"
+            fi
+
+            while IFS= read -r SUBJECT; do
+              case "${SUBJECT}" in
+                feat:*|feat\(*\):*|fix:*|fix\(*\):*|perf:*|perf\(*\):*|refactor:*|refactor\(*\):*)
+                  TITLE="$(printf '%s' "${SUBJECT}" | sed -E 's/^(feat|fix|perf|refactor)(\([^)]*\))?!?:[[:space:]]*//')"
+                  [ -n "${TITLE}" ] && printf -- '- %s\n' "${TITLE}" >> "${NOTES_FILE}"
+                  ;;
+              esac
+            done < <(git log "${RANGE}" --no-merges --pretty=format:'%s')
+
+            if [ "$(grep -c '^- ' "${NOTES_FILE}")" -eq 0 ]; then
+              printf '%s\n' '- 常规体验优化与稳定性改进。' >> "${NOTES_FILE}"
+            fi
+          fi
+
+          DELIMITER="RELEASE_NOTES_$(date +%s%N)"
+          {
+            echo "body<<${DELIMITER}"
+            cat "${NOTES_FILE}"
+            echo "${DELIMITER}"
+          } >> "${GITHUB_OUTPUT}"
+
+  quality:
+    name: Release gate ${{ matrix.os }}
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run check
+      - run: npm run rust:check
+
+  build:
+    name: Build ${{ matrix.artifact }}
+    needs: [prepare, quality]
+    if: needs.prepare.outputs.publish == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 钉在 macos-14：macos-latest 已开始轮换到 macOS 26 beta 镜像，
+          # C 依赖（ring 等）在新 Xcode 下交叉编 universal 会构建失败。
+          - platform: macos-14
+            artifact: macos-universal
+            args: --target universal-apple-darwin --bundles app,dmg
+          - platform: windows-latest
+            artifact: windows-x64
+            args: --bundles nsis
+    runs-on: ${{ matrix.platform }}
+    environment: production-release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Rust for macOS universal build
+        if: runner.os == 'macOS'
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install Rust
+        if: runner.os != 'macOS'
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify signing secrets
+        id: signing
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        run: |
+          set -euo pipefail
+          # 更新器签名密钥是硬性要求：缺了它 latest.json 无法生成，自动更新会断。
+          test -n "${TAURI_SIGNING_PRIVATE_KEY}"
+          # 平台代码签名证书是可选项：全部配齐才启用签名，全空则构建未签名安装包
+          #（与 v1.2.1 之前的发布行为一致）；只配了一部分视为配置错误，直接失败。
+          count_set() { local n=0; for v in "$@"; do [ -n "${v}" ] && n=$((n+1)); done; echo "${n}"; }
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            SET=$(count_set "${APPLE_CERTIFICATE}" "${APPLE_CERTIFICATE_PASSWORD}" "${APPLE_SIGNING_IDENTITY}" "${APPLE_ID}" "${APPLE_PASSWORD}" "${APPLE_TEAM_ID}")
+            if [ "${SET}" = "6" ]; then
+              echo "apple=true" >> "${GITHUB_OUTPUT}"
+            elif [ "${SET}" = "0" ]; then
+              echo "::warning::未配置 Apple 签名证书，本次构建未签名 macOS 安装包。"
+              echo "apple=false" >> "${GITHUB_OUTPUT}"
+            else
+              echo "::error::Apple 签名 secrets 只配置了 ${SET}/6 项，请配齐或全部留空。"
+              exit 1
+            fi
+          else
+            SET=$(count_set "${WINDOWS_CERTIFICATE}" "${WINDOWS_CERTIFICATE_PASSWORD}" "${WINDOWS_CERTIFICATE_THUMBPRINT}")
+            if [ "${SET}" = "3" ]; then
+              echo "windows=true" >> "${GITHUB_OUTPUT}"
+            elif [ "${SET}" = "0" ]; then
+              echo "::warning::未配置 Windows 签名证书，本次构建未签名安装包。"
+              echo "windows=false" >> "${GITHUB_OUTPUT}"
+            else
+              echo "::error::Windows 签名 secrets 只配置了 ${SET}/3 项，请配齐或全部留空。"
+              exit 1
+            fi
+          fi
+
+      - name: Import macOS Developer ID certificate
+        if: runner.os == 'macOS' && steps.signing.outputs.apple == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERTIFICATE_PATH="${RUNNER_TEMP}/developer-id.p12"
+          KEYCHAIN_PATH="${RUNNER_TEMP}/xiangzi-signing.keychain-db"
+          printf '%s' "${APPLE_CERTIFICATE}" | base64 --decode > "${CERTIFICATE_PATH}"
+          security create-keychain -p "${RUNNER_TEMP}" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${RUNNER_TEMP}" "${KEYCHAIN_PATH}"
+          security import "${CERTIFICATE_PATH}" -P "${APPLE_CERTIFICATE_PASSWORD}" -A -t cert -f pkcs12 -k "${KEYCHAIN_PATH}"
+          security set-key-partition-list -S apple-tool:,apple: -k "${RUNNER_TEMP}" "${KEYCHAIN_PATH}"
+          security list-keychain -d user -s "${KEYCHAIN_PATH}" login.keychain-db
+
+      - name: Import Windows Authenticode certificate
+        if: runner.os == 'Windows' && steps.signing.outputs.windows == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        run: |
+          $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          $path = Join-Path $env:RUNNER_TEMP 'xiangzi-signing.pfx'
+          [IO.File]::WriteAllBytes($path, $bytes)
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $path -CertStoreLocation Cert:\CurrentUser\My -Password $password | Out-Null
+          $config = @{ bundle = @{ windows = @{ certificateThumbprint = $env:WINDOWS_CERTIFICATE_THUMBPRINT; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } } } | ConvertTo-Json -Compress -Depth 4
+          "TAURI_CONFIG=$config" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build signed macOS assets
+        if: runner.os == 'macOS' && steps.signing.outputs.apple == 'true'
+        id: build-signed-macos
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: ${{ matrix.args }}
+
+      - name: Build platform assets
+        if: runner.os != 'macOS' || steps.signing.outputs.apple == 'false'
+        id: build-platform
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
+        env:
+          # 不配置 Apple 证书时不能把空的 APPLE_SIGNING_IDENTITY 传给 Tauri，
+          # 否则 macOS Runner 会尝试用空身份 codesign 并在 keychain 阶段失败。
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: ${{ matrix.args }}
+
+      - name: Generate platform SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom-${{ matrix.artifact }}.spdx.json
+          upload-artifact: false
+
+      - name: Generate SHA-256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          # macOS 自带 shasum（Perl），Windows git-bash 只有 coreutils 的 sha256sum
+          if command -v sha256sum >/dev/null 2>&1; then
+            HASH_CMD=(sha256sum)
+          else
+            HASH_CMD=(shasum -a 256)
+          fi
+          find src-tauri/target -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.tar.gz' -o -name '*.sig' \) -print0 \
+            | sort -z | xargs -0 "${HASH_CMD[@]}" > SHA256SUMS-${{ matrix.artifact }}.txt
+          test -s SHA256SUMS-${{ matrix.artifact }}.txt
+
+      - name: Attest installers, updater signatures, checksums and SBOM
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            src-tauri/target/**/bundle/**/*.dmg
+            src-tauri/target/**/bundle/**/*.exe
+            src-tauri/target/**/bundle/**/*.tar.gz
+            src-tauri/target/**/bundle/**/*.sig
+            SHA256SUMS-${{ matrix.artifact }}.txt
+            sbom-${{ matrix.artifact }}.spdx.json
+
+      - name: Stage platform release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d release-assets
+          find src-tauri/target -type f \( \
+              -name '*.dmg' -o -name '*-setup.exe' -o \
+              -name '*.app.tar.gz' -o -name '*.sig' \
+            \) -exec cp {} release-assets/ \;
+          cp "SHA256SUMS-${{ matrix.artifact }}.txt" \
+            "sbom-${{ matrix.artifact }}.spdx.json" release-assets/
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
+            test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
+            test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 1
+          else
+            test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
+            test "$(find release-assets -maxdepth 1 -name '*-setup.exe.sig' | wc -l | tr -d ' ')" -eq 1
+          fi
+
+      - name: Upload temporary ${{ matrix.artifact }} artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ matrix.artifact }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish unified GitHub Release
+    needs: [prepare, build]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: production-release
+    timeout-minutes: 20
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Validate the complete release asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GitHub normalizes spaces in uploaded asset names to dots. Do that
+          # before generating latest.json so the manifest and uploaded assets
+          # always use the exact same deterministic names.
+          while IFS= read -r -d '' source; do
+            target="${source// /.}"
+            if [ "${source}" != "${target}" ]; then
+              test ! -e "${target}"
+              mv "${source}" "${target}"
+            fi
+          done < <(find release-assets -maxdepth 1 -type f -name '* *' -print0)
+          if find release-assets -maxdepth 1 -type f -name '* *' | grep -q .; then
+            echo '::error::Release asset names must not contain spaces.'
+            exit 1
+          fi
+          test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*-setup.exe.sig' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name 'SHA256SUMS-*.txt' | wc -l | tr -d ' ')" -eq 2
+          test "$(find release-assets -maxdepth 1 -name 'sbom-*.spdx.json' | wc -l | tr -d ' ')" -eq 2
+
+      - name: Generate the single cross-platform updater manifest
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.tag }}
+          NOTES: ${{ needs.prepare.outputs.notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=${VERSION#v}
+          MAC_ARCHIVE=$(find release-assets -maxdepth 1 -name '*.app.tar.gz' -exec basename {} \;)
+          MAC_SIGNATURE=$(tr -d '\r\n' < "release-assets/${MAC_ARCHIVE}.sig")
+          WINDOWS_INSTALLER=$(find release-assets -maxdepth 1 -name '*-setup.exe' -exec basename {} \;)
+          WINDOWS_SIGNATURE=$(tr -d '\r\n' < "release-assets/${WINDOWS_INSTALLER}.sig")
+          BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          # Encode the final, normalized asset names as URL path segments.
+          MAC_ARCHIVE_URL=$(jq -rn --arg value "${MAC_ARCHIVE}" '$value | @uri')
+          WINDOWS_INSTALLER_URL=$(jq -rn --arg value "${WINDOWS_INSTALLER}" '$value | @uri')
+          jq -n \
+            --arg version "${VERSION}" \
+            --arg notes "${NOTES}" \
+            --arg pub_date "$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')" \
+            --arg mac_url "${BASE_URL}/${MAC_ARCHIVE_URL}" \
+            --arg mac_signature "${MAC_SIGNATURE}" \
+            --arg windows_url "${BASE_URL}/${WINDOWS_INSTALLER_URL}" \
+            --arg windows_signature "${WINDOWS_SIGNATURE}" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "darwin-aarch64": {signature:$mac_signature,url:$mac_url},
+                "darwin-x86_64": {signature:$mac_signature,url:$mac_url},
+                "darwin-aarch64-app": {signature:$mac_signature,url:$mac_url},
+                "darwin-x86_64-app": {signature:$mac_signature,url:$mac_url},
+                "windows-x86_64": {signature:$windows_signature,url:$windows_url},
+                "windows-x86_64-nsis": {signature:$windows_signature,url:$windows_url}
+              }
+            }' > release-assets/latest.json
+          jq -e '.platforms | length == 6' release-assets/latest.json >/dev/null
+          jq -e '[.platforms[].url | test("[[:space:]]")] | any | not' release-assets/latest.json >/dev/null
+
+      - name: Create or repair the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The publish job only downloads build artifacts and has no checkout,
+          # so gh cannot infer the repository from a local .git directory.
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          NOTES: ${{ needs.prepare.outputs.notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES_FILE=$(mktemp)
+          printf '%s\n' "${NOTES}" > "${NOTES_FILE}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" \
+              --title "Xiangzi MD ${TAG}" --notes-file "${NOTES_FILE}"
+          else
+            gh release create "${TAG}" \
+              --title "Xiangzi MD ${TAG}" --notes-file "${NOTES_FILE}"
+          fi
+          gh release upload "${TAG}" release-assets/* --clobber
+
+      - name: Verify every published asset and updater URL
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
+          RELEASE_JSON=$(mktemp)
+          DOWNLOADED=$(mktemp)
+
+          # Release assets can be briefly eventually consistent after upload.
+          for attempt in 1 2 3 4 5; do
+            curl --fail --silent --show-error --retry 3 --retry-all-errors \
+              -H "Authorization: Bearer ${GH_TOKEN}" "${API}" -o "${RELEASE_JSON}"
+            remote_count=$(jq '.assets | length' "${RELEASE_JSON}")
+            local_count=$(find release-assets -maxdepth 1 -type f | wc -l | tr -d ' ')
+            [ "${remote_count}" -eq "${local_count}" ] && break
+            [ "${attempt}" -eq 5 ] && { echo "::error::Expected ${local_count} assets, found ${remote_count}."; exit 1; }
+            sleep $((attempt * 3))
+          done
+
+          # Download every asset through its public browser_download_url. A 200
+          # alone is insufficient: also require the downloaded byte count to
+          # match the size recorded by the GitHub Release API.
+          while IFS=$'\t' read -r name url expected_size; do
+            echo "Verifying ${name} (${expected_size} bytes)"
+            curl --fail --location --silent --show-error \
+              --retry 4 --retry-all-errors --connect-timeout 20 --max-time 1800 \
+              "${url}" -o "${DOWNLOADED}"
+            actual_size=$(stat -c '%s' "${DOWNLOADED}")
+            if [ "${actual_size}" -ne "${expected_size}" ]; then
+              echo "::error::${name}: expected ${expected_size} bytes, downloaded ${actual_size}."
+              exit 1
+            fi
+          done < <(jq -r '.assets[] | [.name, .browser_download_url, (.size | tostring)] | @tsv' "${RELEASE_JSON}")
+
+          # Finally verify that all six updater entries resolve to an asset that
+          # was just downloaded successfully. This catches filename drift even
+          # when every Release asset itself is healthy.
+          jq -e '.platforms | length == 6' release-assets/latest.json >/dev/null
+          while IFS= read -r updater_url; do
+            jq -e --arg url "${updater_url}" \
+              '[.assets[].browser_download_url] | index($url) != null' \
+              "${RELEASE_JSON}" >/dev/null || {
+                echo "::error::Updater URL does not match a published asset: ${updater_url}"
+                exit 1
+              }
+          done < <(jq -r '.platforms[].url' release-assets/latest.json | sort -u)
+
+      - name: Attest the unified updater manifest
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: release-assets/latest.json

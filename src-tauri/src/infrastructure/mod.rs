@@ -1,0 +1,13 @@
+pub mod attachment;
+pub mod drafts;
+pub mod lifecycle;
+pub mod menu;
+pub mod protocol;
+pub mod remote_image;
+pub mod search;
+pub mod settings;
+mod settings_model;
+mod settings_validation;
+pub mod workspace;
+mod workspace_mutations;
+mod workspace_write;

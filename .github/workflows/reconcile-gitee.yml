@@ -1,0 +1,97 @@
+name: Reconcile Gitee Release
+
+# 夜间对账补偿：发布上传走跨境链路容易变慢/报 400 而失败，这里在每天凌晨
+# 逐小时检查最新版本是否已完整同步到 Gitee，没有就补触发既有的幂等发布流程。
+on:
+  schedule:
+    # cron 用 UTC。北京时间（UTC+8）凌晨 1、3、5 点 = UTC 17、19、21 点，各跑一次，
+    # 隔小时多给几次机会以对冲跨境网络抖动和 GitHub 定时任务本身的延迟/丢弃。
+    - cron: '0 17,19,21 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write # 需要用 gh workflow run 触发 publish-gitee-release
+
+concurrency:
+  group: reconcile-gitee
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify Gitee sync and trigger publish if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 1) 对账目标 = 最新的 GitHub 已发布 release（自动排除草稿与预发布）。
+          TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+            --jq '.tag_name' 2>/dev/null || true)
+          if [ -z "${TAG}" ]; then
+            echo "No published GitHub release yet; nothing to reconcile."
+            exit 0
+          fi
+          [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]
+          VERSION="${TAG#v}"
+          echo "Latest GitHub release: ${TAG}"
+
+          # 2) 拉 Gitee updater 分支上的 latest.json —— 发布流程最后一步才推送，
+          #    是“附件全部上传完成”的最强完工信号。Gitee 不可达时跳过本轮，
+          #    避免仅因网络抖动就盲目触发一次 ~40 分钟的发布。
+          # Gitee 的 raw 链接会 302 跳到 raw.giteeusercontent.com 的签名地址，
+          # 必须 --location 跟随重定向，否则拿到的是一段 HTML 而非 JSON。
+          if ! MANIFEST=$(curl --location --fail --silent --show-error \
+                --retry 4 --retry-delay 5 --retry-all-errors \
+                --connect-timeout 20 --max-time 60 \
+                "https://gitee.com/tlqgyx/xiangzi-md/raw/updater/latest.json"); then
+            echo "Could not reach Gitee updater manifest; skipping this cycle."
+            exit 0
+          fi
+
+          # 3) 结构完整性：版本一致 + 6 个平台 + 全部为 gitee 直链。
+          if ! printf '%s' "${MANIFEST}" | jq -e --arg v "${VERSION}" '
+                .version == $v
+                and (.platforms | length) == 6
+                and ([.platforms[].url | startswith("https://gitee.com/")] | all)
+             ' >/dev/null 2>&1; then
+            echo "Gitee manifest version/platform shape does not match ${TAG}."
+          else
+            # 4) 文件完整性：清单引用的每个附件必须在 Gitee 上真实可下载。
+            #    仅靠版本号会漏掉“版本已更新、但某平台附件缺失/失效/被删”的情况
+            #    （例如有 windows 却没有 mac）。6 个平台实际只对应少数几个物理
+            #    文件，去重后逐个 HEAD，200 才算数；404 等一律视为缺失。
+            MISSING=""
+            while IFS= read -r URL; do
+              [ -n "${URL}" ] || continue
+              CODE=$(curl --location --silent --show-error --output /dev/null \
+                --head --connect-timeout 20 --max-time 60 --retry 3 --retry-delay 5 \
+                --write-out '%{http_code}' "${URL}" || echo 000)
+              if [ "${CODE}" != "200" ]; then
+                echo "Missing/unreachable Gitee asset (HTTP ${CODE}): ${URL}"
+                MISSING=1
+              fi
+            done < <(printf '%s' "${MANIFEST}" | jq -r '.platforms[].url' | sort -u)
+            if [ -z "${MISSING}" ]; then
+              echo "Gitee fully synced to ${TAG} (version + every asset verified); nothing to do."
+              exit 0
+            fi
+          fi
+          echo "Gitee is NOT fully synced to ${TAG}."
+
+          # 4) 已有针对发布的 run 在排队/运行时不重复触发，交给它跑完即可。
+          ACTIVE=$(gh run list --workflow publish-gitee-release.yml \
+            --json status \
+            --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length')
+          if [ "${ACTIVE}" -gt 0 ]; then
+            echo "A publish-gitee-release run is already active; letting it finish."
+            exit 0
+          fi
+
+          # 5) 触发既有的幂等发布工作流补传缺失产物（已存在的附件会被自动跳过）。
+          echo "Dispatching publish-gitee-release for ${TAG}"
+          gh workflow run publish-gitee-release.yml -f tag="${TAG}"

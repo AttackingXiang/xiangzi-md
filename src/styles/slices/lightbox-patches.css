@@ -1,0 +1,140 @@
+/* ---------- 图片放大预览 ---------- */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+  animation: lb-fade 0.12s ease;
+}
+
+.lightbox-img {
+  max-width: 92vw;
+  max-height: 92vh;
+  border-radius: 6px;
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+
+@keyframes lb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Heading fold ─────────────────────────────────────────────────────────── */
+.fold-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 9px;
+  color: var(--text-muted);
+  user-select: none;
+  vertical-align: middle;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+.fold-btn::before {
+  content: '▼';
+}
+.fold-btn.is-folded::before {
+  content: '▶';
+}
+.fold-btn:hover {
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+/* Completely hide folded content — decoration adds this class */
+.heading-fold-hidden {
+  display: none !important;
+}
+
+/* ── Outline drag ─────────────────────────────────────────────────────────── */
+/* Absolutely positioned so the handle never pushes the text right */
+.outline-drag-handle {
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 11px;
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.outline-item:hover .outline-drag-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
+.outline-item.drop-target {
+  border-top: 2px solid var(--accent);
+}
+
+body.outline-pointer-dragging,
+body.outline-pointer-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* ── File tree reveal flash ───────────────────────────────────────────────── */
+@keyframes reveal-flash {
+  0% {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.tree-row.reveal-flash {
+  animation: reveal-flash 1.6s ease-out forwards;
+}
+
+/* Settings textarea */
+.settings-textarea {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  min-width: 0;
+  resize: vertical;
+  outline: none;
+  line-height: 1.6;
+}
+.settings-textarea:focus {
+  border-color: var(--accent);
+}
+/* 滚动条更轻量 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: content-box;
+}

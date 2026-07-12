@@ -1,0 +1,472 @@
+:root {
+  /* 浅色（默认） */
+  --bg: #ffffff;
+  --bg-sidebar: #fafafa;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f0f0f0;
+  --bg-active: #eef2ff;
+  --border: #ececec;
+  --border-strong: #dcdcdc;
+  --text: #1f2328;
+  --text-2: #57606a;
+  --text-muted: #9ca3af;
+  --accent: #4f46e5;
+  --accent-text: #4f46e5;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+  --radius: 8px;
+  --workspace-divider: color-mix(in srgb, var(--text) 11%, transparent);
+  --workspace-divider-strong: color-mix(in srgb, var(--text) 18%, transparent);
+  --code-block-opacity: 30%;
+
+  /* 静态代码块（xmd-code-block）专用色板：数值取自原先散落在
+     code-table.css 里的硬编码值，集中到这里后新增主题只需在这一处补一组值，
+     不必在 code-table.css 里重复整段选择器。 */
+  --code-card-bg: #f7f7f7;
+  --code-card-border: #e4e4e4;
+  --code-header-bg: #f0f0f0;
+  --code-lang-color: #64748b;
+  --code-lang-hover-color: #334155;
+  --code-btn-color: #94a3b8;
+  --code-btn-hover-color: #475569;
+  --code-btn-hover-bg: #e2e8f0;
+  --code-text: #1e293b;
+  --code-selection-bg: #d9d9d9;
+  --code-inline-text: #c7254e;
+
+  /* Mermaid 流程图节点配色：取 mermaid 'default' 内置主题原有的淡紫色节点
+     配色，避免 --bg-sidebar/--border-strong 这类结构灰色让图表显得灰白、
+     缺乏辨识度。其余 5 个主题各配一组与自身 --accent 呼应的节点色。 */
+  --diagram-node-bg: #ececff;
+  --diagram-node-border: #9370db;
+
+  /* 代码语法高亮的语义色板，CodeMirror 编辑态、静态渲染态、HTML 导出态三处
+     共用（见 src/lib/codeSyntaxPalette.ts 的说明）。variable 槽位统一取
+     code-table.css 原有值（#24292f），codeTheme.ts 原来的 #1e293b 是与它
+     独立维护产生的漂移，这里一并收敛。 */
+  --code-keyword: #cf222e;
+  --code-string: #0a3069;
+  --code-comment: #6e7781;
+  --code-number: #0550ae;
+  --code-function: #8250df;
+  --code-type: #953800;
+  --code-property: #116329;
+  --code-variable: #24292f;
+  --code-tag: #116329;
+  --code-operator: #57606a;
+  --code-meta: #6e7781;
+  --code-link: #0969da;
+  --code-invalid: #cf222e;
+  --code-diff-added: #116329;
+  --code-diff-removed: #cf222e;
+
+  font-size: 14.5px;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #1a1b1e;
+  --bg-sidebar: #1f2023;
+  --bg-elevated: #25262a;
+  --bg-hover: #2a2c31;
+  --bg-active: #2d2f50;
+  --border: #2c2e33;
+  --border-strong: #3a3d44;
+  --text: #e6e7ea;
+  --text-2: #b4b8c0;
+  --text-muted: #757a85;
+  --accent: #818cf8;
+  --accent-text: #a5b4fc;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+
+  --diagram-node-bg: #2d2b55;
+  --diagram-node-border: #8b7fd1;
+
+  --code-card-bg: #1e2128;
+  --code-card-border: #2d333b;
+  --code-header-bg: #252b34;
+  --code-lang-color: #6e7681;
+  --code-lang-hover-color: #8b949e;
+  --code-btn-color: #4d5566;
+  --code-btn-hover-color: #8b949e;
+  --code-btn-hover-bg: #2d333b;
+  --code-text: #adbac7;
+  --code-selection-bg: rgba(125, 175, 255, 0.2);
+  --code-inline-text: #f47067;
+
+  --code-keyword: #c678dd;
+  --code-string: #98c379;
+  --code-comment: #5c6370;
+  --code-number: #d19a66;
+  --code-function: #61afef;
+  --code-type: #e5c07b;
+  --code-property: #56b6c2;
+  --code-variable: #e06c75;
+  --code-tag: #e06c75;
+  --code-operator: #56b6c2;
+  --code-meta: #5c6370;
+  --code-link: #61afef;
+  --code-invalid: #e06c75;
+  --code-diff-added: #98c379;
+  --code-diff-removed: #e06c75;
+
+  color-scheme: dark;
+}
+
+/* 暖色：陶土/琥珀色调，代码配色借鉴 Gruvbox Light 的暖色语义色板 */
+[data-theme='warm'] {
+  --bg: #fdf6ec;
+  --bg-sidebar: #f9efe0;
+  --bg-elevated: #fffaf2;
+  --bg-hover: #f3e5d0;
+  --bg-active: #f0dcc0;
+  --border: #ecdcc4;
+  --border-strong: #ddc7a3;
+  --text: #4a3728;
+  --text-2: #7a5c42;
+  --text-muted: #a68a6d;
+  --accent: #c1622d;
+  --accent-text: #ad5323;
+  --shadow: 0 8px 30px rgba(120, 72, 30, 0.14);
+
+  --diagram-node-bg: #f3dfc0;
+  --diagram-node-border: #c1622d;
+
+  --code-card-bg: #f5ead6;
+  --code-card-border: #e8d4b0;
+  --code-header-bg: #f0e0c4;
+  --code-lang-color: #a07a4d;
+  --code-lang-hover-color: #6b4a26;
+  --code-btn-color: #c2a37c;
+  --code-btn-hover-color: #8a6636;
+  --code-btn-hover-bg: #e8d4b0;
+  --code-text: #4a3728;
+  --code-selection-bg: #e8cfa0;
+  --code-inline-text: #b5432a;
+
+  --code-keyword: #9d0006;
+  --code-string: #79740e;
+  --code-comment: #928374;
+  --code-number: #076678;
+  --code-function: #8f3f71;
+  --code-type: #af3a03;
+  --code-property: #79740e;
+  --code-variable: #3c3836;
+  --code-tag: #79740e;
+  --code-operator: #7c6f64;
+  --code-meta: #928374;
+  --code-link: #076678;
+  --code-invalid: #9d0006;
+  --code-diff-added: #79740e;
+  --code-diff-removed: #9d0006;
+
+  color-scheme: light;
+}
+
+/* 浅绿：清新薄荷色调，代码配色偏自然草木色系 */
+[data-theme='mint'] {
+  --bg: #f3faf6;
+  --bg-sidebar: #eaf5ee;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e1f0e6;
+  --bg-active: #d3ecdf;
+  --border: #dcefe2;
+  --border-strong: #c3e0cf;
+  --text: #22392c;
+  --text-2: #4f6b58;
+  --text-muted: #8aa89a;
+  --accent: #2f9e6e;
+  --accent-text: #1f7a54;
+  --shadow: 0 8px 30px rgba(20, 80, 50, 0.12);
+
+  --diagram-node-bg: #d7f0e0;
+  --diagram-node-border: #2f9e6e;
+
+  --code-card-bg: #eef8f2;
+  --code-card-border: #d3e9dc;
+  --code-header-bg: #e3f2e9;
+  --code-lang-color: #5b8b73;
+  --code-lang-hover-color: #2f5943;
+  --code-btn-color: #8fb9a3;
+  --code-btn-hover-color: #3f6b54;
+  --code-btn-hover-bg: #d3e9dc;
+  --code-text: #22392c;
+  --code-selection-bg: #c7e6d4;
+  --code-inline-text: #b03a5b;
+
+  --code-keyword: #c2410c;
+  --code-string: #2f9e6e;
+  --code-comment: #7c9686;
+  --code-number: #0e7490;
+  --code-function: #6d28d9;
+  --code-type: #b45309;
+  --code-property: #15803d;
+  --code-variable: #1f2f27;
+  --code-tag: #15803d;
+  --code-operator: #5b7266;
+  --code-meta: #7c9686;
+  --code-link: #0e7490;
+  --code-invalid: #c2410c;
+  --code-diff-added: #15803d;
+  --code-diff-removed: #c2410c;
+
+  color-scheme: light;
+}
+
+/* 蓝调：静谧蓝灰色调，代码配色偏冷色系，对比度更沉稳 */
+[data-theme='blue'] {
+  --bg: #f4f7fb;
+  --bg-sidebar: #eaeff8;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e2e9f5;
+  --bg-active: #d8e3f7;
+  --border: #dde5f2;
+  --border-strong: #c4d3ea;
+  --text: #1f2a3d;
+  --text-2: #4c5c78;
+  --text-muted: #8b9bb5;
+  --accent: #3f6fd1;
+  --accent-text: #2f5bb8;
+  --shadow: 0 8px 30px rgba(30, 50, 90, 0.12);
+
+  --diagram-node-bg: #dce6fb;
+  --diagram-node-border: #3f6fd1;
+
+  --code-card-bg: #eef2f9;
+  --code-card-border: #d7e1f0;
+  --code-header-bg: #e5ebf6;
+  --code-lang-color: #6b7fa3;
+  --code-lang-hover-color: #34435f;
+  --code-btn-color: #9aabc9;
+  --code-btn-hover-color: #46587a;
+  --code-btn-hover-bg: #d7e1f0;
+  --code-text: #1f2a3d;
+  --code-selection-bg: #c9d9f2;
+  --code-inline-text: #b0305f;
+
+  --code-keyword: #a6303f;
+  --code-string: #1f7a5c;
+  --code-comment: #7285a8;
+  --code-number: #b5651d;
+  --code-function: #5b3fa6;
+  --code-type: #0f7b8a;
+  --code-property: #1f7a5c;
+  --code-variable: #23324a;
+  --code-tag: #1f7a5c;
+  --code-operator: #5c6e8c;
+  --code-meta: #7285a8;
+  --code-link: #2b6cb0;
+  --code-invalid: #a6303f;
+  --code-diff-added: #1f7a5c;
+  --code-diff-removed: #a6303f;
+
+  color-scheme: light;
+}
+
+/* 夏日：明亮柠檬/蜜柚色调，代码配色偏热带高饱和色系 */
+[data-theme='summer'] {
+  --bg: #fffdf5;
+  --bg-sidebar: #fef9e7;
+  --bg-elevated: #ffffff;
+  --bg-hover: #fdf1c7;
+  --bg-active: #fce89f;
+  --border: #f5e6a8;
+  --border-strong: #e8d478;
+  --text: #4a3c1a;
+  --text-2: #7a6530;
+  --text-muted: #ab9860;
+  --accent: #e0932b;
+  --accent-text: #c67a13;
+  --shadow: 0 8px 30px rgba(120, 90, 10, 0.14);
+
+  --diagram-node-bg: #fce9a8;
+  --diagram-node-border: #e0932b;
+
+  --code-card-bg: #fdf6dc;
+  --code-card-border: #f0dd9c;
+  --code-header-bg: #faf0c0;
+  --code-lang-color: #a68a3d;
+  --code-lang-hover-color: #6b5518;
+  --code-btn-color: #cbb066;
+  --code-btn-hover-color: #8a6f26;
+  --code-btn-hover-bg: #f0dd9c;
+  --code-text: #4a3c1a;
+  --code-selection-bg: #f5e08a;
+  --code-inline-text: #c2185b;
+
+  --code-keyword: #d1401f;
+  --code-string: #2e8b57;
+  --code-comment: #9c8a4e;
+  --code-number: #0e7c86;
+  --code-function: #7b3fa0;
+  --code-type: #b5651d;
+  --code-property: #2e8b57;
+  --code-variable: #3d3216;
+  --code-tag: #2e8b57;
+  --code-operator: #8a7a4a;
+  --code-meta: #9c8a4e;
+  --code-link: #0e7c86;
+  --code-invalid: #d1401f;
+  --code-diff-added: #2e8b57;
+  --code-diff-removed: #d1401f;
+
+  color-scheme: light;
+}
+
+/* 樱粉：柔和樱花玫瑰色调，代码配色以玫红为主色、辅以青绿对比 */
+[data-theme='sakura'] {
+  --bg: #fdf4f7;
+  --bg-sidebar: #faebf1;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f8e0ea;
+  --bg-active: #f4d3e1;
+  --border: #f4dce6;
+  --border-strong: #e9c2d5;
+  --text: #3d2230;
+  --text-2: #6b4658;
+  --text-muted: #b189a0;
+  --accent: #d6417f;
+  --accent-text: #b82f6a;
+  --shadow: 0 8px 30px rgba(120, 30, 70, 0.12);
+
+  --diagram-node-bg: #f6d6e4;
+  --diagram-node-border: #d6417f;
+
+  --code-card-bg: #fbeef4;
+  --code-card-border: #f0d6e2;
+  --code-header-bg: #f7e3ec;
+  --code-lang-color: #a86b85;
+  --code-lang-hover-color: #6e3350;
+  --code-btn-color: #c896ac;
+  --code-btn-hover-color: #8a3f60;
+  --code-btn-hover-bg: #f0d6e2;
+  --code-text: #3d2230;
+  --code-selection-bg: #f6cfe0;
+  --code-inline-text: #0f766e;
+
+  --code-keyword: #be185d;
+  --code-string: #2e8b57;
+  --code-comment: #a08894;
+  --code-number: #0e7490;
+  --code-function: #7c3aed;
+  --code-type: #b45309;
+  --code-property: #15803d;
+  --code-variable: #2f1a26;
+  --code-tag: #15803d;
+  --code-operator: #8a6076;
+  --code-meta: #a08894;
+  --code-link: #0e7490;
+  --code-invalid: #be185d;
+  --code-diff-added: #15803d;
+  --code-diff-removed: #be185d;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Auto-hide scrollbars: transparent by default, appear when hovering the container */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted) !important;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  --workspace-surface: color-mix(
+    in srgb,
+    var(--bg) calc(100% - var(--bg-image-shade, 0) * 48%),
+    transparent
+  );
+  /* 与 Tab 栏一样保持扁平透明；workspace-shell 已统一提供背景图遮罩，子栏不应
+     再叠加毛玻璃、白色表面或投影。 */
+  --editor-chrome-bg: transparent;
+  --editor-chrome-border: var(--workspace-divider);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg);
+  background-image: var(--bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.workspace-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--workspace-surface);
+}
+
+button {
+  font-family: inherit;
+}
+
+/* ---------- 通用图标按钮 ---------- */
+.icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.icon-btn.sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.icon-btn.active {
+  color: var(--accent-text);
+  background: var(--bg-active);
+}
