@@ -1,45 +1,137 @@
 # Xiangzi MD
 
-> 写 Markdown，不该像在调试格式。
+**English** | [简体中文](README.zh-CN.md)
 
-Xiangzi MD 是一款开源、本地优先的所见即所得 Markdown 编辑器，支持 macOS 和 Windows。
+> Write Markdown well—and deliver it without the extra work.
 
-我喜欢 Typora 那种“光标走到哪儿，文字就在哪里成形”的感觉，但日常写文档时，我还经常要在一个文件夹里来回切换、全局找一句话、让图片乖乖待在约定目录，最后再把整篇内容连图复制给同事。Xiangzi MD 就是沿着这些小麻烦，一点点长出来的。
+Xiangzi MD is an open-source, local-first WYSIWYG Markdown editor for macOS and Windows.
 
-如果你正在找一个更自由的 Typora 替代，它值得试一圈：不用注册账号，不接管你的文件，也没有私有文档格式。不喜欢就关掉，原来的 `.md` 还安安稳稳待在原处。
+It is built around a practical workflow: manage documents in folders, write Markdown and Mermaid diagrams, paste local images, then copy the result directly into Feishu, Word, or email—or export it as a long image. No account, cloud dependency, or proprietary document format is required. Your content always remains in ordinary `.md` files.
 
-[下载最新版](https://github.com/AttackingXiang/xiangzi-md/releases/latest) · [使用说明](docs/USER_GUIDE.md) · [提交问题或建议](https://github.com/AttackingXiang/xiangzi-md/issues)
+[Download the latest release](https://github.com/AttackingXiang/xiangzi-md/releases/latest) · [User guide](docs/USER_GUIDE.md) · [Report an issue or suggest an idea](https://github.com/AttackingXiang/xiangzi-md/issues)
 
-![Xiangzi MD 工作区与所见即所得编辑](docs/images/user-guide/01-workspace.png)
+![Xiangzi MD workspace and WYSIWYG editor](docs/images/user-guide/01-workspace.png)
 
-## 它哪里顺手
+## Why Xiangzi MD?
 
-- **文件永远是你的**：直接读写本地 `.md` 文件，可继续用 Typora、Obsidian、VS Code 或 Git 管理。
-- **写作和源码随时切换**：所见即所得与源码模式编辑的是同一份 Markdown，不需要来回导入导出。
-- **不只会开一个文件**：文件夹工作区、可固定/拖动的多标签页、会话恢复、文件夹全文搜索、命令面板和文件操作撤销都内置好了。
-- **技术文档直接写**：支持 GFM 表格、行列拖动与智能列宽、代码语言检测和高亮、Mermaid、KaTeX、任务列表和脚注；Mermaid 图表可直接复制为 PNG 图片。
-- **图片不再到处乱跑**：支持粘贴、拖入、预览、五种附件归档规则和安全的远程图片开关；整篇内容连同图片可直接复制到 Word、飞书或邮件。
-- **交付方式够多**：可导出完整 HTML、多页 PDF、PNG/JPEG 长图和 Word，并可从 Word 导回 Markdown；DOCX 双向转换需要本机 Pandoc。
-- **细节可以自己定**：阅读模式、专注模式、打字机模式、可选格式工具栏、中英文界面、自定义 CSS，以及会检查冲突的自定义快捷键。
+Many Markdown editors are good at writing. Once the document is finished, however, you may still need to screenshot diagrams, fix image paths, convert formats, and move everything into another application.
 
-![Mermaid、KaTeX 与代码高亮](docs/images/user-guide/02-rich-rendering.png)
+Xiangzi MD focuses on the entire path from writing to delivery:
 
-## 和 Typora 相比
+- **Take diagrams with you**: preview Mermaid diagrams in place, then copy them directly as PNG images—or switch to copying the Mermaid source.
+- **Copy text and images together**: when copied content contains local images, the images themselves are placed on the clipboard. Paste the result into Word, Feishu, or email instead of getting broken local paths.
+- **Export long images in one step**: export Markdown as a PNG or JPEG long image for chats, social platforms, reviews, and presentations. HTML, PDF, and Word export are also available.
+- **Make it your default Markdown app**: double-click a `.md` file to open it directly in Xiangzi MD.
+- **Your files remain yours**: Xiangzi MD reads and writes local Markdown without accounts, cloud lock-in, or proprietary formats. Continue using Typora, Obsidian, VS Code, or Git whenever you want.
+- **Edit one file or manage a project**: folder workspaces, tabs, full-text search, an outline, a command palette, and session restoration are included in one lightweight desktop app.
 
-Xiangzi MD 保留了原地渲染的写作体验，同时把我自己经常缺的东西补了进来：可固定和拖动的多标签页、工作区全文搜索、命令面板、可拖拽重排的大纲和表格、更细的图片目录规则、Word 双向转换，以及 PNG/JPEG 长图导出。
+![Mermaid, KaTeX, and syntax highlighting](docs/images/user-guide/02-rich-rendering.png)
 
-它也还不完美。目前 PDF 为了保持排版一致，采用分页位图，文字不能选择或搜索；源码模式支持查找但暂不支持替换；Word 双向转换依赖 Pandoc，复杂 Word 版式无法保证无损往返；Linux 安装包也还没准备好。项目仍在持续更新，遇到别扭的地方，欢迎直接提 [Issue](https://github.com/AttackingXiang/xiangzi-md/issues)。
+## How is it different?
 
-## 下载与安装
+Xiangzi MD is not trying to become another all-encompassing knowledge base, nor is it only a minimal text box. It focuses on efficient local Markdown editing—and on making the content useful after it leaves the editor.
 
-- macOS：下载 Universal DMG，同时支持 Apple Silicon 和 Intel Mac。
-- Windows：下载 x64 安装程序。
+| What matters to you | Xiangzi MD | Typical single-file editors | Typical knowledge-base apps |
+| --- | --- | --- | --- |
+| WYSIWYG editing of ordinary `.md` files | Supported | Usually supported | Supported, or split edit/preview views |
+| Folders, tabs, and full-text search | Built in | Often limited | Usually strong |
+| Copy Mermaid as an image | Built in; image or source | Often requires screenshots or plugins | Depends on plugins and themes |
+| Copy rich content into office apps | Handles local images | May copy only local paths | Depends on the app and plugins |
+| PNG/JPEG long-image export | Built in | Not always available | Often requires a plugin or external tool |
+| Word import and export | Supported via Pandoc | Not always available | Usually not a core feature |
+| Data and accounts | Local files; no account | Mostly local files | Some features revolve around vaults or cloud services |
+| Primary focus | **Local writing + effortless delivery** | Focused single-document writing | Knowledge management and relationships |
 
-安装包都在 [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/latest)。如果 GitHub 访问不方便，也可以使用 [Gitee Releases](https://gitee.com/tlqgyx/xiangzi-md/releases)。应用支持签名自动更新，更新检查会优先访问 GitHub，失败后回退到 Gitee。
+> The table describes common product categories, not every application or plugin. Xiangzi MD stands out by keeping Markdown writing lightweight and direct while making diagrams, images, rich copying, and multi-format delivery first-class features.
 
-## 本地开发
+## Who is it for?
 
-项目基于 Tauri 2、Rust、React 18、TypeScript 和 Milkdown。先准备 Node 22、npm 10 和 Rust stable；macOS 还需要 Xcode Command Line Tools。
+- People writing technical proposals, API documentation, and READMEs with Mermaid, KaTeX, code blocks, and tables.
+- People who draft in Markdown but deliver their work through Feishu, Word, email, or chat applications.
+- People who want fully local files together with folders, tabs, and full-text search.
+- People who enjoy Typora-style in-place editing but need a more capable workspace and export workflow.
+- People who want Git-friendly documents without being locked into a knowledge base or proprietary format.
+
+## Features
+
+### Writing and formatting
+
+- WYSIWYG and source modes edit the same Markdown document.
+- GFM tables, task lists, footnotes, syntax highlighting, Mermaid, and KaTeX.
+- Drag-to-reorder table rows and columns, intelligent column widths, and a reorderable outline.
+- Reading, focus, and typewriter modes; an optional formatting toolbar; custom CSS; and Chinese/English UI.
+
+### Files and workspaces
+
+- Open an individual file or an entire folder.
+- Pinnable and reorderable tabs, recent files, and session restoration.
+- Workspace-wide full-text search, a command palette, undoable file operations, and customizable keyboard shortcuts.
+- Paste or drag images with five attachment organization strategies. Remote images are disabled by default to reduce privacy exposure.
+
+### Copying and delivery
+
+- Copy Mermaid diagrams as PNG images or source text.
+- Copy content containing images as rich text for pasting into common office applications.
+- Export complete HTML, paginated PDF, PNG/JPEG long images, and Word documents.
+- Import Word documents as Markdown. DOCX conversion in both directions requires Pandoc.
+
+## Get started in three minutes
+
+1. Download the macOS Universal DMG or Windows x64 installer from [GitHub Releases](https://github.com/AttackingXiang/xiangzi-md/releases/latest).
+2. Open a `.md` file, or open a folder as a workspace.
+3. Start editing. Switch to source mode whenever you need the raw Markdown.
+4. Select a Mermaid diagram or rich content and copy it into another application, or use **File > Export** to create HTML, PDF, image, or Word output.
+
+To make Xiangzi MD the default application for Markdown files:
+
+- **macOS**: select any `.md` file in Finder, press `Command + I`, choose Xiangzi MD under **Open with**, then click **Change All**.
+- **Windows**: right-click any `.md` file, choose **Open with > Choose another app**, select Xiangzi MD, and enable the option to always use this app.
+
+See the [user guide](docs/USER_GUIDE.md) for complete instructions and settings. If GitHub is difficult to access, releases are also available on [Gitee](https://gitee.com/tlqgyx/xiangzi-md/releases). Signed automatic updates check GitHub first and fall back to Gitee.
+
+## Current limitations
+
+The project is actively evolving and currently has the following known limitations:
+
+- PDF output uses paginated bitmap rendering for consistent cross-platform layout, so its text cannot be selected or searched.
+- Source mode supports Find, but not Replace yet.
+- Word conversion requires Pandoc, and complex Word layouts may not survive a round trip perfectly.
+- Linux packages are not available yet.
+
+If one of these limitations affects your workflow, please open an [issue](https://github.com/AttackingXiang/xiangzi-md/issues).
+
+## For open-source contributors
+
+### Technology
+
+- Desktop: [Tauri 2](https://tauri.app/) + Rust
+- Frontend: [React 18](https://react.dev/) + TypeScript + Vite
+- WYSIWYG editor: [Milkdown](https://milkdown.dev/)
+- Source editor: CodeMirror 6
+- Diagrams and math: Mermaid + KaTeX
+- Testing: Vitest + Rust tests
+
+### Repository map
+
+```text
+src/
+├── components/       # Editor, sidebar, settings, search, tabs, and other UI
+├── features/         # Independent features such as export, tags, and properties
+├── hooks/            # File, command, export, update, and native integration flows
+├── lib/              # Editor behavior, clipboard, images, tables, and pure logic
+├── platform/         # Frontend platform contracts and the Tauri adapter
+└── styles/           # Styles split by interface area
+src-tauri/
+├── src/              # Rust commands, filesystem operations, and OS integration
+└── tauri.conf.json   # Desktop application and packaging configuration
+docs/                 # Architecture, user guide, release, and acceptance documents
+```
+
+The frontend isolates desktop capabilities behind the contracts in `src/platform`. Tauri and Rust handle local files, operating-system integration, and packaging. Testable editing, clipboard, and export logic primarily lives in `src/lib` and `src/features`. See the [architecture guide](docs/ARCHITECTURE.md) and [engineering constraints](docs/ENGINEERING_CONSTRAINTS.md) for more detail.
+
+### Local development
+
+Install Node.js 22, npm 10, and the stable Rust toolchain. macOS development also requires Xcode Command Line Tools.
 
 ```bash
 npm ci
@@ -47,28 +139,30 @@ npm run check
 npm run tauri:dev
 ```
 
+Check the Rust code or build an installer:
+
 ```bash
 npm run rust:check
 npm run tauri:build
 ```
 
-也可以使用仓库里的 `mise.toml`：
+You can also use the included `mise.toml`:
 
 ```bash
 mise install
 mise run check
 ```
 
-更多资料：
+Additional project documentation:
 
-- [渲染效果示例](docs/RENDERING_SHOWCASE.md)
-- [功能与平台验收状态](docs/FEATURE_PARITY.md)
-- [架构说明](docs/ARCHITECTURE.md)
-- [工程与体验审计](audit/ENGINEERING_UX_AUDIT.md)
-- [更新签名与发布](docs/UPDATE_SIGNING.md)
+- [Rendering showcase](docs/RENDERING_SHOWCASE.md)
+- [Feature and platform acceptance status](docs/FEATURE_PARITY.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Update signing and releases](docs/UPDATE_SIGNING.md)
+- [Privacy](PRIVACY.md)
 
-## English
+## Contributing
 
-Xiangzi MD is an open-source, local-first WYSIWYG Markdown editor for macOS and Windows. It edits ordinary `.md` files and combines in-place rendering with workspace folders, tabs, full-text search, a command palette, Mermaid and KaTeX support, flexible local image handling, and HTML/PDF/PNG/JPEG export. Built with Tauri 2, Rust, React, and Milkdown. Licensed under MIT.
+Bug reports, real-world feedback, ideas, and code contributions are welcome. Before submitting a pull request, run `npm run check` and `npm run rust:check`, then describe the use case and how the change was verified.
 
-If Xiangzi MD saves you a little friction, a star helps more people find it. Bug reports and honest feedback are equally welcome.
+Xiangzi MD is available under the [MIT License](LICENSE). If it removes a little friction from your documentation workflow, consider giving the project a Star so more people can discover it.
