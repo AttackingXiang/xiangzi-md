@@ -92,7 +92,10 @@ export const headingFoldPlugin = $prose(
     new Plugin({
       key: headingFoldKey,
       state: {
-        init: (_, { doc }) => ({ folded: new Set<number>(), decos: buildFoldDecos(doc, new Set<number>()) }),
+        init: (_, { doc }) => ({
+          folded: new Set<number>(),
+          decos: buildFoldDecos(doc, new Set<number>()),
+        }),
         apply(tr, old, _, { doc }) {
           // Toggle meta dispatched by fold button click
           const meta = tr.getMeta(headingFoldKey) as number | undefined
