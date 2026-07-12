@@ -1,11 +1,11 @@
 ---
 title: Xiangzi MD 渲染效果示例
 tags:
-  - "Xiangzi MD"
-  - "Markdown"
-  - "渲染示例"
+  - 'Xiangzi MD'
+  - 'Markdown'
+  - '渲染示例'
 aliases:
-  - "Rendering Showcase"
+  - 'Rendering Showcase'
 created: 2026-07-12
 description: 展示文档属性、个性化界面、所见即所得编辑、代码、图表、公式与多格式导出的完整示例。
 publish: true

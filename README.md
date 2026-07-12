@@ -35,16 +35,16 @@ Xiangzi MD focuses on the entire path from writing to delivery:
 
 Xiangzi MD is not trying to become another all-encompassing knowledge base, nor is it only a minimal text box. It focuses on efficient local Markdown editing—and on making the content useful after it leaves the editor.
 
-| What matters to you | Xiangzi MD | Typical single-file editors | Typical knowledge-base apps |
-| --- | --- | --- | --- |
-| WYSIWYG editing of ordinary `.md` files | Supported | Usually supported | Supported, or split edit/preview views |
-| Folders, tabs, and full-text search | Built in | Often limited | Usually strong |
-| Copy Mermaid as an image | Built in; image or source | Often requires screenshots or plugins | Depends on plugins and themes |
-| Copy rich content into office apps | Handles local images | May copy only local paths | Depends on the app and plugins |
-| PNG/JPEG long-image export | Built in | Not always available | Often requires a plugin or external tool |
-| Word import and export | Supported via Pandoc | Not always available | Usually not a core feature |
-| Data and accounts | Local files; no account | Mostly local files | Some features revolve around vaults or cloud services |
-| Primary focus | **Local writing + effortless delivery** | Focused single-document writing | Knowledge management and relationships |
+| What matters to you                     | Xiangzi MD                              | Typical single-file editors           | Typical knowledge-base apps                           |
+| --------------------------------------- | --------------------------------------- | ------------------------------------- | ----------------------------------------------------- |
+| WYSIWYG editing of ordinary `.md` files | Supported                               | Usually supported                     | Supported, or split edit/preview views                |
+| Folders, tabs, and full-text search     | Built in                                | Often limited                         | Usually strong                                        |
+| Copy Mermaid as an image                | Built in; image or source               | Often requires screenshots or plugins | Depends on plugins and themes                         |
+| Copy rich content into office apps      | Handles local images                    | May copy only local paths             | Depends on the app and plugins                        |
+| PNG/JPEG long-image export              | Built in                                | Not always available                  | Often requires a plugin or external tool              |
+| Word import and export                  | Supported via Pandoc                    | Not always available                  | Usually not a core feature                            |
+| Data and accounts                       | Local files; no account                 | Mostly local files                    | Some features revolve around vaults or cloud services |
+| Primary focus                           | **Local writing + effortless delivery** | Focused single-document writing       | Knowledge management and relationships                |
 
 > The table describes common product categories, not every application or plugin. Xiangzi MD stands out by keeping Markdown writing lightweight and direct while making diagrams, images, rich copying, and multi-format delivery first-class features.
 
