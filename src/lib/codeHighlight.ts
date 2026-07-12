@@ -69,6 +69,10 @@ const hlKey = new PluginKey<DecorationSet>('xmd-static-hl')
 // Module-level ref to the active PM view so async loads can trigger a re-dispatch
 let _pmView: PMEditorView | null = null
 
+// Languages currently awaiting a loadLanguage() resolution + pending re-decoration notify.
+// Prevents scheduling one async callback + dispatch per code block during a bulk decorate pass.
+const pendingNotify = new Set<string>()
+
 function decorateBlock(node: PMNode, pos: number, out: Decoration[]): void {
   if (node.type.name !== 'code_block') return
   const lang = (node.attrs.language as string) || ''
@@ -84,14 +88,15 @@ function decorateBlock(node: PMNode, pos: number, out: Decoration[]): void {
 
   const cached = langCache.get(lang)
   if (cached === undefined) {
-    void loadLanguage(lang).then((language) => {
-      if (!language) return
-      const spans = computeSpans(language, code)
-      spanCache.set(key, spans)
-      const view = _pmView
-      if (!view || view.isDestroyed) return
-      view.dispatch(view.state.tr.setMeta(hlKey, true))
-    })
+    if (!pendingNotify.has(lang)) {
+      pendingNotify.add(lang)
+      void loadLanguage(lang).then(() => {
+        pendingNotify.delete(lang)
+        const view = _pmView
+        if (!view || view.isDestroyed) return
+        view.dispatch(view.state.tr.setMeta(hlKey, { lang }))
+      })
+    }
   } else if (cached !== null) {
     const spans = computeSpans(cached, code)
     spanCache.set(key, spans)
@@ -117,7 +122,22 @@ export const codeHighlightPlugin = $prose(
           return buildDecos(doc)
         },
         apply(tr, old, _, { doc }) {
-          if (tr.getMeta(hlKey)) return buildDecos(doc)
+          const meta = tr.getMeta(hlKey) as { lang: string } | undefined
+          if (meta) {
+            // A language finished loading. Re-decorate only that language's code blocks.
+            // A bare meta transaction has no doc change, so positions in `old` remain valid.
+            let set = old
+            const add: Decoration[] = []
+            const ranges: { from: number; to: number }[] = []
+            doc.descendants((node, pos) => {
+              if (node.type.name !== 'code_block') return
+              if (((node.attrs.language as string) || '') !== meta.lang) return
+              ranges.push({ from: pos, to: pos + node.nodeSize })
+              decorateBlock(node, pos, add)
+            })
+            for (const r of ranges) set = set.remove(set.find(r.from, r.to))
+            return set.add(doc, add)
+          }
           if (!tr.docChanged) return old
 
           let set = old.map(tr.mapping, tr.doc)
