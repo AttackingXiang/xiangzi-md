@@ -169,6 +169,22 @@
   overflow: auto;
   overscroll-behavior: contain;
   padding: 6px;
+  scrollbar-color: transparent transparent;
+}
+
+/* 文件树的横、纵滚动条仅在鼠标或键盘焦点位于树内时显示。 */
+.sidebar-body::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.sidebar-body:hover,
+.sidebar-body:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent) transparent;
+}
+
+.sidebar-body:hover::-webkit-scrollbar-thumb,
+.sidebar-body:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
 }
 
 .sidebar-empty {

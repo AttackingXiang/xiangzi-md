@@ -782,6 +782,25 @@ button.tag-chip-label {
   padding: 5px 6px 10px;
 }
 
+/* 标签树的横、纵滚动条仅在鼠标或键盘焦点位于树内时显示。 */
+.tag-overview-list {
+  scrollbar-color: transparent transparent;
+}
+
+.tag-overview-list::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.tag-overview-list:hover,
+.tag-overview-list:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 55%, transparent) transparent;
+}
+
+.tag-overview-list:hover::-webkit-scrollbar-thumb,
+.tag-overview-list:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+
 .related-document-item {
   display: flex;
   flex-direction: column;
