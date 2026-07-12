@@ -69,37 +69,41 @@ const hlKey = new PluginKey<DecorationSet>('xmd-static-hl')
 // Module-level ref to the active PM view so async loads can trigger a re-dispatch
 let _pmView: PMEditorView | null = null
 
+function decorateBlock(node: PMNode, pos: number, out: Decoration[]): void {
+  if (node.type.name !== 'code_block') return
+  const lang = (node.attrs.language as string) || ''
+  if (!lang || lang === 'mermaid') return
+  const code = node.textContent
+  const key = `${lang}\0${code}`
+
+  if (spanCache.has(key)) {
+    for (const s of spanCache.get(key)!)
+      out.push(Decoration.inline(pos + 1 + s.from, pos + 1 + s.to, { class: s.cls }))
+    return
+  }
+
+  const cached = langCache.get(lang)
+  if (cached === undefined) {
+    void loadLanguage(lang).then((language) => {
+      if (!language) return
+      const spans = computeSpans(language, code)
+      spanCache.set(key, spans)
+      const view = _pmView
+      if (!view || view.isDestroyed) return
+      view.dispatch(view.state.tr.setMeta(hlKey, true))
+    })
+  } else if (cached !== null) {
+    const spans = computeSpans(cached, code)
+    spanCache.set(key, spans)
+    for (const s of spans)
+      out.push(Decoration.inline(pos + 1 + s.from, pos + 1 + s.to, { class: s.cls }))
+  }
+}
+
 function buildDecos(doc: PMNode): DecorationSet {
   const decos: Decoration[] = []
   doc.descendants((node, pos) => {
-    if (node.type.name !== 'code_block') return
-    const lang = (node.attrs.language as string) || ''
-    if (!lang || lang === 'mermaid') return
-    const code = node.textContent
-    const key = `${lang}\0${code}`
-
-    if (spanCache.has(key)) {
-      for (const s of spanCache.get(key)!)
-        decos.push(Decoration.inline(pos + 1 + s.from, pos + 1 + s.to, { class: s.cls }))
-      return
-    }
-
-    const cached = langCache.get(lang)
-    if (cached === undefined) {
-      void loadLanguage(lang).then((language) => {
-        if (!language) return
-        const spans = computeSpans(language, code)
-        spanCache.set(key, spans)
-        const view = _pmView
-        if (!view || view.isDestroyed) return
-        view.dispatch(view.state.tr.setMeta(hlKey, true))
-      })
-    } else if (cached !== null) {
-      const spans = computeSpans(cached, code)
-      spanCache.set(key, spans)
-      for (const s of spans)
-        decos.push(Decoration.inline(pos + 1 + s.from, pos + 1 + s.to, { class: s.cls }))
-    }
+    decorateBlock(node, pos, decos)
   })
   return DecorationSet.create(doc, decos)
 }
@@ -113,7 +117,44 @@ export const codeHighlightPlugin = $prose(
           return buildDecos(doc)
         },
         apply(tr, old, _, { doc }) {
-          return tr.docChanged || tr.getMeta(hlKey) ? buildDecos(doc) : old
+          if (tr.getMeta(hlKey)) return buildDecos(doc)
+          if (!tr.docChanged) return old
+
+          let set = old.map(tr.mapping, tr.doc)
+
+          let changeFrom = Infinity
+          let changeTo = -Infinity
+          tr.mapping.maps.forEach((stepMap, i) => {
+            stepMap.forEach((_os, _oe, ns, ne) => {
+              const rest = tr.mapping.slice(i + 1)
+              changeFrom = Math.min(changeFrom, rest.map(ns, -1))
+              changeTo = Math.max(changeTo, rest.map(ne, 1))
+            })
+          })
+          if (changeTo < changeFrom) return set
+
+          changeFrom = Math.max(0, Math.min(changeFrom, doc.content.size))
+          changeTo = Math.max(0, Math.min(changeTo, doc.content.size))
+
+          let expandFrom = changeFrom
+          let expandTo = changeTo
+          doc.nodesBetween(changeFrom, changeTo, (node, pos) => {
+            if (node.type.name !== 'code_block') return
+            expandFrom = Math.min(expandFrom, pos)
+            expandTo = Math.max(expandTo, pos + node.nodeSize)
+          })
+          expandFrom = Math.max(0, Math.min(expandFrom, doc.content.size))
+          expandTo = Math.max(0, Math.min(expandTo, doc.content.size))
+
+          set = set.remove(set.find(expandFrom, expandTo))
+
+          const rebuilt: Decoration[] = []
+          doc.nodesBetween(expandFrom, expandTo, (node, pos) => {
+            decorateBlock(node, pos, rebuilt)
+          })
+          set = set.add(doc, rebuilt)
+
+          return set
         },
       },
       props: {

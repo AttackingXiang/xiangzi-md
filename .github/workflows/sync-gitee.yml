@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - electron-legacy-v0.1
     tags:
       - 'v*'
 
@@ -70,10 +69,8 @@ jobs:
           }
 
           git fetch origin \
-            +refs/heads/main:refs/remotes/origin/main \
-            +refs/heads/electron-legacy-v0.1:refs/remotes/origin/electron-legacy-v0.1
+            +refs/heads/main:refs/remotes/origin/main
           retry git push gitee refs/remotes/origin/main:refs/heads/main
-          retry git push gitee refs/remotes/origin/electron-legacy-v0.1:refs/heads/electron-legacy-v0.1
 
           # A tag-triggered run publishes only that tag. Pushing every historical
           # tag makes an unrelated legacy mismatch (currently v1.2.6) fail every
