@@ -6,10 +6,8 @@
 @import './slices/settings-shell.css';
 @import './slices/settings-content.css';
 @import './slices/unsaved.css';
-@import './slices/editor-typography.css';
-@import './slices/code-table.css';
 @import './slices/overlays.css';
-@import './slices/drafts-crepe.css';
+@import './slices/drafts.css';
 @import './slices/lightbox-patches.css';
 @import './slices/editor-toolbar.css';
 @import './slices/text-editor.css';

@@ -22,7 +22,9 @@ export function useExportActions(
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content)
+      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, false, {
+        docDir: tab?.path ? dirName(tab.path) : null,
+      })
       if (!html) return
       const res = await desktop.exportHTML(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
@@ -40,7 +42,9 @@ export function useExportActions(
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, true)
+      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, true, {
+        docDir: tab?.path ? dirName(tab.path) : null,
+      })
       if (!html) return
       const res = await desktop.exportPDF(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
@@ -58,7 +62,9 @@ export function useExportActions(
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, true)
+      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, true, {
+        docDir: tab?.path ? dirName(tab.path) : null,
+      })
       if (!html) return
       const res = await desktop.exportImage(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)

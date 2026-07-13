@@ -337,8 +337,3 @@
   align-items: center;
   gap: 7px;
 }
-.milkdown .milkdown-toolbar .toolbar-item:disabled {
-  cursor: not-allowed;
-  opacity: 0.34;
-  background: transparent;
-}

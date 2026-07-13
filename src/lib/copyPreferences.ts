@@ -1,7 +1,7 @@
 /** 复制控制偏好：一个进程内单例，供剪贴板逻辑同步读取。
  *
  * 图片和 Mermaid 的复制逻辑分别在 richClipboard 的 copy 事件处理器、以及
- * staticCodeBlock 这个 ProseMirror NodeView 里——都不是 React 组件、拿不到
+ * 代码块预览等非 React 渲染逻辑里——它们拿不到
  * props/context，所以用这个模块在 copy 发生的一瞬间同步读当前设置。设置变化时
  * 由 App 的 effect 调 setCopyPreferences 推进来。 */
 

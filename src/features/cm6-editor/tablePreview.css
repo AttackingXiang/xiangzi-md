@@ -1,0 +1,31 @@
+.xmd-cm-table-preview {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+.xmd-cm-table-preview table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.xmd-cm-table-preview th,
+.xmd-cm-table-preview td {
+  min-width: 6rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  cursor: text;
+}
+.xmd-cm-table-preview th {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  font-weight: 600;
+}
+.xmd-cm-table-preview td:hover,
+.xmd-cm-table-preview th:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}

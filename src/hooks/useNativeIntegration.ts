@@ -92,6 +92,32 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
   )
 
   useEffect(() => {
+    const confirmAndOpen = (url: string, description: string): void => {
+      void desktop
+        .confirm(
+          `${t('是否在系统浏览器中打开此链接？')}\n\n${description}\n${url}`,
+          t('打开外部链接'),
+          t('打开'),
+          t('取消'),
+        )
+        .then((confirmed) => {
+          if (confirmed) return desktop.openExternal(url)
+        })
+    }
+
+    const openHttpsLink = (href: string): void => {
+      const decision = classifyExternalLink(href)
+      if (decision.kind === 'blocked') {
+        window.alert(t('出于安全原因，只能打开 HTTPS 外部链接。'))
+        return
+      }
+      if (decision.kind === 'trusted') {
+        void desktop.openExternal(decision.url)
+        return
+      }
+      confirmAndOpen(decision.url, `${t('域名：')}${decision.hostname}`)
+    }
+
     const openExternalLink = (event: MouseEvent): void => {
       if (!(event.target instanceof Element)) return
       const anchor = event.target.closest<HTMLAnchorElement>('a[href]')
@@ -109,27 +135,43 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
         return
       }
       event.preventDefault()
-      const decision = classifyExternalLink(anchor.href)
-      if (decision.kind === 'blocked') {
-        window.alert(t('出于安全原因，只能打开 HTTPS 外部链接。'))
+      openHttpsLink(anchor.href)
+    }
+
+    const openCm6Link = (event: Event): void => {
+      if (!(event instanceof CustomEvent)) return
+      const detail = event.detail as { href?: unknown } | null
+      if (typeof detail?.href !== 'string') return
+      const href = detail.href.trim()
+      if (/^https?:\/\//i.test(href)) {
+        openHttpsLink(href)
         return
       }
-      if (decision.kind === 'trusted') {
-        void desktop.openExternal(decision.url)
+      if (/^mailto:/i.test(href)) {
+        if (/[\r\n]/.test(href)) return
+        let normalized: URL
+        try {
+          normalized = new URL(href)
+        } catch {
+          return
+        }
+        if (normalized.protocol !== 'mailto:') return
+        confirmAndOpen(normalized.href, normalized.pathname)
         return
       }
-      void desktop
-        .confirm(
-          `${t('是否在系统浏览器中打开此链接？')}\n\n${t('域名：')}${decision.hostname}\n${decision.url}`,
-          t('打开外部链接'),
-          t('打开'),
-          t('取消'),
+      // Anchors and relative Markdown paths remain application navigation.
+      // Re-dispatch a narrower event instead of treating them as external URLs.
+      if (href.startsWith('#') || !/^[a-z][a-z\d+.-]*:/i.test(href)) {
+        document.dispatchEvent(
+          new CustomEvent('xmd-relative-link', { bubbles: true, detail: { href } }),
         )
-        .then((confirmed) => {
-          if (confirmed) return desktop.openExternal(decision.url)
-        })
+      }
     }
     document.addEventListener('click', openExternalLink)
-    return () => document.removeEventListener('click', openExternalLink)
+    document.addEventListener('xmd-link-open', openCm6Link)
+    return () => {
+      document.removeEventListener('click', openExternalLink)
+      document.removeEventListener('xmd-link-open', openCm6Link)
+    }
   }, [])
 }

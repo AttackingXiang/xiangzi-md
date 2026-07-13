@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { Selection } from '@milkdown/kit/prose/state'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   Bold,
   Italic,
@@ -27,7 +26,6 @@ import {
 import { toolbarStateBridge, type ToolbarActiveState } from '../lib/toolbarStateBridge'
 import { editorCmd } from '../lib/editorCommands'
 import { tablePickerBridge } from '../lib/tablePickerBridge'
-import { editorBridge } from '../lib/editorBridge'
 
 const DEFAULT: ToolbarActiveState = {
   bold: false,
@@ -51,7 +49,6 @@ interface Props {
 
 export default function EditorToolbar({ lang }: Props): JSX.Element {
   const [ts, setTs] = useState<ToolbarActiveState>(DEFAULT)
-  const preservedSelection = useRef<Selection | null>(null)
 
   useEffect(() => {
     toolbarStateBridge.setListener(setTs)
@@ -61,22 +58,11 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
   const t = (zh: string, en: string): string => (lang === 'en' ? en : zh)
 
   const preserveEditorSelection = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    // Keep CM6 focused so its selection and active syntax context remain intact.
     event.preventDefault()
-    preservedSelection.current = editorBridge.get()?.state.selection ?? null
-  }
-
-  const restoreEditorSelection = (): void => {
-    const view = editorBridge.get()
-    const selection = preservedSelection.current
-    preservedSelection.current = null
-    if (!view || !selection || selection.$from.doc !== view.state.doc) return
-    if (!selection.eq(view.state.selection)) {
-      view.dispatch(view.state.tr.setSelection(selection))
-    }
   }
 
   const runToolbarAction = (action: () => void): void => {
-    restoreEditorSelection()
     action()
   }
 
@@ -174,7 +160,6 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
         title={t('插入表格', 'Insert table')}
         onMouseDown={preserveEditorSelection}
         onClick={(e) => {
-          restoreEditorSelection()
           const rect = e.currentTarget.getBoundingClientRect()
           tablePickerBridge.request(rect.left, rect.bottom + 8, editorCmd.insertTable)
         }}

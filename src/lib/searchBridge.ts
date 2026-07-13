@@ -1,113 +1,67 @@
 import {
   SearchQuery,
-  setSearchState,
   findNext,
-  findPrev,
-  replaceNext,
+  findPrevious,
   replaceAll,
-} from 'prosemirror-search'
-import { editorBridge } from './editorBridge'
-import { virtualSearchBridge } from './virtualSearchBridge'
+  replaceNext,
+  setSearchQuery,
+} from '@codemirror/search'
+import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
 
-/** 当前是否有可用的所见即所得编辑器（用于决定走 PM 搜索还是源码原生查找） */
+/** Whether the active Markdown editor can serve the shared find/replace UI. */
 export function hasEditor(): boolean {
-  return !!editorBridge.get()
-}
-
-/** 把当前激活的匹配滚动到视口中央（ProseMirror 自带滚动在 flex 容器里不够可靠） */
-function scrollActiveIntoView(): void {
-  requestAnimationFrame(() => {
-    const el = document.querySelector('.ProseMirror-active-search-match')
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  })
+  return cm6ActiveViewBridge.get() !== null
 }
 
 function setQuery(text: string, replace: string): boolean {
-  const view = editorBridge.get()
+  const view = cm6ActiveViewBridge.get()
   if (!view) return false
-  const query = new SearchQuery({ search: text, replace, caseSensitive: false })
-  view.dispatch(setSearchState(view.state.tr, query))
+  view.dispatch({
+    effects: setSearchQuery.of(
+      new SearchQuery({ search: text, replace, caseSensitive: false, literal: true }),
+    ),
+  })
   return true
 }
 
-/** 设置查询并跳到下一个匹配 */
 export function searchFind(text: string, replace = ''): void {
-  const virtual = virtualSearchBridge.get()
-  if (virtual) {
-    virtual.find(text)
-    return
-  }
   if (!setQuery(text, replace)) return
-  const view = editorBridge.get()
-  if (view) {
-    findNext(view.state, view.dispatch)
-    scrollActiveIntoView()
-  }
+  const view = cm6ActiveViewBridge.get()
+  if (view) findNext(view)
 }
 
 export function searchNext(): void {
-  const virtual = virtualSearchBridge.get()
-  if (virtual) {
-    virtual.next()
-    return
-  }
-  const view = editorBridge.get()
-  // 不调用 view.focus()：保持焦点在查找框，避免回车落到编辑器替换选中文本
-  if (view) {
-    findNext(view.state, view.dispatch)
-    scrollActiveIntoView()
-  }
+  const view = cm6ActiveViewBridge.get()
+  if (view) findNext(view)
 }
 
 export function searchPrev(): void {
-  const virtual = virtualSearchBridge.get()
-  if (virtual) {
-    virtual.prev()
-    return
-  }
-  const view = editorBridge.get()
-  if (view) {
-    findPrev(view.state, view.dispatch)
-    scrollActiveIntoView()
-  }
+  const view = cm6ActiveViewBridge.get()
+  if (view) findPrevious(view)
 }
 
 export function searchReplace(text: string, replace: string): void {
-  const virtual = virtualSearchBridge.get()
-  if (virtual) {
-    virtual.replace(text, replace)
-    return
-  }
   if (!setQuery(text, replace)) return
-  const view = editorBridge.get()
-  if (view) replaceNext(view.state, view.dispatch)
+  const view = cm6ActiveViewBridge.get()
+  if (view) replaceNext(view)
 }
 
 export function searchReplaceAll(text: string, replace: string): void {
-  const virtual = virtualSearchBridge.get()
-  if (virtual) {
-    virtual.replaceAll(text, replace)
-    return
-  }
   if (!setQuery(text, replace)) return
-  const view = editorBridge.get()
-  if (view) replaceAll(view.state, view.dispatch)
+  const view = cm6ActiveViewBridge.get()
+  if (view) replaceAll(view)
 }
 
-/** 关闭查找时清除高亮 */
 export function searchClear(): void {
-  const virtual = virtualSearchBridge.get()
-  if (virtual) virtual.clear()
-  const view = editorBridge.get()
+  const view = cm6ActiveViewBridge.get()
   if (!view) return
-  view.dispatch(setSearchState(view.state.tr, new SearchQuery({ search: '' })))
+  view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: '' })) })
 }
 
-/** Highlight a query only in the currently mounted virtual chunk. */
+/** Select a known occurrence after folder-search navigation opens the document. */
 export function searchMountedEditor(text: string, localOccurrence = 0): void {
   if (!setQuery(text, '')) return
-  const view = editorBridge.get()
+  const view = cm6ActiveViewBridge.get()
   if (!view) return
-  for (let i = 0; i <= localOccurrence; i += 1) findNext(view.state, view.dispatch)
-  scrollActiveIntoView()
+  for (let index = 0; index <= localOccurrence; index += 1) findNext(view)
 }

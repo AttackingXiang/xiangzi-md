@@ -238,14 +238,9 @@ export function planPdfPages(
 
 function collectPdfBlocks(doc: Document): PdfBlockBoundary[] {
   const rootTop = doc.documentElement.getBoundingClientRect().top
-  const selector = [
-    '.export-content > *',
-    '.mermaid-export',
-    '.milkdown-code-block',
-    'pre',
-    'table',
-    'blockquote',
-  ].join(',')
+  const selector = ['.export-content > *', '.mermaid-export', 'pre', 'table', 'blockquote'].join(
+    ',',
+  )
 
   return Array.from(doc.querySelectorAll<HTMLElement>(selector)).map((element) => {
     const rect = element.getBoundingClientRect()

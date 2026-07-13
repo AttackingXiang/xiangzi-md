@@ -1,0 +1,31 @@
+.xmd-cm-image-preview {
+  box-sizing: border-box;
+  color: var(--text-muted);
+}
+
+.xmd-cm-image-preview.is-block {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  margin: 0.75em auto;
+  overflow: hidden;
+  width: 100%;
+}
+
+.xmd-cm-image-preview.is-inline {
+  display: inline-flex;
+  margin-inline: 0.2em;
+  vertical-align: middle;
+}
+
+.xmd-cm-image-preview img {
+  border-radius: 6px;
+  height: auto;
+  object-fit: contain;
+}
+
+.xmd-cm-image-preview.is-loading {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}

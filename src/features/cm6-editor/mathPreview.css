@@ -1,0 +1,23 @@
+.xmd-cm-math {
+  color: var(--text);
+}
+
+.xmd-cm-math-inline {
+  border-radius: 3px;
+  padding-inline: 0.12em;
+}
+
+.xmd-cm-math-display {
+  box-sizing: border-box;
+  margin: 0.8em 0;
+  min-height: 58px;
+  overflow-x: auto;
+  padding: 14px 18px;
+  text-align: center;
+  width: 100%;
+}
+
+.xmd-cm-math.is-error {
+  color: var(--danger, #c43d4d);
+  font-family: var(--crepe-font-code, ui-monospace, monospace);
+}

@@ -306,37 +306,6 @@
   cursor: default;
 }
 
-/* prosemirror-search 匹配高亮 */
-.ProseMirror-search-match {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-radius: 2px;
-}
-
-.ProseMirror-active-search-match {
-  background: color-mix(in srgb, var(--accent) 48%, transparent);
-  border-radius: 2px;
-}
-
-/* Mermaid 图表预览 */
-.mermaid-preview {
-  display: flex;
-  justify-content: center;
-  padding: 12px 4px;
-  overflow-x: auto;
-}
-
-.mermaid-preview svg {
-  max-width: 100%;
-  height: auto;
-}
-
-.mermaid-error {
-  color: #e5484d;
-  font-size: 13px;
-  white-space: pre-wrap;
-  margin: 0;
-}
-
 /* ---------- 编辑区 ---------- */
 .editor-area {
   flex: 1;
@@ -347,53 +316,6 @@
      大纲挤到正文下方（曾经的回归）。所有编辑器子项都是 flex:1，正是为横向填充设计。 */
   flex-direction: row;
   position: relative;
-}
-
-.wysiwyg-editor {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.virtual-wysiwyg-editor {
-  flex: 1;
-  height: 100%;
-  max-height: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  position: relative;
-}
-
-.virtual-wysiwyg-spacer {
-  position: relative;
-  min-width: 0;
-}
-
-.virtual-markdown-chunk {
-  position: absolute;
-  inset: 0 0 auto;
-  min-width: 0;
-}
-
-.virtual-markdown-chunk .wysiwyg-editor.embedded-editor {
-  display: block;
-  overflow: visible;
-  flex: none;
-}
-
-.virtual-markdown-chunk .embedded-editor .milkdown,
-.virtual-markdown-chunk .embedded-editor .milkdown .ProseMirror {
-  min-height: 0;
-}
-
-.virtual-markdown-chunk .embedded-editor .milkdown .ProseMirror {
-  padding-top: 24px;
-  padding-bottom: 24px;
-}
-
-/* 阅读模式：转成文本选择光标，弱化编辑态视觉 */
-.wysiwyg-editor.reading-mode .ProseMirror {
-  cursor: default;
 }
 
 /* 尝试编辑时的临时提示 */

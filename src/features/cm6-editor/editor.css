@@ -1,0 +1,127 @@
+.xmd-cm-editor {
+  --crepe-font-default:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif;
+  --crepe-font-title: var(--crepe-font-default);
+  --crepe-font-code:
+    'SFMono-Regular', 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  background: transparent;
+  color: var(--text);
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.xmd-cm-mount,
+.xmd-cm-mount > .cm-editor {
+  height: 100%;
+  min-height: 0;
+}
+
+.xmd-cm-editor .cm-scroller {
+  font-family: var(--crepe-font-default);
+  line-height: 1.7;
+  overflow: auto;
+}
+
+.xmd-cm-editor .cm-content {
+  box-sizing: border-box;
+  caret-color: var(--accent);
+  margin: 0 auto;
+  max-width: var(--editor-max-width, 860px);
+  min-height: 100%;
+  padding: 0 40px 128px;
+  width: 100%;
+}
+
+.xmd-cm-editor .cm-content > .cm-line:first-of-type {
+  padding-top: 72px;
+}
+
+.xmd-cm-editor.has-tag-bar .cm-content > .cm-line:first-of-type {
+  padding-top: 18px;
+}
+
+.xmd-cm-editor .cm-line {
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-heading-1 {
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 36px;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-heading-2 {
+  border-bottom: 1px solid var(--border);
+  font-size: 28px;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-heading-3 {
+  font-size: 23px;
+}
+.xmd-cm-editor .cm-line.xmd-cm-heading-4 {
+  font-size: 19px;
+}
+.xmd-cm-editor .cm-line.xmd-cm-heading-5,
+.xmd-cm-editor .cm-line.xmd-cm-heading-6 {
+  font-size: 16px;
+}
+
+.xmd-cm-editor .cm-focused {
+  outline: none;
+}
+
+.xmd-cm-editor .cm-cursor,
+.xmd-cm-editor .cm-dropCursor {
+  border-left-color: var(--accent);
+}
+
+.xmd-cm-editor .cm-selectionBackground,
+.xmd-cm-editor .cm-focused .cm-selectionBackground {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.xmd-cm-editor .cm-activeLine {
+  background: transparent;
+}
+
+.xmd-cm-editor.focus-mode .cm-line {
+  opacity: 0.34;
+  transition: opacity 120ms ease;
+}
+
+.xmd-cm-editor.focus-mode .cm-line.cm-activeLine {
+  opacity: 1;
+}
+
+.xmd-cm-tag-bar-host:empty {
+  display: none;
+}
+
+.xmd-cm-tag-bar-host .document-tag-bar,
+.xmd-cm-tag-bar-host .document-properties,
+.xmd-cm-tag-bar-host .document-title-fallback {
+  max-width: none;
+}
+
+.xmd-cm-editor.is-reading .cm-cursor {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .xmd-cm-editor .cm-content {
+    padding-inline: 24px;
+  }
+  .xmd-cm-editor .cm-content > .cm-line:first-of-type {
+    padding-top: 48px;
+  }
+  .xmd-cm-editor .cm-line.xmd-cm-heading-1 {
+    font-size: 31px;
+  }
+  .xmd-cm-editor .cm-line.xmd-cm-heading-2 {
+    font-size: 25px;
+  }
+}

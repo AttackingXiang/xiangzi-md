@@ -1,0 +1,105 @@
+/* ---------- 草稿恢复 ---------- */
+.draft-recovery-dialog {
+  width: min(760px, 92vw);
+  max-height: min(720px, 86vh);
+}
+
+.draft-recovery-header {
+  align-items: flex-start;
+}
+
+.draft-recovery-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.draft-recovery-header p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.draft-recovery-list {
+  min-height: 0;
+  padding: 10px 14px;
+  overflow-y: auto;
+}
+
+.draft-recovery-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.draft-recovery-item + .draft-recovery-item {
+  margin-top: 8px;
+}
+
+.draft-recovery-icon {
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+
+.draft-recovery-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.draft-recovery-copy strong,
+.draft-recovery-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-recovery-meta,
+.draft-recovery-path {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.draft-recovery-copy p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.draft-recovery-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.draft-recovery-item-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.draft-recovery-actions {
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .draft-recovery-item {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .draft-recovery-item-actions {
+    grid-column: 2;
+    justify-content: flex-end;
+  }
+}

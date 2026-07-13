@@ -23,7 +23,7 @@ interface Props {
 
 /**
  * 查找/替换条：
- * - 所见即所得模式走 prosemirror-search（编辑器内高亮 + 替换）
+ * - Markdown 模式走 CM6 SearchQuery（编辑器内高亮 + 替换）
  * - 源码模式退回 Electron 原生 findInPage（仅查找）
  */
 export default function FindBar({

@@ -78,7 +78,6 @@ fn migrate_v8_to_v9(settings: &mut AppSettings) {
 }
 
 pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
-    settings.large_document_threshold_kb = settings.large_document_threshold_kb.clamp(10, 10_240);
     if !matches!(settings.language.as_str(), "zh" | "en") {
         settings.language = "zh".into();
     }
@@ -197,9 +196,6 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
     }
     if settings.image_max_width > 10_000 {
         return Err(AppError::new("settings_invalid", "图片宽度设置过大"));
-    }
-    if !(10..=10_240).contains(&settings.large_document_threshold_kb) {
-        return Err(AppError::new("settings_invalid", "大文档阈值超出范围"));
     }
     if !FILE_TREE_SORT_MODES.contains(&settings.file_tree_sort.as_str()) {
         return Err(AppError::new("settings_invalid", "文件树排序方式无效"));

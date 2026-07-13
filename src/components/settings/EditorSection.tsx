@@ -104,31 +104,6 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
           onChange={(showSelectionToolbar) => onChange({ showSelectionToolbar })}
         />
       </SettingsCard>
-      <SettingsCard title={en ? 'Advanced' : '高级'}>
-        <SettingRow
-          label={en ? 'Large text mode threshold' : '大文本模式阈值'}
-          description={
-            en
-              ? 'Markdown files larger than this size use large text mode. Default: 100 KiB.'
-              : '超过该大小的 Markdown 使用大文本模式，默认 100 KiB。'
-          }
-        >
-          <span className="settings-number-with-unit">
-            <input
-              type="number"
-              min={10}
-              max={10240}
-              step={10}
-              value={settings.largeDocumentThresholdKb ?? 100}
-              onChange={(event) => {
-                const value = Math.max(10, Math.min(10240, Number(event.target.value) || 100))
-                onChange({ largeDocumentThresholdKb: value })
-              }}
-            />
-            <span>KiB</span>
-          </span>
-        </SettingRow>
-      </SettingsCard>
       <SettingsCard title={en ? 'Copy control' : '复制控制'}>
         <SettingRow label={en ? 'Copy images as' : '图片复制为'}>
           <select

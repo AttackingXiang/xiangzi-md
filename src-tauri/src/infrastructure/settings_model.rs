@@ -137,8 +137,6 @@ pub struct AppSettings {
     pub allow_remote_images: bool,
     pub show_toolbar: bool,
     pub show_selection_toolbar: bool,
-    /// 启用虚拟化大文档编辑器的阈值（KiB）。
-    pub large_document_threshold_kb: u32,
     /// 表格列宽策略：distribute（智能占满）、fit（内容适配）、equal（等宽）或 none。
     pub table_auto_width: String,
     pub table_auto_resize: bool,
@@ -256,7 +254,6 @@ impl Default for AppSettings {
             allow_remote_images: false,
             show_toolbar: false,
             show_selection_toolbar: false,
-            large_document_threshold_kb: 100,
             table_auto_width: "distribute".into(),
             table_auto_resize: true,
             show_status_bar: true,
@@ -324,7 +321,6 @@ pub struct SettingsPatch {
     pub allow_remote_images: Option<bool>,
     pub show_toolbar: Option<bool>,
     pub show_selection_toolbar: Option<bool>,
-    pub large_document_threshold_kb: Option<u32>,
     pub table_auto_width: Option<String>,
     pub table_auto_resize: Option<bool>,
     pub show_status_bar: Option<bool>,

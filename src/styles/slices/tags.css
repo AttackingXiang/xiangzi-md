@@ -1,9 +1,4 @@
-/* 文档标签栏：仿 Obsidian 属性面板，正文顶部一张独立的卡片。现在是
-   .wysiwyg-editor（滚动视口本身）内部的第一个子节点，跟 .crepe-mount
-   （Crepe 的挂载点）是兄弟节点——这样它会跟标题、正文一起滚动，而不是钉死
-   在编辑区顶部。外层用跟正文一样的 max-width + 40px 内边距对齐到标题左
-   边缘，卡片本身的描边会比标题文字略宽一圈，看起来像"框住"了这一行属性，
-   而不是一条光秃秃贴着标题的工具条。 */
+/* 文档标签栏：与正文同宽，挂载在 CM6 顶部块级 widget 中。 */
 .document-tag-bar {
   flex: 0 0 auto;
   box-sizing: border-box;
@@ -22,19 +17,6 @@
   user-select: none;
 }
 
-/* 卡片紧接着正文时，把标题原本给"顶部留白"用的 padding-top 收紧一些，
-   让标题看起来是紧跟在这张属性卡片（或下面那个 frontmatter title 兜底）下面，
-   而不是隔着一大截空白。用 ~ 而不是 + ，因为卡片和 .crepe-mount 之间可能还
-   夹着 .document-title-fallback。 */
-/* 顶部有属性面板时，收紧正文的巨大顶部留白（默认 72px），让标题紧跟在面板下方，
-   而不是隔着一大截空白。用 :has() 直接钉在滚动视口上，不依赖 ~ 兄弟链，避免因
-   crepe 内部 DOM 结构变化而失效。 */
-.document-tag-bar ~ .crepe-mount .milkdown .ProseMirror,
-.document-properties ~ .crepe-mount .milkdown .ProseMirror,
-.wysiwyg-editor:has(.document-properties) .milkdown .ProseMirror {
-  padding-top: 18px;
-}
-
 /* 有些笔记只在 frontmatter 写了 title、正文没有 H1——这里原样照抄 H1 的排版
    （字号、粗细、下边框），把 frontmatter 的 title 摆在正文本该是标题的位置，
    这样笔记看起来不会像"没有标题"。这段文字本身不可编辑，要改标题得去改
@@ -46,8 +28,7 @@
   margin: 0 auto;
   padding: 20px 40px 0.18em;
   border-bottom: 1px solid var(--border-strong);
-  /* .document-title-fallback 是 .milkdown 的兄弟节点而不是后代，够不着
-     --crepe-font-title（只在 .milkdown 上定义），这里直接抄一份同样的字体栈。 */
+  /* 标题兜底与编辑器正文使用同一套系统字体。 */
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif;

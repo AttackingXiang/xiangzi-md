@@ -1,0 +1,63 @@
+.xmd-cm-code-preview {
+  background: var(--code-card-bg);
+  border: 1px solid var(--code-card-border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  margin: 0.75em 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.xmd-cm-code-preview-header {
+  align-items: center;
+  background: color-mix(in srgb, var(--code-card-bg) 72%, var(--editor-chrome-bg));
+  border-bottom: 1px solid var(--code-card-border);
+  display: flex;
+  height: 34px;
+  justify-content: space-between;
+  padding: 0 10px 0 14px;
+}
+
+.xmd-cm-code-preview-language {
+  color: var(--text-muted);
+  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1;
+  text-transform: lowercase;
+}
+
+.xmd-cm-code-preview-copy {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 7px;
+}
+
+.xmd-cm-code-preview-copy:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.xmd-cm-code-preview-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.xmd-cm-code-preview-pre {
+  box-sizing: border-box;
+  color: var(--code-block-text, var(--text));
+  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  font-size: 13.5px;
+  line-height: 1.62;
+  margin: 0;
+  max-height: var(--xmd-code-max-height, 480px);
+  overflow: auto;
+  padding: 14px 16px 16px;
+  tab-size: 4;
+  white-space: pre;
+}

@@ -12,14 +12,16 @@ import { desktop } from './platform'
 import Sidebar from './components/Sidebar'
 import SidebarHeader from './components/SidebarHeader'
 import TabBar from './components/TabBar'
-import SourceEditor from './components/SourceEditor'
 import { classifyFile, fileExtension } from './lib/fileKind'
 import { textLanguageLabel } from './lib/textLanguages'
 import { textEditorBridge } from './lib/textEditorBridge'
 import type { TextCursorInfo, TextViewState } from './components/TextEditor'
 
-const Editor = lazy(() => import('./components/Editor'))
-const VirtualizedEditor = lazy(() => import('./components/VirtualizedEditor'))
+const MarkdownEditor = lazy(() =>
+  import('./features/cm6-editor/MarkdownEditor').then(({ MarkdownEditor: Component }) => ({
+    default: Component,
+  })),
+)
 const TextEditor = lazy(() => import('./components/TextEditor'))
 const Settings = lazy(() => import('./components/Settings'))
 const UpdateNotice = lazy(() => import('./components/UpdateNotice'))
@@ -54,11 +56,11 @@ import type { SortContext } from './lib/fileTreeSort'
 import { buildFrecencyRank } from './lib/recency'
 import { parseOutline } from './lib/outline'
 import { setCopyPreferences } from './lib/copyPreferences'
-import { editorBridge } from './lib/editorBridge'
+import { cm6ActiveViewBridge } from './features/cm6-editor/activeViewBridge'
+import { reorderHeading, revealHeading } from './features/cm6-editor/outline'
 import { tablePickerBridge } from './lib/tablePickerBridge'
 import { tableZoomBridge } from './lib/tableZoomBridge'
 import { linkPromptBridge } from './lib/linkPromptBridge'
-import { TextSelection } from '@milkdown/kit/prose/state'
 import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
 import { useNow } from './hooks/useNow'
@@ -71,69 +73,17 @@ import { useExportActions } from './hooks/useExportActions'
 import { useAppCommands } from './hooks/useAppCommands'
 import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
-import type { ThemeName } from './lib/codeSyntaxPalette'
 import { groupKeysToCollapse } from './features/tags/tagTree'
 import { replaceMarkdownBody } from './features/tags/frontmatter'
 import { useTagFeature } from './features/tags/useTagFeature'
-import { largeDocumentBridge } from './features/large-document/bridge'
+import { resolveAssetURL } from './lib/asset'
+import { headingOffsetForAnchor, resolveRelativeMarkdownLink } from './lib/linkNavigation'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 const EMPTY_STRING_ARRAY: string[] = []
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 /** 「最近打开」门控停留阈值：切到某文件停留超过这个毫秒数才算一次有效打开。 */
 const DWELL_MS = 2500
-
-// Guards against two navigations animating at once: a newer call bumps the
-// token so the older rAF loop sees a mismatch and bows out.
-let activeScrollToken = 0
-
-/**
- * Glide `container` so `el` sits at the top of its viewport over a fixed
- * duration (a far heading arrives no slower than a near one).
- *
- * The target is recomputed every frame from `el`'s live position, so a reflow
- * during the glide is tracked without dragging out the arrival. Any real user
- * gesture aborts immediately so we never fight manual scrolling. Holding the
- * heading steady against reflow that lands *after* arrival is handled by the
- * editor's scroll anchoring, not here. rAF also runs after event-handler
- * dispatch, so each frame overrides ProseMirror's resetScrollPos.
- */
-function smoothScrollTo(container: HTMLElement, el: HTMLElement): void {
-  const token = ++activeScrollToken
-  const glideMs = 340
-  const t0 = performance.now()
-  const from = container.scrollTop
-  let cancelled = false
-
-  const cancel = (): void => {
-    cancelled = true
-  }
-  const cleanup = (): void => {
-    window.removeEventListener('wheel', cancel, { capture: true })
-    window.removeEventListener('touchstart', cancel, { capture: true })
-    window.removeEventListener('pointerdown', cancel, { capture: true })
-    window.removeEventListener('keydown', cancel, { capture: true })
-  }
-  window.addEventListener('wheel', cancel, { passive: true, capture: true })
-  window.addEventListener('touchstart', cancel, { passive: true, capture: true })
-  window.addEventListener('pointerdown', cancel, { capture: true })
-  window.addEventListener('keydown', cancel, { capture: true })
-
-  const step = (now: number): void => {
-    if (cancelled || token !== activeScrollToken) {
-      cleanup()
-      return
-    }
-    const elapsed = now - t0
-    const elTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top
-    const target = container.scrollTop + elTop
-    const p = Math.min(elapsed / glideMs, 1)
-    const ease = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p
-    container.scrollTop = from + (target - from) * ease
-    if (p < 1) requestAnimationFrame(step)
-    else cleanup()
-  }
-  requestAnimationFrame(step)
-}
 
 export default function App(): JSX.Element {
   // ── Settings (theme, width, i18n, CSS side-effects all live here) ──────────
@@ -241,17 +191,13 @@ export default function App(): JSX.Element {
   const activeDocDir = activeTab
     ? (dirName(activeTab.path ?? activeTab.recoverySourcePath ?? null) ?? folder?.root ?? null)
     : null
-  // 编辑器会在标签切换时卸载；滚动位置按“标签 + 编辑模式”独立保存。
+  // 编辑器会在标签切换时卸载；滚动位置按标签保存。源码/实时预览共享同一个 CM6。
   // 使用 ref 避免滚动过程中触发整棵应用树重渲染。
   const wysiwygScrollPositions = useRef(new Map<string, number>())
-  const sourceScrollPositions = useRef(new Map<string, number>())
   useEffect(() => {
     const openIds = new Set(tabs.map((tab) => tab.id))
     for (const id of wysiwygScrollPositions.current.keys()) {
       if (!openIds.has(id)) wysiwygScrollPositions.current.delete(id)
-    }
-    for (const id of sourceScrollPositions.current.keys()) {
-      if (!openIds.has(id)) sourceScrollPositions.current.delete(id)
     }
   }, [tabs])
 
@@ -410,13 +356,8 @@ export default function App(): JSX.Element {
   const [textCursor, setTextCursor] = useState<TextCursorInfo | null>(null)
   const captureActiveScroll = useCallback((): void => {
     if (!activeId) return
-    if (sourceMode) {
-      const editor = document.querySelector<HTMLTextAreaElement>('.source-editor')
-      if (editor) sourceScrollPositions.current.set(activeId, editor.scrollTop)
-    } else {
-      const editor = document.querySelector<HTMLElement>('.wysiwyg-editor')
-      if (editor) wysiwygScrollPositions.current.set(activeId, editor.scrollTop)
-    }
+    const editor = document.querySelector<HTMLElement>('.xmd-cm-editor .cm-scroller')
+    if (editor) wysiwygScrollPositions.current.set(activeId, editor.scrollTop)
   }, [activeId, sourceMode])
 
   const selectTab = useCallback(
@@ -496,27 +437,6 @@ export default function App(): JSX.Element {
   const [exportResultPath, setExportResultPath] = useState<string | null>(null)
 
   const updater = useUpdater(settings?.checkUpdatesOnStartup ?? false)
-
-  // Resolved theme for the Editor key (forces remount so Milkdown/CodeMirror re-measure on theme change)
-  const [resolvedTheme, setResolvedTheme] = useState<ThemeName>('light')
-  useEffect(() => {
-    const apply = (): void => {
-      const t =
-        settings?.theme === 'system'
-          ? window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light'
-          : (settings?.theme ?? 'light')
-      setResolvedTheme(t)
-    }
-    apply()
-    if (settings?.theme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)')
-      mq.addEventListener('change', apply)
-      return () => mq.removeEventListener('change', apply)
-    }
-    return undefined
-  }, [settings?.theme])
 
   // ── Session restore (runs once after settings load) ─────────────────────
   const didRestore = useRef(false)
@@ -720,11 +640,6 @@ export default function App(): JSX.Element {
     () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
     [deferredOutlineContent, outlineVisible],
   )
-  const ActiveWysiwygEditor =
-    activeFrontmatter.body.length > (settings?.largeDocumentThresholdKb ?? 100) * 1024
-      ? VirtualizedEditor
-      : Editor
-
   // frecency 衰减用的“现在”，周期刷新；避免在 render 里直接调 Date.now()。
   const now = useNow()
   // 文件树排序上下文：排序方式 + 置顶集合 + frecency 排名。集中在此计算，
@@ -769,7 +684,7 @@ export default function App(): JSX.Element {
     void refreshTree()
   }, [workspaceVisibilityKey, refreshTree])
 
-  // 把复制控制设置推给剪贴板逻辑（richClipboard / staticCodeBlock 都是非 React
+  // 把复制控制设置推给剪贴板逻辑（richClipboard 等非 React
   // 环境，copy 发生时同步读取这个单例）。
   useEffect(() => {
     setCopyPreferences({
@@ -831,67 +746,58 @@ export default function App(): JSX.Element {
   // ── Outline navigation ─────────────────────────────────────────────────────
   const scrollToHeading = useCallback(
     (index: number) => {
-      const virtualScroller = document.querySelector<HTMLElement>('.virtual-wysiwyg-editor')
       const item = outline[index]
-      if (virtualScroller && item) {
-        window.dispatchEvent(
-          new CustomEvent('xmd-virtual-outline-navigate', {
-            detail: { headingIndex: index, markdownOffset: item.offset },
-          }),
-        )
-        return
-      }
-      const els = document.querySelectorAll(
-        '.milkdown h1, .milkdown h2, .milkdown h3, .milkdown h4, .milkdown h5, .milkdown h6',
-      )
-      const el = els[index] as HTMLElement | undefined
-      if (!el) return
-      const container = el.closest<HTMLElement>('.wysiwyg-editor')
-      if (!container) return
-      // Cancel editor scroll-restoration and suppress typewriter re-centering.
-      window.dispatchEvent(new Event('xmd-navigate'))
-      // Move the caret into the target heading. Outline items are not focusable,
-      // so clicking one leaves the editor focused with its caret at the old,
-      // now off-screen position. WebKit (and ProseMirror's scrollToSelection)
-      // then asynchronously reveal that caret a moment after we settle — this is
-      // the intermittent "slides down after navigation" bug. Placing the caret at
-      // the heading makes any later scroll-to-caret target the heading we already
-      // scrolled to, so it becomes a no-op. Dispatch WITHOUT scrollIntoView() so
-      // ProseMirror stays in "preserve" mode and does not fight the animation
-      // below (a plain setSelection only writes the DOM selection, which does not
-      // itself scroll in WebKit).
-      const view = editorBridge.get()
-      if (view) {
-        try {
-          const pos = view.posAtDOM(el, 0)
-          view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pos))))
-        } catch {
-          // posAtDOM can throw while the DOM is mid-update; fall back to scroll-only.
-        }
-      }
-      // Use a rAF-based animation instead of scrollIntoView({ behavior: 'smooth' }).
-      // ProseMirror's resetScrollPos mechanism saves/restores scrollTop on every
-      // transaction; any direct scrollTop assignment cancels a CSS smooth-scroll
-      // animation. Our rAF runs in the rendering phase, after event-handler
-      // dispatches, so it overrides any mid-frame interference each tick.
-      smoothScrollTo(container, el)
+      const view = cm6ActiveViewBridge.get()
+      if (!view || !item) return
+      revealHeading(view, item.offset)
     },
     [outline],
   )
 
   const reorderSection = useCallback((fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return
-    const largeDocument = largeDocumentBridge.get()
-    if (largeDocument) {
-      largeDocument.reorderHeading(fromIndex, toIndex)
-      return
-    }
-    void import('./lib/outlineReorder')
-      .then(({ reorderHeadingSections }) => {
-        reorderHeadingSections(fromIndex, toIndex)
-      })
-      .catch((error: unknown) => console.error('Outline reorder failed', error))
+    const view = cm6ActiveViewBridge.get()
+    if (!view) return
+    reorderHeading(view, fromIndex, toIndex)
   }, [])
+
+  useEffect(() => {
+    const openRelativeLink = (event: Event): void => {
+      if (!(event instanceof CustomEvent)) return
+      const detail = event.detail as { href?: unknown } | null
+      if (typeof detail?.href !== 'string') return
+      const active = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
+      const target = resolveRelativeMarkdownLink(detail.href, active?.path ?? null)
+      if (!target) return
+
+      if (target.kind === 'anchor') {
+        const view = cm6ActiveViewBridge.get()
+        if (!view) return
+        const offset = headingOffsetForAnchor(view.state.doc.toString(), target.anchor)
+        if (offset !== null) revealHeading(view, offset)
+        return
+      }
+
+      void openPath(target.path, baseName(target.path)).then(() => {
+        if (!target.anchor) return
+        // Wait for the newly selected tab's EditorView to mount before resolving
+        // its source heading. The active path guard prevents a late callback from
+        // navigating a different tab if the user switches again immediately.
+        window.setTimeout(() => {
+          const current = stateRef.current.tabs.find(
+            (tab) => tab.id === stateRef.current.activeId,
+          )
+          if (current?.path !== target.path) return
+          const view = cm6ActiveViewBridge.get()
+          if (!view) return
+          const offset = headingOffsetForAnchor(view.state.doc.toString(), target.anchor ?? '')
+          if (offset !== null) revealHeading(view, offset)
+        }, 0)
+      })
+    }
+    document.addEventListener('xmd-relative-link', openRelativeLink)
+    return () => document.removeEventListener('xmd-relative-link', openRelativeLink)
+  }, [openPath, stateRef])
 
   const { exportHTML, exportPDF, exportImage, exportDocx } = useExportActions(
     stateRef,
@@ -965,12 +871,7 @@ export default function App(): JSX.Element {
       if (!isUndo || !canUndo) return
       // Let the editor handle its own undo when focused.
       const active = document.activeElement
-      if (
-        active?.closest(
-          '.milkdown, .cm-editor, .source-editor, input, textarea, [contenteditable="true"]',
-        )
-      )
-        return
+      if (active?.closest('.cm-editor, input, textarea, [contenteditable="true"]')) return
       e.preventDefault()
       void undoLastOp()
     }
@@ -1199,7 +1100,7 @@ export default function App(): JSX.Element {
               const image =
                 target instanceof HTMLImageElement
                   ? target
-                  : target.closest('.image-wrapper, .milkdown-image-inline')?.querySelector('img')
+                  : target.closest('[data-xmd-image]')?.querySelector('img')
               if (!image) return
               event.preventDefault()
               event.stopPropagation()
@@ -1213,9 +1114,7 @@ export default function App(): JSX.Element {
               const image =
                 target instanceof HTMLImageElement
                   ? target
-                  : target
-                      ?.closest('.image-wrapper, .milkdown-image-inline')
-                      ?.querySelector<HTMLImageElement>('img')
+                  : target?.closest('[data-xmd-image]')?.querySelector<HTMLImageElement>('img')
               openEditorContext(
                 e.clientX,
                 e.clientY,
@@ -1245,34 +1144,46 @@ export default function App(): JSX.Element {
                     }
                   />
                 </Suspense>
-              ) : sourceMode ? (
-                <SourceEditor
-                  key={activeTab.id + '-src'}
-                  content={activeTab.content}
-                  readingMode={readingMode}
-                  initialScrollTop={sourceScrollPositions.current.get(activeTab.id) ?? 0}
-                  onScrollTopChange={(scrollTop) =>
-                    sourceScrollPositions.current.set(activeTab.id, scrollTop)
-                  }
-                  onChange={(c) => updateContent(activeTab.id, c)}
-                />
               ) : (
                 <Suspense fallback={<div className="editor-loading" />}>
-                  <ActiveWysiwygEditor
-                    key={activeTab.id + '-' + resolvedTheme + '-' + settings.showSelectionToolbar}
+                  <MarkdownEditor
+                    key={activeTab.id}
                     content={activeFrontmatter.body}
-                    docDir={activeDocDir}
-                    docName={activeTab.name}
-                    vaultRoot={folder?.root ?? null}
-                    assetSearchPaths={settings.assetSearchPaths ?? []}
+                    livePreview={!sourceMode}
+                    resolveImageSrc={(src) =>
+                      resolveAssetURL(
+                        activeDocDir,
+                        src,
+                        folder?.root ?? null,
+                        settings.assetSearchPaths ?? [],
+                        settings.allowRemoteImages ?? false,
+                      )
+                    }
                     allowRemoteImages={settings.allowRemoteImages ?? false}
                     imageMaxWidth={settings.imageMaxWidth}
+                    uploadImage={async (file) => {
+                      if (!activeTab.path || !activeDocDir) {
+                        throw new Error(t('请先保存文档，再插入本地图片。'))
+                      }
+                      if (file.size > MAX_ATTACHMENT_BYTES) {
+                        throw new Error(t('单个附件不能超过 20 MB。'))
+                      }
+                      const result = await desktop.saveAttachment(
+                        activeDocDir,
+                        activeTab.name,
+                        folder?.root ?? null,
+                        file.name,
+                        new Uint8Array(await file.arrayBuffer()),
+                      )
+                      return result.relPath
+                    }}
+                    onImageError={(error) => {
+                      const message = error instanceof Error ? error.message : String(error)
+                      void desktop.notify(message)
+                    }}
                     focusMode={focusMode}
                     typewriterMode={typewriterMode}
-                    showSelectionToolbar={settings.showSelectionToolbar}
-                    tableAutoWidth={settings.tableAutoWidth ?? 'distribute'}
-                    tableAutoResize={settings.tableAutoResize ?? true}
-                    documentKey={activeTab.path ?? activeTab.id}
+                    previewThemeVersion={settings.theme}
                     tagBar={
                       <>
                         <DocumentPropertyPanel

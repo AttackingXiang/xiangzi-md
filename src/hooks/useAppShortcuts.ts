@@ -29,7 +29,7 @@ export function useAppShortcuts(
       if (action) {
         if (action === 'select-all' && event.target instanceof Element) {
           const editableControl = event.target.closest('input, textarea, [contenteditable="true"]')
-          const insideDocument = event.target.closest('.ProseMirror')
+          const insideDocument = event.target.closest('.xmd-cm-editor')
           if (editableControl && !insideDocument) return
         }
         event.preventDefault()

@@ -19,8 +19,8 @@ const TRANSPARENT_LAYERS = [
     selector: '.sidebar',
   },
   {
-    file: '../styles/slices/editor-typography.css',
-    selector: '.wysiwyg-editor .milkdown',
+    file: '../features/cm6-editor/editor.css',
+    selector: '.xmd-cm-editor',
   },
   {
     file: '../styles/slices/workspace.css',

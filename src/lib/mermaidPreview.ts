@@ -90,6 +90,14 @@ export async function renderMermaidForExport(content: string): Promise<string> {
   return svg
 }
 
+/** Render an interactive screen preview using Mermaid's HTML label mode. */
+export async function renderMermaidForPreview(content: string): Promise<string> {
+  const mermaid = await getMermaid(true)
+  const id = 'mmd-screen-' + Math.random().toString(36).slice(2)
+  const { svg } = await mermaid.render(id, content)
+  return svg
+}
+
 /**
  * 供 Crepe code-mirror 的 renderPreview 使用：mermaid 代码块异步渲染为图表。
  * 返回 undefined 表示异步，渲染完成后经 applyPreview 回填 SVG 字符串。
