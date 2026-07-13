@@ -66,12 +66,10 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-heading-1 {
-  border-bottom: 1px solid var(--border-strong);
   font-size: 36px;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-heading-2 {
-  border-bottom: 1px solid var(--border);
   font-size: 28px;
 }
 

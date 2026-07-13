@@ -1,28 +1,10 @@
 import type { OutlineItem } from '../types'
+import { markdownHeadings } from './linkNavigation'
 
-/** 从 Markdown 解析标题大纲（跳过代码块内的 #） */
+/** 从统一的 CommonMark 标题模型构建大纲。 */
 export function parseOutline(markdown: string): OutlineItem[] {
-  const items: OutlineItem[] = []
-  const lines = markdown.split('\n')
-  let inFence = false
-  let index = 0
-  let offset = 0
-  for (const line of lines) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      inFence = !inFence
-      offset += line.length + 1
-      continue
-    }
-    if (inFence) {
-      offset += line.length + 1
-      continue
-    }
-    const m = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line)
-    if (m) {
-      items.push({ level: m[1].length, text: m[2].trim(), index, offset })
-      index++
-    }
-    offset += line.length + 1
-  }
-  return items
+  return markdownHeadings(markdown, { topLevelOnly: true }).map((heading, index) => ({
+    ...heading,
+    index,
+  }))
 }

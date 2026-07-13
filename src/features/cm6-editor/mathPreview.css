@@ -4,17 +4,76 @@
 
 .xmd-cm-math-inline {
   border-radius: 3px;
+  cursor: text;
   padding-inline: 0.12em;
+}
+
+.xmd-cm-math-block {
+  box-sizing: border-box;
+  padding: 0.55em 0;
+  position: relative;
+  width: 100%;
 }
 
 .xmd-cm-math-display {
   box-sizing: border-box;
-  margin: 0.8em 0;
-  min-height: 58px;
+  margin: 0;
   overflow-x: auto;
-  padding: 14px 18px;
+  padding: 14px 72px 14px 18px;
   text-align: center;
   width: 100%;
+}
+
+.xmd-cm-math-display .katex-display {
+  margin: 0;
+  min-width: max-content;
+}
+
+.xmd-cm-math-actions {
+  display: flex;
+  gap: 4px;
+  position: absolute;
+  right: 10px;
+  top: calc(0.55em + 10px);
+}
+
+.xmd-cm-math-actions button,
+.xmd-cm-math-preview-toggle {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+}
+
+.xmd-cm-math-actions button:hover,
+.xmd-cm-math-preview-toggle:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.xmd-cm-math-copy[data-copy-state='success'] {
+  color: var(--success, #2e9e5b);
+}
+
+.xmd-cm-math-copy[data-copy-state='error'] {
+  color: var(--danger, #c43d4d);
+}
+
+.xmd-cm-math-preview-toggle.is-display {
+  margin: 0;
+}
+
+.xmd-cm-math-preview-toggle.is-inline {
+  margin-inline: 0.18em;
+  vertical-align: middle;
 }
 
 .xmd-cm-math.is-error {

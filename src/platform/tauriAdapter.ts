@@ -19,7 +19,7 @@ import type {
   UpdaterPort,
 } from './contracts'
 import { releaseExportObjectUrls } from '../lib/exportImageAsset'
-import { imageFormatForPath } from '../lib/exportFormat'
+import { exportFileStem, imageFormatForPath } from '../lib/exportFormat'
 import { dirName } from '../lib/path'
 
 const MAX_BINARY_READ_BYTES = 64 * 1024 * 1024
@@ -244,17 +244,19 @@ export const tauriDesktopAdapter: DesktopPort = {
   stopFind: () => Promise.resolve(),
   exportHTML: async (html, suggestedName) => {
     const path = await save({
-      defaultPath: suggestedName.replace(/\.md$/i, '') + '.html',
+      defaultPath: exportFileStem(suggestedName) + '.html',
       filters: [{ name: 'HTML', extensions: ['html'] }],
     })
     if (!path) return null
-    await invoke('write_file', { path, content: html, expectedVersion: null, force: true })
+    await invoke('write_binary_file', new TextEncoder().encode(html), {
+      headers: { 'x-xmd-output-path': encodeURIComponent(path) },
+    })
     return { path }
   },
   exportPDF: async (html, suggestedName) => {
     try {
       const path = await save({
-        defaultPath: suggestedName.replace(/\.md$/i, '') + '.pdf',
+        defaultPath: exportFileStem(suggestedName) + '.pdf',
         filters: [{ name: 'PDF', extensions: ['pdf'] }],
       })
       if (!path) return null
@@ -270,7 +272,7 @@ export const tauriDesktopAdapter: DesktopPort = {
   exportImage: async (html, suggestedName) => {
     try {
       const path = await save({
-        defaultPath: suggestedName.replace(/\.md$/i, '') + '.png',
+        defaultPath: exportFileStem(suggestedName) + '.png',
         filters: [
           { name: 'PNG 图片', extensions: ['png'] },
           { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
@@ -289,7 +291,7 @@ export const tauriDesktopAdapter: DesktopPort = {
   pandocStatus: () => invoke<{ path: string; version: string } | null>('pandoc_status'),
   exportDocx: async (markdown, docDir, suggestedName) => {
     const path = await save({
-      defaultPath: suggestedName.replace(/\.md$/i, '') + '.docx',
+      defaultPath: exportFileStem(suggestedName) + '.docx',
       filters: [{ name: 'Word Document', extensions: ['docx'] }],
     })
     if (!path) return null

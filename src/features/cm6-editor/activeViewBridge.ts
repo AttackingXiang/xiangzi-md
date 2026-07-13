@@ -1,6 +1,13 @@
 import type { EditorView } from '@codemirror/view'
 
 let active: EditorView | null = null
+const listeners = new Set<(view: EditorView | null) => void>()
+
+function setActive(view: EditorView | null): void {
+  if (active === view) return
+  active = view
+  for (const listener of [...listeners]) listener(view)
+}
 
 /**
  * Process-local access to the focused CM6 editor. Cleanup is view-scoped so an
@@ -8,14 +15,14 @@ let active: EditorView | null = null
  */
 export const cm6ActiveViewBridge = {
   register(view: EditorView): () => void {
-    active = view
+    setActive(view)
     return () => {
-      if (active === view) active = null
+      if (active === view) setActive(null)
     }
   },
 
   activate(view: EditorView): void {
-    active = view
+    setActive(view)
   },
 
   get(): EditorView | null {
@@ -23,6 +30,11 @@ export const cm6ActiveViewBridge = {
   },
 
   clear(): void {
-    active = null
+    setActive(null)
+  },
+
+  subscribe(listener: (view: EditorView | null) => void): () => void {
+    listeners.add(listener)
+    return () => listeners.delete(listener)
   },
 }

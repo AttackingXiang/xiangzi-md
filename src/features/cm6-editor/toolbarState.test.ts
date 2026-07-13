@@ -29,7 +29,17 @@ describe('CM6 toolbar state', () => {
     expect(computeCm6ToolbarState(stateAt('> quote', 'quote')).blockquote).toBe(true)
     expect(computeCm6ToolbarState(stateAt('- bullet', 'bullet')).bulletList).toBe(true)
     expect(computeCm6ToolbarState(stateAt('2. ordered', 'ordered')).orderedList).toBe(true)
-    expect(computeCm6ToolbarState(stateAt('  - [x] task', 'task')).taskList).toBe(true)
+    const task = computeCm6ToolbarState(stateAt('  - [x] task', 'task'))
+    expect(task.taskList).toBe(true)
+    expect(task.bulletList).toBe(false)
+    const quotedTask = computeCm6ToolbarState(stateAt('> - [x] quoted task', 'task'))
+    expect(quotedTask.taskList).toBe(true)
+    expect(quotedTask.bulletList).toBe(false)
+  })
+
+  it('does not report a bare URL as an explicitly formatted link', () => {
+    expect(computeCm6ToolbarState(stateAt('https://example.com', 'example')).link).toBe(false)
+    expect(computeCm6ToolbarState(stateAt('<https://example.com>', 'example')).link).toBe(true)
   })
 
   it('derives fenced code context', () => {

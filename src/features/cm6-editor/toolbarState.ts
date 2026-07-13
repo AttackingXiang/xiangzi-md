@@ -10,7 +10,7 @@ import {
 
 const HEADING_NODE = /^(?:ATX|Setext)Heading([1-6])$/
 const CODE_BLOCK_NODES = new Set(['FencedCode', 'CodeBlock', 'IndentedCode'])
-const LINK_NODES = new Set(['Link', 'Autolink', 'URL'])
+const LINK_NODES = new Set(['Link', 'Autolink'])
 
 function nodeNamesNearSelection(state: EditorState): Set<string> {
   const names = new Set<string>()
@@ -53,10 +53,12 @@ function hasAny(names: ReadonlySet<string>, candidates: ReadonlySet<string>): bo
 export function computeCm6ToolbarState(state: EditorState): ToolbarActiveState {
   const names = nodeNamesNearSelection(state)
   const line = state.doc.lineAt(state.selection.main.head).text
+  const structuralLine = line.replace(/^(?: {0,3}>[ \t]?)+/, '')
   const headingPrefix = /^\s{0,3}(#{1,6})(?:\s|$)/.exec(line)
-  const taskList = /^\s*(?:[-+*])\s+\[[ xX]\](?:\s|$)/.test(line)
-  const orderedList = /^\s*\d+[.)](?:\s|$)/.test(line)
-  const bulletList = !taskList && /^\s*[-+*](?:\s|$)/.test(line)
+  const taskList = /^\s*(?:[-+*])\s+\[[ xX]\](?:\s|$)/.test(structuralLine)
+  const inTaskList = names.has('TaskMarker') || taskList
+  const orderedList = /^\s*\d+[.)](?:\s|$)/.test(structuralLine)
+  const bulletList = !taskList && /^\s*[-+*](?:\s|$)/.test(structuralLine)
 
   return {
     ...DEFAULT_TOOLBAR_ACTIVE_STATE,
@@ -68,9 +70,9 @@ export function computeCm6ToolbarState(state: EditorState): ToolbarActiveState {
     headingLevel: headingFromNodes(names) ?? (headingPrefix ? headingPrefix[1].length : null),
     blockquote: names.has('Blockquote') || /^\s{0,3}>/.test(line),
     codeBlock: hasAny(names, CODE_BLOCK_NODES),
-    bulletList: names.has('BulletList') || bulletList,
+    bulletList: !inTaskList && (names.has('BulletList') || bulletList),
     orderedList: names.has('OrderedList') || orderedList,
-    taskList: names.has('TaskMarker') || taskList,
+    taskList: inTaskList,
     canUndo: undoDepth(state) > 0,
     canRedo: redoDepth(state) > 0,
   }

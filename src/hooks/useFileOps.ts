@@ -1,11 +1,12 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { desktop } from '../platform'
 import { getLang, t } from '../lib/i18n'
 import { ErrorCode } from '../lib/errorCodes'
 import { createTaskQueue, mapWithConcurrencyLimit } from '../lib/asyncPool'
 import { InFlightCache } from '../lib/inFlightCache'
 import { LatestTaskQueue } from '../lib/latestTask'
-import { completeSave } from '../lib/saveState'
+import { completePersistedTransform, completeSave, updateTabContent } from '../lib/saveState'
+import { activateOrAppendTab, mergeRestoredTabs, tabsAreClean } from '../lib/documentState'
 import { isKnownTextFile } from '../lib/fileKind'
 import type { Draft, Tab } from '../types'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
@@ -48,8 +49,8 @@ interface Deps {
  * （见 recordDocOpen 的调用），避免误点/快速翻找污染 frecency 语料。
  */
 export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) {
-  const [tabs, setTabs] = useState<Tab[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
+  const [tabs, setTabsState] = useState<Tab[]>([])
+  const [activeId, setActiveIdState] = useState<string | null>(null)
   const openQueueRef = useRef(createTaskQueue(2))
   const openTasksRef = useRef(new InFlightCache<string, void>())
   const saveQueuesRef = useRef(new LatestTaskQueue<string, boolean>())
@@ -58,51 +59,98 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   // Always-fresh ref for use inside callbacks
   const stateRef = useRef({ tabs, activeId })
   stateRef.current = { tabs, activeId }
+  const tabMutationRef = useRef(0)
+  const activeMutationRef = useRef(0)
+
+  // File commands often intentionally chain an in-memory mutation and an I/O
+  // operation in the same tick (property update -> save is one example). React
+  // does not guarantee that a functional state updater has run before the next
+  // line of user code, so keep the command-side snapshot authoritative eagerly.
+  const setTabs = useCallback<Dispatch<SetStateAction<Tab[]>>>((action) => {
+    const apply = typeof action === 'function' ? action : () => action
+    const base = stateRef.current.tabs
+    const optimistic = apply(base)
+    const mutation = ++tabMutationRef.current
+    stateRef.current = { ...stateRef.current, tabs: optimistic }
+    setTabsState((previous) => {
+      const next = previous === base ? optimistic : apply(previous)
+      if (tabMutationRef.current === mutation) {
+        stateRef.current = { ...stateRef.current, tabs: next }
+      }
+      return next
+    })
+  }, [])
+
+  const setActiveId = useCallback<Dispatch<SetStateAction<string | null>>>((action) => {
+    const apply = typeof action === 'function' ? action : () => action
+    const base = stateRef.current.activeId
+    const optimistic = apply(base)
+    const mutation = ++activeMutationRef.current
+    stateRef.current = { ...stateRef.current, activeId: optimistic }
+    setActiveIdState((previous) => {
+      const next = previous === base ? optimistic : apply(previous)
+      if (activeMutationRef.current === mutation) {
+        stateRef.current = { ...stateRef.current, activeId: next }
+      }
+      return next
+    })
+  }, [])
 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null
 
+  const activateOpenedTab = useCallback(
+    (tab: Tab): void => {
+      const result = activateOrAppendTab(stateRef.current.tabs, tab)
+      setTabs(result.tabs)
+      setActiveId(result.activeId)
+    },
+    [setActiveId, setTabs],
+  )
+
   // ── Open ───────────────────────────────────────────────────────────────────
-  const openPath = useCallback((path: string, name?: string): Promise<void> => {
-    const existing = stateRef.current.tabs.find((t) => t.path === path)
-    if (existing) {
-      setActiveId(existing.id)
-      return Promise.resolve()
-    }
-    // 与文件树 openable / Rust is_known_text 对齐：Markdown、无扩展名、已知文本
-    // 才放行。挡住最近文件里已变成二进制/未知类型的陈旧条目，避免误进 TextEditor。
-    if (!isKnownTextFile(name ?? path)) {
-      void desktop.notify(t('无法打开该类型的文件：\n') + path)
-      return Promise.resolve()
-    }
-    return openTasksRef.current.getOrCreate(path, () =>
-      openQueueRef.current.run(async () => {
-        const openedWhileQueued = stateRef.current.tabs.find((tab) => tab.path === path)
-        if (openedWhileQueued) {
-          setActiveId(openedWhileQueued.id)
-          return
-        }
-        let file
-        try {
-          file = await desktop.readFile(path)
-        } catch {
-          await desktop.notify(t('文件不存在或无法打开：\n') + path)
-          return
-        }
-        const tab: Tab = {
-          id: newTabId(),
-          path: file.path,
-          name: name ?? file.name,
-          content: file.content,
-          savedContent: file.content,
-          dirty: false,
-          revision: 0,
-          version: file.version,
-        }
-        setTabs((prev) => [...prev, tab])
-        setActiveId(tab.id)
-      }),
-    )
-  }, [])
+  const openPath = useCallback(
+    (path: string, name?: string): Promise<void> => {
+      const existing = stateRef.current.tabs.find((t) => t.path === path)
+      if (existing) {
+        setActiveId(existing.id)
+        return Promise.resolve()
+      }
+      // 与文件树 openable / Rust is_known_text 对齐：Markdown、无扩展名、已知文本
+      // 才放行。挡住最近文件里已变成二进制/未知类型的陈旧条目，避免误进 TextEditor。
+      if (!isKnownTextFile(name ?? path)) {
+        void desktop.notify(t('无法打开该类型的文件：\n') + path)
+        return Promise.resolve()
+      }
+      return openTasksRef.current.getOrCreate(path, () =>
+        openQueueRef.current.run(async () => {
+          const openedWhileQueued = stateRef.current.tabs.find((tab) => tab.path === path)
+          if (openedWhileQueued) {
+            setActiveId(openedWhileQueued.id)
+            return
+          }
+          let file
+          try {
+            file = await desktop.readFile(path)
+          } catch {
+            await desktop.notify(t('文件不存在或无法打开：\n') + path)
+            return
+          }
+          const tab: Tab = {
+            id: newTabId(),
+            path: file.path,
+            name: name ?? file.name,
+            content: file.content,
+            savedContent: file.content,
+            dirty: false,
+            revision: 0,
+            version: file.version,
+          }
+          activateOpenedTab(tab)
+        }),
+      )
+    },
+    [activateOpenedTab, setActiveId],
+  )
 
   const openFile = useCallback(async () => {
     const file = await desktop.openFile()
@@ -112,19 +160,20 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       setActiveId(existing.id)
       return
     }
-    const tab: Tab = {
-      id: newTabId(),
-      path: file.path,
-      name: file.name,
-      content: file.content,
-      savedContent: file.content,
-      dirty: false,
-      revision: 0,
-      version: file.version,
-    }
-    setTabs((prev) => [...prev, tab])
-    setActiveId(tab.id)
-  }, [])
+    await openTasksRef.current.getOrCreate(file.path, () => {
+      activateOpenedTab({
+        id: newTabId(),
+        path: file.path,
+        name: file.name,
+        content: file.content,
+        savedContent: file.content,
+        dirty: false,
+        revision: 0,
+        version: file.version,
+      })
+      return Promise.resolve()
+    })
+  }, [activateOpenedTab, setActiveId])
 
   const newFile = useCallback(() => {
     const name = newUntitledName(stateRef.current.tabs, lang)
@@ -140,7 +189,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
     }
     setTabs((prev) => [...prev, tab])
     setActiveId(tab.id)
-  }, [lang])
+  }, [lang, setActiveId, setTabs])
 
   const recoverDraft = useCallback(
     (draft: Draft): void => {
@@ -163,7 +212,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       setTabs((previous) => [...previous, tab])
       setActiveId(tab.id)
     },
-    [lang],
+    [lang, setActiveId, setTabs],
   )
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -243,7 +292,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         return false
       }
     },
-    [recordDocEdit],
+    [recordDocEdit, setTabs],
   )
 
   const saveTab = useCallback(
@@ -257,24 +306,20 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   // 还没随 React 提交刷新，会读到旧内容导致标签页停留在“待保存”。直接用确定的
   // content/version 落定，保证每个受影响的标签页都变成已保存。
   const markTabPersisted = useCallback(
-    (id: string, content: string, version: NonNullable<Tab['version']>): void => {
+    (
+      id: string,
+      baseContent: string,
+      content: string,
+      version: NonNullable<Tab['version']>,
+    ): void => {
       savedVersionsRef.current.set(id, version)
       setTabs((prev) =>
         prev.map((t) =>
-          t.id === id
-            ? {
-                ...t,
-                content,
-                savedContent: content,
-                dirty: false,
-                revision: t.revision + 1,
-                version,
-              }
-            : t,
+          t.id === id ? completePersistedTransform(t, baseContent, content, version) : t,
         ),
       )
     },
-    [],
+    [setTabs],
   )
 
   const saveAsTab = useCallback(
@@ -303,29 +348,16 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         await desktop.notify(t('另存为失败。'))
       }
     },
-    [recordDocEdit],
+    [recordDocEdit, setTabs],
   )
 
   // ── Content update ─────────────────────────────────────────────────────────
-  const updateContent = useCallback((id: string, content: string) => {
-    setTabs((prev) => {
-      const next = prev.map((t) =>
-        t.id === id && content !== t.content
-          ? {
-              ...t,
-              content,
-              dirty: content !== t.savedContent,
-              revision: t.revision + 1,
-            }
-          : t,
-      )
-      // Keep stateRef in sync synchronously (not just on next render) so a
-      // caller can immediately follow updateContent with saveTab and have
-      // performSave read this update via stateRef instead of a stale snapshot.
-      stateRef.current = { ...stateRef.current, tabs: next }
-      return next
-    })
-  }, [])
+  const updateContent = useCallback(
+    (id: string, content: string) => {
+      setTabs((prev) => prev.map((tab) => (tab.id === id ? updateTabContent(tab, content) : tab)))
+    },
+    [setTabs],
+  )
 
   // ── Close ──────────────────────────────────────────────────────────────────
   const confirmCloseTargets = useCallback(
@@ -339,7 +371,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
           if (!(await saveTab(tab.id))) return false
         }
         const targetIds = new Set(dirty.map((tab) => tab.id))
-        if (stateRef.current.tabs.some((tab) => targetIds.has(tab.id) && tab.dirty)) return false
+        if (!tabsAreClean(stateRef.current.tabs, targetIds)) return false
       }
       return true
     },
@@ -354,50 +386,59 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
     [confirmCloseTargets],
   )
 
-  const moveTab = useCallback((fromIndex: number, insertAt: number): void => {
-    setTabs((prev) => {
-      if (
-        fromIndex < 0 ||
-        fromIndex >= prev.length ||
-        insertAt < 0 ||
-        insertAt > prev.length ||
-        fromIndex === insertAt ||
-        fromIndex === insertAt - 1
+  const moveTab = useCallback(
+    (fromIndex: number, insertAt: number): void => {
+      setTabs((prev) => {
+        if (
+          fromIndex < 0 ||
+          fromIndex >= prev.length ||
+          insertAt < 0 ||
+          insertAt > prev.length ||
+          fromIndex === insertAt ||
+          fromIndex === insertAt - 1
+        )
+          return prev
+        const next = [...prev]
+        const [moved] = next.splice(fromIndex, 1)
+        next.splice(insertAt > fromIndex ? insertAt - 1 : insertAt, 0, moved)
+        return next
+      })
+    },
+    [setTabs],
+  )
+
+  const toggleTabLock = useCallback(
+    (id: string): void => {
+      setTabs((prev) => prev.map((tab) => (tab.id === id ? { ...tab, locked: !tab.locked } : tab)))
+    },
+    [setTabs],
+  )
+
+  const closeTabsWithoutPrompt = useCallback(
+    (ids: readonly string[]): void => {
+      const targets = new Set(ids)
+      if (targets.size === 0) return
+      const snapshot = stateRef.current.tabs
+      // Never close locked tabs
+      const closeable = new Set(
+        snapshot.filter((t) => targets.has(t.id) && !t.locked).map((t) => t.id),
       )
-        return prev
-      const next = [...prev]
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(insertAt > fromIndex ? insertAt - 1 : insertAt, 0, moved)
-      return next
-    })
-  }, [])
-
-  const toggleTabLock = useCallback((id: string): void => {
-    setTabs((prev) => prev.map((tab) => (tab.id === id ? { ...tab, locked: !tab.locked } : tab)))
-  }, [])
-
-  const closeTabsWithoutPrompt = useCallback((ids: readonly string[]): void => {
-    const targets = new Set(ids)
-    if (targets.size === 0) return
-    const snapshot = stateRef.current.tabs
-    // Never close locked tabs
-    const closeable = new Set(
-      snapshot.filter((t) => targets.has(t.id) && !t.locked).map((t) => t.id),
-    )
-    if (closeable.size === 0) return
-    setTabs((previous) => previous.filter((tab) => !closeable.has(tab.id)))
-    setActiveId((current) => {
-      // Only reassign focus if the currently active tab is actually being closed
-      if (!current || !closeable.has(current)) return current
-      const currentIndex = snapshot.findIndex((tab) => tab.id === current)
-      const nextTab = snapshot.slice(currentIndex + 1).find((tab) => !closeable.has(tab.id))
-      const previousTab = snapshot
-        .slice(0, currentIndex)
-        .reverse()
-        .find((tab) => !closeable.has(tab.id))
-      return nextTab?.id ?? previousTab?.id ?? null
-    })
-  }, [])
+      if (closeable.size === 0) return
+      setTabs((previous) => previous.filter((tab) => !closeable.has(tab.id)))
+      setActiveId((current) => {
+        // Only reassign focus if the currently active tab is actually being closed
+        if (!current || !closeable.has(current)) return current
+        const currentIndex = snapshot.findIndex((tab) => tab.id === current)
+        const nextTab = snapshot.slice(currentIndex + 1).find((tab) => !closeable.has(tab.id))
+        const previousTab = snapshot
+          .slice(0, currentIndex)
+          .reverse()
+          .find((tab) => !closeable.has(tab.id))
+        return nextTab?.id ?? previousTab?.id ?? null
+      })
+    },
+    [setActiveId, setTabs],
+  )
 
   const closeTab = useCallback(
     async (id: string) => {
@@ -423,7 +464,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       setTabs((prev) => prev.filter((tab) => !targetIds.has(tab.id)))
       setActiveId(id)
     },
-    [confirmCloseTargets],
+    [confirmCloseTargets, setActiveId, setTabs],
   )
 
   const closeAllTabs = useCallback(async () => {
@@ -437,7 +478,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       const firstLockedId = current.find((t) => t.locked)?.id ?? null
       setActiveId((active) => (active && !targetIds.has(active) ? active : firstLockedId))
     }
-  }, [confirmCloseTargets])
+  }, [confirmCloseTargets, setActiveId, setTabs])
 
   const closeLeft = useCallback(
     async (id: string) => {
@@ -450,7 +491,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       setTabs((prev) => prev.filter((tab) => !targetIds.has(tab.id)))
       setActiveId((active) => (active && !targetIds.has(active) ? active : id))
     },
-    [confirmCloseTargets],
+    [confirmCloseTargets, setActiveId, setTabs],
   )
 
   const closeRight = useCallback(
@@ -464,44 +505,48 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       setTabs((prev) => prev.filter((tab) => !targetIds.has(tab.id)))
       setActiveId((active) => (active && !targetIds.has(active) ? active : id))
     },
-    [confirmCloseTargets],
+    [confirmCloseTargets, setActiveId, setTabs],
   )
 
   // ── Session restore ────────────────────────────────────────────────────────
-  const restoreSession = useCallback(async (openFiles: string[], activePath: string | null) => {
-    const restored = (
-      await mapWithConcurrencyLimit(
-        openFiles.slice(0, MAX_RESTORED_TABS),
-        RESTORE_CONCURRENCY,
-        async (path): Promise<Tab | null> => {
-          try {
-            const file = await desktop.readFile(path)
-            return {
-              id: newTabId(),
-              path: file.path,
-              name: file.name,
-              content: file.content,
-              savedContent: file.content,
-              dirty: false,
-              revision: 0,
-              version: file.version,
+  const restoreSession = useCallback(
+    async (openFiles: string[], activePath: string | null) => {
+      const restored = (
+        await mapWithConcurrencyLimit(
+          openFiles.slice(0, MAX_RESTORED_TABS),
+          RESTORE_CONCURRENCY,
+          async (path): Promise<Tab | null> => {
+            try {
+              const file = await desktop.readFile(path)
+              return {
+                id: newTabId(),
+                path: file.path,
+                name: file.name,
+                content: file.content,
+                savedContent: file.content,
+                dirty: false,
+                revision: 0,
+                version: file.version,
+              }
+            } catch {
+              return null
             }
-          } catch {
-            return null
-          }
-        },
-      )
-    ).filter((tab): tab is Tab => tab !== null)
-    if (restored.length) {
-      const act = restored.find((t) => t.path === activePath) ?? restored[0]
-      setTabs((current) => {
-        if (current.length === 0) return restored
-        const existingPaths = new Set(current.flatMap((tab) => (tab.path ? [tab.path] : [])))
-        return [...current, ...restored.filter((tab) => !tab.path || !existingPaths.has(tab.path))]
-      })
-      setActiveId((current) => current ?? act.id)
-    }
-  }, [])
+          },
+        )
+      ).filter((tab): tab is Tab => tab !== null)
+      if (restored.length) {
+        const result = mergeRestoredTabs(
+          stateRef.current.tabs,
+          restored,
+          activePath,
+          stateRef.current.activeId,
+        )
+        setTabs(result.tabs)
+        setActiveId(result.activeId)
+      }
+    },
+    [setActiveId, setTabs],
+  )
 
   return {
     tabs,

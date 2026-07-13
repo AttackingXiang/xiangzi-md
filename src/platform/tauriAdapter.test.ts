@@ -201,18 +201,30 @@ describe('tauriDesktopAdapter', () => {
     })
   })
 
-  it('writes the self-contained HTML through the scoped Rust command', async () => {
+  it('writes self-contained HTML as binary so image-heavy exports are not limited to 20 MiB', async () => {
     saveMock.mockResolvedValueOnce('/notes/a.html')
     invokeMock.mockResolvedValueOnce({ path: '/notes/a.html' })
 
     await expect(tauriDesktopAdapter.exportHTML('<h1>A</h1>', 'a.md')).resolves.toEqual({
       path: '/notes/a.html',
     })
-    expect(invokeMock).toHaveBeenCalledWith('write_file', {
-      path: '/notes/a.html',
-      content: '<h1>A</h1>',
-      expectedVersion: null,
-      force: true,
+    expect(invokeMock).toHaveBeenCalledWith(
+      'write_binary_file',
+      new TextEncoder().encode('<h1>A</h1>'),
+      {
+        headers: { 'x-xmd-output-path': encodeURIComponent('/notes/a.html') },
+      },
+    )
+  })
+
+  it('uses clean names for every supported Markdown extension', async () => {
+    saveMock.mockResolvedValueOnce(null)
+
+    await tauriDesktopAdapter.exportHTML('<p>A</p>', '说明.markdown')
+
+    expect(saveMock).toHaveBeenCalledWith({
+      defaultPath: '说明.html',
+      filters: [{ name: 'HTML', extensions: ['html'] }],
     })
   })
 
@@ -231,11 +243,29 @@ describe('tauriDesktopAdapter', () => {
   })
 
   it('does not render a PDF when the save dialog is cancelled', async () => {
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
     saveMock.mockResolvedValueOnce(null)
 
-    await expect(tauriDesktopAdapter.exportPDF('<h1>A</h1>', 'a.md')).resolves.toBeNull()
+    await expect(
+      tauriDesktopAdapter.exportPDF('<img data-xmd-export-owned-url="blob:cancelled">', 'a.md'),
+    ).resolves.toBeNull()
     expect(renderDocumentPdfMock).not.toHaveBeenCalled()
     expect(invokeMock).not.toHaveBeenCalled()
+    expect(revoke).toHaveBeenCalledWith('blob:cancelled')
+    revoke.mockRestore()
+  })
+
+  it('releases export assets when PDF rendering fails', async () => {
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    saveMock.mockResolvedValueOnce('/notes/a.pdf')
+    renderDocumentPdfMock.mockRejectedValueOnce(new Error('canvas failed'))
+
+    await expect(
+      tauriDesktopAdapter.exportPDF('<img data-xmd-export-owned-url="blob:failed">', 'a.md'),
+    ).rejects.toThrow('canvas failed')
+    expect(invokeMock).not.toHaveBeenCalled()
+    expect(revoke).toHaveBeenCalledWith('blob:failed')
+    revoke.mockRestore()
   })
 
   it('selects Pandoc and Word reference template files', async () => {

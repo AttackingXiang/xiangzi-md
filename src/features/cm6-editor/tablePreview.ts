@@ -1,6 +1,12 @@
 import { syntaxTree } from '@codemirror/language'
 import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view'
+import { GFM, parser as markdownParser } from '@lezer/markdown'
+import {
+  tableCellCommandBridge,
+  type TableCellCommandState,
+  type TableCellInlineFormat,
+} from '../../lib/tableCellCommandBridge'
 import './tablePreview.css'
 
 export type TableAlignment = 'left' | 'center' | 'right' | null
@@ -12,17 +18,160 @@ export interface MarkdownTableCell {
 export interface MarkdownTableMatch {
   from: number
   to: number
+  source: string
   header: MarkdownTableCell[]
   rows: MarkdownTableCell[][]
   alignments: TableAlignment[]
 }
 export interface MarkdownTablePreviewOptions {
   bufferChars?: number
+  /** Initial CM6 viewport estimate only. The rendered table is always measured from its DOM. */
   rowHeight?: number
 }
 
 const DEFAULT_BUFFER_CHARS = 2_000
 const DEFAULT_ROW_HEIGHT = 38
+const tableCellParser = markdownParser.configure([GFM])
+
+export type TableInlinePart =
+  | { kind: 'text'; text: string }
+  | { kind: 'break'; source: string }
+  | {
+      kind: 'strong' | 'emphasis' | 'strike' | 'code' | 'link' | 'plain'
+      prefix: string
+      suffix: string
+      children: TableInlinePart[]
+    }
+
+type TableCellSyntaxNode = ReturnType<typeof tableCellParser.parse>['topNode']
+
+function textPart(text: string): TableInlinePart[] {
+  return text ? [{ kind: 'text', text }] : []
+}
+
+function directChildren(node: TableCellSyntaxNode, name: string): TableCellSyntaxNode[] {
+  const matches: TableCellSyntaxNode[] = []
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.name === name) matches.push(child)
+  }
+  return matches
+}
+
+function inlinePartsInRange(
+  node: TableCellSyntaxNode,
+  source: string,
+  from: number,
+  to: number,
+): TableInlinePart[] {
+  const parts: TableInlinePart[] = []
+  let cursor = from
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.to <= from) continue
+    if (child.from >= to) break
+    if (child.from > cursor) parts.push(...textPart(source.slice(cursor, Math.min(child.from, to))))
+    if (child.from >= from && child.to <= to) parts.push(...inlinePartForNode(child, source))
+    cursor = Math.max(cursor, Math.min(child.to, to))
+  }
+  if (cursor < to) parts.push(...textPart(source.slice(cursor, to)))
+  return parts
+}
+
+function markedInlinePart(
+  node: TableCellSyntaxNode,
+  source: string,
+  kind: Exclude<TableInlinePart['kind'], 'text' | 'break' | 'link'>,
+  markerName: string,
+): TableInlinePart[] {
+  const marks = directChildren(node, markerName)
+  if (marks.length < 2) return textPart(source.slice(node.from, node.to))
+  const contentFrom = marks[0].to
+  const contentTo = marks[marks.length - 1].from
+  return [
+    {
+      kind,
+      prefix: source.slice(node.from, contentFrom),
+      suffix: source.slice(contentTo, node.to),
+      children: inlinePartsInRange(node, source, contentFrom, contentTo),
+    },
+  ]
+}
+
+function inlinePartForNode(node: TableCellSyntaxNode, source: string): TableInlinePart[] {
+  if (node.name === 'StrongEmphasis')
+    return markedInlinePart(node, source, 'strong', 'EmphasisMark')
+  if (node.name === 'Emphasis') return markedInlinePart(node, source, 'emphasis', 'EmphasisMark')
+  if (node.name === 'Strikethrough')
+    return markedInlinePart(node, source, 'strike', 'StrikethroughMark')
+  if (node.name === 'InlineCode') return markedInlinePart(node, source, 'code', 'CodeMark')
+  if (node.name === 'Link' || node.name === 'Autolink') {
+    const marks = directChildren(node, 'LinkMark')
+    if (marks.length < 2) return textPart(source.slice(node.from, node.to))
+    const contentFrom = marks[0].to
+    const contentTo = marks[1].from
+    return [
+      {
+        kind: 'link',
+        prefix: source.slice(node.from, contentFrom),
+        suffix: source.slice(contentTo, node.to),
+        children: inlinePartsInRange(node, source, contentFrom, contentTo),
+      },
+    ]
+  }
+  if (node.name === 'URL') {
+    return [
+      {
+        kind: 'link',
+        prefix: '',
+        suffix: '',
+        children: textPart(source.slice(node.from, node.to)),
+      },
+    ]
+  }
+  if (node.name === 'Escape') {
+    return [
+      {
+        kind: 'plain',
+        prefix: source.slice(node.from, node.from + 1),
+        suffix: '',
+        children: textPart(source.slice(node.from + 1, node.to)),
+      },
+    ]
+  }
+  if (node.name === 'HTMLTag' && CELL_BREAK_PATTERN.test(source.slice(node.from, node.to))) {
+    return [{ kind: 'break', source: source.slice(node.from, node.to) }]
+  }
+  if (!node.firstChild) return textPart(source.slice(node.from, node.to))
+  return inlinePartsInRange(node, source, node.from, node.to)
+}
+
+/** Parse the safe, editable subset of Markdown inline syntax used inside a GFM table cell. */
+export function parseTableCellInline(source: string): TableInlinePart[] {
+  return inlinePartsInRange(tableCellParser.parse(source).topNode, source, 0, source.length)
+}
+
+function inlinePlainText(parts: readonly TableInlinePart[]): string {
+  return parts
+    .map((part) =>
+      part.kind === 'text'
+        ? part.text
+        : part.kind === 'break'
+          ? '\n'
+          : inlinePlainText(part.children),
+    )
+    .join('')
+}
+
+export function serializeTableCellInline(parts: readonly TableInlinePart[]): string {
+  return parts
+    .map((part) =>
+      part.kind === 'text'
+        ? part.text
+        : part.kind === 'break'
+          ? part.source
+          : `${part.prefix}${serializeTableCellInline(part.children)}${part.suffix}`,
+    )
+    .join('')
+}
 
 export function splitMarkdownTableRow(text: string, lineFrom: number): MarkdownTableCell[] {
   const delimiters: number[] = []
@@ -89,6 +238,7 @@ export function parseMarkdownTable(
   return {
     from,
     to,
+    source: state.doc.sliceString(from, to),
     header,
     alignments,
     rows: lines.slice(2).map((line) => splitMarkdownTableRow(line.text, line.from)),
@@ -122,20 +272,35 @@ export function findVisibleMarkdownTables(
 
 /** Re-escape a cell's plain text back into Markdown table syntax. */
 function escapeTableCellText(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
+  let escaped = ''
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]
+    if (character === '|') {
+      let slashes = 0
+      for (let before = index - 1; before >= 0 && value[before] === '\\'; before -= 1) slashes += 1
+      if (slashes % 2 === 0) escaped += '\\'
+    }
+    escaped += character
+  }
+  return escaped
 }
 
 /** Plain-text snapshot of a table, used as the working copy for row/column edits. */
-interface TableData {
+export interface TableData {
   header: string[]
   rows: string[][]
   alignments: TableAlignment[]
 }
 
-function toTableData(table: MarkdownTableMatch): TableData {
+export function toTableData(table: MarkdownTableMatch): TableData {
+  const columnCount = table.header.length
   return {
     header: table.header.map((cell) => cell.text),
-    rows: table.rows.map((row) => row.map((cell) => cell.text)),
+    // GFM ignores surplus body cells and renders missing cells as empty. Keep the
+    // editable model consistent with that visual column count before structural edits.
+    rows: table.rows.map((row) =>
+      Array.from({ length: columnCount }, (_, column) => row[column]?.text ?? ''),
+    ),
     alignments: [...table.alignments],
   }
 }
@@ -151,7 +316,7 @@ function serializeRow(cells: string[]): string {
   return `| ${cells.map(escapeTableCellText).join(' | ')} |`
 }
 
-function serializeTableData(data: TableData): string {
+export function serializeTableData(data: TableData): string {
   return [
     serializeRow(data.header),
     serializeRow(data.alignments.map(alignmentMarker)),
@@ -161,15 +326,19 @@ function serializeTableData(data: TableData): string {
 
 /** Row/column structural edits. `rowIndex`/`columnIndex` are 0-based into `data.rows`/cells;
  *  the header row is addressed separately since it can't be deleted or reordered. */
-function insertRowAt(data: TableData, rowIndex: number): TableData {
+export function insertRowAt(data: TableData, rowIndex: number): TableData {
   const rows = [...data.rows]
-  rows.splice(rowIndex, 0, data.header.map(() => ''))
+  rows.splice(
+    rowIndex,
+    0,
+    data.header.map(() => ''),
+  )
   return { ...data, rows }
 }
-function deleteRowAt(data: TableData, rowIndex: number): TableData {
+export function deleteRowAt(data: TableData, rowIndex: number): TableData {
   return { ...data, rows: data.rows.filter((_, index) => index !== rowIndex) }
 }
-function insertColumnAt(data: TableData, columnIndex: number): TableData {
+export function insertColumnAt(data: TableData, columnIndex: number): TableData {
   const header = [...data.header]
   header.splice(columnIndex, 0, '')
   const alignments = [...data.alignments]
@@ -181,17 +350,78 @@ function insertColumnAt(data: TableData, columnIndex: number): TableData {
   })
   return { header, alignments, rows }
 }
-function deleteColumnAt(data: TableData, columnIndex: number): TableData {
+export function deleteColumnAt(data: TableData, columnIndex: number): TableData {
   return {
     header: data.header.filter((_, index) => index !== columnIndex),
     alignments: data.alignments.filter((_, index) => index !== columnIndex),
     rows: data.rows.map((row) => row.filter((_, index) => index !== columnIndex)),
   }
 }
-function setColumnAlignment(data: TableData, columnIndex: number, align: TableAlignment): TableData {
+export function moveRowAt(data: TableData, rowIndex: number, targetIndex: number): TableData {
+  if (
+    rowIndex < 0 ||
+    rowIndex >= data.rows.length ||
+    targetIndex < 0 ||
+    targetIndex >= data.rows.length ||
+    rowIndex === targetIndex
+  )
+    return data
+  const rows = data.rows.map((row) => [...row])
+  const [row] = rows.splice(rowIndex, 1)
+  rows.splice(targetIndex, 0, row)
+  return { ...data, rows }
+}
+
+export function moveColumnAt(data: TableData, columnIndex: number, targetIndex: number): TableData {
+  if (
+    columnIndex < 0 ||
+    columnIndex >= data.header.length ||
+    targetIndex < 0 ||
+    targetIndex >= data.header.length ||
+    columnIndex === targetIndex
+  )
+    return data
+  const move = <T>(values: T[]): T[] => {
+    const next = [...values]
+    const [value] = next.splice(columnIndex, 1)
+    next.splice(targetIndex, 0, value)
+    return next
+  }
+  return {
+    header: move(data.header),
+    alignments: move(data.alignments),
+    rows: data.rows.map((row) =>
+      move(Array.from({ length: data.header.length }, (_, index) => row[index] ?? '')),
+    ),
+  }
+}
+
+export function setColumnAlignment(
+  data: TableData,
+  columnIndex: number,
+  align: TableAlignment,
+): TableData {
   const alignments = [...data.alignments]
   alignments[columnIndex] = align
   return { ...data, alignments }
+}
+
+export function tableCellPlainText(value: string): string {
+  return inlinePlainText(parseTableCellInline(value))
+}
+
+function copyPlainText(value: string): void {
+  const fallback = (): void => {
+    const textarea = document.createElement('textarea')
+    textarea.value = value
+    textarea.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0'
+    document.body.append(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    textarea.remove()
+  }
+  if (!navigator.clipboard?.writeText) return fallback()
+  void navigator.clipboard.writeText(value).catch(fallback)
 }
 
 function applyTableEdit(
@@ -199,12 +429,14 @@ function applyTableEdit(
   table: MarkdownTableMatch,
   mutate: (data: TableData) => TableData,
 ): void {
+  if (view.state.readOnly) return
   const next = mutate(toTableData(table))
   view.dispatch({ changes: { from: table.from, to: table.to, insert: serializeTableData(next) } })
   view.focus()
 }
 
 function deleteTable(view: EditorView, table: MarkdownTableMatch): void {
+  if (view.state.readOnly) return
   const eatsTrailingNewline = view.state.doc.sliceString(table.to, table.to + 1) === '\n'
   view.dispatch({ changes: { from: table.from, to: table.to + (eatsTrailingNewline ? 1 : 0) } })
   view.focus()
@@ -240,7 +472,10 @@ function openTableContextMenu(event: MouseEvent, ctx: TableMenuContext): void {
   closeOpenTableMenu?.()
 
   const { view, table, rowKind, columnIndex } = ctx
+  const readOnly = view.state.readOnly
   const bodyRowIndex = rowKind === 'header' ? null : rowKind
+  const selectedCell =
+    rowKind === 'header' ? table.header[columnIndex] : table.rows[rowKind]?.[columnIndex]
   const menu = document.createElement('div')
   menu.className = 'xmd-cm-table-menu'
   menu.style.left = `${event.clientX}px`
@@ -275,51 +510,100 @@ function openTableContextMenu(event: MouseEvent, ctx: TableMenuContext): void {
   }
 
   const addSeparator = (): void => {
-    menu.append(Object.assign(document.createElement('div'), { className: 'xmd-cm-table-menu-separator' }))
+    menu.append(
+      Object.assign(document.createElement('div'), { className: 'xmd-cm-table-menu-separator' }),
+    )
   }
+
+  addItem('复制单元格', null, () => copyPlainText(tableCellPlainText(selectedCell?.text ?? '')))
+  addItem('复制表格', null, () => copyPlainText(view.state.doc.sliceString(table.from, table.to)))
+  addSeparator()
 
   addItem(
     '在上方插入行',
     null,
     () => applyTableEdit(view, table, (data) => insertRowAt(data, bodyRowIndex ?? 0)),
-    bodyRowIndex === null,
+    readOnly || bodyRowIndex === null,
   )
-  addItem('在下方插入行', '⌘Enter', () =>
-    applyTableEdit(view, table, (data) =>
-      insertRowAt(data, bodyRowIndex === null ? 0 : bodyRowIndex + 1),
-    ),
+  addItem(
+    '在下方插入行',
+    null,
+    () =>
+      applyTableEdit(view, table, (data) =>
+        insertRowAt(data, bodyRowIndex === null ? 0 : bodyRowIndex + 1),
+      ),
+    readOnly,
   )
   addItem(
     '删除行',
     '⌘⌫',
     () => applyTableEdit(view, table, (data) => deleteRowAt(data, bodyRowIndex ?? 0)),
-    bodyRowIndex === null,
+    readOnly || bodyRowIndex === null,
+  )
+  addItem(
+    '上移行',
+    null,
+    () => applyTableEdit(view, table, (data) => moveRowAt(data, bodyRowIndex!, bodyRowIndex! - 1)),
+    readOnly || bodyRowIndex === null || bodyRowIndex === 0,
+  )
+  addItem(
+    '下移行',
+    null,
+    () => applyTableEdit(view, table, (data) => moveRowAt(data, bodyRowIndex!, bodyRowIndex! + 1)),
+    readOnly || bodyRowIndex === null || bodyRowIndex === table.rows.length - 1,
   )
   addSeparator()
-  addItem('在左侧插入列', null, () =>
-    applyTableEdit(view, table, (data) => insertColumnAt(data, columnIndex)),
+  addItem(
+    '在左侧插入列',
+    null,
+    () => applyTableEdit(view, table, (data) => insertColumnAt(data, columnIndex)),
+    readOnly,
   )
-  addItem('在右侧插入列', null, () =>
-    applyTableEdit(view, table, (data) => insertColumnAt(data, columnIndex + 1)),
+  addItem(
+    '在右侧插入列',
+    null,
+    () => applyTableEdit(view, table, (data) => insertColumnAt(data, columnIndex + 1)),
+    readOnly,
   )
   addItem(
     '删除列',
     null,
     () => applyTableEdit(view, table, (data) => deleteColumnAt(data, columnIndex)),
-    table.header.length <= 1,
+    readOnly || table.header.length <= 1,
+  )
+  addItem(
+    '左移列',
+    null,
+    () => applyTableEdit(view, table, (data) => moveColumnAt(data, columnIndex, columnIndex - 1)),
+    readOnly || columnIndex === 0,
+  )
+  addItem(
+    '右移列',
+    null,
+    () => applyTableEdit(view, table, (data) => moveColumnAt(data, columnIndex, columnIndex + 1)),
+    readOnly || columnIndex === table.header.length - 1,
   )
   addSeparator()
-  addItem('左对齐', null, () =>
-    applyTableEdit(view, table, (data) => setColumnAlignment(data, columnIndex, 'left')),
+  addItem(
+    '左对齐',
+    null,
+    () => applyTableEdit(view, table, (data) => setColumnAlignment(data, columnIndex, 'left')),
+    readOnly,
   )
-  addItem('居中对齐', null, () =>
-    applyTableEdit(view, table, (data) => setColumnAlignment(data, columnIndex, 'center')),
+  addItem(
+    '居中对齐',
+    null,
+    () => applyTableEdit(view, table, (data) => setColumnAlignment(data, columnIndex, 'center')),
+    readOnly,
   )
-  addItem('右对齐', null, () =>
-    applyTableEdit(view, table, (data) => setColumnAlignment(data, columnIndex, 'right')),
+  addItem(
+    '右对齐',
+    null,
+    () => applyTableEdit(view, table, (data) => setColumnAlignment(data, columnIndex, 'right')),
+    readOnly,
   )
   addSeparator()
-  addItem('删除表格', null, () => deleteTable(view, table))
+  addItem('删除表格', null, () => deleteTable(view, table), readOnly)
 
   document.body.append(menu)
   const rect = menu.getBoundingClientRect()
@@ -355,6 +639,8 @@ function openTableContextMenu(event: MouseEvent, ctx: TableMenuContext): void {
 interface TableWidgetController {
   table: MarkdownTableMatch
   cellElements: Map<MarkdownTableCell, HTMLElement>
+  cellByElement: WeakMap<HTMLElement, MarkdownTableCell>
+  resizeObserver?: ResizeObserver
 }
 
 const tableControllers = new WeakMap<HTMLElement, TableWidgetController>()
@@ -383,21 +669,300 @@ function editableCellsInOrder(dom: HTMLElement): HTMLElement[] {
   return Array.from(dom.querySelectorAll<HTMLElement>('[contenteditable="true"]'))
 }
 
-function insertPlainText(text: string): void {
-  document.execCommand('insertText', false, text)
+const CELL_BREAK_PATTERN = /^<br\s*\/?\s*>$/i
+
+function tableCellBreakRanges(value: string): { from: number; to: number }[] {
+  const ranges: { from: number; to: number }[] = []
+  tableCellParser.parse(value).iterate({
+    enter(node) {
+      if (node.name === 'HTMLTag' && CELL_BREAK_PATTERN.test(value.slice(node.from, node.to))) {
+        ranges.push({ from: node.from, to: node.to })
+      }
+    },
+  })
+  return ranges
+}
+
+export function splitTableCellLines(value: string): string[] {
+  const ranges = tableCellBreakRanges(value)
+  if (!ranges.length) return [value]
+  const lines: string[] = []
+  let cursor = 0
+  for (const range of ranges) {
+    lines.push(value.slice(cursor, range.from))
+    cursor = range.to
+  }
+  lines.push(value.slice(cursor))
+  return lines
+}
+
+export function normalizeTableCellBreaks(value: string): string {
+  return splitTableCellLines(value).join('<br>')
+}
+
+function renderTableInlinePart(part: TableInlinePart): Node {
+  if (part.kind === 'text') return document.createTextNode(part.text)
+  if (part.kind === 'break') return document.createElement('br')
+  const tag =
+    part.kind === 'strong'
+      ? 'strong'
+      : part.kind === 'emphasis'
+        ? 'em'
+        : part.kind === 'strike'
+          ? 'del'
+          : part.kind === 'code'
+            ? 'code'
+            : 'span'
+  const element = document.createElement(tag)
+  element.dataset.xmdTableInline = 'true'
+  element.dataset.xmdPrefix = part.prefix
+  element.dataset.xmdSuffix = part.suffix
+  if (part.kind === 'link') element.className = 'xmd-cm-table-inline-link'
+  if (part.kind === 'code') element.className = 'xmd-cm-table-inline-code'
+  for (const child of part.children) element.append(renderTableInlinePart(child))
+  return element
+}
+
+/** Render Markdown's portable in-cell line break without enabling arbitrary HTML. */
+export function setTableCellContent(element: HTMLElement, value: string): void {
+  element.replaceChildren()
+  for (const inline of parseTableCellInline(value)) element.append(renderTableInlinePart(inline))
+}
+
+/** Convert the safe contenteditable DOM back to the canonical Markdown cell value. */
+export function readTableCellContent(element: HTMLElement): string {
+  const read = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+    if (node.nodeName === 'BR') return '<br>'
+    const content = Array.from(node.childNodes, read).join('')
+    if (node instanceof HTMLElement && node.dataset.xmdTableInline === 'true') {
+      // If all visible content of a format wrapper was deleted, drop its hidden
+      // Markdown markers as well instead of leaving `****`, `` or an empty link.
+      if (!content) return ''
+      return `${node.dataset.xmdPrefix ?? ''}${content}${node.dataset.xmdSuffix ?? ''}`
+    }
+    return content
+  }
+  return Array.from(element.childNodes, read).join('')
+}
+
+const TABLE_INLINE_FORMAT_DOM: Record<
+  TableCellInlineFormat,
+  { tag: 'STRONG' | 'EM' | 'DEL' | 'CODE'; prefix: string; suffix: string }
+> = {
+  bold: { tag: 'STRONG', prefix: '**', suffix: '**' },
+  italic: { tag: 'EM', prefix: '*', suffix: '*' },
+  strike: { tag: 'DEL', prefix: '~~', suffix: '~~' },
+  inlineCode: { tag: 'CODE', prefix: '`', suffix: '`' },
+}
+
+function closestTableInlineWrapper(
+  node: Node,
+  cell: HTMLElement,
+  format: TableCellInlineFormat,
+): HTMLElement | null {
+  const tag = TABLE_INLINE_FORMAT_DOM[format].tag
+  let current: HTMLElement | null =
+    node instanceof HTMLElement
+      ? node
+      : node.parentElement instanceof HTMLElement
+        ? node.parentElement
+        : null
+  while (current && current !== cell) {
+    if (current.tagName === tag && current.dataset.xmdTableInline === 'true') return current
+    current = current.parentElement
+  }
+  return null
+}
+
+function closestAnyTableInlineWrapper(node: Node, cell: HTMLElement): HTMLElement | null {
+  let current: HTMLElement | null =
+    node instanceof HTMLElement
+      ? node
+      : node.parentElement instanceof HTMLElement
+        ? node.parentElement
+        : null
+  while (current && current !== cell) {
+    if (current.dataset.xmdTableInline === 'true') return current
+    current = current.parentElement
+  }
+  return null
+}
+
+function selectionRangeInCell(cell: HTMLElement): Range | null {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return null
+  const range = selection.getRangeAt(0)
+  return cell.contains(range.startContainer) && cell.contains(range.endContainer) ? range : null
+}
+
+function tableCellInlineState(cell: HTMLElement): Omit<TableCellCommandState, 'focused'> {
+  const range = selectionRangeInCell(cell)
+  const active = (format: TableCellInlineFormat): boolean => {
+    if (!range) return false
+    const start = closestTableInlineWrapper(range.startContainer, cell, format)
+    return Boolean(start && start === closestTableInlineWrapper(range.endContainer, cell, format))
+  }
+  return {
+    hasSelection: Boolean(range && !range.collapsed),
+    bold: active('bold'),
+    italic: active('italic'),
+    strike: active('strike'),
+    inlineCode: active('inlineCode'),
+  }
+}
+
+function rangeTextOffset(root: HTMLElement, node: Node, offset: number): number {
+  const prefix = document.createRange()
+  prefix.selectNodeContents(root)
+  prefix.setEnd(node, offset)
+  return prefix.toString().length
+}
+
+function selectNodes(first: Node, last: Node): void {
+  const selection = window.getSelection()
+  if (!selection) return
+  const range = document.createRange()
+  range.setStartBefore(first)
+  range.setEndAfter(last)
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
+
+function unwrapTableInlineElement(element: HTMLElement): { first: Node; last: Node } | null {
+  const first = element.firstChild
+  const last = element.lastChild
+  if (!first || !last) return null
+  element.replaceWith(...Array.from(element.childNodes))
+  return { first, last }
+}
+
+/**
+ * Apply the safe inline subset directly to a cell's own contenteditable DOM.
+ * Block styles never enter this path. Partial removal from inside one existing
+ * wrapper is deliberately rejected rather than producing overlapping Markdown.
+ */
+export function toggleTableCellInlineFormat(
+  cell: HTMLElement,
+  format: TableCellInlineFormat,
+): boolean {
+  const range = selectionRangeInCell(cell)
+  if (!range || range.collapsed) return false
+  const config = TABLE_INLINE_FORMAT_DOM[format]
+  const startWrapper = closestTableInlineWrapper(range.startContainer, cell, format)
+  const endWrapper = closestTableInlineWrapper(range.endContainer, cell, format)
+
+  if (startWrapper && startWrapper === endWrapper) {
+    const start = rangeTextOffset(startWrapper, range.startContainer, range.startOffset)
+    const end = rangeTextOffset(startWrapper, range.endContainer, range.endOffset)
+    if (start !== 0 || end !== (startWrapper.textContent ?? '').length) return false
+    const unwrapped = unwrapTableInlineElement(startWrapper)
+    if (!unwrapped) return false
+    selectNodes(unwrapped.first, unwrapped.last)
+    return true
+  }
+
+  // A range crossing an inline-wrapper boundary cannot be safely reparented
+  // with DOM Range APIs without changing formatting outside the selection.
+  // Reject it instead of producing overlapping Markdown or stale outer edits.
+  if (
+    startWrapper ||
+    endWrapper ||
+    closestAnyTableInlineWrapper(range.startContainer, cell) !==
+      closestAnyTableInlineWrapper(range.endContainer, cell)
+  ) {
+    return false
+  }
+
+  const preview = range.cloneContents()
+  if (
+    format === 'inlineCode' &&
+    (preview.querySelector('br') || preview.querySelector('[data-xmd-table-inline="true"]'))
+  ) {
+    return false
+  }
+  const fragment = range.extractContents()
+  const nested = Array.from(
+    fragment.querySelectorAll<HTMLElement>(
+      `${config.tag.toLowerCase()}[data-xmd-table-inline="true"]`,
+    ),
+  ).reverse()
+  for (const wrapper of nested) unwrapTableInlineElement(wrapper)
+
+  const wrapper = document.createElement(config.tag.toLowerCase())
+  wrapper.dataset.xmdTableInline = 'true'
+  wrapper.dataset.xmdPrefix = config.prefix
+  wrapper.dataset.xmdSuffix = config.suffix
+  wrapper.append(fragment)
+  range.insertNode(wrapper)
+
+  let merged = wrapper
+  const previous = merged.previousSibling
+  if (
+    previous instanceof HTMLElement &&
+    previous.tagName === config.tag &&
+    previous.dataset.xmdTableInline === 'true'
+  ) {
+    previous.append(...Array.from(merged.childNodes))
+    merged.remove()
+    merged = previous
+  }
+  const next = merged.nextSibling
+  if (
+    next instanceof HTMLElement &&
+    next.tagName === config.tag &&
+    next.dataset.xmdTableInline === 'true'
+  ) {
+    merged.append(...Array.from(next.childNodes))
+    next.remove()
+  }
+  if (merged.firstChild && merged.lastChild) selectNodes(merged.firstChild, merged.lastChild)
+  return true
+}
+
+function replaceCellSelection(element: HTMLElement, value: string): boolean {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return false
+  const range = selection.getRangeAt(0)
+  if (!element.contains(range.commonAncestorContainer)) return false
+  range.deleteContents()
+  const fragment = document.createDocumentFragment()
+  const parts = value.replace(/\r\n?/g, '\n').split('\n')
+  let lastNode: Node | null = null
+  parts.forEach((part, index) => {
+    if (index > 0) {
+      lastNode = document.createElement('br')
+      fragment.append(lastNode)
+    }
+    if (part) {
+      lastNode = document.createTextNode(part)
+      fragment.append(lastNode)
+    }
+  })
+  if (!lastNode) return true
+  range.insertNode(fragment)
+  range.setStartAfter(lastNode)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
 }
 
 class TableWidget extends WidgetType {
   constructor(
     readonly table: MarkdownTableMatch,
     readonly rowHeight: number,
+    readonly readOnly: boolean,
   ) {
     super()
   }
   eq(other: TableWidget): boolean {
     return (
       this.rowHeight === other.rowHeight &&
-      JSON.stringify(this.table) === JSON.stringify(other.table)
+      this.readOnly === other.readOnly &&
+      this.table.from === other.table.from &&
+      this.table.to === other.table.to &&
+      this.table.source === other.table.source
     )
   }
   get estimatedHeight(): number {
@@ -427,13 +992,14 @@ class TableWidget extends WidgetType {
         const element = elements[index]
         index += 1
         if (!element) return
-        if (document.activeElement !== element && element.textContent !== cell.text) {
-          element.textContent = cell.text
+        if (document.activeElement !== element && readTableCellContent(element) !== cell.text) {
+          setTableCellContent(element, cell.text)
         }
         element.style.textAlign = this.table.alignments[column] ?? ''
         element.dataset.sourceFrom = String(cell.from)
         element.dataset.sourceTo = String(cell.to)
         nextCellElements.set(cell, element)
+        controller.cellByElement.set(element, cell)
       })
     }
     controller.cellElements = nextCellElements
@@ -443,7 +1009,6 @@ class TableWidget extends WidgetType {
     const wrapper = document.createElement('div')
     wrapper.className = 'xmd-cm-table-preview'
     wrapper.dataset.xmdTable = 'true'
-    wrapper.style.minHeight = `${this.estimatedHeight}px`
     const table = document.createElement('table')
     const head = document.createElement('thead')
     const body = document.createElement('tbody')
@@ -451,17 +1016,24 @@ class TableWidget extends WidgetType {
     const controller: TableWidgetController = {
       table: this.table,
       cellElements: new Map(),
+      cellByElement: new WeakMap(),
     }
 
     head.append(this.createRow(view, controller, this.table.header, true))
     for (const row of this.table.rows) body.append(this.createRow(view, controller, row, false))
     table.append(head, body)
     wrapper.append(table)
+    if (typeof ResizeObserver !== 'undefined') {
+      controller.resizeObserver = new ResizeObserver(() => view.requestMeasure())
+      controller.resizeObserver.observe(wrapper)
+    }
     tableControllers.set(wrapper, controller)
     return wrapper
   }
 
   destroy(dom: HTMLElement): void {
+    for (const cell of editableCellsInOrder(dom)) tableCellCommandBridge.deactivate(cell)
+    tableControllers.get(dom)?.resizeObserver?.disconnect()
     tableControllers.delete(dom)
   }
 
@@ -477,19 +1049,23 @@ class TableWidget extends WidgetType {
     header: boolean,
   ): HTMLTableRowElement {
     const row = document.createElement('tr')
-    const count = Math.max(this.table.header.length, cells.length)
+    // GFM's rendered table always follows the header column count. Surplus source
+    // cells are ignored and missing cells remain visual placeholders.
+    const count = this.table.header.length
     for (let column = 0; column < count; column++) {
       const cell = cells[column]
       const element = document.createElement(header ? 'th' : 'td')
       const align = this.table.alignments[column]
       if (align) element.style.textAlign = align
       if (cell) {
-        element.textContent = cell.text
-        element.contentEditable = 'true'
+        setTableCellContent(element, cell.text)
+        element.contentEditable = this.readOnly ? 'false' : 'true'
+        element.setAttribute('aria-readonly', String(this.readOnly))
         element.dataset.sourceFrom = String(cell.from)
         element.dataset.sourceTo = String(cell.to)
         controller.cellElements.set(cell, element)
-        this.bindCellEvents(view, controller, element, cell)
+        controller.cellByElement.set(element, cell)
+        this.bindCellEvents(view, controller, element)
       }
       row.append(element)
     }
@@ -500,10 +1076,15 @@ class TableWidget extends WidgetType {
     view: EditorView,
     controller: TableWidgetController,
     element: HTMLElement,
-    cell: MarkdownTableCell,
   ): void {
-    element.addEventListener('input', () => {
-      const raw = element.textContent ?? ''
+    const commitCell = (): void => {
+      if (view.state.readOnly) return
+      // updateDOM reuses cell elements but replaces the parsed table/cell objects.
+      // Resolve the current object for every transaction rather than retaining stale
+      // source offsets in this event-handler closure.
+      const cell = controller.cellByElement.get(element)
+      if (!cell) return
+      const raw = readTableCellContent(element)
       if (raw === cell.text) return
       const escaped = escapeTableCellText(raw)
       const from = cell.from
@@ -513,12 +1094,54 @@ class TableWidget extends WidgetType {
       cell.text = raw
       cell.to = from + escaped.length
       shiftCellsAfter(controller.table, cell, to, delta)
+    }
+
+    element.addEventListener('input', (event) => {
+      if (event instanceof InputEvent && event.isComposing) return
+      commitCell()
+      tableCellCommandBridge.refresh(element)
     })
+    element.addEventListener('compositionend', commitCell)
+    element.addEventListener('focus', () => {
+      element
+        .closest('table')
+        ?.querySelectorAll('.xmd-cm-table-cell-active')
+        .forEach((active) => {
+          if (active !== element) active.classList.remove('xmd-cm-table-cell-active')
+        })
+      element.classList.add('xmd-cm-table-cell-active')
+      tableCellCommandBridge.activate({
+        element,
+        runInline: (format) => {
+          if (view.state.readOnly || !toggleTableCellInlineFormat(element, format)) return false
+          commitCell()
+          return true
+        },
+        readState: () => tableCellInlineState(element),
+        selectAll: () => {
+          const selection = window.getSelection()
+          if (!selection) return
+          const range = document.createRange()
+          range.selectNodeContents(element)
+          selection.removeAllRanges()
+          selection.addRange(range)
+        },
+      })
+    })
+    element.addEventListener('blur', () => {
+      tableCellCommandBridge.deactivate(element)
+      element.classList.remove('xmd-cm-table-cell-active')
+      const cell = controller.cellByElement.get(element)
+      if (cell) setTableCellContent(element, cell.text)
+    })
+    element.addEventListener('mouseup', () => tableCellCommandBridge.refresh(element))
+    element.addEventListener('keyup', () => tableCellCommandBridge.refresh(element))
 
     element.addEventListener('paste', (event) => {
+      if (view.state.readOnly) return
       event.preventDefault()
       const text = event.clipboardData?.getData('text/plain') ?? ''
-      insertPlainText(text.replace(/\r?\n/g, ' '))
+      if (replaceCellSelection(element, text)) commitCell()
     })
 
     element.addEventListener('contextmenu', (event) => {
@@ -533,28 +1156,34 @@ class TableWidget extends WidgetType {
     })
 
     element.addEventListener('keydown', (event) => {
+      if (event.isComposing) return
+      if (view.state.readOnly) return
       const withMod = event.metaKey || event.ctrlKey
       if (withMod && event.key === 'Enter') {
         event.preventDefault()
-        const position = cellPosition(element)
-        if (position) {
-          applyTableEdit(view, controller.table, (data) =>
-            insertRowAt(data, position.rowKind === 'header' ? 0 : position.rowKind + 1),
-          )
-        }
+        // Input is synchronized transaction-by-transaction. Mod+Enter explicitly
+        // commits and remains in this cell, matching spreadsheet conventions.
+        commitCell()
         return
       }
       if (withMod && event.key === 'Backspace') {
         event.preventDefault()
         const position = cellPosition(element)
         if (position && position.rowKind !== 'header') {
-          applyTableEdit(view, controller.table, (data) => deleteRowAt(data, position.rowKind as number))
+          applyTableEdit(view, controller.table, (data) =>
+            deleteRowAt(data, position.rowKind as number),
+          )
         }
         return
       }
       if (event.key === 'Enter') {
         event.preventDefault()
-        this.moveFocus(element, event.shiftKey ? -1 : 1, /* sameColumn */ true)
+        if (event.shiftKey) {
+          if (replaceCellSelection(element, '\n')) commitCell()
+        } else {
+          commitCell()
+          this.moveFocus(element, 1, /* sameColumn */ true)
+        }
         return
       }
       if (event.key === 'Tab') {
@@ -628,7 +1257,13 @@ export function markdownTablePreview(options: MarkdownTablePreviewOptions = {}):
       update(update: ViewUpdate): void {
         // Cells are edited in place now, so table widgets no longer need to rebuild
         // when the selection merely moves into/out of the table's source range.
-        if (update.docChanged || update.viewportChanged) this.schedule()
+        if (
+          update.docChanged ||
+          update.viewportChanged ||
+          update.startState.readOnly !== update.state.readOnly ||
+          syntaxTree(update.startState) !== syntaxTree(update.state)
+        )
+          this.schedule()
       }
 
       destroy(): void {
@@ -651,10 +1286,10 @@ export function markdownTablePreview(options: MarkdownTablePreviewOptions = {}):
           this.view.visibleRanges,
           bufferChars,
         ).map((table) =>
-          Decoration.replace({ widget: new TableWidget(table, rowHeight), block: true }).range(
-            table.from,
-            table.to,
-          ),
+          Decoration.replace({
+            widget: new TableWidget(table, rowHeight, this.view.state.readOnly),
+            block: true,
+          }).range(table.from, table.to),
         )
         return Decoration.set(ranges, true)
       }

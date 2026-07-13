@@ -8,6 +8,7 @@ interface Props {
   onSelect: (index: number) => void
   onReorder: (fromIndex: number, toIndex: number) => void
   onClose: () => void
+  readOnly?: boolean
   /** 可选宽度覆盖（拖放调整后的动态宽度） */
   width?: number
 }
@@ -17,6 +18,7 @@ const Outline = memo(function Outline({
   onSelect,
   onReorder,
   onClose,
+  readOnly = false,
   width,
 }: Props): JSX.Element {
   const [dropTarget, setDropTarget] = useState<number | null>(null)
@@ -30,8 +32,12 @@ const Outline = memo(function Outline({
     [],
   )
 
+  useEffect(() => {
+    if (readOnly) dragCleanupRef.current?.()
+  }, [readOnly])
+
   const startDrag = (event: React.PointerEvent<HTMLDivElement>, fromIndex: number): void => {
-    if (event.button !== 0) return
+    if (readOnly || event.button !== 0) return
     dragCleanupRef.current?.()
     const startX = event.clientX
     const startY = event.clientY
@@ -106,7 +112,7 @@ const Outline = memo(function Outline({
               className={`outline-item${dropTarget === i ? ' drop-target' : ''}`}
               data-outline-index={i}
               style={{ paddingLeft: `${(it.level - 1) * 10 + 4}px` }}
-              onPointerDown={(event) => startDrag(event, i)}
+              onPointerDown={readOnly ? undefined : (event) => startDrag(event, i)}
               onClick={() => {
                 if (suppressClickRef.current) {
                   suppressClickRef.current = false
@@ -116,9 +122,11 @@ const Outline = memo(function Outline({
               }}
               title={it.text}
             >
-              <span className="outline-drag-handle" aria-hidden>
-                ⠿
-              </span>
+              {!readOnly && (
+                <span className="outline-drag-handle" aria-hidden>
+                  ⠿
+                </span>
+              )}
               {it.text || t('（空标题）')}
             </div>
           ))

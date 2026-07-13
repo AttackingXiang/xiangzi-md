@@ -4,12 +4,54 @@
   line-height: 1.75;
 }
 
+/* Markdown separator lines delimit blocks in source but render no paragraph. */
+.xmd-cm-editor .cm-line.xmd-cm-block-separator {
+  height: 0;
+  line-height: 0;
+  min-height: 0;
+  padding-block: 0;
+  overflow: hidden;
+}
+
+/* Empty Markdown lines are collapsed above, so rendered paragraphs provide
+   their own block rhythm. Only document-level Paragraph AST nodes receive
+   these classes; list, quote, table and literal-block layout stays untouched. */
+.xmd-cm-editor .cm-line.xmd-cm-paragraph-first {
+  padding-top: 0.38em;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-paragraph-last {
+  padding-bottom: 0.38em;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-horizontal-rule {
+  line-height: 0;
+  min-height: 0;
+  padding-block: 0.24em;
+}
+
+.xmd-cm-editor .xmd-cm-horizontal-rule-widget {
+  border-top: 1px solid var(--border-strong);
+  box-sizing: border-box;
+  display: block;
+  height: 0;
+  width: 100%;
+}
+
 .xmd-cm-editor .cm-line.xmd-cm-heading {
   color: var(--text);
   font-family: var(--crepe-font-title, var(--crepe-font-default, sans-serif));
   font-weight: 700;
   line-height: 1.28;
   padding-block: 0.18em;
+}
+
+/* CM6's default Markdown highlight underlines heading tokens. Live Preview
+   already communicates heading hierarchy through typography, so remove that
+   source-editor affordance from both the line and its generated token spans. */
+.xmd-cm-editor .cm-line.xmd-cm-heading,
+.xmd-cm-editor .cm-line.xmd-cm-heading span {
+  text-decoration: none;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-heading-1 {
@@ -70,9 +112,33 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-blockquote {
-  border-left: 3px solid var(--border-strong);
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--border-strong) 0 3px,
+    transparent 3px 1em
+  );
+  background-repeat: no-repeat;
+  background-size: calc(var(--xmd-quote-depth, 1) * 1em) 100%;
   color: var(--text-2);
-  padding-left: 1em;
+  padding-left: calc(var(--xmd-quote-depth, 1) * 1em);
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-list-line {
+  line-height: 1.6;
+}
+
+.xmd-cm-list-marker {
+  color: var(--text-muted);
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  margin-inline: calc(var(--xmd-list-depth, 0) * 1.35em) 0.45em;
+  text-align: right;
+  width: 1.3em;
+}
+
+.xmd-cm-list-marker.is-task {
+  margin-right: 0;
+  width: 0;
 }
 
 .xmd-cm-task-checkbox {

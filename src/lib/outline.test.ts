@@ -37,11 +37,18 @@ describe('parseOutline', () => {
     expect(result).toEqual([{ level: 2, text: 'Clean', index: 0, offset: 0 }])
   })
 
+  it('shows visible inline text and Setext headings', () => {
+    const result = parseOutline('   # **Bold** [link](next.md)\nSetext `code`\n===\n')
+    expect(result).toEqual([
+      { level: 1, text: 'Bold link', index: 0, offset: 0 },
+      { level: 1, text: 'Setext code', index: 1, offset: 30 },
+    ])
+  })
+
   it('does not treat --- thematic breaks as headings', () => {
-    const md = 'Some paragraph\n---\n## Real heading'
+    const md = 'Some paragraph\n\n---\n## Real heading'
     const result = parseOutline(md)
-    // Only the ATX heading should appear; --- is a thematic break, not a heading
-    expect(result).toEqual([{ level: 2, text: 'Real heading', index: 0, offset: 19 }])
+    expect(result).toEqual([{ level: 2, text: 'Real heading', index: 0, offset: 20 }])
   })
 
   it('returns empty array for content with no headings', () => {

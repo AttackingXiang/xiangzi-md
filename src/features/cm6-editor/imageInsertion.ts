@@ -1,3 +1,4 @@
+import { isolateHistory } from '@codemirror/commands'
 import { StateEffect, StateField, type ChangeDesc, type Extension } from '@codemirror/state'
 import { ViewPlugin, type EditorView } from '@codemirror/view'
 
@@ -28,19 +29,35 @@ export function mapPendingImageAnchor(
 }
 
 function escapeAlt(value: string): string {
-  return value.replace(/([\\\[\]])/g, '\\$1')
+  return value
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .replace(/([\\\[\]])/g, '\\$1')
 }
 
 function escapeDestination(value: string): string {
-  return value.replace(/([\\>])/g, '\\$1')
+  return value
+    .replace(/[\u0000-\u001f\u007f]/g, (character) => encodeURIComponent(character))
+    .replace(/([\\>])/g, '\\$1')
 }
 
 export function markdownImageInsertionText(fileName: string, path: string): string {
-  return `![${escapeAlt(fileName || 'image')}](<${escapeDestination(path)}>)`
+  const alt = escapeAlt(fileName || 'image') || 'image'
+  return `![${alt}](<${escapeDestination(path)}>)`
+}
+
+const IMAGE_FILE_EXTENSION = /\.(?:avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i
+
+export function isImageFile(file: Pick<File, 'name' | 'type'>): boolean {
+  const type = file.type.toLowerCase()
+  return (
+    type.startsWith('image/') ||
+    ((!type || type === 'application/octet-stream') && IMAGE_FILE_EXTENSION.test(file.name))
+  )
 }
 
 function imageFiles(files: FileList | null): File[] {
-  return files ? Array.from(files).filter((file) => file.type.startsWith('image/')) : []
+  return files ? Array.from(files).filter(isImageFile) : []
 }
 
 /**
@@ -73,7 +90,13 @@ export function imageInsertion(options: ImageInsertionOptions): Extension {
     alive: boolean
   }
 
-  const beginUpload = (view: EditorView, files: File[], from: number, to: number): boolean => {
+  const beginUpload = (
+    view: EditorView,
+    files: File[],
+    from: number,
+    to: number,
+    origin: 'paste' | 'drop',
+  ): boolean => {
     if (view.state.readOnly || !files.length) return false
     const id = ++nextId
     view.dispatch({ effects: addAnchor.of({ id, from, to }) })
@@ -96,10 +119,16 @@ export function imageInsertion(options: ImageInsertionOptions): Extension {
       if (!view.plugin(runtime)?.alive) return
       const anchor = view.state.field(anchors).get(id)
       if (!anchor) return
+      if (view.state.readOnly) {
+        view.dispatch({ effects: removeAnchor.of(id) })
+        return
+      }
       const markdown = markdownItems.filter((item): item is string => item !== null).join('\n')
       view.dispatch({
         changes: markdown ? { from: anchor.from, to: anchor.to, insert: markdown } : undefined,
         effects: removeAnchor.of(id),
+        annotations: isolateHistory.of('full'),
+        userEvent: origin === 'paste' ? 'input.paste' : 'input.drop',
       })
     })
     return true
@@ -117,14 +146,24 @@ export function imageInsertion(options: ImageInsertionOptions): Extension {
         paste(event, view) {
           const files = imageFiles(event.clipboardData?.files ?? null)
           const selection = view.state.selection.main
-          return beginUpload(view, files, selection.from, selection.to)
+          const handled = beginUpload(view, files, selection.from, selection.to, 'paste')
+          if (handled) event.preventDefault()
+          return handled
         },
         drop(event, view) {
           const files = imageFiles(event.dataTransfer?.files ?? null)
           if (!files.length || view.state.readOnly) return false
           const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
           const fallback = view.state.selection.main.head
-          return beginUpload(view, files, position ?? fallback, position ?? fallback)
+          const handled = beginUpload(
+            view,
+            files,
+            position ?? fallback,
+            position ?? fallback,
+            'drop',
+          )
+          if (handled) event.preventDefault()
+          return handled
         },
       },
     },

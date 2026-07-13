@@ -1,3 +1,4 @@
+import { syntaxTree } from '@codemirror/language'
 import { StateEffect, StateField, type Extension } from '@codemirror/state'
 import {
   Decoration,
@@ -9,11 +10,42 @@ import {
 
 export type ViewportDecorationBuilder = (view: EditorView) => DecorationSet
 
+export interface ViewportDecorationOptions {
+  atomic?: boolean
+  rebuildOnSelection?: boolean
+  /** Rebuild after CodeMirror's background parser publishes a more complete syntax tree. */
+  rebuildOnSyntaxTree?: boolean
+  /** Rebuild for a feature-owned state effect that doesn't otherwise change the view. */
+  rebuildOnUpdate?: (update: ViewUpdate) => boolean
+}
+
+interface ViewportDecorationUpdateReason {
+  docChanged: boolean
+  selectionSet: boolean
+  viewportChanged: boolean
+  syntaxTreeChanged: boolean
+}
+
+export function shouldRebuildViewportDecorations(
+  update: ViewportDecorationUpdateReason,
+  options: ViewportDecorationOptions,
+): boolean {
+  return (
+    update.docChanged ||
+    update.viewportChanged ||
+    (options.rebuildOnSelection !== false && update.selectionSet) ||
+    (options.rebuildOnSyntaxTree === true && update.syntaxTreeChanged)
+  )
+}
+
 /**
  * Hosts vertically significant decorations in a StateField, as CM6 requires.
  * The plugin only observes the view and schedules an effect outside update().
  */
-export function viewportDecorationExtension(build: ViewportDecorationBuilder): Extension {
+export function viewportDecorationExtension(
+  build: ViewportDecorationBuilder,
+  options: ViewportDecorationOptions = {},
+): Extension {
   const replaceDecorations = StateEffect.define<DecorationSet>()
   const field = StateField.define<DecorationSet>({
     create: () => Decoration.none,
@@ -23,7 +55,12 @@ export function viewportDecorationExtension(build: ViewportDecorationBuilder): E
       }
       return transaction.docChanged ? value.map(transaction.changes) : value
     },
-    provide: (source) => EditorView.decorations.from(source),
+    provide: (source) => [
+      EditorView.decorations.from(source),
+      ...(options.atomic
+        ? [EditorView.atomicRanges.from(source, (decorations) => () => decorations)]
+        : []),
+    ],
   })
 
   const observer = ViewPlugin.fromClass(
@@ -38,7 +75,21 @@ export function viewportDecorationExtension(build: ViewportDecorationBuilder): E
 
       update(update: ViewUpdate): void {
         if (this.dispatching) return
-        if (update.docChanged || update.selectionSet || update.viewportChanged) this.schedule()
+        if (
+          shouldRebuildViewportDecorations(
+            {
+              docChanged: update.docChanged,
+              selectionSet: update.selectionSet,
+              viewportChanged: update.viewportChanged,
+              syntaxTreeChanged:
+                options.rebuildOnSyntaxTree === true &&
+                syntaxTree(update.startState) !== syntaxTree(update.state),
+            },
+            options,
+          ) || options.rebuildOnUpdate?.(update) === true
+        ) {
+          this.schedule()
+        }
       }
 
       destroy(): void {

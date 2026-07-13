@@ -754,12 +754,15 @@ export default function App(): JSX.Element {
     [outline],
   )
 
-  const reorderSection = useCallback((fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex) return
-    const view = cm6ActiveViewBridge.get()
-    if (!view) return
-    reorderHeading(view, fromIndex, toIndex)
-  }, [])
+  const reorderSection = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      if (readingMode || fromIndex === toIndex) return
+      const view = cm6ActiveViewBridge.get()
+      if (!view) return
+      reorderHeading(view, fromIndex, toIndex)
+    },
+    [readingMode],
+  )
 
   useEffect(() => {
     const openRelativeLink = (event: Event): void => {
@@ -784,9 +787,7 @@ export default function App(): JSX.Element {
         // its source heading. The active path guard prevents a late callback from
         // navigating a different tab if the user switches again immediately.
         window.setTimeout(() => {
-          const current = stateRef.current.tabs.find(
-            (tab) => tab.id === stateRef.current.activeId,
-          )
+          const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
           if (current?.path !== target.path) return
           const view = cm6ActiveViewBridge.get()
           if (!view) return
@@ -1205,9 +1206,16 @@ export default function App(): JSX.Element {
                     onScrollTopChange={(scrollTop) =>
                       wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
                     }
-                    onChange={(c) =>
-                      updateContent(activeTab.id, replaceMarkdownBody(activeTab.content, c))
-                    }
+                    onChange={(body) => {
+                      // Frontmatter/property edits and CM6 transactions can be
+                      // dispatched in the same tick. Merge the editor body into
+                      // the authoritative tab snapshot, not this render's closure,
+                      // so neither side can overwrite a newer update.
+                      const current = stateRef.current.tabs.find((tab) => tab.id === activeTab.id)
+                      if (current) {
+                        updateContent(current.id, replaceMarkdownBody(current.content, body))
+                      }
+                    }}
                   />
                 </Suspense>
               )
@@ -1236,6 +1244,7 @@ export default function App(): JSX.Element {
                   onSelect={scrollToHeading}
                   onReorder={reorderSection}
                   onClose={closeOutline}
+                  readOnly={readingMode}
                   width={outlineWidth}
                 />
               </>

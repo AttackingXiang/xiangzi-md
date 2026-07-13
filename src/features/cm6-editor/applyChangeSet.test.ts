@@ -20,6 +20,23 @@ describe('applyChangeSetToString', () => {
     expect(applyChangeSetToString(source, changes)).toBe('你好！世界')
   })
 
+  it('replaces complete surrogate pairs and preserves CRLF source bytes', () => {
+    const source = '😀\r\nline'
+    const changes = ChangeSet.of([{ from: 0, to: 2, insert: '😁' }], source.length)
+    expect(applyChangeSetToString(source, changes)).toBe('😁\r\nline')
+  })
+
+  it('updates a large source mirror without changing distant content', () => {
+    const prefix = 'a'.repeat(128 * 1024)
+    const suffix = 'b'.repeat(128 * 1024)
+    const source = `${prefix}OLD${suffix}`
+    const changes = ChangeSet.of(
+      [{ from: prefix.length, to: prefix.length + 3, insert: 'NEW' }],
+      source.length,
+    )
+    expect(applyChangeSetToString(source, changes)).toBe(`${prefix}NEW${suffix}`)
+  })
+
   it('supports deletion and insertion at document boundaries', () => {
     const deletion = ChangeSet.of([{ from: 0, to: 3 }], 6)
     expect(applyChangeSetToString('abcdef', deletion)).toBe('def')

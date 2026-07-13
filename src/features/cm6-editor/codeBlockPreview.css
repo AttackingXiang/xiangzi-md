@@ -1,34 +1,59 @@
-.xmd-cm-code-preview {
-  background: var(--code-card-bg);
-  border: 1px solid var(--code-card-border);
-  border-radius: 8px;
-  box-sizing: border-box;
-  margin: 0.75em 0;
-  overflow: hidden;
-  position: relative;
-  width: 100%;
+/* Fenced code remains ordinary lines in the outer EditorView. These line
+   decorations create the card without introducing a nested selection model. */
+.xmd-cm-editor .cm-line.xmd-cm-code-fence-line {
+  height: 0;
+  line-height: 0;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
 }
 
-/* Floats over the code area's top-right corner instead of splitting the block
-   into a separate header row + content row (that read as two stacked panels). */
+.xmd-cm-editor .cm-line.xmd-cm-code-line {
+  background: var(--code-card-bg);
+  border-left: 1px solid var(--code-card-border);
+  border-right: 1px solid var(--code-card-border);
+  box-sizing: border-box;
+  color: var(--code-block-text, var(--text));
+  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  font-size: inherit;
+  line-height: inherit;
+  min-height: 0;
+  padding: 0 16px;
+  white-space: pre;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first {
+  border-radius: 8px 8px 0 0;
+  border-top: 1px solid var(--code-card-border);
+  padding-right: 112px;
+  position: relative;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-last {
+  border-bottom: 1px solid var(--code-card-border);
+  border-radius: 0 0 8px 8px;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-line-last {
+  border-radius: 8px;
+}
+
 .xmd-cm-code-preview-header {
   align-items: center;
-  display: flex;
+  display: inline-flex;
   gap: 6px;
-  padding: 8px 8px 0 0;
+  inset-inline-end: 8px;
+  line-height: 22px;
   pointer-events: none;
   position: absolute;
-  right: 0;
-  top: 0;
-  z-index: 1;
+  top: 8px;
+  z-index: 2;
 }
 
 .xmd-cm-code-preview-header > * {
   pointer-events: auto;
 }
 
-/* Plain text tag, not a select box — clicking it still opens the native picker.
-   Hidden entirely (via [hidden] set in JS) when the fence has no language. */
 .xmd-cm-code-preview-language {
   appearance: none;
   background: transparent;
@@ -41,7 +66,7 @@
   font-size: 12px;
   height: 22px;
   line-height: 20px;
-  max-width: min(20ch, 45%);
+  max-width: min(20ch, 45vw);
   outline: none;
   padding: 0 6px;
   text-transform: lowercase;
@@ -76,59 +101,4 @@
 .xmd-cm-code-preview-copy:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-}
-
-.xmd-cm-code-preview-editor {
-  box-sizing: border-box;
-  color: var(--code-block-text, var(--text));
-  font-family: var(--crepe-font-code, ui-monospace, monospace);
-  font-size: 13.5px;
-  line-height: 1.62;
-  margin: 0;
-  max-height: var(--xmd-code-max-height, 480px);
-  overflow: auto;
-}
-
-.xmd-cm-editor .xmd-cm-code-preview-editor .cm-editor {
-  background: transparent;
-  height: auto;
-  max-height: var(--xmd-code-max-height, 480px);
-  min-height: 0;
-}
-
-.xmd-cm-code-preview-editor .cm-editor.cm-focused {
-  outline: none;
-}
-
-.xmd-cm-editor .xmd-cm-code-preview-editor .cm-scroller {
-  font-family: inherit;
-  height: auto;
-  max-height: var(--xmd-code-max-height, 480px);
-  min-height: 0;
-  overflow: auto;
-}
-
-.xmd-cm-editor .xmd-cm-code-preview-editor .cm-content {
-  /* Override the outer editor's full-height content rule for this nested CM6.
-     Top padding keeps the first line clear of the overlaid language/copy pills. */
-  height: auto;
-  min-height: 0;
-  padding: 34px 16px 16px;
-  tab-size: 4;
-  white-space: pre;
-}
-
-/* The outer editor reserves space above its own first line for the tag bar via
-   ".xmd-cm-editor[.has-tag-bar] .cm-content > .cm-line:first-of-type". Neither selector
-   is scoped to the outer EditorView, so both also match this nested editor's first
-   line, stacking an extra 72px (or 18px with a tag bar) on top of the padding above.
-   The extra ".xmd-cm-code-preview" class keeps this selector's specificity strictly
-   higher than both outer variants (including the tag-bar one) regardless of CSS
-   import order, so it reliably wins the reset to 0. */
-.xmd-cm-editor .xmd-cm-code-preview .xmd-cm-code-preview-editor .cm-content > .cm-line:first-of-type {
-  padding-top: 0;
-}
-
-.xmd-cm-code-preview-editor .cm-gutters {
-  display: none;
 }

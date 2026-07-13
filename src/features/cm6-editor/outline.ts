@@ -1,43 +1,22 @@
 import type { ChangeSpec } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import {
+  markdownHeadingContentOffset,
+  markdownHeadings,
+  type MarkdownHeading,
+} from '../../lib/linkNavigation'
+import { cm6ActiveViewBridge } from './activeViewBridge'
 
-export interface SourceHeading {
-  level: number
-  text: string
-  offset: number
-}
+export type SourceHeading = MarkdownHeading
 
 export interface HeadingReorderPlan {
   markdown: string
   change: ChangeSpec
 }
 
-/** Parse ATX headings while keeping offsets in the original source. */
+/** Parse top-level CommonMark headings while keeping original-source offsets. */
 export function sourceHeadings(markdown: string): SourceHeading[] {
-  const headings: SourceHeading[] = []
-  const linePattern = /.*(?:\n|$)/g
-  let fence: { marker: '`' | '~'; length: number } | null = null
-  for (const match of markdown.matchAll(linePattern)) {
-    if (!match[0]) continue
-    const offset = match.index
-    const line = match[0].endsWith('\n') ? match[0].slice(0, -1) : match[0]
-    const fenceMatch = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line)
-    if (fenceMatch) {
-      const marker = fenceMatch[1][0] as '`' | '~'
-      if (!fence) fence = { marker, length: fenceMatch[1].length }
-      else if (
-        marker === fence.marker &&
-        fenceMatch[1].length >= fence.length &&
-        fenceMatch[2].trim() === ''
-      )
-        fence = null
-      continue
-    }
-    if (fence) continue
-    const heading = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(line)
-    if (heading) headings.push({ level: heading[1].length, text: heading[2].trim(), offset })
-  }
-  return headings
+  return markdownHeadings(markdown, { topLevelOnly: true })
 }
 
 function sectionEnd(markdown: string, headings: readonly SourceHeading[], index: number): number {
@@ -88,6 +67,7 @@ export function planHeadingReorder(
 }
 
 export function reorderHeading(view: EditorView, fromIndex: number, toIndex: number): boolean {
+  if (view.state.readOnly) return false
   const plan = planHeadingReorder(view.state.doc.toString(), fromIndex, toIndex)
   if (!plan) return false
   view.dispatch({ changes: plan.change })
@@ -95,14 +75,45 @@ export function reorderHeading(view: EditorView, fromIndex: number, toIndex: num
   return true
 }
 
+function stabilizeRevealScroll(view: EditorView, anchor: number, scrollPosition: number): void {
+  if (typeof requestAnimationFrame !== 'function') return
+  const document = view.state.doc
+  let frames = 4
+  const afterLayout = (): void => {
+    frames -= 1
+    if (frames > 0) {
+      requestAnimationFrame(afterLayout)
+      return
+    }
+    if (
+      cm6ActiveViewBridge.get() !== view ||
+      view.state.doc !== document ||
+      view.state.selection.main.head !== anchor
+    )
+      return
+    view.dispatch({
+      effects: EditorView.scrollIntoView(scrollPosition, { y: 'start', yMargin: 24 }),
+    })
+  }
+  requestAnimationFrame(afterLayout)
+}
+
 /** Reveal a source heading even when no live-preview DOM exists for it yet. */
 export function revealHeading(view: EditorView, offset: number): boolean {
   if (!Number.isFinite(offset)) return false
   const position = Math.max(0, Math.min(Math.trunc(offset), view.state.doc.length))
+  const line = view.state.doc.lineAt(position)
+  const atxPrefix = /^ {0,3}#{1,6}(?:[ \t]+|$)/.exec(line.text)
+  const visibleOffset = markdownHeadingContentOffset(line.text)
+  const anchor =
+    atxPrefix || position === line.from
+      ? line.from + (visibleOffset ?? atxPrefix?.[0].length ?? 0)
+      : position
   view.dispatch({
-    selection: { anchor: position },
-    effects: EditorView.scrollIntoView(position, { y: 'start', yMargin: 24 }),
+    selection: { anchor },
+    effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 24 }),
   })
+  stabilizeRevealScroll(view, anchor, line.from)
   view.focus()
   return true
 }

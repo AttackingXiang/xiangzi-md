@@ -56,7 +56,7 @@ describe('image memory budgets', () => {
     expect(plan.overBudget).toBe(false)
   })
 
-  it('never drops below visible resolution and reports a remaining high estimate', () => {
+  it('fits pathological images below visible resolution instead of allowing a canvas crash', () => {
     const baseBytes = 100 * 100 * 4 + 100 * 100 * 8
     const plan = planExportImageMemory([{ width: 4000, height: 4000, displayWidth: 1000 }], {
       documentHeight: 100,
@@ -67,7 +67,20 @@ describe('image memory budgets', () => {
       memoryBudgetBytes: baseBytes + 3_000_000,
     })
 
-    expect(plan.images[0]).toMatchObject({ width: 1000, height: 1000 })
+    expect(plan.images[0].width).toBeLessThan(1000)
+    expect(plan.images[0].width).toBeGreaterThan(800)
+    expect(plan.images[0].width).toBe(plan.images[0].height)
+    expect(plan.autoScaled).toBe(true)
+    expect(plan.overBudget).toBe(false)
+  })
+
+  it('accounts for the full long-image output instead of silently capping at 20,000px', () => {
+    const plan = planExportImageMemory([], {
+      documentHeight: 100_000,
+      fixedOverheadBytes: 0,
+    })
+
+    expect(plan.estimatedPeakBytes).toBeGreaterThan(256 * 1024 * 1024)
     expect(plan.overBudget).toBe(true)
   })
 })

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 const editorCss = readFileSync(new URL('./editor.css', import.meta.url), 'utf8')
 
 describe('CM6 editor layout contract', () => {
-  it('keeps the virtualized editor at a stable flex width', () => {
+  it('keeps the viewport-rendered editor at a stable flex width', () => {
     expect(editorCss).toMatch(/\.xmd-cm-editor\s*\{[^}]*flex:\s*1 1 0;/s)
     expect(editorCss).toMatch(/\.xmd-cm-editor\s*\{[^}]*min-width:\s*0;/s)
     expect(editorCss).toMatch(/\.xmd-cm-mount[^}]*width:\s*100%;/s)

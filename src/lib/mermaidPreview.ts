@@ -6,6 +6,64 @@ type MermaidApi = typeof mermaid
 let mermaidPromise: Promise<MermaidApi> | null = null
 let currentMode: string | null = null
 
+interface MermaidRenderJob<T> {
+  key: string
+  task: () => Promise<T>
+  resolve: (value: T) => void
+  reject: (reason: unknown) => void
+}
+
+/**
+ * Mermaid keeps its configuration in a module-global singleton. Preview rendering uses
+ * HTML labels, while clipboard/export rendering deliberately disables them. Running those
+ * two modes at the same time lets one initialize() call change the other render halfway
+ * through. This scheduler keeps different configurations exclusive, but still lets a batch
+ * of same-mode diagrams render concurrently so documents with many diagrams stay responsive.
+ */
+export class MermaidRenderScheduler {
+  private activeKey: string | null = null
+  private activeCount = 0
+  private readonly waiting: MermaidRenderJob<unknown>[] = []
+
+  run<T>(key: string, task: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const job: MermaidRenderJob<T> = { key, task, resolve, reject }
+      if (this.activeKey === key && this.waiting.length === 0) {
+        this.start(job)
+        return
+      }
+      this.waiting.push(job as MermaidRenderJob<unknown>)
+      this.drain()
+    })
+  }
+
+  private start<T>(job: MermaidRenderJob<T>): void {
+    this.activeKey = job.key
+    this.activeCount += 1
+    void Promise.resolve()
+      .then(job.task)
+      .then(job.resolve, job.reject)
+      .finally(() => {
+        this.activeCount -= 1
+        if (this.activeCount === 0) {
+          this.activeKey = null
+          this.drain()
+        }
+      })
+  }
+
+  private drain(): void {
+    if (this.activeCount > 0 || this.waiting.length === 0) return
+    const key = this.waiting[0].key
+    while (this.waiting[0]?.key === key) {
+      const job = this.waiting.shift()
+      if (job) this.start(job)
+    }
+  }
+}
+
+const renderScheduler = new MermaidRenderScheduler()
+
 function readCssVar(name: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   return value || fallback
@@ -53,12 +111,14 @@ function mermaidThemeVariables(): Record<string, string> {
  * mermaid 的配置是全局的（%%{init}%% 指令对 htmlLabels 实测不生效），因此
  * 这里按「配色+标签模式」记忆当前配置，模式变化时重新 initialize。
  */
-async function getMermaid(htmlLabels = true): Promise<MermaidApi> {
+async function getMermaid(
+  htmlLabels: boolean,
+  themeVariables: Record<string, string>,
+): Promise<MermaidApi> {
   if (!mermaidPromise) {
     mermaidPromise = import('mermaid').then((m) => m.default)
   }
   const mermaid = await mermaidPromise
-  const themeVariables = mermaidThemeVariables()
   const mode = `${String(htmlLabels)}|${JSON.stringify(themeVariables)}`
   if (currentMode !== mode) {
     // mermaid 11 起各图表的 htmlLabels 子配置已废弃，顶层 htmlLabels 优先生效
@@ -74,6 +134,21 @@ async function getMermaid(htmlLabels = true): Promise<MermaidApi> {
   return mermaid
 }
 
+async function renderMermaidMarkup(
+  content: string,
+  htmlLabels: boolean,
+  idPrefix: string,
+): Promise<string> {
+  const themeVariables = mermaidThemeVariables()
+  const mode = `${String(htmlLabels)}|${JSON.stringify(themeVariables)}`
+  return renderScheduler.run(mode, async () => {
+    const mermaid = await getMermaid(htmlLabels, themeVariables)
+    const id = idPrefix + Math.random().toString(36).slice(2)
+    const { svg } = await mermaid.render(id, content)
+    return svg
+  })
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string)
 }
@@ -84,18 +159,12 @@ function escapeHtml(s: string): string {
  * 不影响屏幕预览：下一次预览渲染会按需切回 htmlLabels:true。
  */
 export async function renderMermaidForExport(content: string): Promise<string> {
-  const mermaid = await getMermaid(false)
-  const id = 'mmdx-' + Math.random().toString(36).slice(2)
-  const { svg } = await mermaid.render(id, content)
-  return svg
+  return renderMermaidMarkup(content, false, 'mmdx-')
 }
 
 /** Render an interactive screen preview using Mermaid's HTML label mode. */
 export async function renderMermaidForPreview(content: string): Promise<string> {
-  const mermaid = await getMermaid(true)
-  const id = 'mmd-screen-' + Math.random().toString(36).slice(2)
-  const { svg } = await mermaid.render(id, content)
-  return svg
+  return renderMermaidMarkup(content, true, 'mmd-screen-')
 }
 
 /**
@@ -111,11 +180,9 @@ export function renderMermaid() {
     if (!language || language.toLowerCase() !== 'mermaid') return null
     if (!content.trim()) return null
 
-    const id = 'mmd-' + Math.random().toString(36).slice(2)
     void (async () => {
       try {
-        const mermaid = await getMermaid()
-        const { svg } = await mermaid.render(id, content)
+        const svg = await renderMermaidMarkup(content, true, 'mmd-')
         applyPreview(`<div class="mermaid-preview">${svg}</div>`)
       } catch (err: unknown) {
         const msg = escapeHtml(String((err as Error)?.message ?? err))

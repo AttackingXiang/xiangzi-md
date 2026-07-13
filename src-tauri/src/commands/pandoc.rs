@@ -416,31 +416,55 @@ pub async fn export_docx(
     };
     let normalize_fonts = settings.pandoc_normalize_fonts;
 
-    let output = PathBuf::from(&output_path);
-
-    // 在 spawn_blocking 里执行同步 IO，避免阻塞 Tauri 异步运行时
+    // 在 spawn_blocking 里执行 Pandoc、字体后处理和最终原子替换，避免阻塞
+    // Tauri 异步运行时，也避免失败时把半成品留在用户选择的目标路径。
     let pandoc_path2 = pandoc_path.clone();
     let markdown2 = markdown.clone();
     let doc_dir2 = doc_dir.clone();
     let output_path2 = output_path.clone();
 
     crate::commands::blocking(move || {
-        run_export_docx(
+        run_export_docx_atomic(
             &pandoc_path2,
             &markdown2,
             doc_dir2.as_deref(),
-            &output_path2,
+            Path::new(&output_path2),
             &options,
+            normalize_fonts,
         )
     })
     .await?;
 
-    // 后处理：归一化字体
-    if normalize_fonts {
-        normalize_docx_fonts(&output)?;
-    }
-
     Ok(ExportDocxResult { path: output_path })
+}
+
+fn run_export_docx_atomic(
+    pandoc_path: &Path,
+    markdown: &str,
+    doc_dir: Option<&str>,
+    output_path: &Path,
+    options: &PandocExportOptions,
+    normalize_fonts: bool,
+) -> AppResult<()> {
+    let parent = output_path
+        .parent()
+        .ok_or_else(|| AppError::new("invalid_path", "Word 导出路径没有父目录"))?;
+    let temporary = tempfile::Builder::new()
+        .prefix(".xmd-word-export-")
+        .suffix(".docx")
+        .tempfile_in(parent)
+        .map_err(|error| AppError::io("创建 Word 导出临时文件失败", error))?
+        .into_temp_path();
+    let temporary_string = temporary.to_string_lossy().into_owned();
+
+    run_export_docx(pandoc_path, markdown, doc_dir, &temporary_string, options)?;
+    if normalize_fonts {
+        normalize_docx_fonts(&temporary)?;
+    }
+    temporary
+        .persist(output_path)
+        .map_err(|error| AppError::io("保存 Word 导出文件失败", error.error))?;
+    Ok(())
 }
 
 fn run_export_docx(
@@ -1160,6 +1184,46 @@ mod tests {
         assert_eq!(error.code, "pandoc_args_invalid");
     }
 
+    #[test]
+    fn failed_word_export_preserves_existing_destination_and_cleans_temporary_file() {
+        let dir = tempfile::tempdir().expect("创建临时目录失败");
+        let output = dir.path().join("existing.docx");
+        std::fs::write(&output, b"existing document").expect("写入已有文件失败");
+        let options = PandocExportOptions {
+            reference_doc: None,
+            extra_args: Vec::new(),
+            table_of_contents: false,
+            number_sections: false,
+        };
+
+        let error = run_export_docx_atomic(
+            &dir.path().join("missing-pandoc"),
+            "# title",
+            None,
+            &output,
+            &options,
+            false,
+        )
+        .expect_err("不存在的 Pandoc 应导出失败");
+
+        assert_eq!(error.code, "pandoc_spawn_failed");
+        assert_eq!(
+            std::fs::read(&output).expect("读取已有文件失败"),
+            b"existing document"
+        );
+        let leftovers = std::fs::read_dir(dir.path())
+            .expect("读取临时目录失败")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".xmd-word-export-")
+            })
+            .count();
+        assert_eq!(leftovers, 0, "失败后不应残留 Word 导出临时文件");
+    }
+
     // ── 集成测试：需要真实 pandoc（不存在则跳过）──────────────────────────────
 
     #[test]
@@ -1175,20 +1239,18 @@ mod tests {
         let md = "# 标题一\n\n正文 **加粗** `code`\n\n```\ncode block\n```\n";
         let dir = tempfile::tempdir().expect("创建临时目录失败");
         let out = dir.path().join("test_out.docx");
+        std::fs::write(&out, b"previous export").expect("创建已有目标文件失败");
 
-        // 导出
+        // 导出到临时文件、归一化字体并原子替换目标
         let options = PandocExportOptions {
             reference_doc: None,
             extra_args: Vec::new(),
             table_of_contents: false,
             number_sections: false,
         };
-        run_export_docx(&pandoc, md, None, &out.to_string_lossy(), &options)
+        run_export_docx_atomic(&pandoc, md, None, &out, &options, true)
             .expect("export_docx 应成功");
         assert!(out.exists(), "docx 文件应存在");
-
-        // 归一化字体
-        normalize_docx_fonts(&out).expect("normalize 应成功");
 
         // 解包验证
         let bytes = std::fs::read(&out).unwrap();

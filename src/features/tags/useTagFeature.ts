@@ -275,7 +275,7 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
         // updateContent + saveTab 的往返——批量改多篇时那条路径依赖 stateRef 同步，
         // 会让后续标签页停留在“待保存”。
         const result = await desktop.writeFile(tab.path, content, null, true)
-        markTabPersisted(tab.id, content, result.version)
+        markTabPersisted(tab.id, tab.content, content, result.version)
         tagIndex.upsertDocument(
           documentMetaFromMarkdown(tab.path, tab.name, content, result.version.modifiedNanos),
           result.version.modifiedNanos,

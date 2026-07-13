@@ -1,6 +1,7 @@
 import { ChangeSet } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { mapPendingImageAnchor, markdownImageInsertionText } from './imageInsertion'
+import { parseMarkdownImage } from './imagePreview'
+import { isImageFile, mapPendingImageAnchor, markdownImageInsertionText } from './imageInsertion'
 
 describe('CM6 image insertion', () => {
   it('creates safe Markdown image syntax', () => {
@@ -10,6 +11,22 @@ describe('CM6 image insertion', () => {
     expect(markdownImageInsertionText('a.png', 'assets/a>b.png')).toBe(
       '![a.png](<assets/a\\>b.png>)',
     )
+    expect(markdownImageInsertionText('line\nbreak.png', 'assets/a\nname.png')).toBe(
+      '![line break.png](<assets/a%0Aname.png>)',
+    )
+    expect(parseMarkdownImage(markdownImageInsertionText('a.png', 'assets/a>b.png'))).toEqual({
+      alt: 'a.png',
+      src: 'assets/a>b.png',
+    })
+    expect(markdownImageInsertionText('\u0000', 'assets/a.png')).toBe('![image](<assets/a.png>)')
+  })
+
+  it('accepts image MIME types and extension fallback without accepting arbitrary files', () => {
+    expect(isImageFile({ name: 'clipboard', type: 'image/png' })).toBe(true)
+    expect(isImageFile({ name: 'photo.WEBP', type: '' })).toBe(true)
+    expect(isImageFile({ name: 'photo.jpg', type: 'application/octet-stream' })).toBe(true)
+    expect(isImageFile({ name: 'notes.txt', type: '' })).toBe(false)
+    expect(isImageFile({ name: 'fake.png', type: 'text/plain' })).toBe(false)
   })
 
   it('maps a collapsed upload anchor through edits before it', () => {

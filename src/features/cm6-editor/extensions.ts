@@ -4,6 +4,7 @@ import { bracketMatching, defaultHighlightStyle, syntaxHighlighting } from '@cod
 import { search, searchKeymap } from '@codemirror/search'
 import { EditorState, type Extension } from '@codemirror/state'
 import { GFM } from '@lezer/markdown'
+import { languages } from '@codemirror/language-data'
 import {
   drawSelection,
   dropCursor,
@@ -49,7 +50,7 @@ export const defaultCm6Theme = EditorView.theme({
 
 export function createBaseExtensions(): Extension[] {
   return [
-    markdown({ base: markdownLanguage, extensions: GFM }),
+    markdown({ base: markdownLanguage, extensions: GFM, codeLanguages: languages }),
     history(),
     search({ top: true }),
     drawSelection(),

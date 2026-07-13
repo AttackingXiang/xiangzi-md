@@ -1,5 +1,5 @@
 import type { EditorView } from '@codemirror/view'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cm6ActiveViewBridge } from './activeViewBridge'
 
 const fakeView = (): EditorView => ({}) as EditorView
@@ -33,5 +33,18 @@ describe('CM6 active view bridge', () => {
     unregisterFirst()
 
     expect(cm6ActiveViewBridge.get()).toBeNull()
+  })
+
+  it('notifies subscribers only when the active view changes', () => {
+    const listener = vi.fn()
+    const unsubscribe = cm6ActiveViewBridge.subscribe(listener)
+    const first = fakeView()
+    const unregister = cm6ActiveViewBridge.register(first)
+    cm6ActiveViewBridge.activate(first)
+    unregister()
+    unsubscribe()
+    cm6ActiveViewBridge.register(fakeView())
+
+    expect(listener.mock.calls).toEqual([[first], [null]])
   })
 })

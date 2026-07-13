@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Replace, X } from 'lucide-react'
-import { desktop } from '../platform'
 import {
+  canReplaceInEditor,
   hasEditor,
+  onEditorAvailable,
   searchClear,
   searchFind,
   searchNext,
   searchPrev,
   searchReplace,
   searchReplaceAll,
+  searchMountedEditor,
+  subscribeEditorAvailability,
 } from '../lib/searchBridge'
 import { t } from '../lib/i18n'
 
@@ -23,8 +26,8 @@ interface Props {
 
 /**
  * 查找/替换条：
- * - Markdown 模式走 CM6 SearchQuery（编辑器内高亮 + 替换）
- * - 源码模式退回 Electron 原生 findInPage（仅查找）
+ * Markdown 所见即所得和源码视图共享同一个 CM6 文档与搜索状态。
+ * 懒加载期间通过 active-view 订阅等待编辑器，不搜索应用外壳 DOM。
  */
 export default function FindBar({
   initialQuery = '',
@@ -32,56 +35,72 @@ export default function FindBar({
   initialMatchIndex,
   onClose,
 }: Props): JSX.Element {
-  const [find, setFind] = useState(initialQuery)
+  const [find, setFind] = useState(initialQuery.trim())
   const [replace, setReplace] = useState('')
   const [showReplace, setShowReplace] = useState(false)
+  const [editorAvailable, setEditorAvailable] = useState(hasEditor)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pendingFindRef = useRef<(() => void) | null>(null)
 
-  const wysiwyg = hasEditor()
+  const replaceEnabled = editorAvailable && canReplaceInEditor()
 
   useEffect(() => {
     inputRef.current?.focus()
     inputRef.current?.select()
-    if (initialQuery) {
-      const timer = setTimeout(() => {
-        if (hasEditor()) {
-          searchFind(initialQuery, '')
-          if (initialMatchIndex !== undefined) {
-            for (let index = 0; index < initialMatchIndex; index += 1) searchNext()
-          }
-        } else {
-          void desktop.findInPage(initialQuery, true, false)
-        }
-      }, 450)
-      return () => {
-        clearTimeout(timer)
-        searchClear()
-        void desktop.stopFind()
+    return subscribeEditorAvailability(setEditorAvailable)
+  }, [])
+
+  useEffect(() => {
+    const query = initialQuery.trim()
+    setFind(query)
+    let unsubscribe: (() => void) | undefined
+    if (query) {
+      if (hasEditor()) searchMountedEditor(query, initialMatchIndex ?? 0, initialLine)
+      else {
+        unsubscribe = onEditorAvailable(() => {
+          unsubscribe?.()
+          searchMountedEditor(query, initialMatchIndex ?? 0, initialLine)
+        })
       }
     }
     return () => {
+      unsubscribe?.()
       searchClear()
-      void desktop.stopFind()
     }
   }, [initialQuery, initialLine, initialMatchIndex])
 
+  useEffect(
+    () => () => {
+      pendingFindRef.current?.()
+    },
+    [],
+  )
+
   const runFind = (text: string): void => {
+    pendingFindRef.current?.()
+    pendingFindRef.current = null
     if (!text) {
       searchClear()
-      void desktop.stopFind()
       return
     }
     if (hasEditor()) searchFind(text, replace)
-    else void desktop.findInPage(text, true, false)
+    else {
+      const unsubscribe = onEditorAvailable(() => {
+        unsubscribe()
+        pendingFindRef.current = null
+        searchFind(text, replace)
+      })
+      pendingFindRef.current = unsubscribe
+    }
   }
 
   const goNext = (): void => {
-    if (hasEditor()) searchNext()
-    else if (find) void desktop.findInPage(find, true, true)
+    if (!find) return
+    searchNext()
   }
   const goPrev = (): void => {
-    if (hasEditor()) searchPrev()
-    else if (find) void desktop.findInPage(find, false, true)
+    if (!find) return
+    searchPrev()
   }
 
   return (
@@ -126,9 +145,9 @@ export default function FindBar({
           <div className="findbar-row">
             <input
               className="find-input"
-              placeholder={wysiwyg ? t('替换为…') : t('源码模式暂不支持替换')}
+              placeholder={t('替换为…')}
               value={replace}
-              disabled={!wysiwyg}
+              disabled={!replaceEnabled}
               onChange={(e) => setReplace(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') onClose()
@@ -136,14 +155,14 @@ export default function FindBar({
             />
             <button
               className="text-btn"
-              disabled={!wysiwyg || !find}
+              disabled={!replaceEnabled || !find}
               onClick={() => searchReplace(find, replace)}
             >
               {t('替换')}
             </button>
             <button
               className="text-btn"
-              disabled={!wysiwyg || !find}
+              disabled={!replaceEnabled || !find}
               onClick={() => searchReplaceAll(find, replace)}
             >
               {t('全部替换')}

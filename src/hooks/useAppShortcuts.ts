@@ -6,6 +6,37 @@ import {
   shortcutFromKeyboardEvent,
   type ShortcutAction,
 } from '../lib/shortcuts'
+import { tableCellCommandBridge, type TableCellInlineFormat } from '../lib/tableCellCommandBridge'
+
+const TABLE_CELL_FORMAT_ACTIONS = new Set<ShortcutAction>(
+  SHORTCUT_DEFINITIONS.filter(({ category }) => category === 'format').map(({ id }) => id),
+)
+const TABLE_CELL_INLINE_ACTIONS: Partial<Record<ShortcutAction, TableCellInlineFormat>> = {
+  bold: 'bold',
+  italic: 'italic',
+  'inline-code': 'inlineCode',
+}
+
+export function isTableCellFormattingShortcut(action: ShortcutAction): boolean {
+  return TABLE_CELL_FORMAT_ACTIONS.has(action)
+}
+
+export type TableCellShortcutRoute =
+  | { kind: 'outer' }
+  | { kind: 'native' }
+  | { kind: 'blocked' }
+  | { kind: 'inline'; format: TableCellInlineFormat }
+
+export function routeTableCellShortcut(
+  action: ShortcutAction,
+  target: EventTarget | null,
+): TableCellShortcutRoute {
+  if (!tableCellCommandBridge.ownsTarget(target)) return { kind: 'outer' }
+  if (action === 'select-all') return { kind: 'native' }
+  if (!isTableCellFormattingShortcut(action)) return { kind: 'outer' }
+  const format = TABLE_CELL_INLINE_ACTIONS[action]
+  return format ? { kind: 'inline', format } : { kind: 'blocked' }
+}
 
 export function useAppShortcuts(
   overrides: Record<string, string>,
@@ -27,11 +58,17 @@ export function useAppShortcuts(
       if (!binding) return
       const action = activeBindings.get(binding)
       if (action) {
-        if (action === 'select-all' && event.target instanceof Element) {
-          const editableControl = event.target.closest('input, textarea, [contenteditable="true"]')
-          const insideDocument = event.target.closest('.xmd-cm-editor')
-          if (editableControl && !insideDocument) return
+        const tableRoute = routeTableCellShortcut(action, event.target)
+        if (tableRoute.kind !== 'outer') {
+          if (tableRoute.kind === 'native') return
+          if (tableRoute.kind === 'inline' || tableRoute.kind === 'blocked') {
+            event.preventDefault()
+            event.stopPropagation()
+            if (tableRoute.kind === 'inline') tableCellCommandBridge.runInline(tableRoute.format)
+            return
+          }
         }
+        if (action === 'select-all' && shouldDeferSelectAllToFocusedEditor(event.target)) return
         event.preventDefault()
         event.stopPropagation()
         dispatch(action)
@@ -48,4 +85,20 @@ export function useAppShortcuts(
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [dispatch, overrides])
+}
+
+/** Native/embedded editors own Cmd/Ctrl+A; the app shortcut is only a fallback. */
+export function shouldDeferSelectAllToFocusedEditor(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  if (target.closest('input, textarea')) return true
+  const editable = target.closest('[contenteditable="true"]')
+  if (!editable) return false
+  const markdownRoot = target.closest('.xmd-cm-editor.is-live-preview')
+  const markdownContent = target.closest(
+    '.xmd-cm-editor.is-live-preview .cm-content[contenteditable="true"]',
+  )
+  // The outer Markdown CM6 is routed through clipboardCmd so fenced-code
+  // select-all can stay block-local. Nested table cells and other editors keep
+  // their native selection scope.
+  return !markdownRoot || editable !== markdownContent
 }

@@ -32,8 +32,8 @@ export interface ExportImageBudgetOptions {
 }
 
 const MEBIBYTE = 1024 * 1024
-const DEFAULT_EXPORT_WIDTH = 920
-const DEFAULT_MAX_EXPORT_HEIGHT = 20_000
+export const EXPORT_RASTER_WIDTH = 920
+export const MAX_EXPORT_DOCUMENT_PIXELS = 32_000_000
 const DEFAULT_RENDER_CHUNK_HEIGHT = 4_000
 const DEFAULT_MEMORY_BUDGET_BYTES = 256 * MEBIBYTE
 const DEFAULT_FIXED_OVERHEAD_BYTES = 24 * MEBIBYTE
@@ -171,11 +171,11 @@ export function planExportImageMemory(
   inputs: readonly ExportImageBudgetInput[],
   options: ExportImageBudgetOptions,
 ): ExportImageBudgetPlan {
-  const exportWidth = Math.max(1, Math.floor(options.exportWidth ?? DEFAULT_EXPORT_WIDTH))
-  const maxExportHeight = Math.max(
-    1,
-    Math.floor(options.maxExportHeight ?? DEFAULT_MAX_EXPORT_HEIGHT),
-  )
+  const exportWidth = Math.max(1, Math.floor(options.exportWidth ?? EXPORT_RASTER_WIDTH))
+  const maxExportHeight =
+    options.maxExportHeight === undefined
+      ? Number.MAX_SAFE_INTEGER
+      : Math.max(1, Math.floor(options.maxExportHeight))
   const documentHeight = Math.max(1, Math.min(maxExportHeight, Math.ceil(options.documentHeight)))
   const chunkHeight = Math.max(
     1,
@@ -230,9 +230,19 @@ export function planExportImageMemory(
       }
     })
   } else if (imagePixels(minimum) > availablePixels) {
-    // Never scale below the actual export display width. This preserves visible
-    // quality; callers can warn before continuing if the estimate stays high.
-    images = minimum
+    // Extremely tall or numerous images can exceed the browser canvas budget
+    // even at their visible width. Preserve aspect ratios and the whole image,
+    // but reduce resolution proportionally instead of proceeding into a
+    // guaranteed allocation/canvas failure after the user confirms the export.
+    const scale = Math.min(
+      1,
+      Math.sqrt(Math.max(inputs.length, availablePixels) / Math.max(1, imagePixels(minimum))),
+    )
+    images = minimum.map((image) => ({
+      ...image,
+      width: Math.max(1, Math.floor(image.width * scale)),
+      height: Math.max(1, Math.floor(image.height * scale)),
+    }))
   }
 
   const estimatedPeakBytes = baseBytes + imagePixels(images) * 4

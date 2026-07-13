@@ -16,6 +16,32 @@ export function releaseExportObjectUrls(html: string): void {
   for (const url of new Set(ownedExportObjectUrls(html))) URL.revokeObjectURL(url)
 }
 
+/**
+ * Own object URLs while an export document is being assembled. Successful
+ * exports transfer ownership to the serialized HTML (and are released by the
+ * desktop adapter); failed assembly must release them here because no HTML is
+ * returned to the adapter.
+ */
+export async function withOwnedExportObjectUrls<T>(
+  operation: (create: (blob: Blob) => string) => Promise<T>,
+): Promise<T> {
+  const owned = new Set<string>()
+  try {
+    const result = await operation((blob) => {
+      const url = URL.createObjectURL(blob)
+      owned.add(url)
+      return url
+    })
+    if (result === null || result === undefined) {
+      for (const url of owned) URL.revokeObjectURL(url)
+    }
+    return result
+  } catch (error) {
+    for (const url of owned) URL.revokeObjectURL(url)
+    throw error
+  }
+}
+
 export function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

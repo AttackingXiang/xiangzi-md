@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 import { classifyExternalLink } from '../lib/externalLinks'
+import { tabsAreClean } from '../lib/documentState'
 import { t } from '../lib/i18n'
 import { isShortcutAction, type ShortcutAction } from '../lib/shortcuts'
 import { desktop } from '../platform'
@@ -66,6 +67,10 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
                 for (const tab of dirtyTabs) {
                   if (!(await saveTab(tab.id))) return
                 }
+                const targetIds = new Set(dirtyTabs.map((tab) => tab.id))
+                // A user edit can land while a disk write is in flight. Do not
+                // acknowledge quit until every requested tab is actually clean.
+                if (!tabsAreClean(stateRef.current.tabs, targetIds)) return
               }
               await deleteDrafts(dirtyTabs.map((tab) => tab.id))
               desktop.notifyQuitOk()

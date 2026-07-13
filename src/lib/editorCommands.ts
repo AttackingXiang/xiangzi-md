@@ -1,8 +1,10 @@
-import { EditorSelection } from '@codemirror/state'
+import { EditorSelection, type EditorState } from '@codemirror/state'
+import { syntaxTree } from '@codemirror/language'
 import { activeCm6Commands } from '../features/cm6-editor/commands'
 import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
 import { computeCm6ToolbarState } from '../features/cm6-editor/toolbarState'
 import { linkPromptBridge } from './linkPromptBridge'
+import { tableCellCommandBridge, type TableCellInlineFormat } from './tableCellCommandBridge'
 
 type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
 
@@ -12,24 +14,29 @@ export function shiftedHeadingLevel(level: number, direction: 'promote' | 'demot
 }
 
 export function getSelectedHeadingLevel(): number | null {
+  if (tableCellCommandBridge.isFocused()) return null
   const view = cm6ActiveViewBridge.get()
   return view ? computeCm6ToolbarState(view.state).headingLevel : null
 }
 
 export function hasWysiwyg(): boolean {
-  return cm6ActiveViewBridge.get() !== null
+  const view = cm6ActiveViewBridge.get()
+  return view !== null && !view.state.readOnly
 }
 
 /** Normalize manually entered links and reject executable protocols. */
 export function normalizeLinkHref(raw: string): string | null {
   const trimmed = raw.trim()
-  if (!trimmed) return null
+  if (!trimmed || /[\u0000-\u001f\u007f]/.test(trimmed)) return null
+  if (trimmed.startsWith('//')) return `https:${trimmed}`
+  if (trimmed.startsWith('#') || /^(?:\.\.?\/|\/)/.test(trimmed)) return trimmed
   const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed)?.[1]?.toLowerCase()
   if (!scheme) return `https://${trimmed}`
   return scheme === 'http' || scheme === 'https' || scheme === 'mailto' ? trimmed : null
 }
 
 function shiftSelectedHeading(direction: 'promote' | 'demote'): void {
+  if (tableCellCommandBridge.isFocused()) return
   const level = getSelectedHeadingLevel()
   if (level === null) return
   const next = shiftedHeadingLevel(level, direction)
@@ -37,39 +44,59 @@ function shiftSelectedHeading(direction: 'promote' | 'demote'): void {
 }
 
 function requestLink(): void {
+  if (tableCellCommandBridge.isFocused()) return
   const originalView = cm6ActiveViewBridge.get()
-  if (!originalView) return
+  if (!originalView || originalView.state.readOnly) return
+  if (computeCm6ToolbarState(originalView.state).link) {
+    activeCm6Commands.removeLink()
+    return
+  }
   const { anchor, head } = originalView.state.selection.main
-  const originalLength = originalView.state.doc.length
+  const originalDoc = originalView.state.doc
   linkPromptBridge.request('', (raw) => {
     const url = normalizeLinkHref(raw)
     const view = cm6ActiveViewBridge.get()
-    if (!url || view !== originalView || view.state.doc.length !== originalLength) return
+    if (!url || view !== originalView || view.state.doc !== originalDoc) return
     view.dispatch({ selection: EditorSelection.single(anchor, head) })
     activeCm6Commands.insertLink(url)
   })
 }
 
+function runInlineCommand(format: TableCellInlineFormat, fallback: () => boolean): void {
+  if (tableCellCommandBridge.isFocused()) {
+    tableCellCommandBridge.runInline(format)
+    return
+  }
+  fallback()
+}
+
+function runBlockCommand(command: () => boolean): void {
+  if (!tableCellCommandBridge.isFocused()) command()
+}
+
 export const editorCmd = {
-  bold: (): void => void activeCm6Commands.bold(),
-  italic: (): void => void activeCm6Commands.italic(),
-  strike: (): void => void activeCm6Commands.strike(),
-  inlineCode: (): void => void activeCm6Commands.inlineCode(),
+  bold: (): void => runInlineCommand('bold', activeCm6Commands.bold),
+  italic: (): void => runInlineCommand('italic', activeCm6Commands.italic),
+  strike: (): void => runInlineCommand('strike', activeCm6Commands.strike),
+  inlineCode: (): void => runInlineCommand('inlineCode', activeCm6Commands.inlineCode),
   heading: (level: number): void => {
-    if (level >= 1 && level <= 6) activeCm6Commands.heading(level as HeadingLevel)
+    if (level >= 1 && level <= 6) {
+      runBlockCommand(() => activeCm6Commands.heading(level as HeadingLevel))
+    }
   },
   promoteHeading: (): void => shiftSelectedHeading('promote'),
   demoteHeading: (): void => shiftSelectedHeading('demote'),
-  paragraph: (): void => void activeCm6Commands.paragraph(),
-  codeBlock: (): void => void activeCm6Commands.codeBlock(),
-  bulletList: (): void => void activeCm6Commands.bulletList(),
-  orderedList: (): void => void activeCm6Commands.orderedList(),
-  taskList: (): void => void activeCm6Commands.taskList(),
-  quote: (): void => void activeCm6Commands.blockquote(),
-  insertTable: (rows = 3, columns = 3): void => void activeCm6Commands.insertTable(rows, columns),
+  paragraph: (): void => runBlockCommand(activeCm6Commands.paragraph),
+  codeBlock: (): void => runBlockCommand(activeCm6Commands.codeBlock),
+  bulletList: (): void => runBlockCommand(activeCm6Commands.bulletList),
+  orderedList: (): void => runBlockCommand(activeCm6Commands.orderedList),
+  taskList: (): void => runBlockCommand(activeCm6Commands.taskList),
+  quote: (): void => runBlockCommand(activeCm6Commands.blockquote),
+  insertTable: (rows = 3, columns = 3): void =>
+    runBlockCommand(() => activeCm6Commands.insertTable(rows, columns)),
   insertLink: requestLink,
-  undo: (): void => void activeCm6Commands.undo(),
-  redo: (): void => void activeCm6Commands.redo(),
+  undo: (): void => runBlockCommand(activeCm6Commands.undo),
+  redo: (): void => runBlockCommand(activeCm6Commands.redo),
 }
 
 export const clipboardCmd = {
@@ -83,9 +110,31 @@ export const clipboardCmd = {
     document.execCommand('paste')
   },
   selectAll: (): void => {
+    if (tableCellCommandBridge.selectAll()) return
     const view = cm6ActiveViewBridge.get()
     if (!view) return
-    view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } })
+    const scope = selectAllScope(view.state)
+    view.dispatch({ selection: { anchor: scope.from, head: scope.to } })
     view.focus()
   },
+}
+
+export function selectAllScope(state: EditorState): {
+  from: number
+  to: number
+} {
+  if (state.readOnly) return { from: 0, to: state.doc.length }
+  const range = state.selection.main
+  const tree = syntaxTree(state)
+  let node: ReturnType<typeof syntaxTree>['topNode'] | null = tree.resolveInner(range.head, -1)
+  while (node && node.name !== 'FencedCode') node = node.parent
+  if (!node) return { from: 0, to: state.doc.length }
+
+  const opening = state.doc.lineAt(node.from)
+  const possibleClosing = state.doc.lineAt(Math.max(node.from, node.to - 1))
+  const closesFence = /^( {0,3})(`{3,}|~{3,})[ \t]*$/.test(possibleClosing.text)
+  return {
+    from: Math.min(state.doc.length, opening.to + 1),
+    to: closesFence ? Math.max(opening.to + 1, possibleClosing.from - 1) : node.to,
+  }
 }
