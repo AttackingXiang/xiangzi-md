@@ -1,7 +1,12 @@
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { findVisibleMarkdownImages, isRemoteImageSource, parseMarkdownImage } from './imagePreview'
+import {
+  ImagePreviewWidget,
+  findVisibleMarkdownImages,
+  isRemoteImageSource,
+  parseMarkdownImage,
+} from './imagePreview'
 
 describe('Markdown image preview parsing', () => {
   it('parses standard images, optional titles and angle-bracket sources', () => {
@@ -52,5 +57,17 @@ describe('visible Markdown image discovery', () => {
     expect(
       findVisibleMarkdownImages(state, [{ from: firstLine.from, to: firstLine.to }], 0),
     ).toHaveLength(1)
+  })
+})
+
+describe('image preview interaction', () => {
+  it('keeps pointer interaction inside the preview', () => {
+    const widget = new ImagePreviewWidget(
+      { from: 0, to: 15, alt: 'sample', src: 'a.png', block: true },
+      'data:image/png;base64,AA==',
+      '100%',
+      120,
+    )
+    expect(widget.ignoreEvent()).toBe(true)
   })
 })

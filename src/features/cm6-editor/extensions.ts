@@ -21,12 +21,19 @@ export const defaultCm6Theme = EditorView.theme({
     fontSize: 'var(--editor-font-size, 16px)',
   },
   '.cm-scroller': {
-    overflow: 'auto',
+    overflowX: 'hidden',
+    overflowY: 'auto',
     fontFamily: 'var(--editor-font-family, inherit)',
     lineHeight: 'var(--editor-line-height, 1.75)',
   },
+  '.cm-sizer': {
+    boxSizing: 'border-box',
+    minWidth: '0',
+    width: '100%',
+  },
   '.cm-content': {
     maxWidth: 'var(--editor-content-width, 920px)',
+    minWidth: '0',
     width: '100%',
     margin: '0 auto',
     padding: '32px 48px 50vh',

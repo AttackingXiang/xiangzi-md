@@ -29,3 +29,59 @@
 .xmd-cm-table-preview th:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+.xmd-cm-table-preview td:focus,
+.xmd-cm-table-preview th:focus {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.xmd-cm-table-menu {
+  background: var(--code-card-bg);
+  border: 1px solid var(--code-card-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 20%, transparent);
+  box-sizing: border-box;
+  min-width: 160px;
+  padding: 4px;
+  position: fixed;
+  z-index: 1000;
+}
+
+.xmd-cm-table-menu-item {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 13px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.xmd-cm-table-menu-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.xmd-cm-table-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.xmd-cm-table-menu-shortcut {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.xmd-cm-table-menu-separator {
+  background: var(--code-card-border);
+  height: 1px;
+  margin: 4px 2px;
+}

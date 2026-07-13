@@ -10,6 +10,35 @@
   margin: 0.75em auto;
   overflow: hidden;
   width: 100%;
+  position: relative;
+}
+
+.xmd-cm-preview-copy {
+  background: color-mix(in srgb, var(--code-card-bg) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  opacity: 0;
+  padding: 4px 8px;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  transition: opacity 120ms ease;
+  z-index: 1;
+}
+
+.xmd-cm-image-preview:hover .xmd-cm-preview-copy,
+.xmd-cm-image-preview:focus-within .xmd-cm-preview-copy,
+.xmd-cm-mermaid-preview:hover .xmd-cm-preview-copy,
+.xmd-cm-mermaid-preview:focus-within .xmd-cm-preview-copy {
+  opacity: 1;
+}
+
+.xmd-cm-preview-copy:hover {
+  color: var(--text);
 }
 
 .xmd-cm-image-preview.is-inline {

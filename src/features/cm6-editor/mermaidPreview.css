@@ -11,10 +11,68 @@
   overflow: auto;
   padding: 18px;
   width: 100%;
+  position: relative;
 }
 
-.xmd-cm-mermaid-preview svg {
+.xmd-cm-mermaid-actions {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  right: 10px;
+  top: 10px;
+}
+
+.xmd-cm-mermaid-actions .xmd-cm-preview-copy {
+  /* Reset the image-preview overlay positioning so it sits in the actions flex row
+     instead of stacking on top of the source-toggle button. */
+  position: static;
+  opacity: 1;
+}
+
+/* Icon-only square buttons: no border/background by default, a subtle hover fill —
+   matches the code-block copy button instead of looking like bordered pill chips. */
+.xmd-cm-mermaid-actions .xmd-cm-preview-copy,
+.xmd-cm-mermaid-source-toggle,
+.xmd-cm-mermaid-preview-toggle {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+}
+
+.xmd-cm-mermaid-preview-toggle {
+  margin: 4px 0;
+}
+
+.xmd-cm-mermaid-actions .xmd-cm-preview-copy:hover,
+.xmd-cm-mermaid-source-toggle:hover,
+.xmd-cm-mermaid-preview-toggle:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.xmd-cm-mermaid-actions .xmd-cm-preview-copy[data-copy-state='success'] {
+  color: var(--success, #2e9e5b);
+}
+
+.xmd-cm-mermaid-actions .xmd-cm-preview-copy[data-copy-state='error'] {
+  color: var(--danger, #c43d4d);
+}
+
+.xmd-cm-mermaid-content svg {
   height: auto;
+  max-width: 100%;
+}
+
+.xmd-cm-mermaid-content {
   max-width: 100%;
 }
 

@@ -8,6 +8,7 @@ import {
   type EditorView,
   type ViewUpdate,
 } from '@codemirror/view'
+import { copyImageElement } from '../../lib/richClipboard'
 
 export interface MarkdownImageMatch {
   from: number
@@ -103,13 +104,7 @@ export function findVisibleMarkdownImages(
   return matches.sort((a, b) => a.from - b.from)
 }
 
-function selectionTouches(state: EditorState, match: MarkdownImageMatch): boolean {
-  return state.selection.ranges.some(({ from, to }) =>
-    from === to ? from >= match.from && from <= match.to : from < match.to && to > match.from,
-  )
-}
-
-class ImagePreviewWidget extends WidgetType {
+export class ImagePreviewWidget extends WidgetType {
   constructor(
     readonly match: MarkdownImageMatch,
     readonly url: string | null,
@@ -157,6 +152,26 @@ class ImagePreviewWidget extends WidgetType {
       image.style.maxWidth = '100%'
       image.style.display = this.match.block ? 'block' : 'inline-block'
       element.append(image)
+      if (this.match.block) {
+        const copy = document.createElement('button')
+        copy.type = 'button'
+        copy.className = 'xmd-cm-preview-copy'
+        copy.textContent = '复制图片'
+        copy.setAttribute('aria-label', '复制图片')
+        copy.addEventListener('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          void copyImageElement(image).then((copied) => {
+            copy.dataset.copyState = copied ? 'success' : 'error'
+            copy.textContent = copied ? '已复制' : '复制失败'
+            window.setTimeout(() => {
+              copy.dataset.copyState = ''
+              copy.textContent = '复制图片'
+            }, 1_500)
+          })
+        })
+        element.append(copy)
+      }
     } else {
       element.classList.add('is-loading')
       element.setAttribute('aria-label', '图片加载中')
@@ -165,7 +180,10 @@ class ImagePreviewWidget extends WidgetType {
   }
 
   ignoreEvent(): boolean {
-    return false
+    // The preview is an interactive surface. Letting CM6 handle its mouse events
+    // moves the selection into the replaced Markdown range and makes the preview
+    // disappear before the user can zoom, copy, or use its native image menu.
+    return true
   }
 }
 
@@ -243,7 +261,6 @@ export function markdownImagePreview(options: MarkdownImagePreviewOptions) {
           this.view.visibleRanges,
           bufferChars,
         )) {
-          if (selectionTouches(this.view.state, match)) continue
           const entry = this.resolve(match)
           // Failed resources fall back to their original Markdown source.
           if (entry.status === 'failed') continue

@@ -7,8 +7,14 @@
     'SFMono-Regular', 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   background: transparent;
   color: var(--text);
+  /* The editor is a row flex item next to the outline. CM6 only mounts viewport
+     content, so its intrinsic width can otherwise change when a wide line/widget
+     enters or leaves the DOM and make the whole editor (and scrollbar) jump. */
+  flex: 1 1 0;
   height: 100%;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
   position: relative;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -17,13 +23,22 @@
 .xmd-cm-mount,
 .xmd-cm-mount > .cm-editor {
   height: 100%;
+  min-width: 0;
   min-height: 0;
+  width: 100%;
 }
 
 .xmd-cm-editor .cm-scroller {
   font-family: var(--crepe-font-default);
   line-height: 1.7;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.xmd-cm-editor .cm-sizer {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
 }
 
 .xmd-cm-editor .cm-content {
@@ -31,6 +46,7 @@
   caret-color: var(--accent);
   margin: 0 auto;
   max-width: var(--editor-max-width, 860px);
+  min-width: 0;
   min-height: 100%;
   padding: 0 40px 128px;
   width: 100%;

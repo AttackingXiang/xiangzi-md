@@ -5,41 +5,71 @@
   box-sizing: border-box;
   margin: 0.75em 0;
   overflow: hidden;
+  position: relative;
   width: 100%;
 }
 
+/* Floats over the code area's top-right corner instead of splitting the block
+   into a separate header row + content row (that read as two stacked panels). */
 .xmd-cm-code-preview-header {
   align-items: center;
-  background: color-mix(in srgb, var(--code-card-bg) 72%, var(--editor-chrome-bg));
-  border-bottom: 1px solid var(--code-card-border);
   display: flex;
-  height: 34px;
-  justify-content: space-between;
-  padding: 0 10px 0 14px;
+  gap: 6px;
+  padding: 8px 8px 0 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 1;
 }
 
+.xmd-cm-code-preview-header > * {
+  pointer-events: auto;
+}
+
+/* Plain text tag, not a select box — clicking it still opens the native picker.
+   Hidden entirely (via [hidden] set in JS) when the fence has no language. */
 .xmd-cm-code-preview-language {
-  color: var(--text-muted);
-  font-family: var(--crepe-font-code, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 1;
-  text-transform: lowercase;
-}
-
-.xmd-cm-code-preview-copy {
   appearance: none;
   background: transparent;
   border: 0;
-  border-radius: 4px;
-  color: var(--text-2);
+  border-radius: 5px;
+  box-sizing: border-box;
+  color: var(--text-muted);
   cursor: pointer;
-  font: inherit;
+  font-family: var(--crepe-font-code, ui-monospace, monospace);
   font-size: 12px;
-  padding: 4px 7px;
+  height: 22px;
+  line-height: 20px;
+  max-width: min(20ch, 45%);
+  outline: none;
+  padding: 0 6px;
+  text-transform: lowercase;
+}
+
+.xmd-cm-code-preview-language:hover,
+.xmd-cm-code-preview-language:focus {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.xmd-cm-code-preview-copy {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  padding: 0;
+  width: 22px;
 }
 
 .xmd-cm-code-preview-copy:hover {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
 }
 
@@ -48,7 +78,7 @@
   outline-offset: 1px;
 }
 
-.xmd-cm-code-preview-pre {
+.xmd-cm-code-preview-editor {
   box-sizing: border-box;
   color: var(--code-block-text, var(--text));
   font-family: var(--crepe-font-code, ui-monospace, monospace);
@@ -57,7 +87,48 @@
   margin: 0;
   max-height: var(--xmd-code-max-height, 480px);
   overflow: auto;
-  padding: 14px 16px 16px;
+}
+
+.xmd-cm-editor .xmd-cm-code-preview-editor .cm-editor {
+  background: transparent;
+  height: auto;
+  max-height: var(--xmd-code-max-height, 480px);
+  min-height: 0;
+}
+
+.xmd-cm-code-preview-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.xmd-cm-editor .xmd-cm-code-preview-editor .cm-scroller {
+  font-family: inherit;
+  height: auto;
+  max-height: var(--xmd-code-max-height, 480px);
+  min-height: 0;
+  overflow: auto;
+}
+
+.xmd-cm-editor .xmd-cm-code-preview-editor .cm-content {
+  /* Override the outer editor's full-height content rule for this nested CM6.
+     Top padding keeps the first line clear of the overlaid language/copy pills. */
+  height: auto;
+  min-height: 0;
+  padding: 34px 16px 16px;
   tab-size: 4;
   white-space: pre;
+}
+
+/* The outer editor reserves space above its own first line for the tag bar via
+   ".xmd-cm-editor[.has-tag-bar] .cm-content > .cm-line:first-of-type". Neither selector
+   is scoped to the outer EditorView, so both also match this nested editor's first
+   line, stacking an extra 72px (or 18px with a tag bar) on top of the padding above.
+   The extra ".xmd-cm-code-preview" class keeps this selector's specificity strictly
+   higher than both outer variants (including the tag-bar one) regardless of CSS
+   import order, so it reliably wins the reset to 0. */
+.xmd-cm-editor .xmd-cm-code-preview .xmd-cm-code-preview-editor .cm-content > .cm-line:first-of-type {
+  padding-top: 0;
+}
+
+.xmd-cm-code-preview-editor .cm-gutters {
+  display: none;
 }

@@ -11,7 +11,7 @@ import { typewriterScrolling } from './writingModes'
 import { markdownTablePreview } from './tablePreview'
 import { markdownMathPreview } from './mathPreview'
 import { markdownMermaidPreview } from './mermaidPreview'
-import { renderMermaidForPreview } from '../../lib/mermaidPreview'
+import { renderMermaidForExport, renderMermaidForPreview } from '../../lib/mermaidPreview'
 import katex from 'katex'
 import { t } from '../../lib/i18n'
 import type { Cm6EditorController } from './types'
@@ -176,6 +176,7 @@ export function MarkdownEditor({
         livePreview
           ? markdownMermaidPreview({
               render: renderMermaidForPreview,
+              renderForCopy: renderMermaidForExport,
               version: previewThemeVersion,
               errorLabel: '图表语法有误',
             })
@@ -256,6 +257,7 @@ export function MarkdownEditor({
       livePreview
         ? markdownMermaidPreview({
             render: renderMermaidForPreview,
+            renderForCopy: renderMermaidForExport,
             version: previewThemeVersion,
             errorLabel: '图表语法有误',
           })

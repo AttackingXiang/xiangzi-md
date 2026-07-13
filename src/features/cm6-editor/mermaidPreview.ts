@@ -1,8 +1,10 @@
 import { syntaxTree } from '@codemirror/language'
-import type { EditorState, Extension } from '@codemirror/state'
-import { Decoration, WidgetType, type DecorationSet } from '@codemirror/view'
+import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
+import { Decoration, WidgetType, type DecorationSet, type EditorView } from '@codemirror/view'
 import type { PreviewRange } from './livePreview'
 import { viewportDecorationExtension } from './viewportDecorations'
+import { copySvgMarkupAsImage } from '../../lib/richClipboard'
+import { checkIcon, codeIcon, copyIcon, eyeIcon } from './widgetIcons'
 
 export type MermaidRenderer = (source: string) => Promise<string>
 
@@ -13,6 +15,8 @@ export interface MermaidPreviewOptions {
   viewportMargin?: number
   errorLabel?: string
   cacheSize?: number
+  /** Re-render without foreignObject for reliable PNG clipboard conversion. */
+  renderForCopy?: MermaidRenderer
 }
 
 interface MermaidBlock {
@@ -20,6 +24,31 @@ interface MermaidBlock {
   to: number
   source: string
 }
+
+interface MermaidSourceRange {
+  from: number
+  to: number
+}
+
+const setMermaidSourceRange = StateEffect.define<MermaidSourceRange | null>({
+  map(value, mapping) {
+    return value && { from: mapping.mapPos(value.from), to: mapping.mapPos(value.to) }
+  },
+})
+
+const mermaidSourceRange = StateField.define<MermaidSourceRange | null>({
+  create: () => null,
+  update(value, transaction) {
+    let next = value && {
+      from: transaction.changes.mapPos(value.from),
+      to: transaction.changes.mapPos(value.to),
+    }
+    for (const effect of transaction.effects) {
+      if (effect.is(setMermaidSourceRange)) next = effect.value
+    }
+    return next
+  },
+})
 
 export class MermaidRenderCache {
   private readonly entries = new Map<string, Promise<string>>()
@@ -46,11 +75,9 @@ export class MermaidRenderCache {
   }
 }
 
-function selectionTouches(state: EditorState, block: MermaidBlock): boolean {
-  return state.selection.ranges.some((range) => {
-    if (range.empty) return range.head >= block.from && range.head <= block.to
-    return range.from <= block.to && range.to >= block.from
-  })
+function isSourceBlock(state: EditorState, block: MermaidBlock): boolean {
+  const range = state.field(mermaidSourceRange, false)
+  return Boolean(range && range.from === block.from && range.to === block.to)
 }
 
 function findMermaidBlocks(
@@ -99,7 +126,7 @@ function appendSanitizedSvg(container: HTMLElement, svg: string): void {
   container.replaceChildren(template.content.cloneNode(true))
 }
 
-class MermaidWidget extends WidgetType {
+export class MermaidWidget extends WidgetType {
   private renderVersion = 0
 
   constructor(
@@ -108,6 +135,7 @@ class MermaidWidget extends WidgetType {
     readonly cache: MermaidRenderCache,
     readonly version: string | number,
     readonly errorLabel: string,
+    readonly renderForCopy: MermaidRenderer,
   ) {
     super()
   }
@@ -126,23 +154,71 @@ class MermaidWidget extends WidgetType {
     return 220
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const container = document.createElement('div')
     container.className = 'xmd-cm-mermaid-preview is-loading'
-    container.textContent = '…'
+    const content = document.createElement('div')
+    content.className = 'xmd-cm-mermaid-content'
+    content.textContent = '…'
+    container.append(content)
     const requestVersion = ++this.renderVersion
     void this.cache.render(this.block.source, this.version, this.renderer).then(
       (svg) => {
         if (requestVersion !== this.renderVersion) return
         container.classList.remove('is-loading', 'is-error')
-        appendSanitizedSvg(container, svg)
+        appendSanitizedSvg(content, svg)
+        const actions = document.createElement('div')
+        actions.className = 'xmd-cm-mermaid-actions'
+        const source = document.createElement('button')
+        source.type = 'button'
+        source.className = 'xmd-cm-mermaid-source-toggle'
+        source.append(codeIcon())
+        source.title = '切换到源码'
+        source.setAttribute('aria-label', '切换到 Mermaid 源码')
+        source.addEventListener('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          view.dispatch({
+            effects: setMermaidSourceRange.of(this.block),
+            selection: { anchor: Math.min(this.block.to, this.block.from + 3) },
+          })
+          view.focus()
+        })
+        const copy = document.createElement('button')
+        copy.type = 'button'
+        copy.className = 'xmd-cm-preview-copy'
+        copy.append(copyIcon())
+        copy.title = '复制图片'
+        copy.setAttribute('aria-label', '复制 Mermaid 图片')
+        copy.addEventListener('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          const background =
+            getComputedStyle(document.documentElement).getPropertyValue('--code-card-bg').trim() ||
+            '#f7f7f7'
+          void this.renderForCopy(this.block.source)
+            .then((markup) => copySvgMarkupAsImage(markup, background))
+            .catch(() => false)
+            .then((copied) => {
+              copy.dataset.copyState = copied ? 'success' : 'error'
+              copy.replaceChildren(copied ? checkIcon() : copyIcon())
+              copy.title = copied ? '已复制' : '复制失败'
+              window.setTimeout(() => {
+                copy.dataset.copyState = ''
+                copy.replaceChildren(copyIcon())
+                copy.title = '复制图片'
+              }, 1_500)
+            })
+        })
+        actions.append(source, copy)
+        container.append(actions)
       },
       (error: unknown) => {
         if (requestVersion !== this.renderVersion) return
         container.classList.remove('is-loading')
         container.classList.add('is-error')
         const message = error instanceof Error ? error.message : String(error)
-        container.textContent = `${this.errorLabel}: ${message}\n\n${this.block.source}`
+        content.textContent = `${this.errorLabel}: ${message}\n\n${this.block.source}`
       },
     )
     return container
@@ -150,6 +226,39 @@ class MermaidWidget extends WidgetType {
 
   destroy(): void {
     this.renderVersion += 1
+  }
+
+  ignoreEvent(): boolean {
+    return true
+  }
+}
+
+class MermaidPreviewToggleWidget extends WidgetType {
+  constructor(readonly block: MermaidBlock) {
+    super()
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'xmd-cm-mermaid-preview-toggle'
+    button.append(eyeIcon())
+    button.title = '切换到预览'
+    button.setAttribute('aria-label', '切换到 Mermaid 预览')
+    button.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      view.dispatch({
+        effects: setMermaidSourceRange.of(null),
+        selection: { anchor: this.block.from },
+      })
+      view.focus()
+    })
+    return button
+  }
+
+  ignoreEvent(): boolean {
+    return true
   }
 }
 
@@ -165,7 +274,16 @@ export function buildMermaidPreviewDecorations(
     visibleRanges,
     Math.max(0, options.viewportMargin ?? 256),
   )) {
-    if (selectionTouches(state, block)) continue
+    if (isSourceBlock(state, block)) {
+      decorations.push(
+        Decoration.widget({
+          block: true,
+          side: -1,
+          widget: new MermaidPreviewToggleWidget(block),
+        }).range(block.from),
+      )
+      continue
+    }
     decorations.push(
       Decoration.replace({
         block: true,
@@ -175,6 +293,7 @@ export function buildMermaidPreviewDecorations(
           cache,
           options.version ?? 'default',
           options.errorLabel ?? 'Diagram error',
+          options.renderForCopy ?? options.render,
         ),
       }).range(block.from, block.to),
     )
@@ -184,7 +303,10 @@ export function buildMermaidPreviewDecorations(
 
 export function markdownMermaidPreview(options: MermaidPreviewOptions): Extension {
   const cache = new MermaidRenderCache(options.cacheSize)
-  return viewportDecorationExtension((view) =>
-    buildMermaidPreviewDecorations(view.state, view.visibleRanges, options, cache),
-  )
+  return [
+    mermaidSourceRange,
+    viewportDecorationExtension((view) =>
+      buildMermaidPreviewDecorations(view.state, view.visibleRanges, options, cache),
+    ),
+  ]
 }
