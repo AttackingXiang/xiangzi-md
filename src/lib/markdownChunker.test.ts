@@ -117,7 +117,10 @@ describe('splitMarkdownIntoChunks', () => {
   })
 
   it('splits a large multi-paragraph doc into multiple chunks bounded by target + one block', () => {
-    const paragraphs = Array.from({ length: 10 }, (_, i) => `Paragraph number ${i} with some padding text.`)
+    const paragraphs = Array.from(
+      { length: 10 },
+      (_, i) => `Paragraph number ${i} with some padding text.`,
+    )
     const md = paragraphs.join('\n\n')
     const target = 40
     const chunks = splitMarkdownIntoChunks(md, target)
