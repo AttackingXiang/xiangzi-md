@@ -9,7 +9,10 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line {
-  background: var(--code-card-bg);
+  /* Keep the code card distinguishable without the heavy grey slab produced
+     by using the shared table/card colour at full strength.  Mixing with the
+     active page background also keeps custom themes visually coherent. */
+  background: color-mix(in srgb, var(--code-card-bg) 60%, var(--bg) 40%);
   border-left: 1px solid var(--code-card-border);
   border-right: 1px solid var(--code-card-border);
   box-sizing: border-box;

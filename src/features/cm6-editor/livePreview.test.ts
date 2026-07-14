@@ -374,6 +374,78 @@ describe('CM6 Markdown live preview', () => {
     expect(state.doc.toString()).toBe('first\n\nsecond')
   })
 
+  it('keeps paragraph edge rhythm stable while an inserted soft line is still empty', () => {
+    let state = EditorState.create({
+      doc: 'first\nsecond',
+      selection: EditorSelection.cursor(5),
+      extensions: [markdown({ base: markdownLanguage }), editableBlankParagraph],
+    })
+    state = state.update({
+      changes: { from: 5, insert: '\n' },
+      selection: EditorSelection.cursor(6),
+      annotations: Transaction.userEvent.of('input'),
+    }).state
+
+    const whileEmpty = decorations(state, 0, state.doc.length)
+      .filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
+      .map(({ from, className }) => ({ from, className }))
+    expect(whileEmpty).toEqual([
+      { from: 0, className: 'xmd-cm-paragraph xmd-cm-paragraph-first' },
+      { from: 6, className: 'xmd-cm-paragraph' },
+      { from: 7, className: 'xmd-cm-paragraph xmd-cm-paragraph-last' },
+    ])
+
+    state = state.update({
+      changes: { from: 6, insert: 'middle' },
+      selection: EditorSelection.cursor(12),
+      annotations: Transaction.userEvent.of('input'),
+    }).state
+    const afterTyping = decorations(state, 0, state.doc.length)
+      .filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
+      .map(({ className }) => className)
+    expect(afterTyping).toEqual([
+      'xmd-cm-paragraph xmd-cm-paragraph-first',
+      'xmd-cm-paragraph',
+      'xmd-cm-paragraph xmd-cm-paragraph-last',
+    ])
+  })
+
+  it('gives a new block paragraph its final spacing before text is entered', () => {
+    let state = EditorState.create({
+      doc: 'first\n',
+      selection: EditorSelection.cursor(6),
+      extensions: [markdown({ base: markdownLanguage }), editableBlankParagraph],
+    })
+    state = state.update({
+      changes: { from: 6, insert: '\n' },
+      selection: EditorSelection.cursor(7),
+      annotations: Transaction.userEvent.of('input'),
+    }).state
+
+    expect(
+      decorations(state, 0, state.doc.length)
+        .filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
+        .map(({ from, className }) => ({ from, className })),
+    ).toEqual([
+      { from: 0, className: 'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last' },
+      { from: 7, className: 'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last' },
+    ])
+
+    state = state.update({
+      changes: { from: 7, insert: 'second' },
+      selection: EditorSelection.cursor(13),
+      annotations: Transaction.userEvent.of('input'),
+    }).state
+    expect(
+      decorations(state, 0, state.doc.length)
+        .filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
+        .map(({ className }) => className),
+    ).toEqual([
+      'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last',
+      'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last',
+    ])
+  })
+
   it('does not modify source for a visual gap without an empty Markdown line', () => {
     const state = createState('## TypeScript\n```ts\nconst value = 1\n```', 13)
     const edit = visualGapEdit(state, state.doc.line(1).to)

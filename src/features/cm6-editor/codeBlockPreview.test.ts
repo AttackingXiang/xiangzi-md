@@ -1,4 +1,5 @@
 import { markdown } from '@codemirror/lang-markdown'
+import { syntaxTree } from '@codemirror/language'
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
@@ -30,6 +31,39 @@ function decorations(
     },
   )
   return ranges
+}
+
+function codeLineClasses(state: EditorState): Map<number, string> {
+  const classes = new Map<number, string>()
+  buildCodeBlockPreviewDecorations(state, [{ from: 0, to: state.doc.length }], {
+    viewportMargin: 0,
+  }).between(0, state.doc.length, (from, to, value) => {
+    const spec: unknown = value.spec
+    if (from !== to || typeof spec !== 'object' || spec === null || !('class' in spec)) return
+    const className = (spec as Record<string, unknown>).class
+    if (typeof className === 'string') {
+      classes.set(from, className)
+    }
+  })
+  return classes
+}
+
+function insertEnter(state: EditorState, position: number): EditorState {
+  return state.update({
+    changes: { from: position, insert: '\n' },
+    selection: EditorSelection.cursor(position + 1),
+    userEvent: 'input.type',
+  }).state
+}
+
+function fencedCodeCount(state: EditorState): number {
+  let count = 0
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (node.name === 'FencedCode') count += 1
+    },
+  })
+  return count
 }
 
 describe('CM6 fenced code preview', () => {
@@ -133,5 +167,66 @@ describe('CM6 fenced code preview', () => {
     expect(state.doc.sliceString(data.codeFrom, data.codeTo)).toBe('first()\nlast()')
     const ranges = decorations(state, 0, doc.length)
     expect(ranges.some(([from, to]) => from <= doc.indexOf('last') && to >= doc.length)).toBe(false)
+  })
+
+  it('keeps Enter in the middle of code inside the same fenced source block', () => {
+    const doc = '```js\nconst answer = 42\n```'
+    const cursor = doc.indexOf('answer') + 3
+    const state = insertEnter(stateAt(doc, cursor), cursor)
+
+    expect(state.doc.toString()).toBe('```js\nconst ans\nwer = 42\n```')
+    expect(fencedCodeCount(state)).toBe(1)
+    const data = readFencedCode(state, 0, state.doc.length)
+    expect(state.doc.sliceString(data.codeFrom, data.codeTo)).toBe('const ans\nwer = 42')
+  })
+
+  it('extends the existing code card when Enter is pressed at the end of its last line', () => {
+    const doc = '```js\nlast()\n```'
+    const cursor = doc.indexOf('\n```', doc.indexOf('last'))
+    const state = insertEnter(stateAt(doc, cursor), cursor)
+
+    expect(state.doc.toString()).toBe('```js\nlast()\n\n```')
+    expect(fencedCodeCount(state)).toBe(1)
+    const data = readFencedCode(state, 0, state.doc.length)
+    const blankLine = state.doc.lineAt(data.codeTo)
+    expect(blankLine.length).toBe(0)
+    expect(data.lastCodeLineFrom).toBe(blankLine.from)
+    expect(codeLineClasses(state).get(blankLine.from)).toContain('xmd-cm-code-line-last')
+  })
+
+  it('keeps a new line immediately before the closing fence in the current code card', () => {
+    const doc = '```ts\nvalue\n```\nafter'
+    const closingFrom = doc.indexOf('```', 3)
+    const state = insertEnter(stateAt(doc, closingFrom), closingFrom)
+
+    expect(state.doc.toString()).toBe('```ts\nvalue\n\n```\nafter')
+    expect(fencedCodeCount(state)).toBe(1)
+    const data = readFencedCode(state, 0, state.doc.toString().indexOf('\nafter'))
+    expect(data.closingFrom).toBe(closingFrom + 1)
+    expect(data.lastCodeLineFrom).toBe(state.doc.lineAt(data.codeTo).from)
+  })
+
+  it('preserves every empty trailing body line after repeated Enter transactions', () => {
+    const initial = '```\nbody\n\n```'
+    const firstClosing = initial.lastIndexOf('```')
+    const state = insertEnter(stateAt(initial, firstClosing), firstClosing)
+    const data = readFencedCode(state, 0, state.doc.length)
+
+    expect(state.doc.toString()).toBe('```\nbody\n\n\n```')
+    expect(state.doc.sliceString(data.codeFrom, data.codeTo)).toBe('body\n\n')
+    expect(data.lastCodeLineFrom).toBe(state.doc.lineAt(data.codeTo).from)
+    expect(codeLineClasses(state).get(data.lastCodeLineFrom)).toContain('xmd-cm-code-line-last')
+  })
+
+  it('does not create or merge fenced blocks when Enter extends the first of consecutive blocks', () => {
+    const doc = '```js\none()\n```\n```ts\ntwo()\n```'
+    const cursor = doc.indexOf('\n```', doc.indexOf('one'))
+    const state = insertEnter(stateAt(doc, cursor), cursor)
+
+    expect(fencedCodeCount(state)).toBe(2)
+    expect(state.doc.toString()).toBe('```js\none()\n\n```\n```ts\ntwo()\n```')
+    const secondFrom = state.doc.toString().indexOf('```ts')
+    const second = readFencedCode(state, secondFrom, state.doc.length)
+    expect(state.doc.sliceString(second.codeFrom, second.codeTo)).toBe('two()')
   })
 })

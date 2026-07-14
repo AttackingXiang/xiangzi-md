@@ -72,6 +72,19 @@ function editableBlankAt(state: EditorState): number | null {
   return state.field(editableBlankParagraph, false) ?? null
 }
 
+function topLevelParagraphAt(
+  state: EditorState,
+  position: number,
+  bias: -1 | 1,
+): SyntaxNode | null {
+  let node: SyntaxNode | null = syntaxTree(state).resolveInner(position, bias)
+  while (node && node.name !== 'Document') {
+    if (node.name === 'Paragraph' && node.parent?.name === 'Document') return node
+    node = node.parent
+  }
+  return null
+}
+
 /** A source-only structural line that must not become a rendered editor row. */
 export function isBlockSeparatorLine(state: EditorState, lineNumber: number): boolean {
   if (lineNumber < 1 || lineNumber > state.doc.lines) return false
@@ -707,6 +720,16 @@ export function buildLivePreviewDecorations(
   const ranges: Array<ReturnType<Decoration['range']>> = []
   const margin = Math.max(0, options.viewportMargin ?? 256)
   const decoratedEmptyLines = new Set<number>()
+  const editableFrom = editableBlankAt(state)
+  const editableLine = editableFrom === null ? null : state.doc.lineAt(editableFrom)
+  const paragraphBeforeEditable =
+    editableLine && editableLine.number > 1
+      ? topLevelParagraphAt(state, state.doc.line(editableLine.number - 1).to, -1)
+      : null
+  const paragraphAfterEditable =
+    editableLine && editableLine.number < state.doc.lines
+      ? topLevelParagraphAt(state, state.doc.line(editableLine.number + 1).from, 1)
+      : null
 
   for (const visible of expandedVisibleRanges(state, visibleRanges, margin)) {
     const quoteDepthByLine = new Map<number, number>()
@@ -714,6 +737,13 @@ export function buildLivePreviewDecorations(
     const lastLine = state.doc.lineAt(visible.to)
     for (let number = firstLine.number; number <= lastLine.number; number += 1) {
       const line = state.doc.line(number)
+      if (editableLine?.from === line.from && !decoratedEmptyLines.has(line.from)) {
+        decoratedEmptyLines.add(line.from)
+        const first = paragraphBeforeEditable === null ? ' xmd-cm-paragraph-first' : ''
+        const last = paragraphAfterEditable === null ? ' xmd-cm-paragraph-last' : ''
+        ranges.push(Decoration.line({ class: `xmd-cm-paragraph${first}${last}` }).range(line.from))
+        continue
+      }
       if (!isBlockSeparatorLine(state, number) || decoratedEmptyLines.has(line.from)) continue
       decoratedEmptyLines.add(line.from)
       ranges.push(Decoration.line({ class: 'xmd-cm-block-separator' }).range(line.from))
@@ -733,12 +763,18 @@ export function buildLivePreviewDecorations(
           const firstLine = state.doc.lineAt(node.from)
           const lastLine = state.doc.lineAt(node.to)
           for (let lineNumber = firstLine.number; lineNumber <= lastLine.number; lineNumber += 1) {
+            const joinsEditableAfter =
+              paragraphBeforeEditable?.from === node.from && paragraphBeforeEditable.to === node.to
+            const joinsEditableBefore =
+              paragraphAfterEditable?.from === node.from && paragraphAfterEditable.to === node.to
+            const isFirst = lineNumber === firstLine.number && !joinsEditableBefore
+            const isLast = lineNumber === lastLine.number && !joinsEditableAfter
             const edge =
-              lineNumber === firstLine.number && lineNumber === lastLine.number
+              isFirst && isLast
                 ? ' xmd-cm-paragraph-first xmd-cm-paragraph-last'
-                : lineNumber === firstLine.number
+                : isFirst
                   ? ' xmd-cm-paragraph-first'
-                  : lineNumber === lastLine.number
+                  : isLast
                     ? ' xmd-cm-paragraph-last'
                     : ''
             ranges.push(

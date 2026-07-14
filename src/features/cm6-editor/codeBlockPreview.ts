@@ -196,7 +196,13 @@ export function readFencedCode(state: EditorState, from: number, to: number): Fe
     },
   })
   const firstCodeLineFrom = state.doc.lineAt(codeFrom).from
-  const lastCodeLineFrom = state.doc.lineAt(Math.max(codeFrom, codeTo - 1)).from
+  // `codeTo` is the structural end boundary of the body, not the position of
+  // its final character.  This distinction matters when the body ends in a
+  // blank line: after pressing Enter at the end of the last code line, codeTo
+  // points at that new blank line. Looking at codeTo - 1 would keep the
+  // previous non-empty line marked as the visual last line and render the new
+  // blank line as a second, detached code card.
+  const lastCodeLineFrom = state.doc.lineAt(Math.max(codeFrom, codeTo)).from
   return {
     from,
     to,
