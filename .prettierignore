@@ -3,3 +3,6 @@ node_modules
 src-tauri/gen
 src-tauri/target
 package-lock.json
+RENDERING_SHOWCASE.html
+markdown_all_formats_test.md
+public/perf-test-1mb.md

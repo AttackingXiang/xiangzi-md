@@ -52,6 +52,8 @@ export interface AppSettings {
   backgroundImagePath: string
   backgroundOpacity: number
   codeBlockOpacity: number
+  /** Whether long lines inside fenced code blocks wrap automatically. */
+  codeBlockLineWrapping: boolean
   themeShade: number
   headingNumber: boolean
   autoSave: boolean

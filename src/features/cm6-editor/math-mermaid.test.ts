@@ -1,11 +1,15 @@
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorSelection, EditorState } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
+import { collectFencedCodeHiddenRanges } from './codeBlockPreview'
 import {
   MermaidRenderCache,
   MermaidWidget,
   buildMermaidPreviewDecorations,
+  collectMermaidHiddenRanges,
+  markdownMermaidPreview,
   mermaidSourceRange,
   setMermaidSourceRange,
 } from './mermaidPreview'
@@ -65,6 +69,53 @@ describe('CM6 Mermaid preview boundary', () => {
         ),
       ),
     ).toBe(false)
+  })
+
+  it('registers each rendered diagram span through the core hidden-range engine', () => {
+    // The Phase 2 gap: a rendered Mermaid block-replace widget previously had
+    // no atomic range at all, so clicks/drags could land the caret inside the
+    // hidden fenced-code source. See core/README.md, Phase 3.
+    const doc = 'before\n```mermaid\ngraph TD\n```\nafter'
+    const state = EditorState.create({ doc, extensions: [markdown()] })
+    const options = { render: () => Promise.resolve('<svg />'), viewportMargin: 0 }
+    expect(collectMermaidHiddenRanges(state, [{ from: 0, to: doc.length }], options)).toEqual([
+      { from: doc.indexOf('```'), to: doc.indexOf('\nafter'), paint: false },
+    ])
+    // Invariant 3 (core/README.md): the only atomicRanges provider is the
+    // aggregated one installed by hiddenRangesEngine() in markdownLivePreview.
+    const withExtension = EditorState.create({
+      doc,
+      extensions: [markdown(), markdownMermaidPreview(options)],
+    })
+    expect(withExtension.facet(EditorView.atomicRanges)).toHaveLength(0)
+  })
+
+  it('splits Mermaid ownership with the generic code-block module without double registration', () => {
+    const doc = '```mermaid\ngraph TD\n```\n\n```ts\ncode()\n```'
+    const state = EditorState.create({ doc, extensions: [markdown()] })
+    const options = { render: () => Promise.resolve('<svg />'), viewportMargin: 0 }
+    const mermaid = collectMermaidHiddenRanges(state, [{ from: 0, to: doc.length }], options)
+    const fenced = collectFencedCodeHiddenRanges(state, [{ from: 0, to: doc.length }], {
+      viewportMargin: 0,
+    })
+    const mermaidEnd = doc.indexOf('\n\n')
+    expect(mermaid).toEqual([{ from: 0, to: mermaidEnd, paint: false }])
+    // codeBlockPreview owns only the non-Mermaid fence lines.
+    expect(fenced.every((range) => range.from > mermaidEnd)).toBe(true)
+  })
+
+  it('leaves a diagram in source-edit mode out of the hidden atomic ranges', () => {
+    const doc = '```mermaid\ngraph TD\n```'
+    const options = { render: () => Promise.resolve('<svg />'), viewportMargin: 0 }
+    let state = EditorState.create({ doc, extensions: [markdown(), mermaidSourceRange] })
+    expect(collectMermaidHiddenRanges(state, [{ from: 0, to: doc.length }], options)).toHaveLength(
+      1,
+    )
+
+    state = state.update({ effects: setMermaidSourceRange.of({ from: 0, to: doc.length }) }).state
+    expect(collectMermaidHiddenRanges(state, [{ from: 0, to: doc.length }], options)).toHaveLength(
+      0,
+    )
   })
 
   it('uses a measured auto-height block instead of fixed or overflowing geometry', () => {

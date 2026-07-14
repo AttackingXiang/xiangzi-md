@@ -4,12 +4,17 @@ import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
   buildCodeBlockPreviewDecorations,
-  buildCodeFenceAtomicRanges,
   codeLanguageOptions,
+  collectFencedCodeHiddenRanges,
+  fencedCodeBoundaryDeletion,
+  fencedCodeFenceRedirectTarget,
+  fencedCodeSelectAll,
+  matchingCodeLanguageOptions,
   partiallyDeletesFencedCodeFence,
-  protectsEmptyFencedCodeBodyDeletion,
   readFencedCode,
+  resolveCodeLanguageInput,
   restoreEmptyFencedCodeBody,
+  selectionIntersectsFencedCode,
 } from './codeBlockPreview'
 
 function stateAt(doc: string, cursor: number): EditorState {
@@ -29,22 +34,30 @@ function decorations(
   buildCodeBlockPreviewDecorations(state, [{ from, to }], { viewportMargin: 0 }).between(
     0,
     state.doc.length,
-    (rangeFrom, rangeTo) => {
+    (rangeFrom, rangeTo, value) => {
+      const spec = value.spec as { class?: string }
+      // Content marks keep CodeText editable; this helper only tracks the
+      // structural replace/widget decorations used by the assertions below.
+      if (spec.class === 'xmd-cm-code-line-content') return
       ranges.push([rangeFrom, rangeTo, ''])
     },
   )
   return ranges
 }
 
-function codeLineClasses(state: EditorState): Map<number, string> {
+function codeLineClasses(
+  state: EditorState,
+  options: { lineWrapping?: boolean } = {},
+): Map<number, string> {
   const classes = new Map<number, string>()
   buildCodeBlockPreviewDecorations(state, [{ from: 0, to: state.doc.length }], {
     viewportMargin: 0,
+    ...options,
   }).between(0, state.doc.length, (from, to, value) => {
     const spec: unknown = value.spec
     if (from !== to || typeof spec !== 'object' || spec === null || !('class' in spec)) return
     const className = (spec as Record<string, unknown>).class
-    if (typeof className === 'string') {
+    if (typeof className === 'string' && className.includes('xmd-cm-code-line')) {
       classes.set(from, className)
     }
   })
@@ -70,12 +83,26 @@ function fencedCodeCount(state: EditorState): number {
 }
 
 describe('CM6 fenced code preview', () => {
-  it('offers CM6 languages through a picker instead of accepting arbitrary typed input', () => {
+  it('provides unique CM6 language suggestions for the editable language input', () => {
     expect(codeLanguageOptions[0]).toEqual({ label: 'Text', value: '' })
     expect(codeLanguageOptions.some((entry) => entry.value === 'javascript')).toBe(true)
     expect(new Set(codeLanguageOptions.map((entry) => entry.value)).size).toBe(
       codeLanguageOptions.length,
     )
+  })
+
+  it('resolves typed language prefixes while preserving custom language names', () => {
+    expect(resolveCodeLanguageInput('py')).toBe('python')
+    expect(resolveCodeLanguageInput('JS')).toBe('javascript')
+    expect(resolveCodeLanguageInput('java')).toBe('java')
+    expect(resolveCodeLanguageInput('text')).toBe('')
+    expect(resolveCodeLanguageInput('my-custom-language')).toBe('my-custom-language')
+  })
+
+  it('shows complete prefix and alias matches in the custom language menu', () => {
+    expect(matchingCodeLanguageOptions('py').map((entry) => entry.value)).toEqual(['python'])
+    expect(matchingCodeLanguageOptions('pyt')[0]).toEqual({ label: 'Python', value: 'python' })
+    expect(matchingCodeLanguageOptions('js')[0]?.value).toBe('javascript')
   })
 
   it('only hides fence text and never replaces CodeText', () => {
@@ -97,29 +124,105 @@ describe('CM6 fenced code preview', () => {
     ).toBe(false)
   })
 
-  it('keeps first and last code lines visually decorated while atomic ranges only cover fences', () => {
+  it('keeps first and last code lines visually decorated while hidden ranges only cover fences', () => {
     const doc = '```ts\nfirst()\nlast()\n```\nafter'
     const state = stateAt(doc, doc.indexOf('first'))
     const visual = buildCodeBlockPreviewDecorations(state, [{ from: 0, to: doc.length }], {
       viewportMargin: 0,
     })
-    const atomic = buildCodeFenceAtomicRanges(state, [{ from: 0, to: doc.length }], 0)
+    const hidden = collectFencedCodeHiddenRanges(state, [{ from: 0, to: doc.length }], {
+      viewportMargin: 0,
+    })
     const firstFrom = doc.indexOf('first')
     const lastFrom = doc.indexOf('last')
     const visualPoints: number[] = []
     visual.between(0, doc.length, (from, to) => {
       if (from === to) visualPoints.push(from)
     })
-    const atomicRanges: Array<[number, number]> = []
-    atomic.between(0, doc.length, (from, to) => {
-      atomicRanges.push([from, to])
-    })
 
     expect(visualPoints).toContain(firstFrom)
     expect(visualPoints).toContain(lastFrom)
-    expect(atomicRanges).toContainEqual([0, doc.indexOf('first')])
-    expect(atomicRanges).toContainEqual([doc.indexOf('```', 3), doc.indexOf('after')])
-    expect(atomicRanges.some(([from, to]) => from <= firstFrom && to > firstFrom)).toBe(false)
+    expect(hidden.every((range) => range.paint === false)).toBe(true)
+    expect(hidden).toContainEqual({ from: 0, to: doc.indexOf('first'), paint: false })
+    const closingFrom = doc.indexOf('```', 3)
+    const closingLineTo = doc.indexOf('\nafter')
+    expect(hidden).toContainEqual({ from: closingFrom, to: closingLineTo + 1, paint: false })
+    expect(hidden.some(({ from, to }) => from <= firstFrom && to > firstFrom)).toBe(false)
+  })
+
+  it('keeps code rows unwrapped by default and opts into wrapping explicitly', () => {
+    const doc = '```js\nfirst()\nlast()\n```'
+    const state = stateAt(doc, doc.indexOf('first'))
+    const defaultClasses = [...codeLineClasses(state).values()]
+    const wrappedClasses = [...codeLineClasses(state, { lineWrapping: true }).values()]
+
+    expect(defaultClasses.length).toBe(2)
+    expect(defaultClasses.every((className) => !className.includes('xmd-cm-code-line-wrap'))).toBe(
+      true,
+    )
+    expect(wrappedClasses.every((className) => className.includes('xmd-cm-code-line-wrap'))).toBe(
+      true,
+    )
+  })
+
+  it('uses editable content marks and only mounts a shared scrollbar when wrapping is off', () => {
+    const doc = '```js\nfirst()\nlast()\n```'
+    const state = stateAt(doc, doc.indexOf('first'))
+    const specs = (lineWrapping: boolean): Array<Record<string, unknown>> => {
+      const result: Array<Record<string, unknown>> = []
+      buildCodeBlockPreviewDecorations(state, [{ from: 0, to: doc.length }], {
+        viewportMargin: 0,
+        lineWrapping,
+      }).between(0, doc.length, (_from, _to, value) => {
+        result.push(value.spec as Record<string, unknown>)
+      })
+      return result
+    }
+
+    const unwrapped = specs(false)
+    const wrapped = specs(true)
+    expect(unwrapped.filter((spec) => spec.class === 'xmd-cm-code-line-content')).toHaveLength(2)
+    expect(unwrapped.filter((spec) => 'widget' in spec)).toHaveLength(2)
+    expect(wrapped.filter((spec) => 'widget' in spec)).toHaveLength(1)
+  })
+
+  it('uses clipped native selection only inside one code block and keeps cross-block selection virtualized', () => {
+    const doc = 'before\n```json\n{"enabled": true}\n```\nafter'
+    const codeFrom = doc.indexOf('{')
+    const codeSelection = EditorState.create({
+      doc,
+      selection: EditorSelection.range(codeFrom, codeFrom + 10),
+      extensions: [markdown()],
+    })
+    const plainSelection = EditorState.create({
+      doc,
+      selection: EditorSelection.range(0, 6),
+      extensions: [markdown()],
+    })
+    const crossBlockSelection = EditorState.create({
+      doc,
+      selection: EditorSelection.range(0, doc.length),
+      extensions: [markdown()],
+    })
+    const cursorOnly = stateAt(doc, codeFrom)
+    const mermaid = '```mermaid\ngraph TD\n```'
+    const mermaidSelection = EditorState.create({
+      doc: mermaid,
+      selection: EditorSelection.range(mermaid.indexOf('graph'), mermaid.indexOf('graph') + 5),
+      extensions: [markdown()],
+    })
+
+    expect(selectionIntersectsFencedCode(codeSelection)).toBe(true)
+    expect(selectionIntersectsFencedCode(plainSelection)).toBe(false)
+    expect(selectionIntersectsFencedCode(crossBlockSelection)).toBe(false)
+    expect(selectionIntersectsFencedCode(cursorOnly)).toBe(false)
+    expect(selectionIntersectsFencedCode(mermaidSelection)).toBe(false)
+  })
+
+  it('does not register hidden ranges for Mermaid fences, which own their own preview', () => {
+    const doc = '```mermaid\ngraph TD\n```'
+    const state = stateAt(doc, doc.indexOf('graph'))
+    expect(collectFencedCodeHiddenRanges(state, [{ from: 0, to: doc.length }])).toHaveLength(0)
   })
 
   it('does not construct widgets for code blocks outside the viewport', () => {
@@ -172,12 +275,85 @@ describe('CM6 fenced code preview', () => {
     expect(ranges.some(([from, to]) => from <= doc.indexOf('last') && to >= doc.length)).toBe(false)
   })
 
-  it('keeps the final empty code row inside its card at both deletion boundaries', () => {
-    const doc = '```js\n\n```'
-    const blank = doc.indexOf('\n\n') + 1
-    const state = stateAt(doc, blank)
-    expect(protectsEmptyFencedCodeBodyDeletion(state, false)).toBe(true)
-    expect(protectsEmptyFencedCodeBodyDeletion(state, true)).toBe(true)
+  describe('fencedCodeBoundaryDeletion', () => {
+    it('swallows Delete at the blank last row so it cannot reach the hidden closing fence', () => {
+      const doc = '```js\n\n```'
+      const blank = doc.indexOf('\n\n') + 1
+      const state = stateAt(doc, blank)
+      const spec = fencedCodeBoundaryDeletion(state, true)
+      expect(spec).not.toBeNull()
+      const next = state.update(spec!).state
+      expect(next.doc.toString()).toBe(doc)
+      expect(next.selection.main.head).toBe(blank)
+    })
+
+    it('deletes the whole block in one step when Backspace is pressed on an already-empty body', () => {
+      const doc = 'before\n\n```js\n\n```\n\nafter'
+      const blank = doc.indexOf('```js\n') + '```js\n'.length
+      const state = stateAt(doc, blank)
+      const openingFrom = doc.indexOf('```js')
+      const spec = fencedCodeBoundaryDeletion(state, false)
+      expect(spec).not.toBeNull()
+      const next = state.update(spec!).state
+      // The whole block (both fences and its blank body) is gone in one
+      // transaction; the surrounding blank separator lines are untouched, so
+      // the caret rests on an ordinary blank line at the block's old position.
+      expect(next.doc.toString()).toBe('before\n\n\n\nafter')
+      expect(next.doc.toString()).not.toContain('```')
+      expect(next.selection.main.head).toBe(openingFrom)
+    })
+
+    it('leaves an empty document behind when the block is the only content', () => {
+      const doc = '```js\n\n```'
+      const blank = doc.indexOf('\n\n') + 1
+      const state = stateAt(doc, blank)
+      const spec = fencedCodeBoundaryDeletion(state, false)
+      expect(spec).not.toBeNull()
+      const next = state.update(spec!).state
+      expect(next.doc.toString()).toBe('')
+      expect(next.selection.main.head).toBe(0)
+    })
+
+    it('still protects Delete at a blank last row even when earlier code lines exist', () => {
+      const doc = '```js\nfoo()\n\n```'
+      const blank = doc.lastIndexOf('\n\n') + 1
+      const state = stateAt(doc, blank)
+      const spec = fencedCodeBoundaryDeletion(state, true)
+      expect(spec).not.toBeNull()
+      expect(state.update(spec!).state.doc.toString()).toBe(doc)
+    })
+
+    it('lets Backspace join a blank last row with a preceding code line normally', () => {
+      const doc = '```js\nfoo()\n\n```'
+      const blank = doc.lastIndexOf('\n\n') + 1
+      const state = stateAt(doc, blank)
+      expect(fencedCodeBoundaryDeletion(state, false)).toBeNull()
+    })
+
+    it('does nothing outside a fenced code block', () => {
+      const doc = 'plain text\n\n```js\ncode\n```'
+      const state = stateAt(doc, 3)
+      expect(fencedCodeBoundaryDeletion(state, false)).toBeNull()
+      expect(fencedCodeBoundaryDeletion(state, true)).toBeNull()
+    })
+
+    it('does nothing for a non-empty selection', () => {
+      const doc = '```js\n\n```'
+      const blank = doc.indexOf('\n\n') + 1
+      const state = EditorState.create({
+        doc,
+        selection: EditorSelection.range(blank, blank + 1),
+        extensions: [markdown()],
+      })
+      expect(fencedCodeBoundaryDeletion(state, false)).toBeNull()
+    })
+
+    it('does nothing when the fence is unclosed', () => {
+      const doc = '```js\n'
+      const state = stateAt(doc, doc.length)
+      expect(fencedCodeBoundaryDeletion(state, false)).toBeNull()
+      expect(fencedCodeBoundaryDeletion(state, true)).toBeNull()
+    })
   })
 
   it('restores an editable code row when a selection deletes the whole final line', () => {
@@ -228,6 +404,56 @@ describe('CM6 fenced code preview', () => {
       annotations: Transaction.userEvent.of('delete.selection'),
     })
     expect(partiallyDeletesFencedCodeFence(whole)).toBe(false)
+  })
+
+  describe('fencedCodeSelectAll', () => {
+    it('selects only the code body, excluding both fences', () => {
+      const doc = '```js\nconst answer = 42\n```'
+      const state = stateAt(doc, doc.indexOf('answer'))
+      const spec = fencedCodeSelectAll(state)
+      expect(spec).not.toBeNull()
+      const next = state.update(spec!).state
+      const data = readFencedCode(next, 0, next.doc.length)
+      expect(next.selection.main.from).toBe(data.codeFrom)
+      expect(next.selection.main.to).toBe(data.codeTo)
+      expect(next.doc.sliceString(next.selection.main.from, next.selection.main.to)).toBe(
+        'const answer = 42',
+      )
+    })
+
+    it('defers to the default select-all outside a code block', () => {
+      const doc = 'plain text\n\n```js\ncode\n```'
+      const state = stateAt(doc, 3)
+      expect(fencedCodeSelectAll(state)).toBeNull()
+    })
+  })
+
+  describe('fencedCodeFenceRedirectTarget', () => {
+    it('redirects a click on the opening fence line into the first code line', () => {
+      const doc = '```js\nfirst()\nlast()\n```'
+      const state = stateAt(doc, 0)
+      const data = readFencedCode(state, 0, doc.length)
+      expect(fencedCodeFenceRedirectTarget(state, 0)).toBe(data.firstCodeLineFrom)
+    })
+
+    it('redirects a click on the closing fence line to the end of the code body', () => {
+      const doc = '```js\nfirst()\nlast()\n```'
+      const state = stateAt(doc, 0)
+      const data = readFencedCode(state, 0, doc.length)
+      expect(fencedCodeFenceRedirectTarget(state, data.closingFrom!)).toBe(data.codeTo)
+    })
+
+    it('does not redirect a position on an ordinary code line', () => {
+      const doc = '```js\nfirst()\nlast()\n```'
+      const state = stateAt(doc, 0)
+      expect(fencedCodeFenceRedirectTarget(state, doc.indexOf('first'))).toBeNull()
+    })
+
+    it('ignores Mermaid fences, which own their own preview', () => {
+      const doc = '```mermaid\ngraph TD\n```'
+      const state = stateAt(doc, 0)
+      expect(fencedCodeFenceRedirectTarget(state, 0)).toBeNull()
+    })
   })
 
   it('keeps Enter in the middle of code inside the same fenced source block', () => {

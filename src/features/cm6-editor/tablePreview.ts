@@ -7,6 +7,7 @@ import {
   type TableCellCommandState,
   type TableCellInlineFormat,
 } from '../../lib/tableCellCommandBridge'
+import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import './tablePreview.css'
 
 export type TableAlignment = 'left' | 'center' | 'right' | null
@@ -268,6 +269,29 @@ export function findVisibleMarkdownTables(
     })
   }
   return tables.sort((a, b) => a.from - b.from)
+}
+
+/**
+ * The single source of atomic/hidden ranges this feature contributes to the
+ * core engine (`core/hiddenRanges.ts`), replacing the standalone
+ * `EditorView.atomicRanges` provider a table preview would otherwise need to
+ * maintain on its own. A `Table` node's whole source span (`table.from`..
+ * `table.to`) is the `atomic-block` case registered in `core/nodePolicy.ts`:
+ * it matches exactly the range `markdownTablePreview`'s own decoration field
+ * already replaces with a `TableWidget`, so `paint: false` here means core
+ * never paints a second, redundant invisible replacement over it — this
+ * module's own StateField already does that.
+ */
+export function collectTableHiddenRanges(
+  state: EditorState,
+  visibleRanges: readonly { from: number; to: number }[],
+  bufferChars = DEFAULT_BUFFER_CHARS,
+): HiddenRange[] {
+  return findVisibleMarkdownTables(state, visibleRanges, bufferChars).map((table) => ({
+    from: table.from,
+    to: table.to,
+    paint: false,
+  }))
 }
 
 /** Re-escape a cell's plain text back into Markdown table syntax. */
@@ -641,6 +665,15 @@ interface TableWidgetController {
   cellElements: Map<MarkdownTableCell, HTMLElement>
   cellByElement: WeakMap<HTMLElement, MarkdownTableCell>
   resizeObserver?: ResizeObserver
+  /**
+   * The screen x coordinate a run of consecutive ArrowUp/ArrowDown cell hops
+   * is trying to keep (CM6's `goalColumn` semantics, but in widget-DOM
+   * pixels). Re-reading the caret's x on every hop would let the goal drift
+   * inward when the caret passes through a narrow cell and gets clamped to
+   * its edge; remembering the first hop's x keeps a straight vertical path.
+   * Reset by any non-vertical key and by pointer interaction.
+   */
+  verticalGoalX?: number
 }
 
 const tableControllers = new WeakMap<HTMLElement, TableWidgetController>()
@@ -955,12 +988,25 @@ function replaceCellSelection(element: HTMLElement, value: string): boolean {
  * no editable line box in WebKit, so the first Shift+Enter appears to do
  * nothing until the user presses it again. The zero-width sentinel is removed
  * by `readTableCellContent` before every source transaction.
+ *
+ * A keydown can legitimately arrive with no live selection inside `element`
+ * yet — e.g. the very first Shift+Enter right after a programmatic
+ * `element.focus()` (`focusCell`/`moveFocus`), where the browser has not
+ * finished publishing a `Selection` range for the new focus target by the
+ * time this synchronous handler runs. Falling back to a fresh collapsed
+ * range at the cell's end (instead of bailing out) is what makes the very
+ * first press reliable instead of silently doing nothing until a second
+ * attempt gives the browser time to catch up.
  */
 function insertTableCellSoftBreak(element: HTMLElement): boolean {
   const selection = window.getSelection()
-  if (!selection?.rangeCount) return false
-  const range = selection.getRangeAt(0)
-  if (!element.contains(range.commonAncestorContainer)) return false
+  if (!selection) return false
+  let range = selection.rangeCount ? selection.getRangeAt(0) : null
+  if (!range || !element.contains(range.commonAncestorContainer)) {
+    range = document.createRange()
+    range.selectNodeContents(element)
+    range.collapse(false)
+  }
   range.deleteContents()
   const breakElement = document.createElement('br')
   const sentinel = document.createTextNode('\u200b')
@@ -972,6 +1018,62 @@ function insertTableCellSoftBreak(element: HTMLElement): boolean {
   selection.removeAllRanges()
   selection.addRange(range)
   return true
+}
+
+export interface HorizontalCellRect {
+  left: number
+  right: number
+}
+
+/**
+ * Pure geometry step behind vertical cell navigation's "goal column": given
+ * the client rects of one row's editable cells (in column order) and a
+ * target x coordinate, pick the cell whose rect contains `x`, or — if `x`
+ * falls in a gap/margin between cells — the cell whose horizontal center is
+ * closest. Returns `-1` for an empty row. Factored out of
+ * `TableWidget.cellAtHorizontalCoordinate` so the selection rule itself is
+ * unit-testable without a real layout engine (`getBoundingClientRect` is
+ * meaningless in jsdom).
+ */
+export function indexOfCellAtHorizontalCoordinate(
+  rects: readonly HorizontalCellRect[],
+  x: number,
+): number {
+  const containing = rects.findIndex((rect) => x >= rect.left && x <= rect.right)
+  if (containing >= 0) return containing
+  let nearest = -1
+  let nearestDistance = Infinity
+  rects.forEach((rect, index) => {
+    const distance = Math.abs((rect.left + rect.right) / 2 - x)
+    if (distance < nearestDistance) {
+      nearestDistance = distance
+      nearest = index
+    }
+  })
+  return nearest
+}
+
+export interface VerticalCaretRect {
+  top: number
+  bottom: number
+  height: number
+}
+
+/**
+ * Whether a caret sits on a cell's first (`atStart`) or last visual line,
+ * judged purely by geometry: the caret rect against the cell content's rect.
+ * Geometry — unlike text-offset or `<br>`-counting checks — treats a caret
+ * anywhere on the boundary line as "at the boundary" and stays correct for
+ * soft-wrapped lines. Factored out of `TableWidget.isAtCellVerticalBoundary`
+ * for the same jsdom reason as `indexOfCellAtHorizontalCoordinate`.
+ */
+export function caretOnBoundaryVisualLine(
+  caret: VerticalCaretRect,
+  content: { top: number; bottom: number },
+  atStart: boolean,
+): boolean {
+  const tolerance = Math.max(caret.height / 2, 4)
+  return atStart ? caret.top - content.top < tolerance : content.bottom - caret.bottom < tolerance
 }
 
 class TableWidget extends WidgetType {
@@ -1049,6 +1151,21 @@ class TableWidget extends WidgetType {
     for (const row of this.table.rows) body.append(this.createRow(view, controller, row, false))
     table.append(head, body)
     wrapper.append(table)
+    // Two layers keep pointer activity on the table from turning into a CM6
+    // source selection. CM6's own input dispatch already skips every event
+    // whose target sits inside this widget (`ignoreEvent()` below returns
+    // true, so `eventBelongsToEditor` rejects it), and the whole table span
+    // is atomic via `collectTableHiddenRanges`, so even a drag that *starts
+    // outside* the table steps over it as one unit instead of selecting its
+    // source. What that leaves exposed is ancestor listeners outside CM6's
+    // dispatch — bubble-phase handlers on the editor container/document added
+    // by the app or future code, which never consult `ignoreEvent`. Stop
+    // propagation at the widget boundary so a mousedown on the table's chrome
+    // (padding/borders between cells, not a `td`/`th`) is never
+    // re-interpreted upstream — the same defence `openTableContextMenu`
+    // applies to `contextmenu`.
+    wrapper.addEventListener('mousedown', (event) => event.stopPropagation())
+    wrapper.addEventListener('pointerdown', (event) => event.stopPropagation())
     if (typeof ResizeObserver !== 'undefined') {
       controller.resizeObserver = new ResizeObserver(() => view.requestMeasure())
       controller.resizeObserver.observe(wrapper)
@@ -1129,6 +1246,14 @@ class TableWidget extends WidgetType {
     })
     element.addEventListener('compositionend', commitCell)
     element.addEventListener('focus', () => {
+      // Entering a cell must leave exactly one visible selection: the cell's
+      // own. CM6 never sees the mousedown that focused this cell (widget
+      // events are ignored), so a non-empty outer-document selection made
+      // beforehand would stay painted by drawSelection next to the cell's
+      // native selection. Collapse it.
+      if (!view.state.selection.main.empty) {
+        view.dispatch({ selection: { anchor: view.state.selection.main.head } })
+      }
       element
         .closest('table')
         ?.querySelectorAll('.xmd-cm-table-cell-active')
@@ -1160,7 +1285,12 @@ class TableWidget extends WidgetType {
       const cell = controller.cellByElement.get(element)
       if (cell) setTableCellContent(element, cell.text)
     })
-    element.addEventListener('mouseup', () => tableCellCommandBridge.refresh(element))
+    element.addEventListener('mouseup', () => {
+      // A pointer interaction re-anchors the caret; the next vertical run
+      // starts a fresh goal column from wherever the user clicked.
+      controller.verticalGoalX = undefined
+      tableCellCommandBridge.refresh(element)
+    })
     element.addEventListener('keyup', () => tableCellCommandBridge.refresh(element))
 
     element.addEventListener('paste', (event) => {
@@ -1183,6 +1313,21 @@ class TableWidget extends WidgetType {
 
     element.addEventListener('keydown', (event) => {
       if (event.isComposing) return
+      // A table cell is a nested contenteditable island inside
+      // `view.contentDOM`. CM6's own keymaps never see these keystrokes
+      // (`ignoreEvent()` on this widget makes `eventBelongsToEditor` reject
+      // them), but ancestor listeners outside CM6's dispatch — bubble-phase
+      // keydown handlers on the editor container/document added by the app
+      // or future code — would still receive them and could act on CM6's own,
+      // unrelated document selection while the native caret stays in this
+      // cell. Cut the bubble at the cell boundary; window-level *capture*
+      // listeners (useAppShortcuts, which routes Cmd+B etc. into
+      // tableCellCommandBridge) run before this handler and are unaffected.
+      // This mirrors the existing `stopPropagation` in `openTableContextMenu`.
+      event.stopPropagation()
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+        controller.verticalGoalX = undefined
+      }
       if (view.state.readOnly) return
       const withMod = event.metaKey || event.ctrlKey
       if (withMod && event.key === 'Enter') {
@@ -1213,13 +1358,27 @@ class TableWidget extends WidgetType {
         return
       }
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        if (!this.isAtCellVerticalBoundary(element, event.key === 'ArrowUp')) return
+        if (!this.isAtCellVerticalBoundary(element, event.key === 'ArrowUp')) {
+          // Native in-cell line movement changes the caret's x; a stale goal
+          // from an earlier cross-cell run must not override it later.
+          controller.verticalGoalX = undefined
+          return
+        }
         event.preventDefault()
         const direction = event.key === 'ArrowUp' ? -1 : 1
-        if (!this.moveFocus(element, direction, /* vertical */ true)) {
+        const goalX = controller.verticalGoalX ?? this.caretX(element)
+        controller.verticalGoalX = goalX
+        if (!this.moveFocus(element, direction, /* vertical */ true, goalX)) {
           // At a table edge, continue in the document above/below the table.
-          // Never fall back to a neighbouring left/right cell for a vertical key.
-          const position = direction < 0 ? controller.table.from : controller.table.to
+          // Never fall back to a neighbouring left/right cell for a vertical
+          // key. Land inside the adjacent line (not at the widget's own
+          // from/to boundary, where the caret would render pinned to the
+          // table's edge instead of in the neighbouring text row).
+          controller.verticalGoalX = undefined
+          const position =
+            direction < 0
+              ? Math.max(0, controller.table.from - 1)
+              : Math.min(view.state.doc.length, controller.table.to + 1)
           view.dispatch({ selection: { anchor: position }, scrollIntoView: true })
           view.focus()
         }
@@ -1238,19 +1397,30 @@ class TableWidget extends WidgetType {
     })
   }
 
-  /** Tab moves in reading order. Vertical moves preserve the caret's screen X coordinate. */
-  private moveFocus(current: HTMLElement, direction: 1 | -1, vertical: boolean): boolean {
+  /**
+   * Tab moves in reading order. Vertical moves preserve the caret's screen X
+   * coordinate — `goalX` (a run's remembered goal column, see
+   * `TableWidgetController.verticalGoalX`) when supplied, the live caret x
+   * otherwise.
+   */
+  private moveFocus(
+    current: HTMLElement,
+    direction: 1 | -1,
+    vertical: boolean,
+    goalX?: number,
+  ): boolean {
     const table = current.closest('table')
     const row = current.closest('tr')
     if (!table || !row) return false
     if (vertical) {
+      const x = goalX ?? this.caretX(current)
       const allRows = Array.from(table.querySelectorAll('tr'))
       const targetRow = allRows[allRows.indexOf(row) + direction]
       const target = targetRow
-        ? this.cellAtHorizontalCoordinate(Array.from(targetRow.children), this.caretX(current))
+        ? this.cellAtHorizontalCoordinate(Array.from(targetRow.children), x)
         : undefined
       if (target?.isContentEditable) {
-        this.focusCell(target, this.caretX(current))
+        this.focusCell(target, x)
         return true
       }
       return false
@@ -1270,13 +1440,14 @@ class TableWidget extends WidgetType {
     if (!selection?.rangeCount) return false
     const range = selection.getRangeAt(0)
     if (!range.collapsed || !element.contains(range.startContainer)) return false
-    const probe = document.createRange()
-    probe.selectNodeContents(element)
-    if (atStart) probe.setEnd(range.startContainer, range.startOffset)
-    else probe.setStart(range.startContainer, range.startOffset)
-    // `<br>` represents a visual line boundary. Text-only cells are one line.
-    return !Array.from(probe.cloneContents().querySelectorAll('br')).length &&
-      probe.toString().replace(/\u200b/g, '') === ''
+    // An empty cell has no caret rect and exactly one visual line.
+    const caretRect = range.getClientRects().item(0)
+    if (!caretRect || caretRect.height === 0) return true
+    const contents = document.createRange()
+    contents.selectNodeContents(element)
+    const contentRect = contents.getBoundingClientRect()
+    if (contentRect.height === 0) return true
+    return caretOnBoundaryVisualLine(caretRect, contentRect, atStart)
   }
 
   private caretX(element: HTMLElement): number {
@@ -1286,18 +1457,14 @@ class TableWidget extends WidgetType {
   }
 
   private cellAtHorizontalCoordinate(cells: Element[], x: number): HTMLElement | undefined {
-    const editable = cells.filter((cell): cell is HTMLElement => cell instanceof HTMLElement && cell.isContentEditable)
-    return editable.find((cell) => {
-      const rect = cell.getBoundingClientRect()
-      return x >= rect.left && x <= rect.right
-    }) ?? editable.reduce<HTMLElement | undefined>((nearest, cell) => {
-      if (!nearest) return cell
-      const nearestRect = nearest.getBoundingClientRect()
-      const rect = cell.getBoundingClientRect()
-      const nearestDistance = Math.abs((nearestRect.left + nearestRect.right) / 2 - x)
-      const distance = Math.abs((rect.left + rect.right) / 2 - x)
-      return distance < nearestDistance ? cell : nearest
-    }, undefined)
+    const editable = cells.filter(
+      (cell): cell is HTMLElement => cell instanceof HTMLElement && cell.isContentEditable,
+    )
+    const index = indexOfCellAtHorizontalCoordinate(
+      editable.map((cell) => cell.getBoundingClientRect()),
+      x,
+    )
+    return index < 0 ? undefined : editable[index]
   }
 
   private focusCell(element: HTMLElement, x?: number): void {
@@ -1315,7 +1482,8 @@ class TableWidget extends WidgetType {
       ? null
       : documentWithCaret.caretRangeFromPoint?.(targetX, rect.top + rect.height / 2)
     if (caret && element.contains(caret.offsetNode)) range.setStart(caret.offsetNode, caret.offset)
-    else if (hitRange && element.contains(hitRange.startContainer)) range.setStart(hitRange.startContainer, hitRange.startOffset)
+    else if (hitRange && element.contains(hitRange.startContainer))
+      range.setStart(hitRange.startContainer, hitRange.startOffset)
     else {
       range.selectNodeContents(element)
       range.collapse(x === undefined)
@@ -1393,5 +1561,11 @@ export function markdownTablePreview(options: MarkdownTablePreviewOptions = {}):
       }
     },
   )
-  return [decorationField, viewportObserver]
+  return [
+    decorationField,
+    viewportObserver,
+    hiddenRangeSource.of(({ state, visibleRanges }) =>
+      collectTableHiddenRanges(state, visibleRanges, bufferChars),
+    ),
+  ]
 }

@@ -10,47 +10,164 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line {
+  box-sizing: border-box;
+  color: var(--code-block-text, var(--text));
+  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  font-size: inherit;
+  line-height: inherit;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 16px;
+  /* The card itself always fills the editor. Non-wrapping overflow belongs to
+     the nested content spans and their shared bottom scrollbar. */
+  position: relative;
+  width: 100%;
+}
+
+.xmd-cm-editor .xmd-cm-code-line-content {
+  box-sizing: border-box;
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  vertical-align: top;
+  white-space: pre;
+  width: 100%;
+}
+
+.xmd-cm-editor .xmd-cm-code-line-content::-webkit-scrollbar {
+  display: none;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-wrap .xmd-cm-code-line-content {
+  overflow-x: visible;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* The card visuals live on a pseudo-element sunk below CM6's selection layer
+   (drawSelection renders behind-layers at z-index -1-pos), so a drawn
+   selection stays visible on top of the card instead of being painted over
+   by an opaque line background. */
+.xmd-cm-editor .cm-line.xmd-cm-code-line::before {
   /* Keep the code card distinguishable without the heavy grey slab produced
      by using the shared table/card colour at full strength.  Mixing with the
      active page background also keeps custom themes visually coherent. */
   background: color-mix(in srgb, var(--code-card-bg) 60%, var(--bg) 40%);
   border-left: 1px solid var(--code-card-border);
   border-right: 1px solid var(--code-card-border);
-  box-sizing: border-box;
-  color: var(--code-block-text, var(--text));
-  font-family: var(--crepe-font-code, ui-monospace, monospace);
-  font-size: inherit;
-  line-height: inherit;
-  min-height: 0;
-  padding: 0 16px;
-  white-space: pre;
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: -5;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line-first {
-  border-radius: 8px 8px 0 0;
-  border-top: 1px solid var(--code-card-border);
-  padding-right: 112px;
-  position: relative;
+  padding-top: 10px;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first .xmd-cm-code-line-content {
+  /* Inactive blocks have no invisible control gutter: code uses the full row. */
+  width: 100%;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-block-active .xmd-cm-code-line-content {
+  /* Once the caret enters this block, reserve exactly the mounted controls'
+     width so the language and copy actions never paint over code. */
+  width: calc(100% - var(--xmd-code-controls-width, 112px));
+}
+
+.xmd-cm-editor
+  .cm-line.xmd-cm-code-line-first:has(.xmd-cm-code-preview-language:focus)
+  .xmd-cm-code-line-content {
+  width: calc(100% - 176px);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line-last {
+  padding-bottom: 10px;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first::before {
+  border-radius: 8px 8px 0 0;
+  border-top: 1px solid var(--code-card-border);
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-last::before {
   border-bottom: 1px solid var(--code-card-border);
   border-radius: 0 0 8px 8px;
 }
 
-.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-line-last {
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-line-last::before {
   border-radius: 8px;
+}
+
+.xmd-cm-code-scrollbar {
+  bottom: 3px;
+  border-radius: 999px;
+  display: block;
+  height: 5px;
+  inset-inline: 16px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 120ms ease;
+}
+
+.xmd-cm-code-scrollbar.is-overflowing.is-active,
+.xmd-cm-code-scrollbar.is-overflowing:focus-visible,
+.xmd-cm-code-scrollbar.is-overflowing.is-dragging {
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.xmd-cm-code-scrollbar.is-overflowing::after {
+  background: color-mix(in srgb, var(--text-muted) 42%, transparent);
+  border-radius: 999px;
+  content: '';
+  height: 3px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 1px;
+  transition: background-color 120ms ease;
+  transform: translateX(var(--xmd-code-thumb-left, 0));
+  width: var(--xmd-code-thumb-width, 36px);
+}
+
+.xmd-cm-code-scrollbar.is-overflowing:hover,
+.xmd-cm-code-scrollbar.is-overflowing:focus-visible,
+.xmd-cm-code-scrollbar.is-overflowing.is-dragging {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+
+.xmd-cm-code-scrollbar.is-overflowing:hover::after,
+.xmd-cm-code-scrollbar.is-overflowing:focus-visible::after,
+.xmd-cm-code-scrollbar.is-overflowing.is-dragging::after {
+  background: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+.xmd-cm-code-scrollbar:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  outline: none;
 }
 
 .xmd-cm-code-preview-header {
   align-items: center;
   display: inline-flex;
-  gap: 6px;
-  inset-inline-end: 8px;
-  line-height: 22px;
+  gap: 4px;
+  /* Match the editor's 16px × 1.75 first-line box explicitly. Avoid `lh`
+     here: WKWebView can recompute it inconsistently as CM6 moves widgets
+     between active code blocks. */
+  height: 28px;
+  inset-inline-end: 10px;
+  line-height: 28px;
   pointer-events: none;
   position: absolute;
-  top: 8px;
+  top: 10px;
   z-index: 2;
 }
 
@@ -65,21 +182,79 @@
   border-radius: 5px;
   box-sizing: border-box;
   color: var(--text-muted);
-  cursor: pointer;
+  cursor: text;
   font-family: var(--crepe-font-code, ui-monospace, monospace);
   font-size: 12px;
   height: 22px;
   line-height: 20px;
-  max-width: min(20ch, 45vw);
+  max-width: min(18ch, 40vw);
+  opacity: 0;
   outline: none;
-  padding: 0 6px;
+  padding: 0 4px;
+  pointer-events: none;
   text-transform: lowercase;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.xmd-cm-editor
+  .cm-line.xmd-cm-code-line-first.xmd-cm-code-block-active
+  .xmd-cm-code-preview-language,
+.xmd-cm-code-preview-header:focus-within .xmd-cm-code-preview-language,
+.xmd-cm-code-preview-language:focus-visible {
+  color: var(--text);
+  opacity: 0.78;
+  pointer-events: auto;
 }
 
 .xmd-cm-code-preview-language:hover,
 .xmd-cm-code-preview-language:focus {
   background: color-mix(in srgb, var(--text) 8%, transparent);
+  opacity: 1;
+}
+
+.xmd-cm-code-language-menu {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 18%, transparent);
+  box-sizing: border-box;
+  display: grid;
+  gap: 2px;
+  inset-inline-end: 26px;
+  line-height: 20px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  position: absolute;
+  top: 26px;
+  width: min(180px, calc(100vw - 32px));
+  z-index: 4;
+}
+
+.xmd-cm-code-language-menu[hidden] {
+  display: none;
+}
+
+.xmd-cm-code-language-option {
+  border-radius: 5px;
   color: var(--text);
+  cursor: pointer;
+  display: block;
+  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  font-size: 12px;
+  overflow: hidden;
+  padding: 3px 7px;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xmd-cm-code-language-option:hover,
+.xmd-cm-code-language-option.is-active {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
 .xmd-cm-code-preview-copy {
@@ -93,16 +268,43 @@
   display: inline-flex;
   height: 22px;
   justify-content: center;
+  opacity: 0;
   padding: 0;
+  pointer-events: none;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
   width: 22px;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-block-active .xmd-cm-code-preview-copy,
+.xmd-cm-code-preview-header:focus-within .xmd-cm-code-preview-copy,
+.xmd-cm-code-preview-copy:focus-visible {
+  opacity: 0.78;
+  pointer-events: auto;
 }
 
 .xmd-cm-code-preview-copy:hover {
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
+  opacity: 1;
 }
 
 .xmd-cm-code-preview-copy:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* CM6's rectangle selection layer intentionally fills open line ranges to the
+   editor edges. Inside horizontally clipped code rows that escapes the card,
+   so use the browser selection while a range stays inside one code block.
+   Cross-block selections keep CM6 painting so selection survives scrolling. */
+.xmd-cm-editor .cm-editor.xmd-cm-native-code-selection .cm-selectionLayer {
+  display: none;
+}
+
+.xmd-cm-editor .cm-editor.xmd-cm-native-code-selection .cm-line::selection,
+.xmd-cm-editor .cm-editor.xmd-cm-native-code-selection .cm-line *::selection {
+  background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
 }

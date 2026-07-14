@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   buildMathPreviewDecorations,
+  collectMathHiddenRanges,
   findVisibleMathExpressions,
   markdownMathPreview,
   mathSourceRange,
@@ -163,12 +164,38 @@ describe('CM6 math preview', () => {
     expect(state.field(mathSourceRange)).toBeNull()
   })
 
-  it('registers formula replacements as atomic ranges', () => {
+  it('registers formula spans through the core hidden-range engine, not its own atomicRanges provider', () => {
+    const doc = 'before $x$ after'
     const state = EditorState.create({
-      doc: 'before $x$ after',
+      doc,
       extensions: [markdown(), markdownMathPreview()],
     })
-    expect(state.facet(EditorView.atomicRanges)).toHaveLength(1)
+    // Invariant 3 (core/README.md): the only atomicRanges provider is the
+    // aggregated one installed by hiddenRangesEngine() in markdownLivePreview.
+    expect(state.facet(EditorView.atomicRanges)).toHaveLength(0)
+    expect(
+      collectMathHiddenRanges(state, [{ from: 0, to: doc.length }], { viewportMargin: 0 }),
+    ).toEqual([{ from: doc.indexOf('$'), to: doc.lastIndexOf('$') + 1, paint: false }])
+  })
+
+  it('leaves a formula in source-edit mode out of the hidden atomic ranges', () => {
+    const doc = 'before $x + 1$ after'
+    let state = EditorState.create({ doc, extensions: [markdown(), mathSourceRange] })
+    expect(
+      collectMathHiddenRanges(state, [{ from: 0, to: doc.length }], { viewportMargin: 0 }),
+    ).toHaveLength(1)
+
+    state = state.update({
+      effects: setMathSourceRange.of({
+        from: doc.indexOf('$'),
+        to: doc.lastIndexOf('$') + 1,
+        source: 'x + 1',
+        displayMode: false,
+      }),
+    }).state
+    expect(
+      collectMathHiddenRanges(state, [{ from: 0, to: doc.length }], { viewportMargin: 0 }),
+    ).toHaveLength(0)
   })
 
   it.each([

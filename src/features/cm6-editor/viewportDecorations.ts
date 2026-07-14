@@ -11,7 +11,6 @@ import {
 export type ViewportDecorationBuilder = (view: EditorView) => DecorationSet
 
 export interface ViewportDecorationOptions {
-  atomic?: boolean
   rebuildOnSelection?: boolean
   /** Rebuild after CodeMirror's background parser publishes a more complete syntax tree. */
   rebuildOnSyntaxTree?: boolean
@@ -55,12 +54,11 @@ export function viewportDecorationExtension(
       }
       return transaction.docChanged ? value.map(transaction.changes) : value
     },
-    provide: (source) => [
-      EditorView.decorations.from(source),
-      ...(options.atomic
-        ? [EditorView.atomicRanges.from(source, (decorations) => () => decorations)]
-        : []),
-    ],
+    // Only a decoration provider: atomicity is never declared here. Every
+    // feature's atomic ranges go through core/hiddenRanges.ts's single
+    // aggregated provider (`hiddenRangeSource`), see core/README.md
+    // invariant 3.
+    provide: (source) => EditorView.decorations.from(source),
   })
 
   const observer = ViewPlugin.fromClass(
@@ -86,7 +84,8 @@ export function viewportDecorationExtension(
                 syntaxTree(update.startState) !== syntaxTree(update.state),
             },
             options,
-          ) || options.rebuildOnUpdate?.(update) === true
+          ) ||
+          options.rebuildOnUpdate?.(update) === true
         ) {
           this.schedule()
         }

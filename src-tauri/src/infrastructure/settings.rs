@@ -266,6 +266,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(background_image_path);
     replace_if_some!(background_opacity);
     replace_if_some!(code_block_opacity);
+    replace_if_some!(code_block_line_wrapping);
     replace_if_some!(theme_shade);
     replace_if_some!(heading_number);
     replace_if_some!(auto_save);

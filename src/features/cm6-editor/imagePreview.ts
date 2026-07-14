@@ -1,15 +1,16 @@
 import { syntaxTree } from '@codemirror/language'
-import { StateEffect, type EditorState } from '@codemirror/state'
+import { StateEffect, type EditorState, type Extension } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
 import {
   Decoration,
-  EditorView,
   ViewPlugin,
   WidgetType,
   type DecorationSet,
+  type EditorView,
   type ViewUpdate,
 } from '@codemirror/view'
 import { copyImageElement } from '../../lib/richClipboard'
+import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import { decodeMarkdownReferenceText, resolveMarkdownReference } from './markdownReferences'
 
 export interface MarkdownImageMatch {
@@ -44,6 +45,113 @@ const refreshImagePreviews = StateEffect.define<void>()
 const DEFAULT_BUFFER_CHARS = 2_000
 const DEFAULT_PLACEHOLDER_HEIGHT = 120
 const DEFAULT_CACHE_ENTRIES = 256
+const IMAGE_DIMENSION_STORAGE_KEY = 'xmd:image-dimensions:v1'
+const MAX_STORED_IMAGE_DIMENSIONS = 256
+
+export interface ImageDimensions {
+  width: number
+  height: number
+}
+
+const imageDimensionCache = new Map<string, ImageDimensions>()
+let imageDimensionsHydrated = false
+
+function imageDimensionStorage(): Storage | null {
+  try {
+    return typeof globalThis.localStorage === 'undefined' ? null : globalThis.localStorage
+  } catch {
+    return null
+  }
+}
+
+function validImageDimensions(value: unknown): value is ImageDimensions {
+  if (typeof value !== 'object' || value === null) return false
+  const { width, height } = value as Partial<ImageDimensions>
+  return (
+    typeof width === 'number' &&
+    Number.isFinite(width) &&
+    width > 0 &&
+    typeof height === 'number' &&
+    Number.isFinite(height) &&
+    height > 0
+  )
+}
+
+function hydrateImageDimensions(): void {
+  if (imageDimensionsHydrated) return
+  imageDimensionsHydrated = true
+  const storage = imageDimensionStorage()
+  if (!storage) return
+  try {
+    const entries = JSON.parse(storage.getItem(IMAGE_DIMENSION_STORAGE_KEY) ?? '[]') as unknown
+    if (!Array.isArray(entries)) return
+    for (const entry of entries.slice(-MAX_STORED_IMAGE_DIMENSIONS)) {
+      if (!Array.isArray(entry)) continue
+      const values = entry as unknown[]
+      const url = values[0]
+      if (typeof url !== 'string') continue
+      const dimensions: unknown = { width: values[1], height: values[2] }
+      if (validImageDimensions(dimensions)) imageDimensionCache.set(url, dimensions)
+    }
+  } catch {
+    // Corrupt or unavailable view metadata must never prevent image rendering.
+  }
+}
+
+function persistImageDimensions(): void {
+  const storage = imageDimensionStorage()
+  if (!storage) return
+  try {
+    storage.setItem(
+      IMAGE_DIMENSION_STORAGE_KEY,
+      JSON.stringify(
+        [...imageDimensionCache.entries()].map(([url, dimensions]) => [
+          url,
+          dimensions.width,
+          dimensions.height,
+        ]),
+      ),
+    )
+  } catch {
+    // Persistence is an optimization. Rendering still works without storage.
+  }
+}
+
+export function cachedImageDimensions(url: string): ImageDimensions | null {
+  hydrateImageDimensions()
+  const dimensions = imageDimensionCache.get(url)
+  if (!dimensions) return null
+  // Refresh insertion order so trimming behaves like a small LRU cache.
+  imageDimensionCache.delete(url)
+  imageDimensionCache.set(url, dimensions)
+  return dimensions
+}
+
+export function rememberImageDimensions(url: string, dimensions: ImageDimensions): void {
+  if (!url || !validImageDimensions(dimensions)) return
+  hydrateImageDimensions()
+  const normalized = {
+    width: Math.round(dimensions.width),
+    height: Math.round(dimensions.height),
+  }
+  const previous = imageDimensionCache.get(url)
+  imageDimensionCache.delete(url)
+  imageDimensionCache.set(url, normalized)
+  while (imageDimensionCache.size > MAX_STORED_IMAGE_DIMENSIONS) {
+    const oldest = imageDimensionCache.keys().next().value
+    if (typeof oldest !== 'string') break
+    imageDimensionCache.delete(oldest)
+  }
+  if (previous?.width !== normalized.width || previous.height !== normalized.height) {
+    persistImageDimensions()
+  }
+}
+
+function applyBlockImageDimensions(element: HTMLElement, dimensions: ImageDimensions): void {
+  element.style.width = `${dimensions.width}px`
+  element.style.aspectRatio = `${dimensions.width} / ${dimensions.height}`
+  element.classList.remove('is-unmeasured')
+}
 
 export function parseMarkdownImage(
   markdown: string,
@@ -106,7 +214,10 @@ export function isSafeImageSource(src: string): boolean {
   if (/^[a-z]:[\\/]/i.test(value)) return true
   const scheme = /^([a-z][a-z\d+.-]*):/i.exec(value)?.[1]?.toLowerCase()
   if (!scheme) return true
-  if (['http', 'https', 'blob', 'file', 'asset'].includes(scheme)) return true
+  // `resolveAssetURL` maps desktop-local files to the read-only `xmd://`
+  // protocol served by Tauri. It is an image transport just like Tauri's
+  // built-in `asset://` protocol and must survive the post-resolution check.
+  if (['http', 'https', 'blob', 'file', 'asset', 'xmd'].includes(scheme)) return true
   return scheme === 'data' && /^data:image\/(?:avif|gif|jpe?g|png|webp|svg\+xml)[;,]/i.test(value)
 }
 
@@ -162,6 +273,38 @@ export function findVisibleMarkdownImages(
   return matches.sort((a, b) => a.from - b.from)
 }
 
+/**
+ * The single source of atomic/hidden ranges this feature contributes to the
+ * core engine (`core/hiddenRanges.ts`), replacing the standalone
+ * `EditorView.atomicRanges` provider this module used to maintain directly
+ * off its own decoration `ViewPlugin`. An `Image` node's span is registered
+ * with `paint: false` since the `ViewPlugin` below already paints the
+ * `ImagePreviewWidget` replacement over the same range.
+ *
+ * Only the *synchronously* determinable fallback-to-source cases —
+ * `isSafeImageSource` rejecting the scheme, or a remote source when
+ * `allowRemote` is off — are excluded here, matching `buildDecorations`
+ * exactly for those. A source that looks safe but whose network/blob
+ * resolution later fails asynchronously is intentionally still atomic: that
+ * result lives in the `ViewPlugin`'s private per-view cache, not in
+ * `EditorState`, so it is not visible to this state-only builder. See
+ * core/README.md's Phase 4 checklist for the resulting (narrow) known gap.
+ */
+export function collectImageHiddenRanges(
+  state: EditorState,
+  visibleRanges: readonly { from: number; to: number }[],
+  options: Pick<MarkdownImagePreviewOptions, 'allowRemote' | 'bufferChars'> = {},
+): HiddenRange[] {
+  const bufferChars = options.bufferChars ?? DEFAULT_BUFFER_CHARS
+  const hidden: HiddenRange[] = []
+  for (const match of findVisibleMarkdownImages(state, visibleRanges, bufferChars)) {
+    if (!isSafeImageSource(match.src)) continue
+    if (!options.allowRemote && isRemoteImageSource(match.src)) continue
+    hidden.push({ from: match.from, to: match.to, paint: false })
+  }
+  return hidden
+}
+
 export class ImagePreviewWidget extends WidgetType {
   constructor(
     readonly match: MarkdownImageMatch,
@@ -198,8 +341,13 @@ export class ImagePreviewWidget extends WidgetType {
     element.className = `xmd-cm-image-preview${this.match.block ? ' is-block' : ' is-inline'}`
     element.dataset.xmdImage = this.match.src
     element.title = this.match.title || this.match.alt || this.match.src
-    element.style.maxWidth = this.maxWidth
-    if (this.match.block) element.style.minHeight = `${this.placeholderHeight}px`
+    element.style.setProperty('--xmd-image-max-width', this.maxWidth)
+    if (this.match.block) {
+      element.style.setProperty('--xmd-image-placeholder-height', `${this.placeholderHeight}px`)
+      const dimensions = this.url ? cachedImageDimensions(this.url) : null
+      if (dimensions) applyBlockImageDimensions(element, dimensions)
+      else element.classList.add('is-unmeasured')
+    }
     element.tabIndex = 0
     element.setAttribute('role', 'group')
     element.setAttribute('aria-label', this.match.alt || this.match.title || this.match.src)
@@ -250,11 +398,16 @@ export class ImagePreviewWidget extends WidgetType {
       if (this.match.title) image.title = this.match.title
       image.draggable = false
       image.style.maxWidth = '100%'
+      image.style.height = 'auto'
       image.style.display = this.match.block ? 'block' : 'inline-block'
       element.classList.add('is-loading')
       const finishLoad = (): void => {
+        if (this.match.block && image.naturalWidth > 0 && image.naturalHeight > 0) {
+          const dimensions = { width: image.naturalWidth, height: image.naturalHeight }
+          rememberImageDimensions(this.url!, dimensions)
+          applyBlockImageDimensions(element, dimensions)
+        }
         element.classList.remove('is-loading')
-        element.style.minHeight = ''
         view?.requestMeasure()
       }
       image.addEventListener('load', finishLoad)
@@ -300,12 +453,12 @@ export class ImagePreviewWidget extends WidgetType {
   }
 }
 
-export function markdownImagePreview(options: MarkdownImagePreviewOptions) {
+export function markdownImagePreview(options: MarkdownImagePreviewOptions): Extension {
   const maxWidth = imagePreviewMaxWidth(options.maxWidth)
   const placeholderHeight = options.placeholderHeight ?? DEFAULT_PLACEHOLDER_HEIGHT
   const bufferChars = options.bufferChars ?? DEFAULT_BUFFER_CHARS
 
-  return ViewPlugin.fromClass(
+  const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet
       private readonly cache = new Map<string, CacheEntry>()
@@ -411,10 +564,15 @@ export function markdownImagePreview(options: MarkdownImagePreviewOptions) {
         return Decoration.set(ranges, true)
       }
     },
-    {
-      decorations: (plugin) => plugin.decorations,
-      provide: (plugin) =>
-        EditorView.atomicRanges.of((view) => view.plugin(plugin)?.decorations ?? Decoration.none),
-    },
+    { decorations: (instance) => instance.decorations },
   )
+  return [
+    plugin,
+    hiddenRangeSource.of(({ state, visibleRanges }) =>
+      collectImageHiddenRanges(state, visibleRanges, {
+        allowRemote: options.allowRemote,
+        bufferChars,
+      }),
+    ),
+  ]
 }

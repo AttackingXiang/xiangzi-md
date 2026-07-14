@@ -35,6 +35,16 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
           checked={settings.showToolbar ?? false}
           onChange={(checked) => onChange({ showToolbar: checked })}
         />
+        <ToggleRow
+          label={en ? 'Wrap code blocks' : '代码块自动换行'}
+          description={
+            en
+              ? 'Wrap long lines inside fenced code blocks. Off by default; horizontal scrolling is used instead.'
+              : '代码块中的长行自动换行；默认关闭，关闭时使用横向滚动查看长行。'
+          }
+          checked={settings.codeBlockLineWrapping ?? false}
+          onChange={(codeBlockLineWrapping) => onChange({ codeBlockLineWrapping })}
+        />
       </SettingsCard>
       <SettingsCard title={en ? 'Tables' : '表格'}>
         <div className="table-layout-setting">

@@ -1,24 +1,10 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
+import { EditorSelection, EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
   buildLivePreviewDecorations,
   buildHiddenMarkdownMarkerRanges,
-  blankLineKind,
-  cleanupEmptyMarkdownFormatting,
-  editableBlankParagraph,
-  explicitBlankParagraphDeletion,
-  headingBoundaryDeletion,
-  isBlockSeparatorLine,
-  insertMarkdownHardBreak,
-  insertContainerMarkdownHardBreak,
-  listBoundaryDeletion,
-  quoteBoundaryDeletion,
   safeMarkdownLinkHref,
-  splitTopLevelMarkdownBlock,
-  splitContainerMarkdownBlock,
-  joinContainerMarkdownBlock,
-  visualGapEdit,
 } from './livePreview'
 
 interface SeenDecoration {
@@ -27,6 +13,7 @@ interface SeenDecoration {
   className?: string
   replacement: boolean
   href?: string
+  editing?: string
   style?: string
 }
 
@@ -44,6 +31,7 @@ function decorations(state: EditorState, from: number, to: number): SeenDecorati
         className,
         replacement: rangeTo > rangeFrom && className === undefined,
         href: spec.attributes?.['data-xmd-href'],
+        editing: spec.attributes?.['data-xmd-editing'],
         style: spec.attributes?.style,
       })
     },
@@ -51,7 +39,24 @@ function decorations(state: EditorState, from: number, to: number): SeenDecorati
   return result
 }
 
-function createState(doc: string, cursor = doc.length): EditorState {
+function hiddenRanges(state: EditorState, from: number, to: number): PreviewRangeLike[] {
+  const result: PreviewRangeLike[] = []
+  buildHiddenMarkdownMarkerRanges(state, [{ from, to }], { viewportMargin: 0 }).between(
+    0,
+    state.doc.length,
+    (rangeFrom, rangeTo) => {
+      result.push({ from: rangeFrom, to: rangeTo })
+    },
+  )
+  return result
+}
+
+interface PreviewRangeLike {
+  from: number
+  to: number
+}
+
+function createState(doc: string, cursor = 0): EditorState {
   return EditorState.create({
     doc,
     selection: EditorSelection.cursor(cursor),
@@ -59,318 +64,33 @@ function createState(doc: string, cursor = doc.length): EditorState {
   })
 }
 
-function deleteAsUser(state: EditorState, from: number, to: number): EditorState {
-  const deletion = {
-    changes: { from, to },
-    annotations: Transaction.userEvent.of('delete.selection'),
-  }
-  const transaction = state.update(deletion)
-  const cleanup = cleanupEmptyMarkdownFormatting(transaction)
-  return cleanup ? state.update(deletion, cleanup).state : transaction.state
-}
-
-function deleteAtHeadingBoundary(state: EditorState, forward: boolean): EditorState {
-  const spec = headingBoundaryDeletion(state, forward)
-  if (!spec) return state
-  return state.update(spec).state
-}
-
-function deleteAtListBoundary(state: EditorState, forward: boolean): EditorState {
-  const spec = listBoundaryDeletion(state, forward)
-  if (!spec) return state
-  return state.update(spec).state
-}
-
-function deleteAtQuoteBoundary(state: EditorState, forward: boolean): EditorState {
-  const spec = quoteBoundaryDeletion(state, forward)
-  if (!spec) return state
-  return state.update(spec).state
-}
-
-describe('CM6 Markdown live preview', () => {
-  it('uses one structural delimiter and preserves extra blank lines as editable space', () => {
-    const state = createState('first\n\n\nsecond')
-    expect(blankLineKind(state, 2)).toBe('structural')
-    expect(blankLineKind(state, 3)).toBe('explicit')
-    expect(isBlockSeparatorLine(state, 2)).toBe(true)
-    expect(isBlockSeparatorLine(state, 3)).toBe(false)
-    expect(blankLineKind(createState('first\n\n'), 2)).toBe('explicit')
-  })
-
-  it('deletes an explicit empty paragraph as a block without landing on a hidden delimiter', () => {
-    const between = createState('A\n\n\nB', 3)
-    const backward = explicitBlankParagraphDeletion(between, false)
-    expect(backward).not.toBeNull()
-    const afterBackward = between.update(backward!).state
-    expect(afterBackward.doc.toString()).toBe('A\n\nB')
-    expect(afterBackward.selection.main.head).toBe(3)
-
-    const forward = explicitBlankParagraphDeletion(createState('A\n\n\nB', 3), true)
-    expect(forward).not.toBeNull()
-    expect(createState('A\n\n\nB', 3).update(forward!).state.doc.toString()).toBe('A\n\nB')
-
-    const trailing = createState('A\n\n', 2)
-    const removeTrailing = explicitBlankParagraphDeletion(trailing, false)
-    expect(removeTrailing).not.toBeNull()
-    expect(trailing.update(removeTrailing!).state.doc.toString()).toBe('A')
-  })
-
-  it('splits top-level paragraphs like ProseMirror instead of inserting a soft source line', () => {
-    const middle = createState('AlphaBeta', 5)
-    const splitMiddle = splitTopLevelMarkdownBlock(middle)
-    expect(splitMiddle).not.toBeNull()
-    const afterMiddle = middle.update(splitMiddle!).state
-    expect(afterMiddle.doc.toString()).toBe('Alpha\n\nBeta')
-    expect(afterMiddle.selection.main.head).toBe(7)
-
-    const end = createState('Alpha', 5)
-    const splitEnd = splitTopLevelMarkdownBlock(end)
-    expect(splitEnd).not.toBeNull()
-    const afterEnd = end.update(splitEnd!).state
-    expect(afterEnd.doc.toString()).toBe('Alpha\n\n')
-    expect(afterEnd.selection.main.head).toBe(6)
-
-    const softLine = createState('Alpha\nBeta', 5)
-    const splitSoftLine = splitTopLevelMarkdownBlock(softLine)
-    expect(splitSoftLine).not.toBeNull()
-    expect(softLine.update(splitSoftLine!).state.doc.toString()).toBe('Alpha\n\nBeta')
-
-    const heading = createState('# AlphaBeta', 7)
-    const splitHeading = splitTopLevelMarkdownBlock(heading)
-    expect(splitHeading).not.toBeNull()
-    expect(heading.update(splitHeading!).state.doc.toString()).toBe('# Alpha\n\nBeta')
-  })
-
-  it('writes Shift+Enter as a portable hard break while hiding its source marker', () => {
-    const state = createState('AlphaBeta', 5)
-    const hardBreak = insertMarkdownHardBreak(state)
-    expect(hardBreak).not.toBeNull()
-    const after = state.update(hardBreak!).state
-    expect(after.doc.toString()).toBe('Alpha\\\nBeta')
-    const seen = decorations(after, 0, after.doc.length)
-    expect(seen.some((item) => item.replacement && item.from === 5 && item.to === 6)).toBe(true)
-  })
-
-  it('splits and exits quote/list containers as Markdown blocks', () => {
-    const list = createState('- first', 7)
-    const splitList = splitContainerMarkdownBlock(list)
-    expect(splitList).not.toBeNull()
-    expect(list.update(splitList!).state.doc.toString()).toBe('- first\n- ')
-
-    const ordered = createState('3. third', 8)
-    const splitOrdered = splitContainerMarkdownBlock(ordered)
-    expect(splitOrdered).not.toBeNull()
-    expect(ordered.update(splitOrdered!).state.doc.toString()).toBe('3. third\n4. ')
-
-    const quote = createState('> quote', 7)
-    const splitQuote = splitContainerMarkdownBlock(quote)
-    expect(splitQuote).not.toBeNull()
-    expect(quote.update(splitQuote!).state.doc.toString()).toBe('> quote\n> ')
-
-    const exitList = splitContainerMarkdownBlock(createState('- ', 2))
-    expect(exitList).not.toBeNull()
-    expect(createState('- ', 2).update(exitList!).state.doc.toString()).toBe('')
-
-    const exitQuote = splitContainerMarkdownBlock(createState('> ', 2))
-    expect(exitQuote).not.toBeNull()
-    expect(createState('> ', 2).update(exitQuote!).state.doc.toString()).toBe('')
-  })
-
-  it('keeps list and quote containers when Shift+Enter inserts a hard break', () => {
-    const list = createState('- first', 7)
-    const listBreak = insertContainerMarkdownHardBreak(list)
-    expect(listBreak).not.toBeNull()
-    expect(list.update(listBreak!).state.doc.toString()).toBe('- first\\\n  ')
-
-    const quote = createState('> quote', 7)
-    const quoteBreak = insertContainerMarkdownHardBreak(quote)
-    expect(quoteBreak).not.toBeNull()
-    expect(quote.update(quoteBreak!).state.doc.toString()).toBe('> quote\\\n> ')
-  })
-
-  it('joins adjacent compatible list items and quote paragraphs at their block edge', () => {
-    const list = createState('- first\n- second', 7)
-    const forward = joinContainerMarkdownBlock(list, true)
-    expect(forward).not.toBeNull()
-    expect(list.update(forward!).state.doc.toString()).toBe('- firstsecond')
-
-    const backwardList = createState('- first\n- second', 10)
-    const backward = joinContainerMarkdownBlock(backwardList, false)
-    expect(backward).not.toBeNull()
-    expect(backwardList.update(backward!).state.doc.toString()).toBe('- firstsecond')
-
-    const quote = createState('> first\n> second', 7)
-    const quoteJoin = joinContainerMarkdownBlock(quote, true)
-    expect(quoteJoin).not.toBeNull()
-    expect(quote.update(quoteJoin!).state.doc.toString()).toBe('> firstsecond')
-  })
-
-  it('turns a heading into a paragraph when Backspace is pressed at its visual left edge', () => {
-    const state = createState('## Heading', 3)
-    const result = deleteAtHeadingBoundary(state, false)
-
-    expect(result.doc.toString()).toBe('Heading')
-    expect(result.selection.main.head).toBe(0)
-  })
-
-  it('never creates hidden-marker deletion transactions in read-only mode', () => {
-    const state = EditorState.create({
-      doc: '# Heading\n- item\n> quote',
-      selection: EditorSelection.cursor(2),
-      extensions: [markdown({ base: markdownLanguage }), EditorState.readOnly.of(true)],
-    })
-
-    expect(headingBoundaryDeletion(state, false)).toBeNull()
-    expect(listBoundaryDeletion(state, false)).toBeNull()
-    expect(quoteBoundaryDeletion(state, false)).toBeNull()
-  })
-
-  it('deletes the first visible heading character with Delete at either atomic boundary', () => {
-    for (const cursor of [0, 3]) {
-      const result = deleteAtHeadingBoundary(createState('## 👍🏽Title', cursor), true)
-      expect(result.doc.toString()).toBe('## Title')
-      expect(result.selection.main.head).toBe(3)
-    }
-  })
-
-  it('removes a preceding blank paragraph before lowering a heading at its left edge', () => {
-    const doc = 'before\n\n## Heading'
-    const cursor = doc.indexOf('Heading')
-    const result = deleteAtHeadingBoundary(createState(doc, cursor), false)
-    expect(result.doc.toString()).toBe('before\n## Heading')
-    expect(result.selection.main.head).toBe('before\n## '.length)
-  })
-
-  it('renders Setext headings as one visual row and cleans their marker when emptied', () => {
+describe('CM6 Markdown live preview: heading rendering', () => {
+  it('renders Setext headings as one visual row and hides their underline as an ordinary blank-looking line', () => {
     const doc = 'Heading\n======='
     const state = createState(doc)
     const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
 
     expect(seen.some(({ from, className }) => from === 0 && className?.includes('heading-1'))).toBe(
       true,
     )
+    // The underline row is hidden entirely (its own line, never crossing the
+    // newline that separates it from the heading text line above).
+    const underlineLine = state.doc.line(2)
     expect(
-      seen.some(({ from, className }) => from === 8 && className === 'xmd-cm-block-separator'),
+      hidden.some(({ from, to }) => from === underlineLine.from && to === underlineLine.to),
     ).toBe(true)
-    expect(isBlockSeparatorLine(state, 2)).toBe(true)
-    expect(deleteAsUser(state, 0, 7).doc.toString()).toBe('')
   })
 
-  it('turns a top-level list item into a paragraph at its visual left edge', () => {
-    for (const doc of ['- item', '1. item', '- [ ] task']) {
-      const cursor = doc.indexOf(doc.endsWith('task') ? 'task' : 'item')
-      const result = deleteAtListBoundary(createState(doc, cursor), false)
-      expect(result.doc.toString()).toBe(doc.endsWith('task') ? 'task' : 'item')
-      expect(result.selection.main.head).toBe(0)
-    }
-  })
+  it('keeps heading decoration after deleting the blank line below it', () => {
+    const initial = createState('# Title\n\nparagraph', 8)
+    const state = initial.update({ changes: { from: 8, to: 9 } }).state
+    const seen = decorations(state, 0, state.doc.line(1).to)
+    const hidden = hiddenRanges(state, 0, state.doc.line(1).to)
 
-  it('outdents one level instead of removing a nested list marker', () => {
-    const result = deleteAtListBoundary(createState('    - nested', 6), false)
-
-    expect(result.doc.toString()).toBe('  - nested')
-    expect(result.selection.main.head).toBe(4)
-  })
-
-  it('deletes one visible grapheme at a list marker boundary', () => {
-    for (const cursor of [0, 2]) {
-      const result = deleteAtListBoundary(createState('- 👍🏽item', cursor), true)
-      expect(result.doc.toString()).toBe('- item')
-      expect(result.selection.main.head).toBe(2)
-    }
-  })
-
-  it('keeps quote prefixes while deleting a nested list prefix', () => {
-    const doc = '> - quoted'
-    const result = deleteAtListBoundary(createState(doc, doc.indexOf('quoted')), false)
-
-    expect(result.doc.toString()).toBe('> quoted')
-    expect(result.selection.main.head).toBe(2)
-  })
-
-  it('removes one quote level or one visible grapheme at the quote boundary', () => {
-    const nested = deleteAtQuoteBoundary(createState('> > quoted', 4), false)
-    expect(nested.doc.toString()).toBe('> quoted')
-    expect(nested.selection.main.head).toBe(2)
-
-    const deleted = deleteAtQuoteBoundary(createState('> 👍🏽quoted', 0), true)
-    expect(deleted.doc.toString()).toBe('> quoted')
-    expect(deleted.selection.main.head).toBe(2)
-  })
-
-  it('keeps a heading line editable after its entire visible title is deleted', () => {
-    const state = EditorState.create({
-      doc: '# Title\nnext',
-      selection: EditorSelection.cursor(2),
-      extensions: [markdown({ base: markdownLanguage }), editableBlankParagraph],
-    })
-    const result = deleteAsUser(state, 2, 7)
-
-    expect(result.doc.toString()).toBe('\nnext')
-    expect(result.selection.main.head).toBe(0)
-    expect(result.field(editableBlankParagraph)).toBe(0)
-    expect(isBlockSeparatorLine(result, 1)).toBe(false)
-
-    const afterLeaving = result.update({ selection: EditorSelection.cursor(1) }).state
-    expect(afterLeaving.field(editableBlankParagraph)).toBeNull()
-    // A leading blank line is an explicit editable paragraph, not a separator.
-    expect(isBlockSeparatorLine(afterLeaving, 1)).toBe(false)
-  })
-
-  it.each([
-    ['# title', 2, 7, ''],
-    ['# title #', 2, 7, ''],
-    ['**bold**', 2, 6, ''],
-    ['*italic*', 1, 7, ''],
-    ['~~strike~~', 2, 8, ''],
-    ['`code`', 1, 5, ''],
-    ['[label](https://example.com)', 1, 6, ''],
-  ])(
-    'cleans the whole %s construct when its visible content is deleted',
-    (doc, from, to, result) => {
-      expect(deleteAsUser(createState(doc), from, to).doc.toString()).toBe(result)
-    },
-  )
-
-  it('cleans nested markers and their empty heading in one deletion', () => {
-    const doc = '# ***title***'
-    const from = doc.indexOf('title')
-    expect(deleteAsUser(createState(doc), from, from + 5).doc.toString()).toBe('')
-  })
-
-  it('does not clean formatting when replacement leaves visible content', () => {
-    const state = createState('**bold**')
-    const change = {
-      changes: { from: 2, to: 6, insert: 'new' },
-      annotations: Transaction.userEvent.of('delete.selection'),
-    }
-    const transaction = state.update(change)
-    expect(cleanupEmptyMarkdownFormatting(transaction)).toBeNull()
-    expect(transaction.newDoc.toString()).toBe('**new**')
-  })
-
-  it('does not clean marker-looking text inside fenced code', () => {
-    const doc = '```md\n**bold**\n```'
-    const state = createState(doc)
-    const from = doc.indexOf('bold')
-    expect(deleteAsUser(state, from, from + 4).doc.toString()).toBe('```md\n****\n```')
-  })
-
-  it('makes every hidden Markdown marker atomic without locking rendered content', () => {
-    const doc = '# **bold** and *italic* with [link](https://example.com)'
-    const state = createState(doc, doc.length)
-    const atomic: Array<{ from: number; to: number }> = []
-    buildHiddenMarkdownMarkerRanges(state, [{ from: 0, to: doc.length }], {
-      viewportMargin: 0,
-    }).between(0, doc.length, (from, to) => {
-      atomic.push({ from, to })
-    })
-
-    expect(atomic).toContainEqual({ from: 0, to: 2 })
-    expect(atomic).toContainEqual({ from: 2, to: 4 })
-    expect(atomic).toContainEqual({ from: 8, to: 10 })
-    expect(atomic.some(({ from, to }) => from <= 4 && to >= 8)).toBe(false)
-    expect(atomic.every(({ from, to }) => to > from)).toBe(true)
+    expect(state.doc.toString()).toBe('# Title\nparagraph')
+    expect(seen.some((item) => item.className === 'xmd-cm-heading xmd-cm-heading-1')).toBe(true)
+    expect(hidden.some((item) => item.from === 0 && item.to === 2)).toBe(true)
   })
 
   it('only decorates syntax inside the requested viewport', () => {
@@ -382,51 +102,62 @@ describe('CM6 Markdown live preview', () => {
     expect(seen.some((item) => item.className === 'xmd-cm-heading xmd-cm-heading-1')).toBe(true)
     expect(seen.every((item) => item.from <= firstLineEnd)).toBe(true)
   })
+})
 
-  it('always hides strong markers while preserving the rendered style', () => {
+describe('CM6 Markdown live preview: reveal-on-selection inline marks', () => {
+  it('hides strong markers while the selection sits outside the construct, keeping the rendered style', () => {
     const doc = '**bold** and plain'
-    const state = createState(doc, doc.length)
+    const state = createState(doc, doc.indexOf('plain'))
     const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
 
-    expect(seen.filter((item) => item.replacement && item.to - item.from === 2)).toHaveLength(2)
+    expect(hidden.filter((item) => item.to - item.from === 2)).toHaveLength(2)
     expect(seen.some((item) => item.className === 'xmd-cm-strong')).toBe(true)
   })
 
-  it('does not reveal source markers when editing the construct', () => {
+  it('reveals the marker characters the instant the selection enters the construct', () => {
     const doc = '**bold** and plain'
-    const state = createState(doc, 4)
+    const state = createState(doc, 4) // inside "bold"
     const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
 
-    expect(seen.filter((item) => item.replacement && item.to - item.from === 2)).toHaveLength(2)
+    expect(hidden.filter((item) => item.to - item.from === 2)).toHaveLength(0)
+    // The construct still renders bold while its markers are visible.
     expect(seen.some((item) => item.className === 'xmd-cm-strong')).toBe(true)
   })
 
-  it('keeps heading decoration after deleting the blank line below it', () => {
-    const initial = createState('# Title\n\nparagraph', 8)
-    const state = initial.update({ changes: { from: 8, to: 9 } }).state
-    const seen = decorations(state, 0, state.doc.line(1).to)
+  it('hides again once the selection leaves the construct', () => {
+    const doc = '**bold** and plain'
+    const revealed = hiddenRanges(createState(doc, 4), 0, doc.length)
+    const hidden = hiddenRanges(createState(doc, doc.indexOf('plain')), 0, doc.length)
 
-    expect(state.doc.toString()).toBe('# Title\nparagraph')
-    expect(seen.some((item) => item.className === 'xmd-cm-heading xmd-cm-heading-1')).toBe(true)
-    expect(seen.some((item) => item.replacement && item.from === 0)).toBe(true)
+    expect(revealed.filter((item) => item.to - item.from === 2)).toHaveLength(0)
+    expect(hidden.filter((item) => item.to - item.from === 2)).toHaveLength(2)
   })
 
-  it('collapses block separator lines regardless of selection', () => {
-    const doc = '# Title\n\nParagraph'
-    const inactive = decorations(createState(doc, doc.length), 0, doc.length)
-    const active = decorations(createState(doc, doc.indexOf('\n') + 1), 0, doc.length)
+  it('makes every hidden Markdown marker atomic without locking rendered content', () => {
+    const doc = '# **bold** and *italic* with [link](https://example.com)'
+    const state = createState(doc, 0)
+    const atomic = hiddenRanges(state, 0, doc.length)
 
-    expect(inactive.some((item) => item.className === 'xmd-cm-block-separator')).toBe(true)
-    expect(active.some((item) => item.className === 'xmd-cm-block-separator')).toBe(true)
+    expect(atomic).toContainEqual({ from: 0, to: 2 })
+    expect(atomic).toContainEqual({ from: 2, to: 4 })
+    expect(atomic).toContainEqual({ from: 8, to: 10 })
+    expect(atomic.some(({ from, to }) => from <= 4 && to >= 8)).toBe(false)
+    expect(atomic.every(({ from, to }) => to > from)).toBe(true)
   })
 
-  it('recognizes separators using Markdown block structure', () => {
-    const state = createState('# Title\n\nParagraph\n\n```txt\na\n\nb\n```')
-    expect(isBlockSeparatorLine(state, 2)).toBe(true)
-    expect(isBlockSeparatorLine(state, 4)).toBe(true)
-    expect(isBlockSeparatorLine(state, 7)).toBe(false)
-  })
+  it('uses GFM nodes for strikethrough and task list preview', () => {
+    const doc = '- [x] done\n\n~~removed~~'
+    const state = createState(doc, 0)
+    const seen = decorations(state, 0, doc.length)
 
+    expect(seen.some((item) => item.className === 'xmd-cm-strikethrough')).toBe(true)
+    expect(seen.some((item) => item.replacement && item.to - item.from === 3)).toBe(true)
+  })
+})
+
+describe('CM6 Markdown live preview: paragraphs, callouts and thematic breaks', () => {
   it('renders document paragraphs without applying paragraph layout to lists or quotes', () => {
     const doc = 'first line\ncontinued\n\n- list item\n\n> quoted'
     const seen = decorations(createState(doc), 0, doc.length)
@@ -436,7 +167,7 @@ describe('CM6 Markdown live preview', () => {
       { from: 0, className: 'xmd-cm-paragraph xmd-cm-paragraph-first' },
       {
         from: doc.indexOf('continued'),
-        className: 'xmd-cm-paragraph xmd-cm-paragraph-last',
+        className: 'xmd-cm-paragraph xmd-cm-paragraph-last xmd-cm-paragraph-gap-after',
       },
     ])
   })
@@ -480,141 +211,13 @@ describe('CM6 Markdown live preview', () => {
   it('keeps thematic breaks atomic while leaving neighboring paragraph text editable', () => {
     const doc = 'before\n\n***\n\nafter'
     const state = createState(doc)
-    const atomic: Array<{ from: number; to: number }> = []
-    buildHiddenMarkdownMarkerRanges(state, [{ from: 0, to: doc.length }], {
-      viewportMargin: 0,
-    }).between(0, doc.length, (from, to) => {
-      atomic.push({ from, to })
-    })
+    const atomic = hiddenRanges(state, 0, doc.length)
 
     expect(atomic).toEqual([{ from: doc.indexOf('***'), to: doc.indexOf('***') + 3 }])
   })
+})
 
-  it('keeps source unchanged while separator decorations are computed', () => {
-    const doc = '# Title\n\n\nParagraph'
-    const state = EditorState.create({
-      doc,
-      extensions: [markdown({ base: markdownLanguage }), editableBlankParagraph],
-    })
-    decorations(state, 0, doc.length)
-    expect(state.doc.toString()).toBe(doc)
-  })
-
-  it('keeps a newly inserted empty paragraph editable only while its caret remains there', () => {
-    let state = EditorState.create({
-      doc: 'first\nsecond',
-      selection: EditorSelection.cursor(5),
-      extensions: [markdown({ base: markdownLanguage }), editableBlankParagraph],
-    })
-    state = state.update({
-      changes: { from: 5, insert: '\n' },
-      selection: EditorSelection.cursor(6),
-      annotations: Transaction.userEvent.of('input'),
-    }).state
-
-    expect(state.field(editableBlankParagraph)).toBe(6)
-    expect(isBlockSeparatorLine(state, 2)).toBe(false)
-
-    state = state.update({ selection: EditorSelection.cursor(0) }).state
-    expect(state.field(editableBlankParagraph)).toBeNull()
-    expect(isBlockSeparatorLine(state, 2)).toBe(true)
-    expect(state.doc.toString()).toBe('first\n\nsecond')
-  })
-
-  it('keeps paragraph edge rhythm stable while an inserted soft line is still empty', () => {
-    let state = EditorState.create({
-      doc: 'first\nsecond',
-      selection: EditorSelection.cursor(5),
-      extensions: [markdown({ base: markdownLanguage }), editableBlankParagraph],
-    })
-    state = state.update({
-      changes: { from: 5, insert: '\n' },
-      selection: EditorSelection.cursor(6),
-      annotations: Transaction.userEvent.of('input'),
-    }).state
-
-    const whileEmpty = decorations(state, 0, state.doc.length)
-      .filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
-      .map(({ from, className }) => ({ from, className }))
-    expect(whileEmpty).toEqual([
-      { from: 0, className: 'xmd-cm-paragraph xmd-cm-paragraph-first' },
-      { from: 6, className: 'xmd-cm-paragraph' },
-      { from: 7, className: 'xmd-cm-paragraph xmd-cm-paragraph-last' },
-    ])
-
-    state = state.update({
-      changes: { from: 6, insert: 'middle' },
-      selection: EditorSelection.cursor(12),
-      annotations: Transaction.userEvent.of('input'),
-    }).state
-    const afterTyping = decorations(state, 0, state.doc.length)
-      .filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
-      .map(({ className }) => className)
-    expect(afterTyping).toEqual([
-      'xmd-cm-paragraph xmd-cm-paragraph-first',
-      'xmd-cm-paragraph',
-      'xmd-cm-paragraph xmd-cm-paragraph-last',
-    ])
-  })
-
-  it('gives a new block paragraph its final spacing before text is entered', () => {
-    let state = EditorState.create({
-      doc: 'first\n',
-      selection: EditorSelection.cursor(6),
-      extensions: [markdown({ base: markdownLanguage }), editableBlankParagraph],
-    })
-    state = state.update({
-      changes: { from: 6, insert: '\n' },
-      selection: EditorSelection.cursor(7),
-      annotations: Transaction.userEvent.of('input'),
-    }).state
-
-    expect(
-      decorations(state, 0, state.doc.length)
-        .filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
-        .map(({ from, className }) => ({ from, className })),
-    ).toEqual([
-      { from: 0, className: 'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last' },
-      { from: 7, className: 'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last' },
-    ])
-
-    state = state.update({
-      changes: { from: 7, insert: 'second' },
-      selection: EditorSelection.cursor(13),
-      annotations: Transaction.userEvent.of('input'),
-    }).state
-    expect(
-      decorations(state, 0, state.doc.length)
-        .filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
-        .map(({ className }) => className),
-    ).toEqual([
-      'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last',
-      'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last',
-    ])
-  })
-
-  it('does not modify source for a visual gap without an empty Markdown line', () => {
-    const state = createState('## TypeScript\n```ts\nconst value = 1\n```', 13)
-    const edit = visualGapEdit(state, state.doc.line(1).to)
-
-    expect(edit).toBeNull()
-  })
-
-  it('does not place the caret in a structural source delimiter', () => {
-    const state = createState('## TypeScript\n\n```ts\ncode\n```', 13)
-
-    expect(visualGapEdit(state, state.doc.line(1).to)).toBeNull()
-  })
-
-  it('uses GFM nodes for strikethrough and task list preview', () => {
-    const doc = '- [x] done\n\n~~removed~~'
-    const state = createState(doc, doc.length)
-    const seen = decorations(state, 0, doc.length)
-
-    expect(seen.some((item) => item.className === 'xmd-cm-strikethrough')).toBe(true)
-    expect(seen.some((item) => item.replacement && item.to - item.from === 3)).toBe(true)
-  })
-
+describe('CM6 Markdown live preview: lists and quotes', () => {
   it('renders list markers from AST and hides the bullet before task checkboxes', () => {
     const doc = '- first\n  - nested\n1. ordered\n- [ ] task'
     const state = createState(doc)
@@ -633,12 +236,7 @@ describe('CM6 Markdown live preview', () => {
   it('makes complete list prefixes atomic while leaving item text editable', () => {
     const doc = '  - nested item'
     const state = createState(doc)
-    const atomic: Array<{ from: number; to: number }> = []
-    buildHiddenMarkdownMarkerRanges(state, [{ from: 0, to: doc.length }], {
-      viewportMargin: 0,
-    }).between(0, doc.length, (from, to) => {
-      atomic.push({ from, to })
-    })
+    const atomic = hiddenRanges(state, 0, doc.length)
 
     expect(atomic).toContainEqual({ from: 0, to: 4 })
     expect(atomic.some(({ from, to }) => from <= 4 && to > 4)).toBe(false)
@@ -648,12 +246,7 @@ describe('CM6 Markdown live preview', () => {
     const doc = '> - quoted\n>   > 1. deep'
     const state = createState(doc)
     const seen = decorations(state, 0, doc.length)
-    const atomic: Array<{ from: number; to: number }> = []
-    buildHiddenMarkdownMarkerRanges(state, [{ from: 0, to: doc.length }], {
-      viewportMargin: 0,
-    }).between(0, doc.length, (from, to) => {
-      atomic.push({ from, to })
-    })
+    const atomic = hiddenRanges(state, 0, doc.length)
 
     expect(seen.some(({ from, to }) => from === 2 && to === 4)).toBe(true)
     expect(seen.some(({ from, to }) => from === 17 && to === 20)).toBe(true)
@@ -661,16 +254,11 @@ describe('CM6 Markdown live preview', () => {
     expect(atomic).toContainEqual({ from: 17, to: 20 })
   })
 
-  it('hides quote delimiter whitespace and renders nested quote depth once per line', () => {
+  it('hides quote delimiter whitespace and renders nested quote depth once per line, regardless of selection', () => {
     const doc = '> outer\n> > inner'
-    const state = createState(doc)
+    const state = createState(doc, doc.indexOf('inner'))
     const seen = decorations(state, 0, doc.length)
-    const atomic: Array<{ from: number; to: number }> = []
-    buildHiddenMarkdownMarkerRanges(state, [{ from: 0, to: doc.length }], {
-      viewportMargin: 0,
-    }).between(0, doc.length, (from, to) => {
-      atomic.push({ from, to })
-    })
+    const atomic = hiddenRanges(state, 0, doc.length)
 
     const quotes = seen.filter(({ className }) => className === 'xmd-cm-blockquote')
     expect(quotes).toHaveLength(2)
@@ -679,7 +267,9 @@ describe('CM6 Markdown live preview', () => {
     expect(atomic).toContainEqual({ from: 8, to: 10 })
     expect(atomic).toContainEqual({ from: 10, to: 12 })
   })
+})
 
+describe('CM6 Markdown live preview: links', () => {
   it('adds safe href semantics to a visible link label', () => {
     const doc = '[visible](https://example.com) and [outside](../note.md)'
     const firstEnd = doc.indexOf(' and ')
@@ -690,24 +280,28 @@ describe('CM6 Markdown live preview', () => {
     expect(seen.every((item) => item.from <= firstEnd)).toBe(true)
   })
 
-  it('keeps link rendered and clickable while active', () => {
-    const doc = '[label](../note.md)'
-    const seen = decorations(createState(doc, 3), 0, doc.length)
-
-    expect(seen.some((item) => item.href === '../note.md')).toBe(true)
-    expect(seen.some((item) => item.replacement)).toBe(true)
-  })
-
-  it('hides the complete inline destination and optional title', () => {
-    const doc = '[label](https://example.com "caption")'
-    const state = createState(doc)
+  it('hides the bracket/destination syntax while the selection is outside the link', () => {
+    const doc = 'before [label](https://example.com "caption") after'
+    const linkTo = doc.indexOf(' after')
+    const state = createState(doc, 0)
     const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
     const labelTo = doc.indexOf(']')
 
     expect(seen.some((item) => item.href === 'https://example.com')).toBe(true)
-    expect(
-      seen.some((item) => item.replacement && item.from === labelTo && item.to === doc.length),
-    ).toBe(true)
+    expect(seen.find((item) => item.href)?.editing).toBe('false')
+    expect(hidden.some((item) => item.from === labelTo && item.to === linkTo)).toBe(true)
+  })
+
+  it('reveals the full raw link syntax once the selection enters it', () => {
+    const doc = 'before [label](https://example.com) after'
+    const linkFrom = doc.indexOf('[label]')
+    const state = createState(doc, linkFrom + 3) // inside "label"
+    const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    expect(hidden).toHaveLength(0)
+    expect(seen.find((item) => item.href)?.editing).toBe('true')
   })
 
   it.each([
@@ -716,26 +310,15 @@ describe('CM6 Markdown live preview', () => {
     ['[target]', 'target'],
   ])('resolves %s and collapses its source-only reference definition', (link, label) => {
     const doc = `${link}\n\n[target]: ../other.md#section "title"`
-    const state = createState(doc)
+    const state = createState(doc, doc.length)
     const seen = decorations(state, 0, doc.length)
     const referenceLine = state.doc.line(3)
-    const atomic: Array<{ from: number; to: number }> = []
-    buildHiddenMarkdownMarkerRanges(state, [{ from: 0, to: doc.length }], {
-      viewportMargin: 0,
-    }).between(0, doc.length, (from, to) => {
-      atomic.push({ from, to })
-    })
+    const atomic = hiddenRanges(state, 0, doc.length)
 
     expect(seen.some((item) => item.href === '../other.md#section')).toBe(true)
     expect(state.doc.sliceString(link.indexOf(label), link.indexOf(label) + label.length)).toBe(
       label,
     )
-    expect(isBlockSeparatorLine(state, 3)).toBe(true)
-    expect(
-      seen.some(
-        (item) => item.from === referenceLine.from && item.className === 'xmd-cm-block-separator',
-      ),
-    ).toBe(true)
     expect(atomic).toContainEqual({ from: referenceLine.from, to: referenceLine.to })
   })
 
@@ -757,5 +340,53 @@ describe('CM6 Markdown live preview', () => {
     expect(safeMarkdownLinkHref('javascript:alert(1)')).toBeNull()
     expect(safeMarkdownLinkHref('data:text/html,bad')).toBeNull()
     expect(safeMarkdownLinkHref('//example.com/path')).toBeNull()
+  })
+})
+
+describe('CM6 Markdown live preview: the blank-line model', () => {
+  it('never produces a hidden/replace decoration that crosses a newline', () => {
+    const doc = '# Title\n\nfirst\n\n\nsecond\n\n> quote\n\nend'
+    const state = createState(doc)
+    const paint = decorations(state, 0, doc.length).filter((item) => item.replacement)
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    for (const { from, to } of [...paint, ...hidden]) {
+      expect(state.doc.sliceString(from, to)).not.toContain('\n')
+    }
+  })
+
+  it('never hides or replaces content on a blank source line — every blank line stays addressable', () => {
+    const doc = 'first\n\n\nsecond\n\n\n\nthird'
+    const state = createState(doc)
+    const paint = decorations(state, 0, doc.length).filter((item) => item.replacement)
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    for (let number = 1; number <= state.doc.lines; number += 1) {
+      const line = state.doc.line(number)
+      if (line.length !== 0) continue
+      const touchesThisBlankLine = [...paint, ...hidden].some(
+        (range) => range.to > range.from && range.from <= line.from && range.to >= line.from,
+      )
+      expect(touchesThisBlankLine).toBe(false)
+    }
+  })
+
+  it('gives every paragraph line — including ones separated by multiple blank lines — its own edge classes', () => {
+    const doc = 'first\n\n\nsecond'
+    const seen = decorations(createState(doc), 0, doc.length)
+    const paragraphLines = seen.filter((item) => item.className?.startsWith('xmd-cm-paragraph'))
+
+    expect(paragraphLines.map(({ from, className }) => ({ from, className }))).toEqual([
+      {
+        from: 0,
+        className:
+          'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last xmd-cm-paragraph-gap-after',
+      },
+      {
+        from: doc.indexOf('second'),
+        className:
+          'xmd-cm-paragraph xmd-cm-paragraph-first xmd-cm-paragraph-last xmd-cm-paragraph-gap-before',
+      },
+    ])
   })
 })

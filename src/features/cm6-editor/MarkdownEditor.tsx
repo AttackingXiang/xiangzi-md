@@ -36,6 +36,8 @@ export interface MarkdownEditorProps {
   onImageError?: (error: unknown, file: File) => void
   focusMode?: boolean
   typewriterMode?: boolean
+  /** Wrap long lines in fenced code blocks; off by default. */
+  codeBlockLineWrapping?: boolean
   previewThemeVersion?: string
   initialScrollTop?: number
   onScrollTopChange?: (scrollTop: number) => void
@@ -94,6 +96,7 @@ export function MarkdownEditor({
   onImageError,
   focusMode = false,
   typewriterMode = false,
+  codeBlockLineWrapping = false,
   previewThemeVersion = 'default',
   initialScrollTop = 0,
   onScrollTopChange,
@@ -156,7 +159,13 @@ export function MarkdownEditor({
       readOnly: readingMode,
       extensions: [
         livePreview ? markdownLivePreview() : [],
-        livePreview ? markdownCodeBlockPreview({ copyLabel: '复制', copiedLabel: '已复制' }) : [],
+        livePreview
+          ? markdownCodeBlockPreview({
+              copyLabel: '复制',
+              copiedLabel: '已复制',
+              lineWrapping: codeBlockLineWrapping,
+            })
+          : [],
         livePreview
           ? markdownImagePreview({
               resolveSrc: stableImageResolverRef.current,
@@ -237,7 +246,13 @@ export function MarkdownEditor({
     if (!portalHost) return
     controllerRef.current?.setExtensions([
       livePreview ? markdownLivePreview() : [],
-      livePreview ? markdownCodeBlockPreview({ copyLabel: '复制', copiedLabel: '已复制' }) : [],
+      livePreview
+        ? markdownCodeBlockPreview({
+            copyLabel: '复制',
+            copiedLabel: '已复制',
+            lineWrapping: codeBlockLineWrapping,
+          })
+        : [],
       livePreview
         ? markdownImagePreview({
             resolveSrc: stableImageResolverRef.current,
@@ -267,6 +282,7 @@ export function MarkdownEditor({
     ])
   }, [
     allowRemoteImages,
+    codeBlockLineWrapping,
     hasTagBar,
     imageMaxWidth,
     imageUploadEnabled,

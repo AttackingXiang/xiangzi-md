@@ -29,9 +29,9 @@ describe('vertically significant preview extensions', () => {
       viewportChanged: false,
       syntaxTreeChanged: true,
     }
-    expect(
-      shouldRebuildViewportDecorations(parserReadyUpdate, { rebuildOnSyntaxTree: true }),
-    ).toBe(true)
+    expect(shouldRebuildViewportDecorations(parserReadyUpdate, { rebuildOnSyntaxTree: true })).toBe(
+      true,
+    )
     expect(shouldRebuildViewportDecorations(parserReadyUpdate, {})).toBe(false)
   })
 })

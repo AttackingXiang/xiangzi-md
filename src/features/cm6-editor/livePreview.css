@@ -4,24 +4,29 @@
   line-height: 1.75;
 }
 
-/* Markdown separator lines delimit blocks in source but render no paragraph. */
-.xmd-cm-editor .cm-line.xmd-cm-block-separator {
-  height: 0;
-  line-height: 0;
-  min-height: 0;
-  padding-block: 0;
-  overflow: hidden;
-}
-
-/* Empty Markdown lines are collapsed above, so rendered paragraphs provide
-   their own block rhythm. Only document-level Paragraph AST nodes receive
-   these classes; list, quote, table and literal-block layout stays untouched. */
+/* Every Markdown line — including a blank one — is a real, addressable
+   editor row with a uniform line height (see core/README.md). Rendered
+   paragraphs additionally get a small padding-based edge rhythm; only
+   document-level Paragraph AST nodes receive these classes, so list, quote,
+   table and literal-block layout stays untouched. */
 .xmd-cm-editor .cm-line.xmd-cm-paragraph-first {
   padding-top: 0.38em;
 }
 
+/* A real blank line above already supplies a full row of breathing room
+   (see core/README.md). Stacking the full edge padding on top of it made a
+   single Enter's gap read as large as a double Enter's; shrink to a small
+   rhythm nudge whenever a genuine blank separator line is present. */
+.xmd-cm-editor .cm-line.xmd-cm-paragraph-first.xmd-cm-paragraph-gap-before {
+  padding-top: 0.12em;
+}
+
 .xmd-cm-editor .cm-line.xmd-cm-paragraph-last {
   padding-bottom: 0.38em;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-paragraph-last.xmd-cm-paragraph-gap-after {
+  padding-bottom: 0.12em;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-horizontal-rule {

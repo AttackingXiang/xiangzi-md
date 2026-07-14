@@ -1,6 +1,7 @@
 import { syntaxTree } from '@codemirror/language'
 import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import type { PreviewRange } from './livePreview'
 import { isExternalDocumentSync } from './sync'
 import { viewportDecorationExtension } from './viewportDecorations'
@@ -436,19 +437,51 @@ export function buildMathPreviewDecorations(
   return Decoration.set(decorations, true)
 }
 
+/**
+ * The single source of atomic/hidden ranges this feature contributes to the
+ * core engine (`core/hiddenRanges.ts`), replacing the standalone
+ * `EditorView.atomicRanges` provider (`atomic: true` on
+ * `viewportDecorationExtension`) this module used to maintain on its own.
+ * An expression currently open in source-edit mode (`mathSourceRange`,
+ * toggled by `MathWidget`'s edit affordances) is excluded so its raw LaTeX
+ * stays ordinary, editable text — matching `buildMathPreviewDecorations`,
+ * which likewise skips painting a widget over it. Every other expression's
+ * span is registered with `paint: false`: this module's own
+ * `viewportDecorationExtension` StateField already paints the `MathWidget`
+ * replacement, so core must not paint a second, invisible one on top of it.
+ */
+export function collectMathHiddenRanges(
+  state: EditorState,
+  visibleRanges: readonly PreviewRange[],
+  options: MathPreviewOptions = {},
+): HiddenRange[] {
+  const hidden: HiddenRange[] = []
+  for (const expression of findVisibleMathExpressions(
+    state,
+    visibleRanges,
+    options.viewportMargin,
+  )) {
+    if (isSourceExpression(state, expression)) continue
+    hidden.push({ from: expression.from, to: expression.to, paint: false })
+  }
+  return hidden
+}
+
 export function markdownMathPreview(options: MathPreviewOptions = {}): Extension {
   return [
     mathSourceRange,
     viewportDecorationExtension(
       (view) => buildMathPreviewDecorations(view.state, view.visibleRanges, options),
       {
-        atomic: true,
         rebuildOnSyntaxTree: true,
         rebuildOnUpdate: (update) =>
           update.transactions.some((transaction) =>
             transaction.effects.some((effect) => effect.is(setMathSourceRange)),
           ),
       },
+    ),
+    hiddenRangeSource.of(({ state, visibleRanges }) =>
+      collectMathHiddenRanges(state, visibleRanges, options),
     ),
   ]
 }

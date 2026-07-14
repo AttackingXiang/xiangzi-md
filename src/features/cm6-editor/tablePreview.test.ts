@@ -1,19 +1,25 @@
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorState } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
 import { GFM } from '@lezer/markdown'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  caretOnBoundaryVisualLine,
+  collectTableHiddenRanges,
   deleteColumnAt,
   findVisibleMarkdownTables,
+  indexOfCellAtHorizontalCoordinate,
   insertColumnAt,
   insertRowAt,
+  markdownTablePreview,
   moveColumnAt,
   moveRowAt,
   normalizeTableCellBreaks,
   parseTableCellInline,
   parseMarkdownTable,
   serializeTableCellInline,
+  type VerticalCaretRect,
   serializeTableData,
   splitTableCellLines,
   tableCellPlainText,
@@ -131,6 +137,62 @@ describe('Markdown table preview', () => {
       ],
     })
   })
+  it('registers each table span through the core hidden-range engine, not its own atomicRanges provider', () => {
+    const prefix = 'before\n\n'
+    const state = makeState(prefix)
+    expect(collectTableHiddenRanges(state, [{ from: 0, to: state.doc.length }], 0)).toEqual([
+      { from: prefix.length, to: prefix.length + source.length, paint: false },
+    ])
+    // Invariant 3 (core/README.md): the only atomicRanges provider is the
+    // aggregated one installed by hiddenRangesEngine() in markdownLivePreview.
+    const withExtension = EditorState.create({
+      doc: source,
+      extensions: [markdown({ extensions: GFM }), markdownTablePreview()],
+    })
+    expect(withExtension.facet(EditorView.atomicRanges)).toHaveLength(0)
+  })
+
+  it('does not register hidden ranges outside the buffered visible scan range', () => {
+    const prefix = `${'plain text\n'.repeat(20)}\n`
+    expect(collectTableHiddenRanges(makeState(prefix), [{ from: 0, to: 10 }], 0)).toHaveLength(0)
+  })
+
+  it('picks the vertically navigated cell by containment first, then nearest center', () => {
+    const rects = [
+      { left: 0, right: 100 },
+      { left: 108, right: 200 },
+      { left: 208, right: 400 },
+    ]
+    // Inside a cell: containment wins, even when another center is closer.
+    expect(indexOfCellAtHorizontalCoordinate(rects, 99)).toBe(0)
+    // In the gap between two cells: nearest center wins.
+    expect(indexOfCellAtHorizontalCoordinate(rects, 104)).toBe(1)
+    // Outside the row entirely: clamps to the nearest edge cell.
+    expect(indexOfCellAtHorizontalCoordinate(rects, -50)).toBe(0)
+    expect(indexOfCellAtHorizontalCoordinate(rects, 1000)).toBe(2)
+    // No editable cells in the row.
+    expect(indexOfCellAtHorizontalCoordinate([], 10)).toBe(-1)
+  })
+
+  it('judges vertical cell boundaries by visual line, not caret column', () => {
+    const content = { top: 0, bottom: 60 }
+    const line = (top: number): VerticalCaretRect => ({ top, bottom: top + 20, height: 20 })
+    // Single-line cell: the caret is on both boundary lines wherever it sits.
+    const single = { top: 0, bottom: 20 }
+    expect(caretOnBoundaryVisualLine(line(0), single, true)).toBe(true)
+    expect(caretOnBoundaryVisualLine(line(0), single, false)).toBe(true)
+    // Three-line cell: first line is only the start boundary…
+    expect(caretOnBoundaryVisualLine(line(0), content, true)).toBe(true)
+    expect(caretOnBoundaryVisualLine(line(0), content, false)).toBe(false)
+    // …the middle line is neither, and the last line is only the end boundary.
+    expect(caretOnBoundaryVisualLine(line(20), content, true)).toBe(false)
+    expect(caretOnBoundaryVisualLine(line(20), content, false)).toBe(false)
+    expect(caretOnBoundaryVisualLine(line(40), content, true)).toBe(false)
+    expect(caretOnBoundaryVisualLine(line(40), content, false)).toBe(true)
+    // Sub-pixel layout jitter stays within the tolerance.
+    expect(caretOnBoundaryVisualLine(line(1.5), content, true)).toBe(true)
+  })
+
   it('keeps table layout content-driven while containing horizontal overflow', () => {
     const styles = readFileSync(new URL('./tablePreview.css', import.meta.url), 'utf8')
     expect(styles).toContain('overflow-x: auto')

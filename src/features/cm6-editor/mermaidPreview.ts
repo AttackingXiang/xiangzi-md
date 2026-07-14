@@ -1,6 +1,7 @@
 import { syntaxTree } from '@codemirror/language'
 import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import type { PreviewRange } from './livePreview'
 import { viewportDecorationExtension } from './viewportDecorations'
 import { copySvgMarkupAsImage } from '../../lib/richClipboard'
@@ -365,6 +366,37 @@ export function buildMermaidPreviewDecorations(
   return Decoration.set(decorations, true)
 }
 
+/**
+ * The single source of atomic/hidden ranges this feature contributes to the
+ * core engine (`core/hiddenRanges.ts`). Unlike the other Phase 3 modules,
+ * Mermaid previously registered *no* atomic range at all (see
+ * core/README.md's Phase 2 known-gap note): a rendered diagram's block-replace
+ * widget was purely visual, so a click or drag near it could land the caret
+ * or a selection boundary inside the hidden fenced-code source underneath.
+ * A block currently open in source-edit mode (`mermaidSourceRange`) is
+ * excluded so its raw Mermaid text stays ordinary, editable fenced-code
+ * content — matching `buildMermaidPreviewDecorations`, which likewise skips
+ * painting a widget over it. Every other block's span is registered with
+ * `paint: false`: this module's own `viewportDecorationExtension` StateField
+ * already paints the `MermaidWidget` replacement.
+ */
+export function collectMermaidHiddenRanges(
+  state: EditorState,
+  visibleRanges: readonly PreviewRange[],
+  options: MermaidPreviewOptions,
+): HiddenRange[] {
+  const hidden: HiddenRange[] = []
+  for (const block of findMermaidBlocks(
+    state,
+    visibleRanges,
+    Math.max(0, options.viewportMargin ?? 256),
+  )) {
+    if (isSourceBlock(state, block)) continue
+    hidden.push({ from: block.from, to: block.to, paint: false })
+  }
+  return hidden
+}
+
 export function markdownMermaidPreview(options: MermaidPreviewOptions): Extension {
   const cache = new MermaidRenderCache(options.cacheSize)
   return [
@@ -378,6 +410,9 @@ export function markdownMermaidPreview(options: MermaidPreviewOptions): Extensio
             transaction.effects.some((effect) => effect.is(setMermaidSourceRange)),
           ),
       },
+    ),
+    hiddenRangeSource.of(({ state, visibleRanges }) =>
+      collectMermaidHiddenRanges(state, visibleRanges, options),
     ),
   ]
 }

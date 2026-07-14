@@ -91,6 +91,8 @@ pub struct AppSettings {
     pub background_opacity: u32,
     /// 代码块表面的不透明度，0-100。
     pub code_block_opacity: u32,
+    /// 是否在代码块内自动换行；默认关闭，保留长行的原始布局。
+    pub code_block_line_wrapping: bool,
     /// 当前主题背景色的深浅偏移，-50（更深）到 50（更浅），0 表示不调整。
     pub theme_shade: i32,
     pub heading_number: bool,
@@ -182,6 +184,7 @@ impl Default for AppSettings {
             background_image_path: String::new(),
             background_opacity: 30,
             code_block_opacity: 30,
+            code_block_line_wrapping: false,
             theme_shade: 0,
             heading_number: false,
             auto_save: false,
@@ -290,6 +293,7 @@ pub struct SettingsPatch {
     pub background_image_path: Option<String>,
     pub background_opacity: Option<u32>,
     pub code_block_opacity: Option<u32>,
+    pub code_block_line_wrapping: Option<bool>,
     pub theme_shade: Option<i32>,
     pub heading_number: Option<bool>,
     pub auto_save: Option<bool>,

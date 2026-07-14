@@ -1161,6 +1161,7 @@ export default function App(): JSX.Element {
                       )
                     }
                     allowRemoteImages={settings.allowRemoteImages ?? false}
+                    codeBlockLineWrapping={settings.codeBlockLineWrapping ?? false}
                     imageMaxWidth={settings.imageMaxWidth}
                     uploadImage={async (file) => {
                       if (!activeTab.path || !activeDocDir) {
