@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   headingOffsetForAnchor,
   markdownHeadingContentOffset,
+  markdownHeadingIndex,
   markdownHeadingText,
   markdownHeadings,
   markdownHeadingSlug,
@@ -22,6 +23,21 @@ describe('relative Markdown link navigation', () => {
     expect(headingOffsetForAnchor(markdown, 'a-1')).toBe(4)
     expect(headingOffsetForAnchor(markdown, 'a-2')).toBe(10)
     expect(headingOffsetForAnchor(markdown, 'a-3')).toBe(14)
+  })
+
+  it('uses one complete-source heading index for virtualized outline and anchors', () => {
+    const markdown = '# Same\n\n# Same\n\n> # Nested\n\nSetext\n---\n'
+    expect(markdownHeadingIndex(markdown)).toEqual([
+      { level: 1, text: 'Same', offset: 0, slug: 'same' },
+      { level: 1, text: 'Same', offset: 8, slug: 'same-1' },
+      { level: 1, text: 'Nested', offset: 16, slug: 'nested' },
+      { level: 2, text: 'Setext', offset: 28, slug: 'setext' },
+    ])
+    expect(markdownHeadingIndex(markdown, { topLevelOnly: true }).map(({ slug }) => slug)).toEqual([
+      'same',
+      'same-1',
+      'setext',
+    ])
   })
 
   it('parses indented, empty and Setext headings from the CommonMark tree', () => {

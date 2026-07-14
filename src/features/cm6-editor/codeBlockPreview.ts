@@ -1,6 +1,6 @@
 import { LanguageDescription, syntaxTree } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
-import type { EditorState, Extension } from '@codemirror/state'
+import type { EditorState, Extension, Transaction, TransactionSpec } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import type { PreviewRange } from './livePreview'
 import { viewportDecorationExtension } from './viewportDecorations'
@@ -215,6 +215,122 @@ export function readFencedCode(state: EditorState, from: number, to: number): Fe
     lastCodeLineFrom,
     closingFrom: closing?.from ?? null,
   }
+}
+
+function fencedCodeAtSelection(state: EditorState): FencedCodeData | null {
+  const position = state.selection.main.head
+  let result: FencedCodeData | null = null
+  syntaxTree(state).iterate({
+    from: Math.max(0, position - 1),
+    to: Math.min(state.doc.length, position + 1),
+    enter(node) {
+      if (node.name !== 'FencedCode' || position < node.from || position > node.to) return
+      result = readFencedCode(state, node.from, node.to)
+      return false
+    },
+  })
+  return result
+}
+
+/**
+ * Keep the sole empty body line of a fenced block editable. Deleting its
+ * boundary newline would otherwise make the caret land on the hidden closing
+ * fence, visually outside the card.
+ */
+export function protectsEmptyFencedCodeBodyDeletion(state: EditorState, forward: boolean): boolean {
+  if (state.readOnly || !state.selection.main.empty) return false
+  const data = fencedCodeAtSelection(state)
+  if (!data || data.closingFrom === null || data.codeFrom >= data.closingFrom) return false
+  const lastLine = state.doc.lineAt(Math.max(data.codeFrom, data.closingFrom - 1))
+  if (lastLine.length !== 0) return false
+  const position = state.selection.main.head
+  // Delete at the blank row would eat its newline and expose the closing fence.
+  if (forward && position === lastLine.from) return true
+  // Backspace is only protected when this is the sole body row; with preceding
+  // code it should still join with that code line normally.
+  return !forward && position === data.codeFrom && lastLine.from === data.codeFrom
+}
+
+/**
+ * Selection deletion can remove the final code line and its newline in one
+ * transaction. Restore a single blank body line before the closing fence so
+ * the next caret position remains inside the same code card.
+ */
+export function restoreEmptyFencedCodeBody(transaction: Transaction): TransactionSpec | null {
+  if (!transaction.docChanged || !transaction.isUserEvent('delete')) return null
+  const changed: PreviewRange[] = []
+  transaction.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+    changed.push({ from: fromB, to: toB })
+  })
+  if (!changed.length) return null
+
+  const repairs: Array<{ from: number; insert: string }> = []
+  let caret: number | null = null
+  syntaxTree(transaction.state).iterate({
+    enter(node) {
+      if (node.name !== 'FencedCode') return
+      const data = readFencedCode(transaction.state, node.from, node.to)
+      if (data.closingFrom === null) return false
+      const touched = changed.some(({ from, to }) => from <= data.closingFrom! && to >= data.from)
+      if (!touched) return false
+      const head = transaction.state.selection.main.head
+      if (data.codeFrom === data.closingFrom) {
+        repairs.push({ from: data.codeFrom, insert: '\n' })
+        if (head >= data.from && head <= data.closingFrom) caret = data.codeFrom
+        return false
+      }
+      // After the final visible character is deleted, CM6 can associate the
+      // selection with the hidden closing-fence replacement. Pin it to the
+      // actual blank code line instead of trusting that DOM mapping.
+      if (
+        transaction.state.doc.sliceString(data.codeFrom, data.codeTo).length === 0 &&
+        head >= data.codeFrom &&
+        head <= data.closingFrom
+      )
+        caret = data.lastCodeLineFrom
+      return false
+    },
+  })
+  if (!repairs.length && caret === null) return null
+  return {
+    changes: repairs.length ? repairs : undefined,
+    selection: caret === null ? undefined : { anchor: caret },
+  }
+}
+
+/**
+ * A hidden closing fence must not be removed by a partial delete: without it,
+ * the next fence can become this block's closing fence and two cards appear to
+ * merge. Selecting the complete fenced source remains a valid block deletion.
+ */
+export function partiallyDeletesFencedCodeFence(transaction: Transaction): boolean {
+  if (!transaction.docChanged || !transaction.isUserEvent('delete')) return false
+  const deleted: PreviewRange[] = []
+  transaction.changes.iterChangedRanges((fromA, toA) => {
+    if (toA > fromA) deleted.push({ from: fromA, to: toA })
+  })
+  if (!deleted.length) return false
+
+  let partial = false
+  syntaxTree(transaction.startState).iterate({
+    enter(node) {
+      if (node.name !== 'FencedCode') return
+      const data = readFencedCode(transaction.startState, node.from, node.to)
+      if (data.closingFrom === null) return false
+      const opening = transaction.startState.doc.lineAt(data.from)
+      const closing = transaction.startState.doc.lineAt(data.closingFrom)
+      const touchesFence = deleted.some(
+        ({ from, to }) =>
+          (from < opening.to && to > opening.from) || (from < closing.to && to > closing.from),
+      )
+      const deletesWholeBlock = deleted.some(({ from, to }) => from <= data.from && to >= data.to)
+      if (touchesFence && !deletesWholeBlock) {
+        partial = true
+        return false
+      }
+    },
+  })
+  return partial
 }
 
 function findFencedCodeAt(state: EditorState, blockFrom: number): FencedCodeData | null {

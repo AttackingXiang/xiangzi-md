@@ -20,6 +20,11 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
+import {
+  partiallyDeletesFencedCodeFence,
+  protectsEmptyFencedCodeBodyDeletion,
+  restoreEmptyFencedCodeBody,
+} from './codeBlockPreview'
 import { decodeMarkdownDestination, resolveMarkdownReference } from './markdownReferences'
 
 export interface PreviewRange {
@@ -35,6 +40,8 @@ export interface LivePreviewOptions {
 export interface VisualGapEdit {
   anchor: number
 }
+
+export type BlankLineKind = 'structural' | 'explicit' | null
 
 const setEditableBlank = StateEffect.define<number | null>()
 
@@ -72,35 +79,68 @@ function editableBlankAt(state: EditorState): number | null {
   return state.field(editableBlankParagraph, false) ?? null
 }
 
-function topLevelParagraphAt(
+function topLevelBlockAt(
   state: EditorState,
   position: number,
   bias: -1 | 1,
 ): SyntaxNode | null {
   let node: SyntaxNode | null = syntaxTree(state).resolveInner(position, bias)
   while (node && node.name !== 'Document') {
-    if (node.name === 'Paragraph' && node.parent?.name === 'Document') return node
+    if (
+      node.parent?.name === 'Document' &&
+      (node.name === 'Paragraph' || HEADING_NAMES.has(node.name))
+    )
+      return node
     node = node.parent
   }
   return null
+}
+
+function topLevelParagraphAt(
+  state: EditorState,
+  position: number,
+  bias: -1 | 1,
+): SyntaxNode | null {
+  const node = topLevelBlockAt(state, position, bias)
+  return node?.name === 'Paragraph' ? node : null
+}
+
+/**
+ * Classify a *run* of blank source lines like a ProseMirror document model.
+ * One blank line between two blocks is syntax only; extra blank lines are an
+ * explicit authorial gap and must remain a selectable editor row.
+ */
+export function blankLineKind(state: EditorState, lineNumber: number): BlankLineKind {
+  if (lineNumber < 1 || lineNumber > state.doc.lines) return null
+  const line = state.doc.line(lineNumber)
+  if (line.text.trim().length !== 0) return null
+  if (editableBlankAt(state) === line.from) return 'explicit'
+
+  const probe = Math.min(line.from, Math.max(0, state.doc.length - 1))
+  let node: SyntaxNode | null = syntaxTree(state).resolveInner(probe, 1)
+  while (node && node.name !== 'Document') {
+    // Blank lines inside literal/container blocks belong to that block.
+    if (['FencedCode', 'CodeBlock', 'HTMLBlock'].includes(node.name)) return 'explicit'
+    node = node.parent
+  }
+
+  let runStart = lineNumber
+  let runEnd = lineNumber
+  while (runStart > 1 && state.doc.line(runStart - 1).text.trim().length === 0) runStart -= 1
+  while (runEnd < state.doc.lines && state.doc.line(runEnd + 1).text.trim().length === 0)
+    runEnd += 1
+
+  // A leading/trailing empty line represents an editable empty paragraph. A
+  // run only has a structural delimiter when it actually separates two blocks.
+  if (runStart === 1 || runEnd === state.doc.lines) return 'explicit'
+  return lineNumber === runStart ? 'structural' : 'explicit'
 }
 
 /** A source-only structural line that must not become a rendered editor row. */
 export function isBlockSeparatorLine(state: EditorState, lineNumber: number): boolean {
   if (lineNumber < 1 || lineNumber > state.doc.lines) return false
   const line = state.doc.line(lineNumber)
-  if (line.length === 0) {
-    if (editableBlankAt(state) === line.from) return false
-    const probe = Math.min(line.from, Math.max(0, state.doc.length - 1))
-    let node: SyntaxNode | null = syntaxTree(state).resolveInner(probe, 1)
-    while (node && node.name !== 'Document') {
-      // Blank lines inside literal/container blocks belong to that block, rather
-      // than separating two rendered Markdown blocks.
-      if (['FencedCode', 'CodeBlock', 'HTMLBlock'].includes(node.name)) return false
-      node = node.parent
-    }
-    return true
-  }
+  if (line.text.trim().length === 0) return blankLineKind(state, lineNumber) === 'structural'
 
   let structuralMarker = false
   syntaxTree(state).iterate({
@@ -137,10 +177,280 @@ export function visualGapEdit(state: EditorState, position: number): VisualGapEd
   for (const number of [line.number, line.number - 1, line.number + 1]) {
     if (number < 1 || number > state.doc.lines) continue
     const candidate = state.doc.line(number)
-    if (candidate.length === 0) return { anchor: candidate.from }
+    if (blankLineKind(state, number) === 'explicit') return { anchor: candidate.from }
   }
 
   return null
+}
+
+/**
+ * ProseMirror-style Enter for a top-level text block: split the block, rather
+ * than adding a source-only soft line. Markdown serializes the two blocks with
+ * exactly one structural blank line (`\n\n`).
+ */
+export function splitTopLevelMarkdownBlock(state: EditorState): TransactionSpec | null {
+  if (state.readOnly) return null
+  const selection = state.selection.main
+  const start = topLevelBlockAt(state, selection.from, -1)
+  const end = topLevelBlockAt(state, selection.to, -1)
+  if (!start || start !== end) return null
+
+  const head = selection.head
+  const line = state.doc.lineAt(head)
+  let from = selection.from
+  let to = selection.to
+  // At document end, the second newline creates a trailing editable paragraph
+  // whose source position is immediately after the first newline.
+  let anchor = selection.to === state.doc.length ? from + 1 : from + 2
+
+  // A soft source newline already inside one paragraph is replaced, not kept
+  // as an additional explicit blank line when the user splits at its edge.
+  if (selection.empty && head === line.to && line.to < state.doc.length && state.doc.sliceString(head, head + 1) === '\n') {
+    from = head
+    to = head + 1
+    anchor = head + 2
+  } else if (
+    selection.empty &&
+    head === line.from &&
+    head > 0 &&
+    state.doc.sliceString(head - 1, head) === '\n'
+  ) {
+    from = head - 1
+    to = head
+    anchor = head + 1
+  }
+
+  return {
+    changes: { from, to, insert: '\n\n' },
+    selection: { anchor },
+    scrollIntoView: true,
+    userEvent: 'input',
+  }
+}
+
+/** Insert a portable hard break; the backslash is hidden by live preview. */
+export function insertMarkdownHardBreak(state: EditorState): TransactionSpec | null {
+  if (state.readOnly) return null
+  const selection = state.selection.main
+  const block = topLevelParagraphAt(state, selection.from, -1)
+  if (!block || block !== topLevelParagraphAt(state, selection.to, -1)) return null
+  const from = selection.from
+  return {
+    changes: { from, to: selection.to, insert: '\\\n' },
+    selection: { anchor: from + 2 },
+    scrollIntoView: true,
+    userEvent: 'input',
+  }
+}
+
+interface ContainerLinePrefix {
+  line: ReturnType<EditorState['doc']['lineAt']>
+  quote: string
+  list:
+    | {
+        from: number
+        to: number
+        indentation: string
+        marker: string
+        task: boolean
+      }
+    | null
+  contentFrom: number
+}
+
+/** Source representation of the editable container stack for one line. */
+function containerLinePrefixAt(state: EditorState, position: number): ContainerLinePrefix | null {
+  const line = state.doc.lineAt(position)
+  let offset = 0
+  for (;;) {
+    const match = /^( {0,3}>[ \t]?)/.exec(line.text.slice(offset))
+    if (!match) break
+    offset += match[0].length
+  }
+  const quote = line.text.slice(0, offset)
+  const listMatch = /^(\s*)([-+*]|\d+[.)])([ \t]+)(\[[ xX]\][ \t]+)?/.exec(
+    line.text.slice(offset),
+  )
+  if (!quote && !listMatch) return null
+  if (!listMatch) return { line, quote, list: null, contentFrom: line.from + offset }
+  const listFrom = line.from + offset
+  const listTo = listFrom + listMatch[0].length
+  return {
+    line,
+    quote,
+    list: {
+      from: listFrom,
+      to: listTo,
+      indentation: listMatch[1],
+      marker: listMatch[2],
+      task: Boolean(listMatch[4]),
+    },
+    contentFrom: listTo,
+  }
+}
+
+function nextListMarker(prefix: NonNullable<ContainerLinePrefix['list']>): string {
+  if (prefix.task) return '- [ ] '
+  if (/^\d/.test(prefix.marker)) {
+    const next = Number.parseInt(prefix.marker, 10) + 1
+    const delimiter = prefix.marker.endsWith(')') ? ')' : '.'
+    return `${next}${delimiter} `
+  }
+  return `${prefix.marker} `
+}
+
+/** ProseMirror-style split/exit behaviour for list items and blockquotes. */
+export function splitContainerMarkdownBlock(state: EditorState): TransactionSpec | null {
+  if (state.readOnly) return null
+  const selection = state.selection.main
+  if (!selection.empty) return null
+  const prefix = containerLinePrefixAt(state, selection.head)
+  if (!prefix) return null
+  const content = state.doc.sliceString(prefix.contentFrom, prefix.line.to)
+  if (content.length === 0) {
+    // Empty list item exits its list but stays in its enclosing quote. An empty
+    // quote exits to a normal editable paragraph.
+    const from = prefix.list ? prefix.list.from : prefix.line.from
+    const to = prefix.list ? prefix.list.to : prefix.contentFrom
+    const insert = prefix.list ? prefix.list.indentation : ''
+    return {
+      changes: { from, to, insert },
+      selection: { anchor: from + insert.length },
+      scrollIntoView: true,
+      userEvent: 'input',
+    }
+  }
+  const continuation = prefix.list
+    ? `${prefix.quote}${prefix.list.indentation}${nextListMarker(prefix.list)}`
+    : prefix.quote
+  return {
+    changes: { from: selection.head, to: selection.head, insert: `\n${continuation}` },
+    selection: { anchor: selection.head + continuation.length + 1 },
+    scrollIntoView: true,
+    userEvent: 'input',
+  }
+}
+
+/** Hard break inside a quote/list keeps the current container prefix. */
+export function insertContainerMarkdownHardBreak(state: EditorState): TransactionSpec | null {
+  if (state.readOnly) return null
+  const selection = state.selection.main
+  if (!selection.empty) return null
+  const prefix = containerLinePrefixAt(state, selection.head)
+  if (!prefix) return null
+  const continuation = prefix.list
+    ? `${prefix.quote}${prefix.list.indentation}${' '.repeat(prefix.list.to - prefix.list.from - prefix.list.indentation.length)}`
+    : prefix.quote
+  return {
+    changes: { from: selection.head, to: selection.head, insert: `\\\n${continuation}` },
+    selection: { anchor: selection.head + continuation.length + 2 },
+    scrollIntoView: true,
+    userEvent: 'input',
+  }
+}
+
+function sameContainerKind(left: ContainerLinePrefix, right: ContainerLinePrefix): boolean {
+  if (left.quote !== right.quote) return false
+  if (Boolean(left.list) !== Boolean(right.list)) return false
+  if (!left.list || !right.list) return true
+  return (
+    left.list.indentation === right.list.indentation &&
+    left.list.task === right.list.task &&
+    /^\d/.test(left.list.marker) === /^\d/.test(right.list.marker)
+  )
+}
+
+/** Join adjacent compatible list items or quote paragraphs at a block edge. */
+export function joinContainerMarkdownBlock(
+  state: EditorState,
+  forward: boolean,
+): TransactionSpec | null {
+  if (state.readOnly) return null
+  const selection = state.selection.main
+  if (!selection.empty) return null
+  const current = containerLinePrefixAt(state, selection.head)
+  if (!current) return null
+  if (forward) {
+    if (selection.head !== current.line.to || current.line.number >= state.doc.lines) return null
+    const next = containerLinePrefixAt(state, current.line.to + 1)
+    if (!next || next.line.number !== current.line.number + 1 || !sameContainerKind(current, next))
+      return null
+    return {
+      changes: { from: current.line.to, to: next.contentFrom },
+      selection: { anchor: current.line.to },
+      scrollIntoView: true,
+      userEvent: 'delete.forward',
+    }
+  }
+
+  if (selection.head !== current.contentFrom || current.line.number <= 1) return null
+  const previous = containerLinePrefixAt(state, current.line.from - 1)
+  if (
+    !previous ||
+    previous.line.number !== current.line.number - 1 ||
+    !sameContainerKind(previous, current)
+  )
+    return null
+  return {
+    changes: { from: previous.line.to, to: current.contentFrom },
+    selection: { anchor: previous.line.to },
+    scrollIntoView: true,
+    userEvent: 'delete.backward',
+  }
+}
+
+/**
+ * Delete an explicit empty paragraph as one ProseMirror block. Without this,
+ * source-level Backspace can leave the caret on the preceding collapsed
+ * structural delimiter after removing a newline character.
+ */
+export function explicitBlankParagraphDeletion(
+  state: EditorState,
+  forward: boolean,
+): TransactionSpec | null {
+  if (state.readOnly) return null
+  const selection = state.selection.main
+  if (!selection.empty) return null
+  const line = state.doc.lineAt(selection.head)
+  if (
+    selection.head !== line.from ||
+    line.text.length !== 0 ||
+    blankLineKind(state, line.number) !== 'explicit'
+  )
+    return null
+
+  if (forward) {
+    if (line.from >= state.doc.length || state.doc.sliceString(line.from, line.from + 1) !== '\n')
+      return null
+    return {
+      changes: { from: line.from, to: line.from + 1 },
+      selection: { anchor: line.from },
+      scrollIntoView: true,
+      userEvent: 'delete.forward',
+    }
+  }
+
+  if (line.from === 0) return null
+  // A trailing empty paragraph is encoded by two terminal newlines. Removing
+  // it restores the preceding block exactly, rather than leaving one stray
+  // source newline behind.
+  const isOnlyTrailingEmptyParagraph =
+    line.from + 1 === state.doc.length &&
+    state.doc.sliceString(line.from - 1, line.from + 1) === '\n\n'
+  if (isOnlyTrailingEmptyParagraph) {
+    return {
+      changes: { from: line.from - 1, to: line.from + 1 },
+      selection: { anchor: line.from - 1 },
+      scrollIntoView: true,
+      userEvent: 'delete.backward',
+    }
+  }
+  return {
+    changes: { from: line.from - 1, to: line.from },
+    selection: { anchor: line.from },
+    scrollIntoView: true,
+    userEvent: 'delete.backward',
+  }
 }
 
 const HEADING_NAMES = new Map([
@@ -168,6 +478,51 @@ const INLINE_CLASSES: Readonly<Record<string, string>> = {
   Emphasis: 'xmd-cm-emphasis',
   Strikethrough: 'xmd-cm-strikethrough',
   InlineCode: 'xmd-cm-inline-code',
+}
+
+const CALLOUT_KINDS = new Set(['NOTE', 'TIP', 'WARNING', 'IMPORTANT', 'CAUTION'])
+
+interface CalloutStart {
+  kind: string
+  markerFrom: number
+  markerTo: number
+}
+
+/** GitHub/Obsidian-style alert header at the start of a quote line. */
+function calloutStartAtLine(state: EditorState, lineNumber: number): CalloutStart | null {
+  const line = state.doc.line(lineNumber)
+  const prefix = /^(?: {0,3}>[ \t]?)+/.exec(line.text)?.[0]
+  if (!prefix) return null
+  const match = /^\[!([A-Za-z]+)\][ \t]*/.exec(line.text.slice(prefix.length))
+  if (!match) return null
+  const kind = match[1].toUpperCase()
+  if (!CALLOUT_KINDS.has(kind)) return null
+  return {
+    kind,
+    markerFrom: line.from + prefix.length,
+    markerTo: line.from + prefix.length + match[0].length,
+  }
+}
+
+class CalloutLabelWidget extends WidgetType {
+  constructor(readonly kind: string) {
+    super()
+  }
+
+  eq(other: CalloutLabelWidget): boolean {
+    return other.kind === this.kind
+  }
+
+  toDOM(): HTMLElement {
+    const label = document.createElement('span')
+    label.className = `xmd-cm-callout-label xmd-cm-callout-${this.kind.toLowerCase()}`
+    label.textContent = this.kind
+    return label
+  }
+
+  ignoreEvent(): boolean {
+    return false
+  }
 }
 
 const EMPTY_CLEANUP_NODES = new Set([
@@ -401,6 +756,20 @@ export function headingBoundaryDeletion(
   if (selection.head < line.from || selection.head > contentFrom) return null
 
   if (!forward) {
+    // Mirror ProseMirror's joinBackward priority: an empty block immediately
+    // before a heading is removed first. Only when there is no predecessor to
+    // join through do we lower the heading to a paragraph.
+    if (line.number > 1) {
+      const previous = state.doc.line(line.number - 1)
+      if (previous.length === 0) {
+        return {
+          changes: { from: previous.from, to: line.from },
+          selection: { anchor: contentFrom - (line.from - previous.from) },
+          scrollIntoView: true,
+          userEvent: 'delete.backward',
+        }
+      }
+    }
     return {
       changes: { from: line.from, to: contentFrom },
       selection: { anchor: line.from },
@@ -875,6 +1244,10 @@ export function buildLivePreviewDecorations(
               widget: new TaskCheckboxWidget(marker === '[x]', node.from, node.to),
             }).range(node.from, node.to),
           )
+        } else if (node.name === 'HardBreak') {
+          // Our hard-break command writes `\\\n`; keep the semantic newline but
+          // hide its source backslash in live preview.
+          ranges.push(Decoration.replace({}).range(node.from, node.from + 1))
         } else if (
           MARKER_NAMES.has(node.name) &&
           !['Link', 'Autolink'].includes(node.node.parent?.name ?? '')
@@ -884,6 +1257,23 @@ export function buildLivePreviewDecorations(
         }
       },
     })
+    // Alerts are a Markdown convention layered on blockquotes, not a core
+    // CommonMark node. Decorate them line-by-line so they remain fully
+    // editable and work in a viewport-rendered document.
+    for (let number = firstLine.number; number <= lastLine.number; number += 1) {
+      const alert = calloutStartAtLine(state, number)
+      if (!alert) continue
+      const line = state.doc.line(number)
+      ranges.push(
+        Decoration.line({ class: `xmd-cm-callout xmd-cm-callout-${alert.kind.toLowerCase()}` }).range(
+          line.from,
+        ),
+        Decoration.replace({ widget: new CalloutLabelWidget(alert.kind) }).range(
+          alert.markerFrom,
+          alert.markerTo,
+        ),
+      )
+    }
     for (const [lineFrom, depth] of quoteDepthByLine) {
       ranges.push(
         Decoration.line({
@@ -942,8 +1332,17 @@ export function buildHiddenMarkdownMarkerRanges(
           const marker = listPrefix ?? hiddenMarkerRange(state, node.node)
           hidden.push(Decoration.replace({}).range(marker.from, marker.to))
         }
+        if (node.name === 'HardBreak') {
+          hidden.push(Decoration.replace({}).range(node.from, node.from + 1))
+        }
       },
     })
+    const firstLine = state.doc.lineAt(visible.from)
+    const lastLine = state.doc.lineAt(visible.to)
+    for (let lineNumber = firstLine.number; lineNumber <= lastLine.number; lineNumber += 1) {
+      const alert = calloutStartAtLine(state, lineNumber)
+      if (alert) hidden.push(Decoration.replace({}).range(alert.markerFrom, alert.markerTo))
+    }
   }
 
   return Decoration.set(hidden, true)
@@ -1087,7 +1486,7 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
   ): number => {
     const sourceLine = view.state.doc.lineAt(view.posAtDOM(lineElement, 0))
     const contentOffset = lineElement.classList.contains('xmd-cm-heading')
-      ? (/^(#{1,6})\s+/.exec(sourceLine.text)?.[0].length ?? 0)
+      ? (/^ {0,3}#{1,6}\s+/.exec(sourceLine.text)?.[0].length ?? 0)
       : 0
     const contentFrom = Math.min(sourceLine.to, sourceLine.from + contentOffset)
 
@@ -1119,19 +1518,68 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
   return [
     editableBlankParagraph,
     EditorState.transactionFilter.of((transaction) => {
+      if (partiallyDeletesFencedCodeFence(transaction)) return []
       const cleanup = cleanupEmptyMarkdownFormatting(transaction)
-      return cleanup ? [transaction, cleanup] : transaction
+      const codeBodyRepair = restoreEmptyFencedCodeBody(transaction)
+      return cleanup || codeBodyRepair
+        ? [transaction, ...(cleanup ? [cleanup] : []), ...(codeBodyRepair ? [codeBodyRepair] : [])]
+        : transaction
     }),
     preview,
     Prec.high(
       keymap.of([
         {
           key: 'Backspace',
-          run: (view) => deleteTouchesHiddenMarker(view, false),
+          run: (view) => {
+            if (protectsEmptyFencedCodeBodyDeletion(view.state, false)) return true
+            const join = joinContainerMarkdownBlock(view.state, false)
+            if (join) {
+              view.dispatch(join)
+              return true
+            }
+            const deletion = explicitBlankParagraphDeletion(view.state, false)
+            if (deletion) {
+              view.dispatch(deletion)
+              return true
+            }
+            return deleteTouchesHiddenMarker(view, false)
+          },
         },
         {
           key: 'Delete',
-          run: (view) => deleteTouchesHiddenMarker(view, true),
+          run: (view) => {
+            if (protectsEmptyFencedCodeBodyDeletion(view.state, true)) return true
+            const join = joinContainerMarkdownBlock(view.state, true)
+            if (join) {
+              view.dispatch(join)
+              return true
+            }
+            const deletion = explicitBlankParagraphDeletion(view.state, true)
+            if (deletion) {
+              view.dispatch(deletion)
+              return true
+            }
+            return deleteTouchesHiddenMarker(view, true)
+          },
+        },
+        {
+          key: 'Enter',
+          run: (view) => {
+            const split = splitContainerMarkdownBlock(view.state) ?? splitTopLevelMarkdownBlock(view.state)
+            if (!split) return false
+            view.dispatch(split)
+            return true
+          },
+        },
+        {
+          key: 'Shift-Enter',
+          run: (view) => {
+            const hardBreak =
+              insertContainerMarkdownHardBreak(view.state) ?? insertMarkdownHardBreak(view.state)
+            if (!hardBreak) return false
+            view.dispatch(hardBreak)
+            return true
+          },
         },
         ...(['ArrowUp', 'ArrowDown'] as const).map((key) => ({
           key,
@@ -1225,6 +1673,9 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
         // exact there; applying the legacy block-widget correction a second
         // time causes the caret to visibly jump before settling.
         if (line.classList.contains('xmd-cm-code-line')) return false
+        // Native CM6 hit-testing is more accurate for ordinary paragraphs and
+        // inline marks. Only headings need source-marker compensation.
+        if (!line.classList.contains('xmd-cm-heading')) return false
         const anchor = linePositionAtPointer(event, view, line)
         if (view.state.selection.main.head === anchor) return false
         event.preventDefault()

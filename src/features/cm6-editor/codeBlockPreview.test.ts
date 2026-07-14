@@ -1,12 +1,15 @@
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxTree } from '@codemirror/language'
-import { EditorSelection, EditorState } from '@codemirror/state'
+import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
   buildCodeBlockPreviewDecorations,
   buildCodeFenceAtomicRanges,
   codeLanguageOptions,
+  partiallyDeletesFencedCodeFence,
+  protectsEmptyFencedCodeBodyDeletion,
   readFencedCode,
+  restoreEmptyFencedCodeBody,
 } from './codeBlockPreview'
 
 function stateAt(doc: string, cursor: number): EditorState {
@@ -167,6 +170,64 @@ describe('CM6 fenced code preview', () => {
     expect(state.doc.sliceString(data.codeFrom, data.codeTo)).toBe('first()\nlast()')
     const ranges = decorations(state, 0, doc.length)
     expect(ranges.some(([from, to]) => from <= doc.indexOf('last') && to >= doc.length)).toBe(false)
+  })
+
+  it('keeps the final empty code row inside its card at both deletion boundaries', () => {
+    const doc = '```js\n\n```'
+    const blank = doc.indexOf('\n\n') + 1
+    const state = stateAt(doc, blank)
+    expect(protectsEmptyFencedCodeBodyDeletion(state, false)).toBe(true)
+    expect(protectsEmptyFencedCodeBodyDeletion(state, true)).toBe(true)
+  })
+
+  it('restores an editable code row when a selection deletes the whole final line', () => {
+    const doc = '```js\nlast()\n```'
+    const state = stateAt(doc, doc.indexOf('last'))
+    const transaction = state.update({
+      changes: { from: doc.indexOf('last'), to: doc.indexOf('```', 3) },
+      selection: EditorSelection.cursor(doc.indexOf('last')),
+      annotations: Transaction.userEvent.of('delete.selection'),
+    })
+    const repair = restoreEmptyFencedCodeBody(transaction)
+    expect(repair).not.toBeNull()
+    const next = state.update(transaction, repair!).state
+    expect(next.doc.toString()).toBe('```js\n\n```')
+    expect(next.selection.main.head).toBe('```js\n'.length)
+    const data = readFencedCode(next, 0, next.doc.length)
+    expect(data.codeFrom).toBeLessThan(data.closingFrom!)
+  })
+
+  it('pins the caret to the blank code line after deleting the final character', () => {
+    const doc = '```js\nx\n```'
+    const state = stateAt(doc, doc.indexOf('x') + 1)
+    const transaction = state.update({
+      changes: { from: doc.indexOf('x'), to: doc.indexOf('x') + 1 },
+      selection: EditorSelection.cursor(doc.indexOf('x')),
+      annotations: Transaction.userEvent.of('delete.backward'),
+    })
+    const repair = restoreEmptyFencedCodeBody(transaction)
+    expect(repair).not.toBeNull()
+    const next = state.update(transaction, repair!).state
+    const data = readFencedCode(next, 0, next.doc.length)
+    expect(next.doc.toString()).toBe('```js\n\n```')
+    expect(next.selection.main.head).toBe(data.lastCodeLineFrom)
+  })
+
+  it('rejects a partial closing-fence deletion so adjacent code blocks cannot merge', () => {
+    const doc = '```js\nfirst\n```\n```ts\nsecond\n```'
+    const closing = doc.indexOf('```', 3)
+    const state = stateAt(doc, closing)
+    const partial = state.update({
+      changes: { from: closing, to: closing + 3 },
+      annotations: Transaction.userEvent.of('delete.selection'),
+    })
+    expect(partiallyDeletesFencedCodeFence(partial)).toBe(true)
+
+    const whole = state.update({
+      changes: { from: 0, to: closing + 3 },
+      annotations: Transaction.userEvent.of('delete.selection'),
+    })
+    expect(partiallyDeletesFencedCodeFence(whole)).toBe(false)
   })
 
   it('keeps Enter in the middle of code inside the same fenced source block', () => {

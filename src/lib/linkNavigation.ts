@@ -11,6 +11,15 @@ export interface MarkdownHeading {
   offset: number
 }
 
+/** A source-backed heading record shared by outline and anchor navigation.
+ *
+ * This deliberately comes from the complete Markdown source rather than live-preview
+ * DOM.  Consequently it remains available while a virtualized heading is unmounted.
+ */
+export interface MarkdownHeadingIndexEntry extends MarkdownHeading {
+  slug: string
+}
+
 export interface MarkdownHeadingOptions {
   /** Exclude headings nested inside quotes and list items. */
   topLevelOnly?: boolean
@@ -171,6 +180,28 @@ export function markdownHeadings(
   return headings
 }
 
+/**
+ * Build the stable, source-backed heading index used by both the outline and `#anchor`
+ * navigation. Duplicate slugs follow GitHub/CommonMark live-preview suffix semantics.
+ */
+export function markdownHeadingIndex(
+  markdown: string,
+  options: MarkdownHeadingOptions = {},
+): MarkdownHeadingIndexEntry[] {
+  const usedSlugs = new Set<string>()
+  return markdownHeadings(markdown, options).map((heading) => {
+    const base = markdownHeadingSlug(heading.text)
+    let slug = base
+    let suffix = 0
+    while (usedSlugs.has(slug)) {
+      suffix += 1
+      slug = `${base}-${suffix}`
+    }
+    usedSlugs.add(slug)
+    return { ...heading, slug }
+  })
+}
+
 /** GitHub/CM live-preview compatible heading slug, including duplicate suffixes. */
 export function markdownHeadingSlug(text: string): string {
   return markdownHeadingText(text)
@@ -280,16 +311,8 @@ export function headingOffsetForAnchor(markdown: string, rawAnchor: string): num
   if (!anchor || /[\u0000-\u001f\u007f]/.test(anchor)) return null
   const wanted = markdownHeadingSlug(anchor)
   if (!wanted) return null
-  const usedSlugs = new Set<string>()
-  for (const heading of markdownHeadings(markdown)) {
-    const base = markdownHeadingSlug(heading.text)
-    let slug = base
-    let suffix = 0
-    while (usedSlugs.has(slug)) {
-      suffix += 1
-      slug = `${base}-${suffix}`
-    }
-    usedSlugs.add(slug)
+  for (const heading of markdownHeadingIndex(markdown)) {
+    const { slug } = heading
     if (slug === wanted) return heading.offset
   }
   return sourceOffsetForAnchor(markdown, anchor)

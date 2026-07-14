@@ -123,6 +123,40 @@
   padding-left: calc(var(--xmd-quote-depth, 1) * 1em);
 }
 
+/* GitHub/Obsidian alert blocks. The source stays a normal blockquote, while
+   the alert header becomes a compact, non-source label in live preview. */
+.xmd-cm-editor .cm-line.xmd-cm-callout {
+  background-color: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-radius: 0 4px 4px 0;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.xmd-cm-editor .xmd-cm-callout-label {
+  color: var(--accent);
+  font-size: 0.76em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-right: 0.55em;
+  vertical-align: 0.08em;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-callout-warning,
+.xmd-cm-editor .cm-line.xmd-cm-callout-caution {
+  background-color: color-mix(in srgb, #d97706 9%, transparent);
+}
+.xmd-cm-editor .xmd-cm-callout-warning,
+.xmd-cm-editor .xmd-cm-callout-caution {
+  color: #b45309;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-callout-important {
+  background-color: color-mix(in srgb, #dc2626 8%, transparent);
+}
+.xmd-cm-editor .xmd-cm-callout-important {
+  color: #b91c1c;
+}
+
 .xmd-cm-editor .cm-line.xmd-cm-list-line {
   line-height: 1.6;
 }

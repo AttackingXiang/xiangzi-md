@@ -2,7 +2,7 @@ import type { ChangeSpec } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import {
   markdownHeadingContentOffset,
-  markdownHeadings,
+  markdownHeadingIndex,
   type MarkdownHeading,
 } from '../../lib/linkNavigation'
 import { cm6ActiveViewBridge } from './activeViewBridge'
@@ -16,7 +16,11 @@ export interface HeadingReorderPlan {
 
 /** Parse top-level CommonMark headings while keeping original-source offsets. */
 export function sourceHeadings(markdown: string): SourceHeading[] {
-  return markdownHeadings(markdown, { topLevelOnly: true })
+  return markdownHeadingIndex(markdown, { topLevelOnly: true }).map((heading) => ({
+    level: heading.level,
+    text: heading.text,
+    offset: heading.offset,
+  }))
 }
 
 function sectionEnd(markdown: string, headings: readonly SourceHeading[], index: number): number {

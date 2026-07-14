@@ -732,7 +732,9 @@ export function setTableCellContent(element: HTMLElement, value: string): void {
 /** Convert the safe contenteditable DOM back to the canonical Markdown cell value. */
 export function readTableCellContent(element: HTMLElement): string {
   const read = (node: Node): string => {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+    // A terminal soft break needs a real following caret box in WebKit. The
+    // invisible sentinel supplies that box, but is never part of Markdown.
+    if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? '').replace(/\u200b/g, '')
     if (node.nodeName === 'BR') return '<br>'
     const content = Array.from(node.childNodes, read).join('')
     if (node instanceof HTMLElement && node.dataset.xmdTableInline === 'true') {
@@ -942,6 +944,30 @@ function replaceCellSelection(element: HTMLElement, value: string): boolean {
   if (!lastNode) return true
   range.insertNode(fragment)
   range.setStartAfter(lastNode)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
+}
+
+/**
+ * Insert a Markdown `<br>` with a stable caret target. A bare trailing BR has
+ * no editable line box in WebKit, so the first Shift+Enter appears to do
+ * nothing until the user presses it again. The zero-width sentinel is removed
+ * by `readTableCellContent` before every source transaction.
+ */
+function insertTableCellSoftBreak(element: HTMLElement): boolean {
+  const selection = window.getSelection()
+  if (!selection?.rangeCount) return false
+  const range = selection.getRangeAt(0)
+  if (!element.contains(range.commonAncestorContainer)) return false
+  range.deleteContents()
+  const breakElement = document.createElement('br')
+  const sentinel = document.createTextNode('\u200b')
+  const fragment = document.createDocumentFragment()
+  fragment.append(breakElement, sentinel)
+  range.insertNode(fragment)
+  range.setStart(sentinel, 0)
   range.collapse(true)
   selection.removeAllRanges()
   selection.addRange(range)
@@ -1179,10 +1205,23 @@ class TableWidget extends WidgetType {
       if (event.key === 'Enter') {
         event.preventDefault()
         if (event.shiftKey) {
-          if (replaceCellSelection(element, '\n')) commitCell()
+          if (insertTableCellSoftBreak(element)) commitCell()
         } else {
           commitCell()
-          this.moveFocus(element, 1, /* sameColumn */ true)
+          this.moveFocus(element, 1, /* vertical */ true)
+        }
+        return
+      }
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        if (!this.isAtCellVerticalBoundary(element, event.key === 'ArrowUp')) return
+        event.preventDefault()
+        const direction = event.key === 'ArrowUp' ? -1 : 1
+        if (!this.moveFocus(element, direction, /* vertical */ true)) {
+          // At a table edge, continue in the document above/below the table.
+          // Never fall back to a neighbouring left/right cell for a vertical key.
+          const position = direction < 0 ? controller.table.from : controller.table.to
+          view.dispatch({ selection: { anchor: position }, scrollIntoView: true })
+          view.focus()
         }
         return
       }
@@ -1199,30 +1238,89 @@ class TableWidget extends WidgetType {
     })
   }
 
-  /** Tab moves to the next/previous cell in reading order; Enter moves one row down/up. */
-  private moveFocus(current: HTMLElement, direction: 1 | -1, sameColumn: boolean): void {
+  /** Tab moves in reading order. Vertical moves preserve the caret's screen X coordinate. */
+  private moveFocus(current: HTMLElement, direction: 1 | -1, vertical: boolean): boolean {
     const table = current.closest('table')
     const row = current.closest('tr')
-    if (!table || !row) return
-    if (sameColumn) {
-      const columnIndex = Array.from(row.children).indexOf(current)
+    if (!table || !row) return false
+    if (vertical) {
       const allRows = Array.from(table.querySelectorAll('tr'))
       const targetRow = allRows[allRows.indexOf(row) + direction]
-      const target = targetRow?.children[columnIndex] as HTMLElement | undefined
-      if (target?.isContentEditable) this.focusCell(target)
-      return
+      const target = targetRow
+        ? this.cellAtHorizontalCoordinate(Array.from(targetRow.children), this.caretX(current))
+        : undefined
+      if (target?.isContentEditable) {
+        this.focusCell(target, this.caretX(current))
+        return true
+      }
+      return false
     }
     const cells = editableCellsInOrder(table)
     const target = cells[cells.indexOf(current) + direction]
-    if (target) this.focusCell(target)
+    if (target) {
+      this.focusCell(target)
+      return true
+    }
+    return false
   }
 
-  private focusCell(element: HTMLElement): void {
+  /** True only when native vertical movement would leave this cell. */
+  private isAtCellVerticalBoundary(element: HTMLElement, atStart: boolean): boolean {
+    const selection = window.getSelection()
+    if (!selection?.rangeCount) return false
+    const range = selection.getRangeAt(0)
+    if (!range.collapsed || !element.contains(range.startContainer)) return false
+    const probe = document.createRange()
+    probe.selectNodeContents(element)
+    if (atStart) probe.setEnd(range.startContainer, range.startOffset)
+    else probe.setStart(range.startContainer, range.startOffset)
+    // `<br>` represents a visual line boundary. Text-only cells are one line.
+    return !Array.from(probe.cloneContents().querySelectorAll('br')).length &&
+      probe.toString().replace(/\u200b/g, '') === ''
+  }
+
+  private caretX(element: HTMLElement): number {
+    const range = window.getSelection()?.rangeCount ? window.getSelection()!.getRangeAt(0) : null
+    const rect = range?.getClientRects().item(0)
+    return rect?.left ?? element.getBoundingClientRect().left + 12
+  }
+
+  private cellAtHorizontalCoordinate(cells: Element[], x: number): HTMLElement | undefined {
+    const editable = cells.filter((cell): cell is HTMLElement => cell instanceof HTMLElement && cell.isContentEditable)
+    return editable.find((cell) => {
+      const rect = cell.getBoundingClientRect()
+      return x >= rect.left && x <= rect.right
+    }) ?? editable.reduce<HTMLElement | undefined>((nearest, cell) => {
+      if (!nearest) return cell
+      const nearestRect = nearest.getBoundingClientRect()
+      const rect = cell.getBoundingClientRect()
+      const nearestDistance = Math.abs((nearestRect.left + nearestRect.right) / 2 - x)
+      const distance = Math.abs((rect.left + rect.right) / 2 - x)
+      return distance < nearestDistance ? cell : nearest
+    }, undefined)
+  }
+
+  private focusCell(element: HTMLElement, x?: number): void {
     element.focus()
     const selection = window.getSelection()
     const range = document.createRange()
-    range.selectNodeContents(element)
-    range.collapse(false)
+    const rect = element.getBoundingClientRect()
+    const documentWithCaret = document as Document & {
+      caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+      caretRangeFromPoint?: (x: number, y: number) => Range | null
+    }
+    const targetX = x ?? rect.right - 4
+    const caret = documentWithCaret.caretPositionFromPoint?.(targetX, rect.top + rect.height / 2)
+    const hitRange = caret
+      ? null
+      : documentWithCaret.caretRangeFromPoint?.(targetX, rect.top + rect.height / 2)
+    if (caret && element.contains(caret.offsetNode)) range.setStart(caret.offsetNode, caret.offset)
+    else if (hitRange && element.contains(hitRange.startContainer)) range.setStart(hitRange.startContainer, hitRange.startOffset)
+    else {
+      range.selectNodeContents(element)
+      range.collapse(x === undefined)
+    }
+    range.collapse(true)
     selection?.removeAllRanges()
     selection?.addRange(range)
   }

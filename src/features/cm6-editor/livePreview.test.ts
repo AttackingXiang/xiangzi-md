@@ -4,13 +4,20 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLivePreviewDecorations,
   buildHiddenMarkdownMarkerRanges,
+  blankLineKind,
   cleanupEmptyMarkdownFormatting,
   editableBlankParagraph,
+  explicitBlankParagraphDeletion,
   headingBoundaryDeletion,
   isBlockSeparatorLine,
+  insertMarkdownHardBreak,
+  insertContainerMarkdownHardBreak,
   listBoundaryDeletion,
   quoteBoundaryDeletion,
   safeMarkdownLinkHref,
+  splitTopLevelMarkdownBlock,
+  splitContainerMarkdownBlock,
+  joinContainerMarkdownBlock,
   visualGapEdit,
 } from './livePreview'
 
@@ -81,6 +88,123 @@ function deleteAtQuoteBoundary(state: EditorState, forward: boolean): EditorStat
 }
 
 describe('CM6 Markdown live preview', () => {
+  it('uses one structural delimiter and preserves extra blank lines as editable space', () => {
+    const state = createState('first\n\n\nsecond')
+    expect(blankLineKind(state, 2)).toBe('structural')
+    expect(blankLineKind(state, 3)).toBe('explicit')
+    expect(isBlockSeparatorLine(state, 2)).toBe(true)
+    expect(isBlockSeparatorLine(state, 3)).toBe(false)
+    expect(blankLineKind(createState('first\n\n'), 2)).toBe('explicit')
+  })
+
+  it('deletes an explicit empty paragraph as a block without landing on a hidden delimiter', () => {
+    const between = createState('A\n\n\nB', 3)
+    const backward = explicitBlankParagraphDeletion(between, false)
+    expect(backward).not.toBeNull()
+    const afterBackward = between.update(backward!).state
+    expect(afterBackward.doc.toString()).toBe('A\n\nB')
+    expect(afterBackward.selection.main.head).toBe(3)
+
+    const forward = explicitBlankParagraphDeletion(createState('A\n\n\nB', 3), true)
+    expect(forward).not.toBeNull()
+    expect(createState('A\n\n\nB', 3).update(forward!).state.doc.toString()).toBe('A\n\nB')
+
+    const trailing = createState('A\n\n', 2)
+    const removeTrailing = explicitBlankParagraphDeletion(trailing, false)
+    expect(removeTrailing).not.toBeNull()
+    expect(trailing.update(removeTrailing!).state.doc.toString()).toBe('A')
+  })
+
+  it('splits top-level paragraphs like ProseMirror instead of inserting a soft source line', () => {
+    const middle = createState('AlphaBeta', 5)
+    const splitMiddle = splitTopLevelMarkdownBlock(middle)
+    expect(splitMiddle).not.toBeNull()
+    const afterMiddle = middle.update(splitMiddle!).state
+    expect(afterMiddle.doc.toString()).toBe('Alpha\n\nBeta')
+    expect(afterMiddle.selection.main.head).toBe(7)
+
+    const end = createState('Alpha', 5)
+    const splitEnd = splitTopLevelMarkdownBlock(end)
+    expect(splitEnd).not.toBeNull()
+    const afterEnd = end.update(splitEnd!).state
+    expect(afterEnd.doc.toString()).toBe('Alpha\n\n')
+    expect(afterEnd.selection.main.head).toBe(6)
+
+    const softLine = createState('Alpha\nBeta', 5)
+    const splitSoftLine = splitTopLevelMarkdownBlock(softLine)
+    expect(splitSoftLine).not.toBeNull()
+    expect(softLine.update(splitSoftLine!).state.doc.toString()).toBe('Alpha\n\nBeta')
+
+    const heading = createState('# AlphaBeta', 7)
+    const splitHeading = splitTopLevelMarkdownBlock(heading)
+    expect(splitHeading).not.toBeNull()
+    expect(heading.update(splitHeading!).state.doc.toString()).toBe('# Alpha\n\nBeta')
+  })
+
+  it('writes Shift+Enter as a portable hard break while hiding its source marker', () => {
+    const state = createState('AlphaBeta', 5)
+    const hardBreak = insertMarkdownHardBreak(state)
+    expect(hardBreak).not.toBeNull()
+    const after = state.update(hardBreak!).state
+    expect(after.doc.toString()).toBe('Alpha\\\nBeta')
+    const seen = decorations(after, 0, after.doc.length)
+    expect(seen.some((item) => item.replacement && item.from === 5 && item.to === 6)).toBe(true)
+  })
+
+  it('splits and exits quote/list containers as Markdown blocks', () => {
+    const list = createState('- first', 7)
+    const splitList = splitContainerMarkdownBlock(list)
+    expect(splitList).not.toBeNull()
+    expect(list.update(splitList!).state.doc.toString()).toBe('- first\n- ')
+
+    const ordered = createState('3. third', 8)
+    const splitOrdered = splitContainerMarkdownBlock(ordered)
+    expect(splitOrdered).not.toBeNull()
+    expect(ordered.update(splitOrdered!).state.doc.toString()).toBe('3. third\n4. ')
+
+    const quote = createState('> quote', 7)
+    const splitQuote = splitContainerMarkdownBlock(quote)
+    expect(splitQuote).not.toBeNull()
+    expect(quote.update(splitQuote!).state.doc.toString()).toBe('> quote\n> ')
+
+    const exitList = splitContainerMarkdownBlock(createState('- ', 2))
+    expect(exitList).not.toBeNull()
+    expect(createState('- ', 2).update(exitList!).state.doc.toString()).toBe('')
+
+    const exitQuote = splitContainerMarkdownBlock(createState('> ', 2))
+    expect(exitQuote).not.toBeNull()
+    expect(createState('> ', 2).update(exitQuote!).state.doc.toString()).toBe('')
+  })
+
+  it('keeps list and quote containers when Shift+Enter inserts a hard break', () => {
+    const list = createState('- first', 7)
+    const listBreak = insertContainerMarkdownHardBreak(list)
+    expect(listBreak).not.toBeNull()
+    expect(list.update(listBreak!).state.doc.toString()).toBe('- first\\\n  ')
+
+    const quote = createState('> quote', 7)
+    const quoteBreak = insertContainerMarkdownHardBreak(quote)
+    expect(quoteBreak).not.toBeNull()
+    expect(quote.update(quoteBreak!).state.doc.toString()).toBe('> quote\\\n> ')
+  })
+
+  it('joins adjacent compatible list items and quote paragraphs at their block edge', () => {
+    const list = createState('- first\n- second', 7)
+    const forward = joinContainerMarkdownBlock(list, true)
+    expect(forward).not.toBeNull()
+    expect(list.update(forward!).state.doc.toString()).toBe('- firstsecond')
+
+    const backwardList = createState('- first\n- second', 10)
+    const backward = joinContainerMarkdownBlock(backwardList, false)
+    expect(backward).not.toBeNull()
+    expect(backwardList.update(backward!).state.doc.toString()).toBe('- firstsecond')
+
+    const quote = createState('> first\n> second', 7)
+    const quoteJoin = joinContainerMarkdownBlock(quote, true)
+    expect(quoteJoin).not.toBeNull()
+    expect(quote.update(quoteJoin!).state.doc.toString()).toBe('> firstsecond')
+  })
+
   it('turns a heading into a paragraph when Backspace is pressed at its visual left edge', () => {
     const state = createState('## Heading', 3)
     const result = deleteAtHeadingBoundary(state, false)
@@ -107,6 +231,14 @@ describe('CM6 Markdown live preview', () => {
       expect(result.doc.toString()).toBe('## Title')
       expect(result.selection.main.head).toBe(3)
     }
+  })
+
+  it('removes a preceding blank paragraph before lowering a heading at its left edge', () => {
+    const doc = 'before\n\n## Heading'
+    const cursor = doc.indexOf('Heading')
+    const result = deleteAtHeadingBoundary(createState(doc, cursor), false)
+    expect(result.doc.toString()).toBe('before\n## Heading')
+    expect(result.selection.main.head).toBe('before\n## '.length)
   })
 
   it('renders Setext headings as one visual row and cleans their marker when emptied', () => {
@@ -181,7 +313,8 @@ describe('CM6 Markdown live preview', () => {
 
     const afterLeaving = result.update({ selection: EditorSelection.cursor(1) }).state
     expect(afterLeaving.field(editableBlankParagraph)).toBeNull()
-    expect(isBlockSeparatorLine(afterLeaving, 1)).toBe(true)
+    // A leading blank line is an explicit editable paragraph, not a separator.
+    expect(isBlockSeparatorLine(afterLeaving, 1)).toBe(false)
   })
 
   it.each([
@@ -306,6 +439,20 @@ describe('CM6 Markdown live preview', () => {
         className: 'xmd-cm-paragraph xmd-cm-paragraph-last',
       },
     ])
+  })
+
+  it('renders GitHub-style quote alerts as labelled callouts without exposing the marker', () => {
+    const doc = '> [!WARNING]\n> Read this first.'
+    const seen = decorations(createState(doc), 0, doc.length)
+    expect(seen.some((item) => item.className === 'xmd-cm-callout xmd-cm-callout-warning')).toBe(
+      true,
+    )
+    const markerStart = doc.indexOf('[!WARNING]')
+    expect(
+      seen.some(
+        (item) => item.replacement && item.from === markerStart && item.to === markerStart + 10,
+      ),
+    ).toBe(true)
   })
 
   it('renders only Lezer HorizontalRule nodes as thematic breaks', () => {
@@ -453,10 +600,10 @@ describe('CM6 Markdown live preview', () => {
     expect(edit).toBeNull()
   })
 
-  it('reuses an existing empty source line instead of inserting another one', () => {
+  it('does not place the caret in a structural source delimiter', () => {
     const state = createState('## TypeScript\n\n```ts\ncode\n```', 13)
 
-    expect(visualGapEdit(state, state.doc.line(1).to)).toEqual({ anchor: state.doc.line(2).from })
+    expect(visualGapEdit(state, state.doc.line(1).to)).toBeNull()
   })
 
   it('uses GFM nodes for strikethrough and task list preview', () => {

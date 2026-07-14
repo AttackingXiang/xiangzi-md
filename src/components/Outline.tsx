@@ -36,7 +36,7 @@ const Outline = memo(function Outline({
     if (readOnly) dragCleanupRef.current?.()
   }, [readOnly])
 
-  const startDrag = (event: React.PointerEvent<HTMLDivElement>, fromIndex: number): void => {
+  const startDrag = (event: React.PointerEvent<HTMLElement>, fromIndex: number): void => {
     if (readOnly || event.button !== 0) return
     dragCleanupRef.current?.()
     const startX = event.clientX
@@ -112,7 +112,6 @@ const Outline = memo(function Outline({
               className={`outline-item${dropTarget === i ? ' drop-target' : ''}`}
               data-outline-index={i}
               style={{ paddingLeft: `${(it.level - 1) * 10 + 4}px` }}
-              onPointerDown={readOnly ? undefined : (event) => startDrag(event, i)}
               onClick={() => {
                 if (suppressClickRef.current) {
                   suppressClickRef.current = false
@@ -123,7 +122,14 @@ const Outline = memo(function Outline({
               title={it.text}
             >
               {!readOnly && (
-                <span className="outline-drag-handle" aria-hidden>
+                <span
+                  className="outline-drag-handle"
+                  aria-hidden
+                  onPointerDown={(event) => {
+                    event.stopPropagation()
+                    startDrag(event, i)
+                  }}
+                >
                   ⠿
                 </span>
               )}

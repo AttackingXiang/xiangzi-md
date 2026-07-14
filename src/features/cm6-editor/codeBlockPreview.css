@@ -3,7 +3,8 @@
 .xmd-cm-editor .cm-line.xmd-cm-code-fence-line {
   height: 0;
   line-height: 0;
-  min-height: 0;
+  /* Do not collapse an empty final code line. CM6's normal line box is the
+     caret target between the opening and closing hidden fences. */
   overflow: visible;
   padding: 0;
 }
