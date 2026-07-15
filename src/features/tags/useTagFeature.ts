@@ -3,7 +3,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo } from 'react'
 import { desktop } from '../../platform'
 import { t } from '../../lib/i18n'
 import { baseName } from '../../lib/path'
-import type { MenuItem } from '../../components/ContextMenu'
+import type { ContextMenuState, MenuItem } from '../../components/ContextMenu'
 import type { Folder, Tab } from '../../types'
 import type { AppSettings } from '../../platform/contracts'
 import type { useFileOps } from '../../hooks/useFileOps'
@@ -26,13 +26,6 @@ import {
   setFrontmatterProperties,
   type DocumentProperty,
 } from './properties'
-
-type CtxMenuState = {
-  x: number
-  y: number
-  items: MenuItem[]
-  preserveSelection?: boolean
-} | null
 
 type InputDialogState = {
   title: string
@@ -58,7 +51,7 @@ export interface UseTagFeatureDeps {
   setSidebarVisible: Dispatch<SetStateAction<boolean>>
   setSearchView: Dispatch<SetStateAction<boolean>>
   setInputDialog: Dispatch<SetStateAction<InputDialogState>>
-  setCtxMenu: Dispatch<SetStateAction<CtxMenuState>>
+  setCtxMenu: Dispatch<SetStateAction<ContextMenuState>>
 }
 
 /**

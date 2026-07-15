@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { t } from '../lib/i18n'
+import { useFloatingPanelPosition } from '../hooks/useFloatingPanelPosition'
 
 const MAX = 8
 
@@ -13,20 +14,7 @@ interface Props {
 export default function TableGridPicker({ x, y, onInsert, onClose }: Props): JSX.Element {
   const panelRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState({ r: 0, c: 0 })
-
-  // Position: clamp so panel doesn't overflow viewport
-  const [style, setStyle] = useState<React.CSSProperties>({ left: x, top: y, visibility: 'hidden' })
-  useEffect(() => {
-    const el = panelRef.current
-    if (!el) return
-    const w = el.offsetWidth
-    const h = el.offsetHeight
-    setStyle({
-      left: Math.min(x, window.innerWidth - w - 8),
-      top: Math.min(y, window.innerHeight - h - 8),
-      visibility: 'visible',
-    })
-  }, [x, y])
+  const style = useFloatingPanelPosition(panelRef, x, y)
 
   // Close on outside click
   useEffect(() => {

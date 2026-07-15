@@ -3,7 +3,11 @@ import { EditorView } from '@codemirror/view'
 import { cm6ActiveViewBridge } from './activeViewBridge'
 import { applyChangeSetToString } from './applyChangeSet'
 import { createBaseExtensions, defaultCm6Theme } from './extensions'
-import { createExternalSyncTransaction, isExternalDocumentSync } from './sync'
+import {
+  createExternalSyncTransaction,
+  isExternalDocumentSync,
+  normalizeEditorDocument,
+} from './sync'
 import type { Cm6EditorController, Cm6EditorOptions } from './types'
 
 function editableExtension(readOnly: boolean): Extension {
@@ -24,10 +28,10 @@ export function createCm6Editor(options: Cm6EditorOptions): Cm6EditorController 
   let destroyed = false
   // This is the authoritative serialized document. Local transactions update
   // it incrementally so the input hot path never calls state.doc.toString().
-  let mirror = options.value
+  let mirror = normalizeEditorDocument(options.value)
 
   const state = EditorState.create({
-    doc: options.value,
+    doc: mirror,
     extensions: [
       createBaseExtensions(),
       editable.of(editableExtension(options.readOnly ?? false)),
@@ -60,12 +64,13 @@ export function createCm6Editor(options: Cm6EditorOptions): Cm6EditorController 
     },
     setValue: (value) => {
       if (destroyed) return
-      const transaction = createExternalSyncTransaction(view.state, value, mirror)
+      const normalizedValue = normalizeEditorDocument(value)
+      const transaction = createExternalSyncTransaction(view.state, normalizedValue, mirror)
       if (transaction) {
         // EditorView.dispatch is synchronous: the listener applies the external
         // ChangeSet to the old mirror before this assignment confirms the value.
         view.dispatch(transaction)
-        mirror = value
+        mirror = normalizedValue
       }
     },
     setReadOnly: (readOnly) => reconfigure(editable.reconfigure(editableExtension(readOnly))),

@@ -24,22 +24,15 @@ import {
   Table2,
   TextSelect,
 } from 'lucide-react'
-import type { MenuItem } from '../components/ContextMenu'
+import type { ContextMenuState, MenuItem } from '../components/ContextMenu'
 import { clipboardCmd, editorCmd, getSelectedHeadingLevel, hasWysiwyg } from '../lib/editorCommands'
 import { t } from '../lib/i18n'
 import { copyImageElement } from '../lib/richClipboard'
 import { tablePickerBridge } from '../lib/tablePickerBridge'
 
-type ContextMenuState = {
-  x: number
-  y: number
-  items: MenuItem[]
-  preserveSelection?: boolean
-} | null
-
 export function useEditorContextMenu(
   setCtxMenu: Dispatch<SetStateAction<ContextMenuState>>,
-): (x: number, y: number, image?: HTMLImageElement, inTable?: boolean) => void {
+): (x: number, y: number, image?: HTMLImageElement) => void {
   const openEditorContext = useCallback(
     (x: number, y: number, image?: HTMLImageElement) => {
       const sz = 15

@@ -10,6 +10,11 @@ export interface ContiguousDocumentChange {
   insert: string
 }
 
+/** Matches CodeMirror's internal document model, which stores every line break as LF. */
+export function normalizeEditorDocument(value: string): string {
+  return value.replace(/\r\n?/g, '\n')
+}
+
 function previousCodePointStart(value: string, end: number): number {
   if (end >= 2) {
     const low = value.charCodeAt(end - 1)
@@ -50,12 +55,14 @@ export function createExternalSyncTransaction(
   value: string,
   currentValue = state.doc.toString(),
 ): TransactionSpec | null {
-  if (currentValue.length !== state.doc.length) {
+  const normalizedCurrentValue = normalizeEditorDocument(currentValue)
+  const normalizedValue = normalizeEditorDocument(value)
+  if (normalizedCurrentValue.length !== state.doc.length) {
     throw new RangeError(
-      `CM6 external sync length mismatch: mirror=${currentValue.length}, doc=${state.doc.length}`,
+      `CM6 external sync length mismatch: mirror=${normalizedCurrentValue.length}, doc=${state.doc.length}`,
     )
   }
-  const change = planExternalDocumentChange(currentValue, value)
+  const change = planExternalDocumentChange(normalizedCurrentValue, normalizedValue)
   if (!change) return null
   return {
     changes: change,

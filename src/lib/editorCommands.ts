@@ -1,5 +1,5 @@
 import { EditorSelection, type EditorState } from '@codemirror/state'
-import { syntaxTree } from '@codemirror/language'
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import { activeCm6Commands } from '../features/cm6-editor/commands'
 import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
 import { computeCm6ToolbarState } from '../features/cm6-editor/toolbarState'
@@ -125,7 +125,13 @@ export function selectAllScope(state: EditorState): {
 } {
   if (state.readOnly) return { from: 0, to: state.doc.length }
   const range = state.selection.main
-  const tree = syntaxTree(state)
+  // Markdown parsing is scheduled in the background. Under a busy editor (and
+  // in the parallel test suite) syntaxTree() can still be the initial partial
+  // tree, which made Cmd/Ctrl+A intermittently select the whole document while
+  // the caret was inside a fenced block. Ensure parsing has reached the caret
+  // before resolving its ancestors; keep the existing tree as a safe fallback.
+  const tree =
+    ensureSyntaxTree(state, Math.min(state.doc.length, range.head + 1), 100) ?? syntaxTree(state)
   let node: ReturnType<typeof syntaxTree>['topNode'] | null = tree.resolveInner(range.head, -1)
   while (node && node.name !== 'FencedCode') node = node.parent
   if (!node) return { from: 0, to: state.doc.length }

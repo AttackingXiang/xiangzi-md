@@ -53,6 +53,84 @@ const INLINE_CLASSES: Readonly<Record<string, string>> = {
   InlineCode: 'xmd-cm-inline-code',
 }
 
+interface InlineHtmlOpeningTag {
+  from: number
+  to: number
+  name: 'font' | 'b' | 'strong'
+  color?: string
+}
+
+interface InlineHtmlSpan extends InlineHtmlOpeningTag {
+  closeFrom: number
+  closeTo: number
+}
+
+/** Only values that cannot escape a single CSS color declaration are accepted. */
+function safeInlineHtmlColor(value: string): string | null {
+  const color = value.trim()
+  if (/^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(color)) return color
+  if (/^[a-z]+$/i.test(color)) return color
+  return null
+}
+
+function parseInlineHtmlTag(
+  source: string,
+): { closing: boolean; name: InlineHtmlOpeningTag['name']; color?: string } | null {
+  const closing = /^<\s*\/\s*(font|b|strong)\s*>$/i.exec(source)
+  if (closing) {
+    return {
+      closing: true,
+      name: closing[1].toLowerCase() as InlineHtmlOpeningTag['name'],
+    }
+  }
+
+  const opening = /^<\s*(font|b|strong)\b([^>]*)>$/i.exec(source)
+  if (!opening || /\/\s*>$/.test(source)) return null
+  const name = opening[1].toLowerCase() as InlineHtmlOpeningTag['name']
+  if (name !== 'font') return { closing: false, name }
+
+  const colorAttribute = /\bcolor\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(opening[2])
+  const color = safeInlineHtmlColor(
+    colorAttribute?.[1] ?? colorAttribute?.[2] ?? colorAttribute?.[3] ?? '',
+  )
+  return color ? { closing: false, name, color } : null
+}
+
+function inlineHtmlSpans(state: EditorState, visible: PreviewRange): InlineHtmlSpan[] {
+  const spans: InlineHtmlSpan[] = []
+  const stack: InlineHtmlOpeningTag[] = []
+  // Hidden-boundary key commands query only one character around the caret.
+  // Expand that probe to complete physical lines so an opening/closing tag
+  // pair remains discoverable by the same parser used for viewport painting.
+  const scanFrom = state.doc.lineAt(visible.from).from
+  const scanTo = state.doc.lineAt(visible.to).to
+
+  syntaxTree(state).iterate({
+    from: scanFrom,
+    to: scanTo,
+    enter(node) {
+      if (node.name === 'FencedCode' || node.name === 'Table' || node.name === 'Image') return false
+      if (node.name !== 'HTMLTag') return
+
+      const tag = parseInlineHtmlTag(state.doc.sliceString(node.from, node.to))
+      if (!tag) return
+      if (!tag.closing) {
+        stack.push({ from: node.from, to: node.to, name: tag.name, color: tag.color })
+        return
+      }
+
+      let openingIndex = stack.length - 1
+      while (openingIndex >= 0 && stack[openingIndex]?.name !== tag.name) openingIndex -= 1
+      if (openingIndex < 0) return
+      const [opening] = stack.splice(openingIndex)
+      if (!opening) return
+      spans.push({ ...opening, closeFrom: node.from, closeTo: node.to })
+    },
+  })
+
+  return spans
+}
+
 /**
  * Builds decorations only for the supplied viewport ranges. This function is
  * exported separately so range/selection behaviour can be unit tested without
@@ -131,10 +209,14 @@ export function buildLivePreviewDecorations(
             const indentation = prefix.indentation.replace(/\t/g, '  ').length
             const depth = Math.max(0, Math.floor(indentation / 2))
             const label = prefix.task ? '' : /^\d/.test(prefix.marker) ? prefix.marker : '•'
+            const hangingIndent = Number((depth * 1.35 + (prefix.task ? 1.36 : 1.75)).toFixed(2))
             ranges.push(
-              Decoration.line({ class: 'xmd-cm-list-line' }).range(
-                state.doc.lineAt(node.from).from,
-              ),
+              Decoration.line({
+                class: 'xmd-cm-list-line',
+                attributes: {
+                  style: `--xmd-list-depth:${depth};--xmd-list-hang:${hangingIndent}em`,
+                },
+              }).range(state.doc.lineAt(node.from).from),
               Decoration.replace({
                 widget: new ListMarkerWidget(label, depth, prefix.task),
               }).range(prefix.from, prefix.to),
@@ -231,6 +313,19 @@ export function buildLivePreviewDecorations(
           class: 'xmd-cm-blockquote',
           attributes: { style: `--xmd-quote-depth:${Math.max(1, depth)}` },
         }).range(lineFrom),
+      )
+    }
+    for (const span of inlineHtmlSpans(state, visible)) {
+      if (span.closeFrom <= span.to) continue
+      ranges.push(
+        Decoration.mark(
+          span.name === 'font'
+            ? {
+                class: 'xmd-cm-inline-color',
+                attributes: { style: `color:${span.color ?? ''}` },
+              }
+            : { class: 'xmd-cm-strong' },
+        ).range(span.to, span.closeFrom),
       )
     }
   }
@@ -331,6 +426,12 @@ function collectHiddenRanges(
         }
       },
     })
+    for (const span of inlineHtmlSpans(state, visible)) {
+      hidden.push(
+        { from: span.from, to: span.to, paint: true },
+        { from: span.closeFrom, to: span.closeTo, paint: true },
+      )
+    }
     const firstLine = state.doc.lineAt(visible.from)
     const lastLine = state.doc.lineAt(visible.to)
     for (let lineNumber = firstLine.number; lineNumber <= lastLine.number; lineNumber += 1) {

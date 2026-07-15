@@ -7,6 +7,7 @@
      caret target between the opening and closing hidden fences. */
   overflow: visible;
   padding: 0;
+  position: relative;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line {
@@ -70,20 +71,11 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line-first .xmd-cm-code-line-content {
-  /* Inactive blocks have no invisible control gutter: code uses the full row. */
+  /* Keep text geometry stable while controls appear/disappear. The trailing
+     scrollable space lets a long first line move fully past the overlay
+     without changing the editable element's width after selection changes. */
+  padding-inline-end: 176px;
   width: 100%;
-}
-
-.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-block-active .xmd-cm-code-line-content {
-  /* Once the caret enters this block, reserve exactly the mounted controls'
-     width so the language and copy actions never paint over code. */
-  width: calc(100% - var(--xmd-code-controls-width, 112px));
-}
-
-.xmd-cm-editor
-  .cm-line.xmd-cm-code-line-first:has(.xmd-cm-code-preview-language:focus)
-  .xmd-cm-code-line-content {
-  width: calc(100% - 176px);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line-last {
@@ -105,7 +97,6 @@
 }
 
 .xmd-cm-code-scrollbar {
-  bottom: 3px;
   border-radius: 999px;
   display: block;
   height: 5px;
@@ -113,6 +104,7 @@
   opacity: 0;
   pointer-events: none;
   position: absolute;
+  top: var(--xmd-code-scrollbar-top, 0);
   transition: opacity 120ms ease;
 }
 
@@ -200,7 +192,7 @@
 }
 
 .xmd-cm-editor
-  .cm-line.xmd-cm-code-line-first.xmd-cm-code-block-active
+  .cm-line.xmd-cm-code-fence-line.xmd-cm-code-block-active
   .xmd-cm-code-preview-language,
 .xmd-cm-code-preview-header:focus-within .xmd-cm-code-preview-language,
 .xmd-cm-code-preview-language:focus-visible {
@@ -278,7 +270,7 @@
   width: 22px;
 }
 
-.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-block-active .xmd-cm-code-preview-copy,
+.xmd-cm-editor .cm-line.xmd-cm-code-fence-line.xmd-cm-code-block-active .xmd-cm-code-preview-copy,
 .xmd-cm-code-preview-header:focus-within .xmd-cm-code-preview-copy,
 .xmd-cm-code-preview-copy:focus-visible {
   opacity: 0.78;

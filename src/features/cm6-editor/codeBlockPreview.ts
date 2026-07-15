@@ -14,6 +14,7 @@ import {
   WidgetType,
   keymap,
   type DecorationSet,
+  type KeyBinding,
   type ViewUpdate,
 } from '@codemirror/view'
 import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
@@ -336,42 +337,97 @@ class CodeBlockScrollbarWidget extends WidgetType {
 }
 
 interface MountedCodeBlock {
+  fence: HTMLElement | null
   lines: HTMLElement[]
   contents: HTMLElement[]
   scrollbar: HTMLElement | null
 }
 
-interface CodeScrollMeasure extends Omit<MountedCodeBlock, 'scrollbar'> {
+interface CodeScrollMeasure extends Omit<MountedCodeBlock, 'fence' | 'scrollbar'> {
+  fence: HTMLElement
   scrollbar: HTMLElement
+  cursor: HTMLElement | null
+  cursorTranslateX: number | null
   contentWidth: number
   scrollLeft: number
+  revealScrollLeft: number | null
   overflow: boolean
   active: boolean
-  controlsWidth: number
+  scrollbarTop: number
 }
 
-function mountedCodeBlockAt(line: HTMLElement): MountedCodeBlock {
-  let first = line
+/** Code-block overlays are mounted on the collapsed opening fence instead of
+ * an editable body position. Keeping contenteditable=false widgets out of a
+ * code row is essential: at an empty line or line end they otherwise become
+ * part of the browser's caret coordinate range and push the painted caret to
+ * the right edge or onto a phantom next line. */
+function mountedCodeBlockAt(element: HTMLElement): MountedCodeBlock {
+  let first = element.closest<HTMLElement>('.cm-line.xmd-cm-code-line')
   while (
-    first.previousElementSibling instanceof HTMLElement &&
+    first?.previousElementSibling instanceof HTMLElement &&
     first.previousElementSibling.classList.contains('xmd-cm-code-line')
   ) {
     first = first.previousElementSibling
   }
-
+  const fence =
+    element.closest<HTMLElement>('.cm-line.xmd-cm-code-fence-line') ??
+    (first?.previousElementSibling instanceof HTMLElement &&
+    first.previousElementSibling.classList.contains('xmd-cm-code-fence-line')
+      ? first.previousElementSibling
+      : null)
   const lines: HTMLElement[] = []
-  let current: Element | null = first
+  let current: Element | null = first ?? fence?.nextElementSibling ?? null
   while (current instanceof HTMLElement && current.classList.contains('xmd-cm-code-line')) {
     lines.push(current)
     current = current.nextElementSibling
   }
-
   return {
+    fence,
     lines,
     contents: lines.flatMap((item) =>
       Array.from(item.querySelectorAll<HTMLElement>('.xmd-cm-code-line-content')),
     ),
-    scrollbar: lines.at(-1)?.querySelector<HTMLElement>('.xmd-cm-code-scrollbar') ?? null,
+    scrollbar: fence?.querySelector<HTMLElement>('.xmd-cm-code-scrollbar') ?? null,
+  }
+}
+
+function textDescendants(node: Node, result: Text[] = []): Text[] {
+  if (node instanceof Text && node.data.length > 0) result.push(node)
+  for (const child of Array.from(node.childNodes)) {
+    textDescendants(child, result)
+  }
+  return result
+}
+
+/** Return the rendered inline coordinate of a document position from the
+ * actual text range. Mapping by source-line offset avoids endpoint ambiguity
+ * from inclusive marks and syntax-highlighting spans. */
+function codeContentCaretX(content: HTMLElement, lineOffset: number): number | null {
+  const textNodes = textDescendants(content)
+  if (textNodes.length === 0) return null
+  let remaining = Math.max(0, lineOffset)
+  const range = document.createRange()
+  try {
+    for (const text of textNodes) {
+      if (remaining === 0) {
+        range.setStart(text, 0)
+        range.setEnd(text, 1)
+        return range.getBoundingClientRect().left
+      }
+      if (remaining <= text.data.length) {
+        range.setStart(text, remaining - 1)
+        range.setEnd(text, remaining)
+        return range.getBoundingClientRect().right
+      }
+      remaining -= text.data.length
+    }
+    const lastText = textNodes[textNodes.length - 1]
+    if (!lastText) return null
+    range.setStart(lastText, lastText.data.length - 1)
+    range.setEnd(lastText, lastText.data.length)
+    return range.getBoundingClientRect().right
+  } catch {
+    return null
   }
 }
 
@@ -409,6 +465,7 @@ class CodeBlockScrollPlugin {
     this.view.contentDOM.removeEventListener('pointerdown', this.onPointerDown)
     this.view.contentDOM.removeEventListener('keydown', this.onKeyDown)
     this.view.dom.classList.remove('xmd-cm-native-code-selection')
+    this.clearCursorTranslation()
     this.stopDragging()
   }
 
@@ -424,6 +481,14 @@ class CodeBlockScrollPlugin {
       'xmd-cm-native-code-selection',
       selectionIntersectsFencedCode(state),
     )
+  }
+
+  private clearCursorTranslation(except: HTMLElement | null = null): void {
+    for (const cursor of this.view.dom.querySelectorAll<HTMLElement>('.cm-cursor')) {
+      if (cursor === except) continue
+      cursor.style.removeProperty('transform')
+      delete cursor.dataset.xmdCodeCursorTranslateX
+    }
   }
 
   private syncFrom(source: HTMLElement): void {
@@ -536,10 +601,9 @@ class CodeBlockScrollPlugin {
   }
 
   private setBlockScroll(scrollbar: HTMLElement, next: number): void {
-    const line = scrollbar.closest<HTMLElement>('.cm-line.xmd-cm-code-line')
-    if (!line) return
     const scrollLeft = Math.min(this.maxScroll(scrollbar), Math.max(0, next))
-    const block = mountedCodeBlockAt(line)
+    const block = mountedCodeBlockAt(scrollbar)
+    if (block.lines.length === 0) return
     this.syncing = true
     for (const content of block.contents) content.scrollLeft = scrollLeft
     this.syncing = false
@@ -568,10 +632,13 @@ class CodeBlockScrollPlugin {
         for (const scrollbar of view.contentDOM.querySelectorAll<HTMLElement>(
           '.xmd-cm-code-scrollbar',
         )) {
-          const line = scrollbar.closest<HTMLElement>('.cm-line.xmd-cm-code-line')
-          if (!line) continue
-          const block = mountedCodeBlockAt(line)
-          const controls = block.lines[0]?.querySelector<HTMLElement>('.xmd-cm-code-preview-header')
+          const block = mountedCodeBlockAt(scrollbar)
+          const fence = block.fence
+          if (!fence) continue
+          const lastLine = block.lines.at(-1)
+          if (!lastLine) continue
+          const fenceRect = fence.getBoundingClientRect()
+          const lastLineRect = lastLine.getBoundingClientRect()
           const contentWidth = Math.max(
             scrollbar.clientWidth,
             ...block.contents.map(
@@ -579,39 +646,106 @@ class CodeBlockScrollPlugin {
                 content.scrollWidth + Math.max(0, scrollbar.clientWidth - content.clientWidth),
             ),
           )
+          let revealScrollLeft: number | null = null
+          let cursor: HTMLElement | null = null
+          let cursorTranslateX: number | null = null
+          if (Number(scrollbar.dataset.blockFrom) === activeBlockFrom) {
+            const activeLine = block.lines.find((item) => item.classList.contains('cm-activeLine'))
+            const activeContent = activeLine?.querySelector<HTMLElement>(
+              '.xmd-cm-code-line-content',
+            )
+            const head = view.state.selection.main.head
+            const lineOffset = head - view.state.doc.lineAt(head).from
+            const caretX = activeContent ? codeContentCaretX(activeContent, lineOffset) : null
+            if (activeLine && activeContent && caretX !== null) {
+              const contentRect = activeContent.getBoundingClientRect()
+              const leftEdge = contentRect.left + 8
+              // Controls overlay the first row only. Keep the insertion point
+              // clear of them while preserving one stable editable width.
+              const controlsGutter = activeLine === block.lines[0] ? 176 : 0
+              const rightEdge = contentRect.right - controlsGutter - 8
+              let next = activeContent.scrollLeft
+              if (caretX < leftEdge) next -= leftEdge - caretX
+              else if (caretX > rightEdge) next += caretX - rightEdge
+              revealScrollLeft = next
+
+              const maxScroll = Math.max(0, contentWidth - scrollbar.clientWidth)
+              const nextScrollLeft = Math.min(maxScroll, Math.max(0, next))
+              // CM6's own cursor is exact until the nested code scroller has
+              // actually moved. Only compensate that scrolled case; applying
+              // a transform on an ordinary short line races CM6's next cursor
+              // paint and produces a one-character overshoot.
+              const cursorCandidate = view.dom.querySelector<HTMLElement>('.cm-cursor-primary')
+              const existingTranslateX =
+                Number.parseFloat(cursorCandidate?.dataset.xmdCodeCursorTranslateX ?? '0') || 0
+              cursor =
+                nextScrollLeft > 0.5 ||
+                activeContent.scrollLeft > 0.5 ||
+                Math.abs(existingTranslateX) > 0.5
+                  ? cursorCandidate
+                  : null
+              if (cursor) {
+                const desiredCursorX = caretX - (nextScrollLeft - activeContent.scrollLeft)
+                cursorTranslateX =
+                  existingTranslateX + desiredCursorX - cursor.getBoundingClientRect().left
+              }
+            }
+          }
           measures.push({
             ...block,
+            fence,
             scrollbar,
+            cursor,
+            cursorTranslateX,
             contentWidth,
             scrollLeft: block.contents[0]?.scrollLeft ?? 0,
+            revealScrollLeft,
             overflow: contentWidth > scrollbar.clientWidth + 1,
             active: Number(scrollbar.dataset.blockFrom) === activeBlockFrom,
-            controlsWidth: Math.ceil((controls?.getBoundingClientRect().width ?? 98) + 14),
+            scrollbarTop: Math.max(0, lastLineRect.bottom - fenceRect.top - 8),
           })
         }
         return measures
       },
       write: (measures) => {
-        let activeLayoutChanged = false
+        let adjustedCursor: HTMLElement | null = null
+        let geometryChanged = false
         for (const measure of measures) {
           const visible = measure.overflow && measure.active
           const maxScroll = Math.max(0, measure.contentWidth - measure.scrollbar.clientWidth)
-          const firstLine = measure.lines[0]
-          if (firstLine) {
-            const wasActive = firstLine.classList.contains('xmd-cm-code-block-active')
-            firstLine.classList.toggle('xmd-cm-code-block-active', measure.active)
-            firstLine.style.setProperty('--xmd-code-controls-width', `${measure.controlsWidth}px`)
-            activeLayoutChanged ||= wasActive !== measure.active
-          }
+          const scrollLeft = Math.min(
+            maxScroll,
+            Math.max(0, measure.revealScrollLeft ?? measure.scrollLeft),
+          )
+          measure.fence.classList.toggle('xmd-cm-code-block-active', measure.active)
+          measure.scrollbar.style.setProperty(
+            '--xmd-code-scrollbar-top',
+            `${measure.scrollbarTop}px`,
+          )
           measure.scrollbar.dataset.maxScroll = String(maxScroll)
           measure.scrollbar.classList.toggle('is-overflowing', measure.overflow)
           measure.scrollbar.classList.toggle('is-active', measure.active)
           measure.scrollbar.tabIndex = visible ? 0 : -1
           measure.scrollbar.setAttribute('aria-hidden', visible ? 'false' : 'true')
           measure.scrollbar.setAttribute('aria-valuemax', String(Math.round(maxScroll)))
-          this.updateThumb(measure.scrollbar, measure.scrollLeft)
+          if (scrollLeft !== measure.scrollLeft) {
+            this.syncing = true
+            for (const content of measure.contents) content.scrollLeft = scrollLeft
+            this.syncing = false
+            geometryChanged = true
+          }
+          if (measure.cursor && measure.cursorTranslateX !== null) {
+            const previousTranslateX =
+              Number.parseFloat(measure.cursor.dataset.xmdCodeCursorTranslateX ?? '0') || 0
+            measure.cursor.style.transform = `translateX(${measure.cursorTranslateX}px)`
+            measure.cursor.dataset.xmdCodeCursorTranslateX = String(measure.cursorTranslateX)
+            adjustedCursor = measure.cursor
+            geometryChanged ||= Math.abs(previousTranslateX - measure.cursorTranslateX) > 0.5
+          }
+          this.updateThumb(measure.scrollbar, scrollLeft)
         }
-        if (activeLayoutChanged) {
+        this.clearCursorTranslation(adjustedCursor)
+        if (geometryChanged) {
           cancelAnimationFrame(this.frame)
           this.frame = requestAnimationFrame(() => this.schedule())
         }
@@ -623,34 +757,51 @@ class CodeBlockScrollPlugin {
 const codeBlockScrolling = ViewPlugin.fromClass(CodeBlockScrollPlugin)
 
 export function readFencedCode(state: EditorState, from: number, to: number): FencedCodeData {
-  const opening = state.doc.lineAt(from)
-  const openingMatch = /^( {0,3})(`{3,}|~{3,})/.exec(opening.text)
-  const marker = openingMatch?.[2] ?? '```'
-  const possibleClosing = state.doc.lineAt(Math.max(from, to - 1))
-  const closingPattern = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*$`)
-  const closing =
-    possibleClosing.from !== opening.from && closingPattern.test(possibleClosing.text)
-      ? possibleClosing
-      : null
+  let targetFenceFrom: number | null = null
+  let openingMarkFrom: number | null = null
+  let openingMarkTo: number | null = null
+  let closingMarkFrom: number | null = null
   let language = ''
-  let languageFrom = Math.min(opening.to, opening.from + (openingMatch?.[0].length ?? 3))
-  let languageTo = languageFrom
-  // The body range is structural: everything between the two fence lines.
-  // CodeText nodes deliberately omit some blank lines and may be split by the
-  // language parser, so they must not be used as the editable/copy range.
-  const codeFrom = Math.min(state.doc.length, opening.to + 1)
-  const codeTo = Math.max(codeFrom, closing ? closing.from - 1 : to)
+  let languageFrom: number | null = null
+  let languageTo: number | null = null
+
+  // The Markdown parser has already applied container indentation rules.
+  // Read its direct FencedCode children instead of re-parsing physical lines
+  // with a 0–3-space regex: a fence nested under a list legitimately has four
+  // or more leading spaces in the source document.
   syntaxTree(state).iterate({
     from,
     to,
     enter(node) {
+      const parent = node.node.parent
+      if (node.name === 'CodeMark' && parent?.name === 'FencedCode') {
+        targetFenceFrom ??= parent.from
+        if (parent.from !== targetFenceFrom) return
+        if (openingMarkFrom === null) {
+          openingMarkFrom = node.from
+          openingMarkTo = node.to
+        } else if (closingMarkFrom === null) {
+          closingMarkFrom = node.from
+        }
+        return
+      }
       if (node.name === 'CodeInfo') {
+        if (targetFenceFrom !== null && parent?.from !== targetFenceFrom) return
         language = state.doc.sliceString(node.from, node.to).trim().split(/\s+/, 1)[0] ?? ''
         languageFrom = node.from
         languageTo = node.to
       }
     },
   })
+
+  const opening = state.doc.lineAt(openingMarkFrom ?? from)
+  const closing = closingMarkFrom === null ? null : state.doc.lineAt(closingMarkFrom)
+  const fallbackLanguageFrom = Math.min(opening.to, openingMarkTo ?? opening.from + 3)
+  // The body range is structural: everything between the two fence lines.
+  // CodeText nodes deliberately omit some blank lines and may be split by the
+  // language parser, so they must not be used as the editable/copy range.
+  const codeFrom = Math.min(state.doc.length, opening.to + 1)
+  const codeTo = Math.max(codeFrom, closing ? closing.from - 1 : to)
   const firstCodeLineFrom = state.doc.lineAt(codeFrom).from
   // `codeTo` is the structural end boundary of the body, not the position of
   // its final character.  This distinction matters when the body ends in a
@@ -663,8 +814,8 @@ export function readFencedCode(state: EditorState, from: number, to: number): Fe
     from,
     to,
     language,
-    languageFrom,
-    languageTo,
+    languageFrom: languageFrom ?? fallbackLanguageFrom,
+    languageTo: languageTo ?? fallbackLanguageFrom,
     codeFrom,
     codeTo,
     firstCodeLineFrom,
@@ -708,6 +859,50 @@ export function selectionIntersectsFencedCode(state: EditorState): boolean {
     range.from >= data.codeFrom &&
     range.to <= data.codeTo
   )
+}
+
+/** Move to the logical source-line boundary inside fenced code. CM6's default
+ * visual-line Home/End commands treat a nested horizontal scroller's visible
+ * edge as a line boundary, which can leave the cursor hundreds of columns into
+ * a long line. */
+export function fencedCodeLineBoundary(
+  state: EditorState,
+  forward: boolean,
+  extend = false,
+): TransactionSpec | null {
+  if (state.selection.ranges.length !== 1) return null
+  const range = state.selection.main
+  const data = fencedCodeAt(state, range.head)
+  if (
+    !data ||
+    data.language.toLowerCase() === 'mermaid' ||
+    range.head < data.codeFrom ||
+    range.head > data.codeTo
+  )
+    return null
+  const line = state.doc.lineAt(range.head)
+  const head = forward ? line.to : line.from
+  return {
+    selection: { anchor: extend ? range.anchor : head, head },
+    scrollIntoView: true,
+  }
+}
+
+function fencedCodeBoundaryKeybinding(
+  shortcut: Pick<KeyBinding, 'key' | 'mac'>,
+  forward: boolean,
+): KeyBinding {
+  const dispatch = (view: EditorView, extend: boolean): boolean => {
+    const spec = fencedCodeLineBoundary(view.state, forward, extend)
+    if (!spec) return false
+    view.dispatch(spec)
+    return true
+  }
+  return {
+    ...shortcut,
+    run: (view) => dispatch(view, false),
+    shift: (view) => dispatch(view, true),
+  }
 }
 
 /**
@@ -958,7 +1153,10 @@ export function buildCodeBlockPreviewDecorations(
           decorations.push(Decoration.line({ class: classes.join(' ') }).range(line.from))
           if (line.from < line.to) {
             decorations.push(
-              Decoration.mark({ class: 'xmd-cm-code-line-content' }).range(line.from, line.to),
+              Decoration.mark({ class: 'xmd-cm-code-line-content', inclusiveEnd: true }).range(
+                line.from,
+                line.to,
+              ),
             )
           }
           if (line.number >= state.doc.lines) break
@@ -968,14 +1166,14 @@ export function buildCodeBlockPreviewDecorations(
           Decoration.widget({
             widget: new CodeBlockControlsWidget(data, copyLabel, copiedLabel, state.readOnly),
             side: 1,
-          }).range(data.firstCodeLineFrom),
+          }).range(opening.to),
         )
         if (!options.lineWrapping) {
           decorations.push(
             Decoration.widget({
               widget: new CodeBlockScrollbarWidget(data.from),
               side: 1,
-            }).range(data.codeTo),
+            }).range(opening.to),
           )
         }
         return false
@@ -1090,6 +1288,10 @@ export function markdownCodeBlockPreview(options: CodeBlockPreviewOptions = {}):
             return true
           },
         },
+        fencedCodeBoundaryKeybinding({ key: 'Home' }, false),
+        fencedCodeBoundaryKeybinding({ key: 'End' }, true),
+        fencedCodeBoundaryKeybinding({ mac: 'Cmd-ArrowLeft' }, false),
+        fencedCodeBoundaryKeybinding({ mac: 'Cmd-ArrowRight' }, true),
       ]),
     ),
     EditorView.domEventHandlers({

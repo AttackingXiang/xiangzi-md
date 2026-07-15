@@ -157,6 +157,107 @@ describe('CM6 Markdown live preview: reveal-on-selection inline marks', () => {
   })
 })
 
+describe('CM6 Markdown live preview: safe inline HTML formatting', () => {
+  it('renders font color and hides its source tags while the caret is outside', () => {
+    const doc = '<font color="#ff00ff">magenta</font> and plain'
+    const state = createState(doc, doc.indexOf('plain'))
+    const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
+    const openingEnd = doc.indexOf('>') + 1
+    const closingStart = doc.indexOf('</font>')
+
+    expect(seen).toContainEqual(
+      expect.objectContaining({
+        from: openingEnd,
+        to: closingStart,
+        className: 'xmd-cm-inline-color',
+        style: 'color:#ff00ff',
+      }),
+    )
+    expect(hidden).toContainEqual({ from: 0, to: openingEnd })
+    expect(hidden).toContainEqual({ from: closingStart, to: closingStart + 7 })
+  })
+
+  it('keeps font tags out of layout when the caret enters the colored text', () => {
+    const doc = '<font color="#ff0000">notice</font>'
+    const cursor = doc.indexOf('notice') + 2
+    const state = createState(doc, cursor)
+    const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    expect(
+      seen.some(
+        ({ className, style }) => className === 'xmd-cm-inline-color' && style === 'color:#ff0000',
+      ),
+    ).toBe(true)
+    expect(hidden).toContainEqual({ from: 0, to: doc.indexOf('>') + 1 })
+    expect(hidden).toContainEqual({ from: doc.indexOf('</font>'), to: doc.length })
+  })
+
+  it('keeps a complete HTML pair atomic when a delete command probes one tag character', () => {
+    const doc = '- <font color="#ff0000">a long colored list item</font>'
+    const openingProbe = doc.indexOf('font') + 1
+    const closingStart = doc.indexOf('</font>')
+    const openingHidden = hiddenRanges(
+      createState(doc, openingProbe),
+      openingProbe,
+      openingProbe + 1,
+    )
+    const closingProbe = closingStart + 2
+    const closingHidden = hiddenRanges(
+      createState(doc, closingProbe),
+      closingProbe,
+      closingProbe + 1,
+    )
+
+    for (const hidden of [openingHidden, closingHidden]) {
+      expect(hidden).toContainEqual({ from: 2, to: doc.indexOf('>') + 1 })
+      expect(hidden).toContainEqual({ from: closingStart, to: closingStart + 7 })
+    }
+  })
+
+  it('renders nested HTML bold tags inside a colored span', () => {
+    const doc = '<font color=magenta>path/<b>tomcat_version</b>/app</font> plain'
+    const state = createState(doc, doc.indexOf('plain'))
+    const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
+    const boldFrom = doc.indexOf('<b>') + 3
+    const boldTo = doc.indexOf('</b>')
+
+    expect(seen).toContainEqual(
+      expect.objectContaining({
+        from: boldFrom,
+        to: boldTo,
+        className: 'xmd-cm-strong',
+      }),
+    )
+    expect(
+      seen.some(
+        ({ className, style }) => className === 'xmd-cm-inline-color' && style === 'color:magenta',
+      ),
+    ).toBe(true)
+    expect(hidden).toContainEqual({ from: boldFrom - 3, to: boldFrom })
+    expect(hidden).toContainEqual({ from: boldTo, to: boldTo + 4 })
+  })
+
+  it('leaves unsafe, malformed and code-literal tags visible', () => {
+    const doc = [
+      '<font color="red;display:none">unsafe</font>',
+      '<font color="#ff0000">unclosed',
+      '`<font color="#ff0000">code</font>`',
+      '```html',
+      '<font color="#ff0000">block code</font>',
+      '```',
+    ].join('\n')
+    const state = createState(doc, doc.length)
+    const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    expect(seen.some(({ className }) => className === 'xmd-cm-inline-color')).toBe(false)
+    expect(hidden.some(({ from }) => doc.slice(from).startsWith('<font'))).toBe(false)
+  })
+})
+
 describe('CM6 Markdown live preview: paragraphs, callouts and thematic breaks', () => {
   it('renders document paragraphs without applying paragraph layout to lists or quotes', () => {
     const doc = 'first line\ncontinued\n\n- list item\n\n> quoted'
@@ -226,6 +327,12 @@ describe('CM6 Markdown live preview: lists and quotes', () => {
     const replacements = seen.filter((item) => item.replacement)
 
     expect(listLines).toHaveLength(4)
+    expect(listLines.map(({ style }) => style)).toEqual([
+      '--xmd-list-depth:0;--xmd-list-hang:1.75em',
+      '--xmd-list-depth:1;--xmd-list-hang:3.1em',
+      '--xmd-list-depth:0;--xmd-list-hang:1.75em',
+      '--xmd-list-depth:0;--xmd-list-hang:1.36em',
+    ])
     expect(replacements.some(({ from, to }) => from === 0 && to === 2)).toBe(true)
     expect(replacements.some(({ from, to }) => from === 8 && to === 12)).toBe(true)
     expect(replacements.some(({ from, to }) => from === 19 && to === 22)).toBe(true)

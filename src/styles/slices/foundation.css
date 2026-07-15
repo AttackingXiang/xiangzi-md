@@ -405,6 +405,23 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body.is-browser-preview::after {
+  content: '浏览器预览模式';
+  position: fixed;
+  z-index: 10000;
+  top: 8px;
+  right: 12px;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 88%, var(--accent));
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
+}
+
 .app {
   --workspace-surface: color-mix(
     in srgb,

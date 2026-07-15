@@ -6,7 +6,7 @@ import { baseName, dirName } from '../lib/path'
 import { replaceMovedPath } from '../lib/treeDrag'
 import { removeWorkspacePath } from '../lib/workspaceRemoval'
 import type { FileNode, Folder, Tab } from '../types'
-import type { MenuItem } from '../components/ContextMenu'
+import type { ContextMenuState, MenuItem } from '../components/ContextMenu'
 
 export type UndoItem =
   | { type: 'rename'; fromPath: string; toPath: string; toName: string }
@@ -33,7 +33,7 @@ interface Deps {
   /** 路径移动/删除后同步 frecency 语料的钩子（见 recordDocRename/recordDocRemove）。 */
   recordDocRename: (oldPath: string, newPath: string) => void
   recordDocRemove: (path: string) => void
-  setCtxMenu: (menu: { x: number; y: number; items: MenuItem[] } | null) => void
+  setCtxMenu: (menu: ContextMenuState) => void
   setInputDialog: (
     dialog: {
       title: string

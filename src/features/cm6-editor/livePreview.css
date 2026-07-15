@@ -163,7 +163,10 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-list-line {
+  --xmd-list-hang: 1.75em;
   line-height: 1.6;
+  padding-inline-start: calc(var(--xmd-quote-depth, 0) * 1em + var(--xmd-list-hang));
+  text-indent: calc(0px - var(--xmd-list-hang));
 }
 
 .xmd-cm-list-marker {

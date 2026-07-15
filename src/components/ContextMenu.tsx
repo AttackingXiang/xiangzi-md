@@ -1,4 +1,5 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { useFloatingPanelPosition } from '../hooks/useFloatingPanelPosition'
 
 export interface MenuItem {
   label: string
@@ -10,8 +11,6 @@ export interface MenuItem {
   separatorBefore?: boolean
   /** 相邻且同组的项目显示为一行紧凑按钮。 */
   compactGroup?: string
-  /** 自定义渲染，提供时忽略 label/icon/onClick，由调用方负责调用 close() 关闭菜单。 */
-  render?: (close: () => void) => ReactNode
 }
 
 interface MenuLayoutEntry {
@@ -37,13 +36,18 @@ function layoutItems(items: MenuItem[]): MenuLayoutEntry[] {
   return result
 }
 
-interface Props {
+export interface ContextMenuData {
   x: number
   y: number
   items: MenuItem[]
-  onClose: () => void
   /** 保留触发元素（如编辑器）的选区，供复制/剪切使用 */
   preserveSelection?: boolean
+}
+
+export type ContextMenuState = ContextMenuData | null
+
+interface Props extends ContextMenuData {
+  onClose: () => void
 }
 
 export default function ContextMenu({
@@ -53,6 +57,9 @@ export default function ContextMenu({
   onClose,
   preserveSelection,
 }: Props): JSX.Element {
+  const menuRef = useRef<HTMLDivElement>(null)
+  const style = useFloatingPanelPosition(menuRef, x, y, 0.8)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
@@ -62,11 +69,6 @@ export default function ContextMenu({
   }, [onClose])
 
   const entries = layoutItems(items)
-  const estHeight = entries.length * 34 + 12
-  const style: React.CSSProperties = {
-    left: Math.min(x, window.innerWidth - 220),
-    top: Math.min(y, window.innerHeight - estHeight - 8),
-  }
 
   // 保留编辑器选区：阻止菜单上的 mousedown 夺走焦点/清除选区
   const guard = preserveSelection ? (e: React.MouseEvent): void => e.preventDefault() : undefined
@@ -82,6 +84,7 @@ export default function ContextMenu({
       onMouseDown={guard}
     >
       <div
+        ref={menuRef}
         className="ctx-menu"
         style={style}
         onClick={(e) => e.stopPropagation()}
@@ -118,14 +121,6 @@ export default function ContextMenu({
 
           const item = entry.items[0]
           if (!item) return null
-          if (item.render) {
-            return (
-              <div key={`${entry.key}-${entryIndex}`}>
-                {separator && <div className="ctx-sep" />}
-                {item.render(onClose)}
-              </div>
-            )
-          }
           return (
             <div key={`${entry.key}-${entryIndex}`}>
               {separator && <div className="ctx-sep" />}

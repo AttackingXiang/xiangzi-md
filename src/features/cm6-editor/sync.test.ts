@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createExternalSyncTransaction,
   isExternalDocumentSync,
+  normalizeEditorDocument,
   planExternalDocumentChange,
 } from './sync'
 
@@ -21,6 +22,24 @@ describe('CM6 external document synchronization', () => {
     expect(transaction.newDoc.toString()).toBe('new content')
     expect(isExternalDocumentSync(transaction)).toBe(true)
     expect(undoDepth(transaction.state)).toBe(0)
+  })
+
+  it('normalizes Windows and legacy Mac line endings to the editor line model', () => {
+    expect(normalizeEditorDocument('one\r\ntwo\rthree')).toBe('one\ntwo\nthree')
+  })
+
+  it('opens and externally updates CRLF documents without a mirror mismatch', () => {
+    const initialValue = 'heading\r\n\r\n```sh\r\necho old\r\n```\r\n'
+    const state = EditorState.create({ doc: initialValue })
+    const spec = createExternalSyncTransaction(
+      state,
+      'heading\r\n\r\n```sh\r\necho new\r\n```\r\n',
+      initialValue,
+    )
+    const transaction = state.update(spec!)
+
+    expect(transaction.newDoc.toString()).toBe('heading\n\n```sh\necho new\n```\n')
+    expect(isExternalDocumentSync(transaction)).toBe(true)
   })
 
   it('plans the smallest contiguous change without splitting Unicode code points', () => {

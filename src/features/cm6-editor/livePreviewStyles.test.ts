@@ -13,4 +13,13 @@ describe('CM6 live preview styles', () => {
     expect(widget).toContain('width: 100%')
     expect(widget).not.toContain('max-width')
   })
+
+  it('uses a hanging indent so wrapped list content stays aligned with its first line', () => {
+    const css = readFileSync(new URL('./livePreview.css', import.meta.url), 'utf8')
+    const listLine = css.match(/\.cm-line\.xmd-cm-list-line\s*\{([^}]*)\}/)?.[1]
+
+    expect(listLine).toContain('--xmd-list-hang:')
+    expect(listLine).toContain('padding-inline-start:')
+    expect(listLine).toContain('text-indent: calc(0px - var(--xmd-list-hang))')
+  })
 })

@@ -32,7 +32,7 @@ import TitleBar from './components/TitleBar'
 import Outline from './components/Outline'
 import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
-import ContextMenu, { type MenuItem } from './components/ContextMenu'
+import ContextMenu, { type ContextMenuState, type MenuItem } from './components/ContextMenu'
 import TableGridPicker from './components/TableGridPicker'
 import TableZoomModal from './components/TableZoomModal'
 import InputDialog from './components/InputDialog'
@@ -401,12 +401,7 @@ export default function App(): JSX.Element {
   const toggleReadingMode = useCallback(() => setReadingMode((v) => !v), [])
   const closeOutline = useCallback(() => setOutlineVisible(false), [])
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
-  const [ctxMenu, setCtxMenu] = useState<{
-    x: number
-    y: number
-    items: MenuItem[]
-    preserveSelection?: boolean
-  } | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuState>(null)
   const openEditorContext = useEditorContextMenu(setCtxMenu)
   const [tablePicker, setTablePicker] = useState<{
     x: number
@@ -1116,12 +1111,7 @@ export default function App(): JSX.Element {
                 target instanceof HTMLImageElement
                   ? target
                   : target?.closest('[data-xmd-image]')?.querySelector<HTMLImageElement>('img')
-              openEditorContext(
-                e.clientX,
-                e.clientY,
-                image ?? undefined,
-                !!target?.closest('td, th'),
-              )
+              openEditorContext(e.clientX, e.clientY, image ?? undefined)
             }}
           >
             {activeTab ? (

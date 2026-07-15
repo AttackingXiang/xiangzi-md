@@ -8,6 +8,7 @@ import {
   collectFencedCodeHiddenRanges,
   fencedCodeBoundaryDeletion,
   fencedCodeFenceRedirectTarget,
+  fencedCodeLineBoundary,
   fencedCodeSelectAll,
   matchingCodeLanguageOptions,
   partiallyDeletesFencedCodeFence,
@@ -168,22 +169,30 @@ describe('CM6 fenced code preview', () => {
   it('uses editable content marks and only mounts a shared scrollbar when wrapping is off', () => {
     const doc = '```js\nfirst()\nlast()\n```'
     const state = stateAt(doc, doc.indexOf('first'))
-    const specs = (lineWrapping: boolean): Array<Record<string, unknown>> => {
-      const result: Array<Record<string, unknown>> = []
+    const specs = (
+      lineWrapping: boolean,
+    ): Array<{ from: number; to: number; spec: Record<string, unknown> }> => {
+      const result: Array<{ from: number; to: number; spec: Record<string, unknown> }> = []
       buildCodeBlockPreviewDecorations(state, [{ from: 0, to: doc.length }], {
         viewportMargin: 0,
         lineWrapping,
-      }).between(0, doc.length, (_from, _to, value) => {
-        result.push(value.spec as Record<string, unknown>)
+      }).between(0, doc.length, (from, to, value) => {
+        result.push({ from, to, spec: value.spec as Record<string, unknown> })
       })
       return result
     }
 
     const unwrapped = specs(false)
     const wrapped = specs(true)
-    expect(unwrapped.filter((spec) => spec.class === 'xmd-cm-code-line-content')).toHaveLength(2)
-    expect(unwrapped.filter((spec) => 'widget' in spec)).toHaveLength(2)
-    expect(wrapped.filter((spec) => 'widget' in spec)).toHaveLength(1)
+    const contentMarks = unwrapped.filter(({ spec }) => spec.class === 'xmd-cm-code-line-content')
+    const widgets = unwrapped.filter(({ spec }) => 'widget' in spec)
+    expect(contentMarks).toHaveLength(2)
+    expect(contentMarks.every(({ spec }) => spec.inclusiveEnd === true)).toBe(true)
+    expect(widgets).toHaveLength(2)
+    // Overlay widgets must stay on the collapsed opening fence. Mounting them
+    // at an editable empty/body-line endpoint corrupts browser caret geometry.
+    expect(widgets.every(({ from, to }) => from === 5 && to === 5)).toBe(true)
+    expect(wrapped.filter(({ spec }) => 'widget' in spec)).toHaveLength(1)
   })
 
   it('uses clipped native selection only inside one code block and keeps cross-block selection virtualized', () => {
@@ -217,6 +226,25 @@ describe('CM6 fenced code preview', () => {
     expect(selectionIntersectsFencedCode(crossBlockSelection)).toBe(false)
     expect(selectionIntersectsFencedCode(cursorOnly)).toBe(false)
     expect(selectionIntersectsFencedCode(mermaidSelection)).toBe(false)
+  })
+
+  it('moves Home and End to logical code-line boundaries after horizontal scrolling', () => {
+    const doc = 'before\n```js\nfirst long line\n```\nafter'
+    const cursor = doc.indexOf('long') + 2
+    const state = stateAt(doc, cursor)
+    expect(fencedCodeLineBoundary(state, false)?.selection).toEqual({
+      anchor: doc.indexOf('first'),
+      head: doc.indexOf('first'),
+    })
+    expect(fencedCodeLineBoundary(state, true)?.selection).toEqual({
+      anchor: doc.indexOf('first') + 'first long line'.length,
+      head: doc.indexOf('first') + 'first long line'.length,
+    })
+    expect(fencedCodeLineBoundary(state, false, true)?.selection).toEqual({
+      anchor: cursor,
+      head: doc.indexOf('first'),
+    })
+    expect(fencedCodeLineBoundary(stateAt(doc, 2), false)).toBeNull()
   })
 
   it('does not register hidden ranges for Mermaid fences, which own their own preview', () => {
@@ -253,6 +281,37 @@ describe('CM6 fenced code preview', () => {
     expect(data.language).toBe('custom')
     expect(data.languageFrom).toBe('  ~~~~'.length)
     expect(state.doc.sliceString(data.codeFrom, data.codeTo)).toBe('body')
+  })
+
+  it('uses structural fence marks for code blocks nested under list items', () => {
+    const doc =
+      '- 进入脚本执行目录\n    ```\n    cd /tongweb/coupons-gx-and-hkg/cardserver\n    ```\n- 下一步'
+    const state = stateAt(doc, doc.indexOf('cd /tongweb'))
+    let fencedFrom = -1
+    let fencedTo = -1
+    syntaxTree(state).iterate({
+      enter(node) {
+        if (node.name !== 'FencedCode') return
+        fencedFrom = node.from
+        fencedTo = node.to
+        return false
+      },
+    })
+
+    const data = readFencedCode(state, fencedFrom, fencedTo)
+    const closingMarkFrom = doc.lastIndexOf('```')
+    const closingLineFrom = closingMarkFrom - 4
+    const hidden = collectFencedCodeHiddenRanges(state, [{ from: 0, to: doc.length }], {
+      viewportMargin: 0,
+    })
+
+    expect(data.closingFrom).toBe(closingLineFrom)
+    expect(state.doc.sliceString(data.codeFrom, data.codeTo)).not.toContain('```')
+    expect(hidden).toContainEqual({
+      from: closingLineFrom,
+      to: doc.indexOf('\n- 下一步') + 1,
+      paint: false,
+    })
   })
 
   it('leaves Mermaid fences with extra info attributes to the Mermaid preview', () => {

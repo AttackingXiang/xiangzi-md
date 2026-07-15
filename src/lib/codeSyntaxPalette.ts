@@ -45,15 +45,3 @@ export const CODE_PALETTE_CSS_VARS: Record<keyof CodeSyntaxPalette, string> = {
   diffAdded: 'code-diff-added',
   diffRemoved: 'code-diff-removed',
 }
-
-/** 从已挂载的 DOM 读取当前生效的 --code-* 计算值，供 mermaid 等只能接受字面量颜色的场景使用。 */
-export function readComputedCodePalette(
-  root: Element = document.documentElement,
-): CodeSyntaxPalette {
-  const style = getComputedStyle(root)
-  const read = (name: string): string => style.getPropertyValue(`--${name}`).trim()
-  const entries = Object.entries(CODE_PALETTE_CSS_VARS) as Array<[keyof CodeSyntaxPalette, string]>
-  const result = {} as CodeSyntaxPalette
-  for (const [key, cssVar] of entries) result[key] = read(cssVar)
-  return result
-}

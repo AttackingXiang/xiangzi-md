@@ -1,5 +1,4 @@
 import type mermaid from 'mermaid'
-import { t } from './i18n'
 
 // 动态加载 mermaid（体积较大）：只有真正渲染图表时才加载，避免拖慢启动
 type MermaidApi = typeof mermaid
@@ -149,10 +148,6 @@ async function renderMermaidMarkup(
   })
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string)
-}
-
 /**
  * 以「可栅格化」配置（htmlLabels:false，纯 <text> 标签、无 foreignObject）
  * 重新渲染 mermaid 源码，返回 SVG 字符串，专供复制/导出成图片。
@@ -165,31 +160,4 @@ export async function renderMermaidForExport(content: string): Promise<string> {
 /** Render an interactive screen preview using Mermaid's HTML label mode. */
 export async function renderMermaidForPreview(content: string): Promise<string> {
   return renderMermaidMarkup(content, true, 'mmd-screen-')
-}
-
-/**
- * 供 Crepe code-mirror 的 renderPreview 使用：mermaid 代码块异步渲染为图表。
- * 返回 undefined 表示异步，渲染完成后经 applyPreview 回填 SVG 字符串。
- */
-export function renderMermaid() {
-  return (
-    language: string,
-    content: string,
-    applyPreview: (value: null | string | HTMLElement) => void,
-  ): void | null => {
-    if (!language || language.toLowerCase() !== 'mermaid') return null
-    if (!content.trim()) return null
-
-    void (async () => {
-      try {
-        const svg = await renderMermaidMarkup(content, true, 'mmd-')
-        applyPreview(`<div class="mermaid-preview">${svg}</div>`)
-      } catch (err: unknown) {
-        const msg = escapeHtml(String((err as Error)?.message ?? err))
-        applyPreview(`<div class="mermaid-error">${t('图表语法有误')}: ${msg}</div>`)
-      }
-    })()
-
-    return undefined
-  }
 }

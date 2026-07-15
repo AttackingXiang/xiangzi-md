@@ -12,6 +12,7 @@ import { markdownTablePreview } from './tablePreview'
 import { markdownMathPreview } from './mathPreview'
 import { markdownMermaidPreview } from './mermaidPreview'
 import { renderMermaidForExport, renderMermaidForPreview } from '../../lib/mermaidPreview'
+import { setupRichClipboard } from '../../lib/richClipboard'
 import katex from 'katex'
 import { t } from '../../lib/i18n'
 import type { Cm6EditorController } from './types'
@@ -201,6 +202,7 @@ export function MarkdownEditor({
     setTagPortalHost(portalHost)
 
     const scroller = controller.view.scrollDOM
+    const disposeRichClipboard = setupRichClipboard(mount)
     const reportScroll = (): void => {
       if (!restoringScroll) onScrollTopChangeRef.current?.(scroller.scrollTop)
     }
@@ -223,6 +225,7 @@ export function MarkdownEditor({
     return () => {
       cancelAnimationFrame(restoreFrame)
       scroller.removeEventListener('scroll', reportScroll)
+      disposeRichClipboard()
       // Persist the actual position even when the component unmounts during restore.
       onScrollTopChangeRef.current?.(scroller.scrollTop)
       controllerRef.current = null
