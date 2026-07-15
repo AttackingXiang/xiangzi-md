@@ -347,8 +347,6 @@ interface MountedCodeBlock {
 interface CodeScrollMeasure extends Omit<MountedCodeBlock, 'fence' | 'scrollbar'> {
   fence: HTMLElement
   scrollbar: HTMLElement
-  cursor: HTMLElement | null
-  cursorTranslateX: number | null
   contentWidth: number
   scrollLeft: number
   revealScrollLeft: number | null
@@ -493,7 +491,7 @@ class CodeBlockScrollPlugin {
     this.view.contentDOM.removeEventListener('pointerdown', this.onPointerDown)
     this.view.contentDOM.removeEventListener('keydown', this.onKeyDown)
     this.view.dom.classList.remove('xmd-cm-native-code-selection')
-    this.clearCursorTranslation()
+    this.view.dom.classList.remove('xmd-cm-native-code-caret')
     this.stopDragging()
   }
 
@@ -509,14 +507,7 @@ class CodeBlockScrollPlugin {
       'xmd-cm-native-code-selection',
       selectionIntersectsFencedCode(state),
     )
-  }
-
-  private clearCursorTranslation(except: HTMLElement | null = null): void {
-    for (const cursor of this.view.dom.querySelectorAll<HTMLElement>('.cm-cursor')) {
-      if (cursor === except) continue
-      cursor.style.removeProperty('transform')
-      delete cursor.dataset.xmdCodeCursorTranslateX
-    }
+    this.view.dom.classList.toggle('xmd-cm-native-code-caret', caretInsideFencedCode(state))
   }
 
   private syncFrom(source: HTMLElement): void {
@@ -675,8 +666,6 @@ class CodeBlockScrollPlugin {
             ),
           )
           let revealScrollLeft: number | null = null
-          let cursor: HTMLElement | null = null
-          let cursorTranslateX: number | null = null
           if (Number(scrollbar.dataset.blockFrom) === activeBlockFrom) {
             const activeLine = block.lines.find((item) => item.classList.contains('cm-activeLine'))
             const activeContent = activeLine?.querySelector<HTMLElement>(
@@ -697,35 +686,12 @@ class CodeBlockScrollPlugin {
               if (caretX < leftEdge) next -= leftEdge - caretX
               else if (caretX > rightEdge) next += caretX - rightEdge
               revealScrollLeft = next
-
-              const maxScroll = Math.max(0, contentWidth - scrollbar.clientWidth)
-              const nextScrollLeft = Math.min(maxScroll, Math.max(0, next))
-              // CM6's own cursor is exact until the nested code scroller has
-              // actually moved. Only compensate that scrolled case; applying
-              // a transform on an ordinary short line races CM6's next cursor
-              // paint and produces a one-character overshoot.
-              const cursorCandidate = view.dom.querySelector<HTMLElement>('.cm-cursor-primary')
-              const existingTranslateX =
-                Number.parseFloat(cursorCandidate?.dataset.xmdCodeCursorTranslateX ?? '0') || 0
-              cursor =
-                nextScrollLeft > 0.5 ||
-                activeContent.scrollLeft > 0.5 ||
-                Math.abs(existingTranslateX) > 0.5
-                  ? cursorCandidate
-                  : null
-              if (cursor) {
-                const desiredCursorX = caretX - (nextScrollLeft - activeContent.scrollLeft)
-                cursorTranslateX =
-                  existingTranslateX + desiredCursorX - cursor.getBoundingClientRect().left
-              }
             }
           }
           measures.push({
             ...block,
             fence,
             scrollbar,
-            cursor,
-            cursorTranslateX,
             contentWidth,
             scrollLeft: block.contents[0]?.scrollLeft ?? 0,
             revealScrollLeft,
@@ -737,8 +703,6 @@ class CodeBlockScrollPlugin {
         return measures
       },
       write: (measures) => {
-        let adjustedCursor: HTMLElement | null = null
-        let geometryChanged = false
         for (const measure of measures) {
           const visible = measure.overflow && measure.active
           const maxScroll = Math.max(0, measure.contentWidth - measure.scrollbar.clientWidth)
@@ -761,22 +725,18 @@ class CodeBlockScrollPlugin {
             this.syncing = true
             for (const content of measure.contents) content.scrollLeft = scrollLeft
             this.syncing = false
-            geometryChanged = true
           }
-          if (measure.cursor && measure.cursorTranslateX !== null) {
-            const previousTranslateX =
-              Number.parseFloat(measure.cursor.dataset.xmdCodeCursorTranslateX ?? '0') || 0
-            measure.cursor.style.transform = `translateX(${measure.cursorTranslateX}px)`
-            measure.cursor.dataset.xmdCodeCursorTranslateX = String(measure.cursorTranslateX)
-            adjustedCursor = measure.cursor
-            geometryChanged ||= Math.abs(previousTranslateX - measure.cursorTranslateX) > 0.5
-          }
+          // No follow-up rAF re-measure here (there used to be one, gated on
+          // a `geometryChanged` flag). It existed only to chase the deleted
+          // cursor-transform hack: CM6 re-renders `.cm-cursor-primary` outside
+          // of this plugin's control and would silently wipe the inline
+          // `transform` we set, so a second pass was needed to reapply it a
+          // frame later (the one-frame flash on every keypress mentioned in
+          // the task). The scrollLeft write above needs no such follow-up:
+          // `updateThumb` below already derives the thumb geometry from the
+          // same synchronous `scrollLeft`/`maxScroll` values written this
+          // pass, not from a DOM read that could still be stale.
           this.updateThumb(measure.scrollbar, scrollLeft)
-        }
-        this.clearCursorTranslation(adjustedCursor)
-        if (geometryChanged) {
-          cancelAnimationFrame(this.frame)
-          this.frame = requestAnimationFrame(() => this.schedule())
         }
       },
     })
@@ -903,6 +863,30 @@ export function selectionIntersectsFencedCode(state: EditorState): boolean {
     data.language.toLowerCase() !== 'mermaid' &&
     range.from >= data.codeFrom &&
     range.to <= data.codeTo
+  )
+}
+
+/** Use the browser's native caret when the (sole) selection is a collapsed
+ * caret positioned inside an editable fenced code body. Same reasoning as
+ * `selectionIntersectsFencedCode` above (see also `xmd-cm-native-code-caret`
+ * in codeBlockPreview.css): CM6's `drawSelection` cursor overlay paints a
+ * `.cm-cursor` div at un-scrolled inline coordinates, so it has no way to
+ * know about the nested horizontal scroller each code line owns and drifts
+ * out of place once that scroller has moved. The native caret is painted by
+ * the browser at the DOM position and is naturally clipped/positioned by
+ * that nested scroller, so it never needs correcting. Multiple ranges keep
+ * CM6 drawing — this only concerns the single primary caret; secondary
+ * carets in a multi-cursor selection still rely on the overlay. */
+export function caretInsideFencedCode(state: EditorState): boolean {
+  if (state.selection.ranges.length !== 1) return false
+  const range = state.selection.main
+  if (!range.empty) return false
+  const data = fencedCodeAt(state, range.head)
+  return (
+    data !== null &&
+    data.language.toLowerCase() !== 'mermaid' &&
+    range.head >= data.codeFrom &&
+    range.head <= data.codeTo
   )
 }
 

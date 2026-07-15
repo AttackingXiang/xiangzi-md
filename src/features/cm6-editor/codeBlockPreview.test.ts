@@ -4,6 +4,7 @@ import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
   buildCodeBlockPreviewDecorations,
+  caretInsideFencedCode,
   codeLanguageOptions,
   collectFencedCodeHiddenRanges,
   fencedCodeBoundaryDeletion,
@@ -226,6 +227,49 @@ describe('CM6 fenced code preview', () => {
     expect(selectionIntersectsFencedCode(crossBlockSelection)).toBe(false)
     expect(selectionIntersectsFencedCode(cursorOnly)).toBe(false)
     expect(selectionIntersectsFencedCode(mermaidSelection)).toBe(false)
+  })
+
+  it('flags a collapsed caret inside an editable code body for the native-caret CSS switch', () => {
+    const doc = 'before\n```ts\nconst answer = 42\n```\nafter'
+    const codeFrom = doc.indexOf('const')
+    const codeTo = codeFrom + 'const answer = 42'.length
+
+    // Caret in the middle of a code line.
+    expect(caretInsideFencedCode(stateAt(doc, codeFrom + 3))).toBe(true)
+    // Caret exactly on the codeFrom/codeTo boundaries is still "inside".
+    expect(caretInsideFencedCode(stateAt(doc, codeFrom))).toBe(true)
+    expect(caretInsideFencedCode(stateAt(doc, codeTo))).toBe(true)
+    // Caret in the surrounding document (outside any fence) is not inside.
+    expect(caretInsideFencedCode(stateAt(doc, 0))).toBe(false)
+    expect(caretInsideFencedCode(stateAt(doc, doc.length))).toBe(false)
+
+    // A non-empty (range) selection keeps CM6's own cursor drawing.
+    const rangeSelection = EditorState.create({
+      doc,
+      selection: EditorSelection.range(codeFrom, codeFrom + 5),
+      extensions: [markdown()],
+    })
+    expect(caretInsideFencedCode(rangeSelection)).toBe(false)
+
+    // Multiple cursors: only a single primary caret is compensated by this
+    // switch, so any secondary range keeps everything on CM6's overlay.
+    // `allowMultipleSelections` must be enabled explicitly — without it
+    // `EditorState.create` silently collapses to just the primary range.
+    const multiCursor = EditorState.create({
+      doc,
+      selection: EditorSelection.create([
+        EditorSelection.cursor(codeFrom),
+        EditorSelection.cursor(codeFrom + 5),
+      ]),
+      extensions: [markdown(), EditorState.allowMultipleSelections.of(true)],
+    })
+    expect(multiCursor.selection.ranges.length).toBe(2)
+    expect(caretInsideFencedCode(multiCursor)).toBe(false)
+
+    // Mermaid fences keep their own dedicated block-replace preview and never
+    // expose an editable code body for this switch to apply to.
+    const mermaid = '```mermaid\ngraph TD\n```'
+    expect(caretInsideFencedCode(stateAt(mermaid, mermaid.indexOf('graph') + 2))).toBe(false)
   })
 
   it('moves Home and End to logical code-line boundaries after horizontal scrolling', () => {

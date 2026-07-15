@@ -44,4 +44,26 @@ describe('CM6 live preview styles', () => {
     // rule itself must reference the variable, not repeat the literal value.
     expect(firstLineContent).toContain('padding-inline-end: var(--xmd-code-controls-gutter')
   })
+
+  it('hides the CM6-drawn primary caret and restores the native one while xmd-cm-native-code-caret is active', () => {
+    // codeBlockPreview.ts's `caretInsideFencedCode` toggles this class on the
+    // editor root while the sole selection is a collapsed caret inside an
+    // editable (non-Mermaid) code body, so the browser's own caret — clipped
+    // and positioned correctly by the nested `.xmd-cm-code-line-content`
+    // horizontal scroller — can be used instead of CM6's `drawSelection`
+    // overlay div, which has no awareness of that nested scroller.
+    const css = readFileSync(new URL('./codeBlockPreview.css', import.meta.url), 'utf8')
+    const hidesCursor = css.match(
+      /\.xmd-cm-native-code-caret \.cm-cursorLayer \.cm-cursor-primary\s*\{([^}]*)\}/,
+    )?.[1]
+    // `.xmd-cm-code-line-content` has an earlier, unrelated rule block (base
+    // layout) elsewhere in this file, so scan every block for this selector
+    // rather than matching only the first (unconditional caret-color reset).
+    const contentBlocks = [
+      ...css.matchAll(/\.xmd-cm-editor \.xmd-cm-code-line-content\s*\{([^}]*)\}/g),
+    ].map((match) => match[1])
+
+    expect(hidesCursor).toContain('display: none !important')
+    expect(contentBlocks.some((block) => block?.includes('caret-color: var(--accent)'))).toBe(true)
+  })
 })
