@@ -11,6 +11,7 @@ import type { useTreeOps } from '../../hooks/useTreeOps'
 import { useTagIndex } from './useTagIndex'
 import { buildTagTree, isTagInSubtree } from './tagTree'
 import { buildFrecencyRank } from '../../lib/recency'
+import { applyLineEnding, detectLineEnding } from '../../lib/lineEndings'
 import { useNow } from '../../hooks/useNow'
 import { useTagNavigation } from './useTagNavigation'
 import {
@@ -266,8 +267,14 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
         }
         // 已有磁盘文件：直接强制写盘，再把结果并回标签页（置为已保存）。不经过
         // updateContent + saveTab 的往返——批量改多篇时那条路径依赖 stateRef 同步，
-        // 会让后续标签页停留在“待保存”。
-        const result = await desktop.writeFile(tab.path, content, null, true)
+        // 会让后续标签页停留在“待保存”。写盘字节按这份文档原始换行风格还原；
+        // 并回标签页的 content 仍是 renameTagInMarkdown 吐出的原始（纯 LF）版本。
+        const result = await desktop.writeFile(
+          tab.path,
+          applyLineEnding(content, tab.eol ?? 'lf'),
+          null,
+          true,
+        )
         markTabPersisted(tab.id, tab.content, content, result.version)
         tagIndex.upsertDocument(
           documentMetaFromMarkdown(tab.path, tab.name, content, result.version.modifiedNanos),
@@ -306,13 +313,22 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
             if (await applyToOpenTab(tab)) changed += 1
           } else {
             // 未打开的文件：读 → 改 → 强制写盘（跳过版本冲突检查——写的正是刚读的内容）。
+            // 这份文件没有对应的 Tab，拿不到已经跟着文档走的 eol，只能就地按读到的
+            // 原始内容现测一次；renameTagInMarkdown 的改动本身不引入换行风格分歧
+            // （只替换标签文本），落盘前按测到的风格统一还原即可。
             const file = await desktop.readFile(path)
+            const eol = detectLineEnding(file.content)
             const result = renameTagInMarkdown(file.content, fromKey, toTag)
             if (result.changed) {
               // 用写盘后返回的 version（而非写盘前读到的 file.version），这样"最近
               // 更新"排序准确，且增量扫描缓存里记的 mtime 与磁盘一致，不会白白把刚
               // 改过的文件当成"外部又变了"再重读一遍。
-              const written = await desktop.writeFile(path, result.content, null, true)
+              const written = await desktop.writeFile(
+                path,
+                applyLineEnding(result.content, eol),
+                null,
+                true,
+              )
               tagIndex.upsertDocument(
                 documentMetaFromMarkdown(
                   path,

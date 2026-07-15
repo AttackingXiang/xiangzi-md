@@ -39,4 +39,11 @@ export interface Tab {
   version: FileVersion | null
   /** 锁定后无法被关闭（close / close-others / close-all 均跳过） */
   locked?: boolean
+  /**
+   * 该文档原始的换行风格（打开时用 detectLineEnding 判定一次，跟随文档直到
+   * 关闭；关闭即弃，不写入设置/会话）。CM6 编辑器内部只认 LF，保存前需要用
+   * applyLineEnding 按这个字段还原成磁盘原本的风格，避免整份文件被改写成
+   * LF 导致 diff 爆炸。未设置（新建文件等场景）按 'lf' 处理。
+   */
+  eol?: 'lf' | 'crlf'
 }

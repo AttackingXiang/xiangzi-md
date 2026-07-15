@@ -8,6 +8,7 @@ import { LatestTaskQueue } from '../lib/latestTask'
 import { completePersistedTransform, completeSave, updateTabContent } from '../lib/saveState'
 import { activateOrAppendTab, mergeRestoredTabs, tabsAreClean } from '../lib/documentState'
 import { isKnownTextFile } from '../lib/fileKind'
+import { applyLineEnding, detectLineEnding } from '../lib/lineEndings'
 import type { Draft, Tab } from '../types'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 
@@ -144,6 +145,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
             dirty: false,
             revision: 0,
             version: file.version,
+            eol: detectLineEnding(file.content),
           }
           activateOpenedTab(tab)
         }),
@@ -170,6 +172,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         dirty: false,
         revision: 0,
         version: file.version,
+        eol: detectLineEnding(file.content),
       })
       return Promise.resolve()
     })
@@ -186,6 +189,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       dirty: false,
       revision: 0,
       version: null,
+      eol: 'lf',
     }
     setTabs((prev) => [...prev, tab])
     setActiveId(tab.id)
@@ -208,6 +212,11 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         dirty: true,
         revision: 1,
         version: null,
+        // 草稿是应用内快照（content 早已是编辑器吐出的纯 LF 文本），不是原始
+        // 磁盘字节，没有可还原的换行风格信号；跟新建文件一样按 'lf' 处理，
+        // 用户真正保存（saveAs）时也不会去覆盖原文件，不存在换行风格错乱的
+        // 外部可见影响。
+        eol: 'lf',
       }
       setTabs((previous) => [...previous, tab])
       setActiveId(tab.id)
@@ -222,13 +231,18 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       if (!tab) return false
       try {
         if (tab.path) {
+          // tab.content/mirror 一律是编辑器吐出的纯 LF 文本；磁盘要按这份文档原始
+          // 的换行风格落盘，写盘前统一在这里转换一次。转换只影响发给 desktop 的
+          // 字节，Tab 状态本身（content/savedContent，供 dirty 判断/编辑器回填用）
+          // 继续保持纯 LF，完全不感知这层还原。
+          const diskContent = applyLineEnding(tab.content, tab.eol ?? 'lf')
           let result
           try {
             // force：批量标签改名等场景直接覆盖，跳过版本冲突检查/弹窗——写的正是
             // 我们刚基于当前内容改出来的结果，不该被“外部修改”挡住而悄悄存不进去。
             result = await desktop.writeFile(
               tab.path,
-              tab.content,
+              diskContent,
               savedVersionsRef.current.get(id) ?? tab.version,
               force,
             )
@@ -249,7 +263,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
             if (!overwrite) return false
             result = await desktop.writeFile(
               tab.path,
-              tab.content,
+              diskContent,
               savedVersionsRef.current.get(id) ?? tab.version,
               true,
             )
@@ -263,7 +277,10 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
           recordDocEdit(tab.path)
           return true
         } else {
-          const result = await desktop.saveAs(tab.content, tab.name)
+          const result = await desktop.saveAs(
+            applyLineEnding(tab.content, tab.eol ?? 'lf'),
+            tab.name,
+          )
           if (result) {
             savedVersionsRef.current.set(id, result.version)
             setTabs((prev) =>
@@ -327,7 +344,8 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       const tab = stateRef.current.tabs.find((t) => t.id === id)
       if (!tab) return
       try {
-        const result = await desktop.saveAs(tab.content, tab.name)
+        // 另存为沿用这份文档已判定的换行风格；tab.content 本身继续保持纯 LF。
+        const result = await desktop.saveAs(applyLineEnding(tab.content, tab.eol ?? 'lf'), tab.name)
         if (result) {
           savedVersionsRef.current.set(id, result.version)
           setTabs((prev) =>
@@ -527,6 +545,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
                 dirty: false,
                 revision: 0,
                 version: file.version,
+                eol: detectLineEnding(file.content),
               }
             } catch {
               return null
