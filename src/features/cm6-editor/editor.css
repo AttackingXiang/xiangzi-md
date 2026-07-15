@@ -5,6 +5,14 @@
   --crepe-font-title: var(--crepe-font-default);
   --crepe-font-code:
     'SFMono-Regular', 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  /* Single source of truth for the code-block first-line trailing padding
+     (codeBlockPreview.css) and the caret reveal-scroll "controls gutter"
+     (codeBlockPreview.ts's CodeBlockScrollPlugin). The two must stay in sync
+     or the caret can hide under the copy/language controls; JS measures the
+     controls' actual rendered width against this value and uses whichever is
+     larger, so a longer i18n label never breaks the caret guard even though
+     this padding stays a fixed, non-reflowing width. */
+  --xmd-code-controls-gutter: 176px;
   background: transparent;
   color: var(--text);
   /* The editor is a row flex item next to the outline. CM6 only mounts viewport

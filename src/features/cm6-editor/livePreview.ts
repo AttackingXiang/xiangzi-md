@@ -18,7 +18,7 @@ import {
 import { hiddenRangeSource, hiddenRangesEngine, type HiddenRange } from './core/hiddenRanges'
 import { HEADING_NODE_NAMES } from './core/nodePolicy'
 import { computeRevealedRanges, isRevealed, type RevealedRanges } from './core/revealState'
-import { expandedVisibleRanges, type PreviewRange } from './core/types'
+import { expandedVisibleRanges, rangesTouch, type PreviewRange } from './core/types'
 import { markdownLinkData } from './markdownLinks'
 import {
   CalloutLabelWidget,
@@ -112,7 +112,11 @@ function inlineHtmlSpans(state: EditorState, visible: PreviewRange): InlineHtmlS
       if (node.name === 'FencedCode' || node.name === 'Table' || node.name === 'Image') return false
       if (node.name !== 'HTMLTag') return
 
-      const tag = parseInlineHtmlTag(state.doc.sliceString(node.from, node.to))
+      const raw = state.doc.sliceString(node.from, node.to)
+      // A hidden range may never cross a newline (core/README.md invariant 2).
+      // A multi-line tag can't participate in a hidden span; skip it.
+      if (raw.includes('\n')) return
+      const tag = parseInlineHtmlTag(raw)
       if (!tag) return
       if (!tag.closing) {
         stack.push({ from: node.from, to: node.to, name: tag.name, color: tag.color })
@@ -333,6 +337,21 @@ export function buildLivePreviewDecorations(
   return Decoration.set(ranges, true)
 }
 
+/**
+ * Whether the current selection touches `[from, to)` — reuses `rangesTouch`
+ * from `core/types.ts`, the same "a caret resting exactly on the boundary
+ * counts as touching" semantics `core/revealState.ts`'s `isRevealed` relies
+ * on. Inline HTML tag spans are plain `HTMLTag` pairs discovered by hand in
+ * `inlineHtmlSpans` above, not `reveal-on-selection` nodes walked by
+ * `computeRevealedRanges`'s ancestry search, so they need their own touch
+ * check against `state.selection` rather than going through `RevealedRanges`.
+ */
+function selectionTouchesRange(state: EditorState, range: PreviewRange): boolean {
+  return state.selection.ranges.some((selectionRange) =>
+    rangesTouch({ from: selectionRange.from, to: selectionRange.to }, range),
+  )
+}
+
 /** Split a node's range into per-line pieces so no hidden range crosses a newline. */
 function perLineRanges(state: EditorState, from: number, to: number): PreviewRange[] {
   const pieces: PreviewRange[] = []
@@ -427,6 +446,13 @@ function collectHiddenRanges(
       },
     })
     for (const span of inlineHtmlSpans(state, visible)) {
+      // Obsidian semantics, same as `**bold**` via `isRevealed` elsewhere in
+      // this function: when the selection touches the whole span (open tag
+      // through close tag), reveal both tags together instead of hiding them
+      // forever — otherwise there is no keyboard path to see or edit them,
+      // and a caret resting on `closeTo` hits an unconditionally-atomic
+      // range on every Backspace (a dead key).
+      if (selectionTouchesRange(state, { from: span.from, to: span.closeTo })) continue
       hidden.push(
         { from: span.from, to: span.to, paint: true },
         { from: span.closeFrom, to: span.closeTo, paint: true },

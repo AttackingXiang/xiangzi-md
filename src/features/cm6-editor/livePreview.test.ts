@@ -178,41 +178,63 @@ describe('CM6 Markdown live preview: safe inline HTML formatting', () => {
     expect(hidden).toContainEqual({ from: closingStart, to: closingStart + 7 })
   })
 
-  it('keeps font tags out of layout when the caret enters the colored text', () => {
+  it('reveals both tags together when the caret sits inside the colored text (Obsidian semantics)', () => {
+    // Matches how `**bold**` behaves via `isRevealed`: entering the
+    // construct must surface its source markers so they stay editable, and
+    // a caret resting on `</font>`'s trailing boundary must not still be
+    // "inside" a hidden atomic range (that used to be an unrecoverable
+    // Backspace dead key).
     const doc = '<font color="#ff0000">notice</font>'
     const cursor = doc.indexOf('notice') + 2
     const state = createState(doc, cursor)
     const seen = decorations(state, 0, doc.length)
     const hidden = hiddenRanges(state, 0, doc.length)
+    const openingEnd = doc.indexOf('>') + 1
+    const closingStart = doc.indexOf('</font>')
 
+    // The color mark decoration still applies while revealed, exactly like
+    // `**bold**` text staying bold while its markers are visible.
     expect(
       seen.some(
         ({ className, style }) => className === 'xmd-cm-inline-color' && style === 'color:#ff0000',
       ),
     ).toBe(true)
-    expect(hidden).toContainEqual({ from: 0, to: doc.indexOf('>') + 1 })
-    expect(hidden).toContainEqual({ from: doc.indexOf('</font>'), to: doc.length })
+    expect(hidden.some(({ from, to }) => from === 0 && to === openingEnd)).toBe(false)
+    expect(hidden.some(({ from, to }) => from === closingStart && to === doc.length)).toBe(false)
   })
 
-  it('keeps a complete HTML pair atomic when a delete command probes one tag character', () => {
+  it('reveals a complete HTML pair whenever the caret touches either boundary, fixing the Backspace dead key', () => {
     const doc = '- <font color="#ff0000">a long colored list item</font>'
-    const openingProbe = doc.indexOf('font') + 1
-    const closingStart = doc.indexOf('</font>')
-    const openingHidden = hiddenRanges(
-      createState(doc, openingProbe),
-      openingProbe,
-      openingProbe + 1,
-    )
-    const closingProbe = closingStart + 2
-    const closingHidden = hiddenRanges(
-      createState(doc, closingProbe),
-      closingProbe,
-      closingProbe + 1,
-    )
+    const openingFrom = doc.indexOf('<font')
+    const openingTo = doc.indexOf('>') + 1
+    const closingFrom = doc.indexOf('</font>')
+    const closingTo = closingFrom + '</font>'.length
 
-    for (const hidden of [openingHidden, closingHidden]) {
-      expect(hidden).toContainEqual({ from: 2, to: doc.indexOf('>') + 1 })
-      expect(hidden).toContainEqual({ from: closingStart, to: closingStart + 7 })
+    // A cursor inside the span, and a cursor resting exactly on either
+    // atomic boundary (the position a real Backspace/Delete probe lands on)
+    // must all count as "touching" — same semantics as `rangesTouch`.
+    for (const cursor of [openingFrom, openingFrom + 5, closingTo]) {
+      const hidden = hiddenRanges(createState(doc, cursor), 0, doc.length)
+      expect(hidden.some(({ from, to }) => from === openingFrom && to === openingTo)).toBe(false)
+      expect(hidden.some(({ from, to }) => from === closingFrom && to === closingTo)).toBe(false)
+    }
+
+    // Outside the span, both tags stay hidden and atomic together.
+    const outsideHidden = hiddenRanges(createState(doc, 0), 0, doc.length)
+    expect(outsideHidden).toContainEqual({ from: openingFrom, to: openingTo })
+    expect(outsideHidden).toContainEqual({ from: closingFrom, to: closingTo })
+  })
+
+  it('never hides a range that crosses a newline, even when a tag itself spans multiple lines', () => {
+    // core/README.md invariant 2: a hidden range must never cross a
+    // newline. A pathological multi-line `<font\ncolor="red">` tag must be
+    // skipped rather than registered as a (cross-line) hidden range.
+    const doc = '<font\ncolor="red">multiline</font> after'
+    const state = createState(doc, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    for (const { from, to } of hidden) {
+      expect(state.doc.lineAt(from).number).toBe(state.doc.lineAt(Math.max(from, to - 1)).number)
     }
   })
 

@@ -74,7 +74,7 @@
   /* Keep text geometry stable while controls appear/disappear. The trailing
      scrollable space lets a long first line move fully past the overlay
      without changing the editable element's width after selection changes. */
-  padding-inline-end: 176px;
+  padding-inline-end: var(--xmd-code-controls-gutter, 176px);
   width: 100%;
 }
 

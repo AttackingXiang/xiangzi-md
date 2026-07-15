@@ -1,5 +1,6 @@
-import { LanguageDescription, syntaxTree } from '@codemirror/language'
+import { LanguageDescription, ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
+import type { Tree } from '@lezer/common'
 import {
   EditorState,
   Prec,
@@ -431,6 +432,33 @@ function codeContentCaretX(content: HTMLElement, lineOffset: number): number | n
   }
 }
 
+// Fallback used only when the `--xmd-code-controls-gutter` custom property
+// (defined once in editor.css, alongside the CSS padding it also feeds — see
+// codeBlockPreview.css's `.xmd-cm-code-line-first .xmd-cm-code-line-content`
+// rule) fails to parse, e.g. no stylesheet loaded yet in a test environment.
+const DEFAULT_CODE_CONTROLS_GUTTER = 176
+// Safety margin so the caret does not sit flush against the controls' edge
+// when the *measured* width (rather than the CSS fallback) is the larger one.
+const CODE_CONTROLS_GUTTER_MARGIN = 8
+
+/** Width of the first-row "controls gutter" the caret reveal-scroll math
+ * (below) must stay clear of. Copy-button/language-input i18n copy can be
+ * wider than the fixed CSS reservation, so this takes the larger of that
+ * reservation and the controls header's actual rendered width — the caret
+ * must clear real pixels on screen, never a stale CSS constant. Must only be
+ * read here, in `requestMeasure`'s read phase: `getComputedStyle` and
+ * `getBoundingClientRect` both force layout. */
+function resolveCodeControlsGutter(fence: HTMLElement): number {
+  const cssValue = Number.parseFloat(
+    getComputedStyle(fence).getPropertyValue('--xmd-code-controls-gutter'),
+  )
+  const reserved =
+    Number.isFinite(cssValue) && cssValue > 0 ? cssValue : DEFAULT_CODE_CONTROLS_GUTTER
+  const header = fence.querySelector<HTMLElement>('.xmd-cm-code-preview-header')
+  const measured = header ? header.getBoundingClientRect().width + CODE_CONTROLS_GUTTER_MARGIN : 0
+  return Math.max(reserved, measured)
+}
+
 /** Keeps every source row full-width while synchronizing their hidden
  * horizontal scrollers with one visible scrollbar at the bottom of the card. */
 class CodeBlockScrollPlugin {
@@ -662,7 +690,8 @@ class CodeBlockScrollPlugin {
               const leftEdge = contentRect.left + 8
               // Controls overlay the first row only. Keep the insertion point
               // clear of them while preserving one stable editable width.
-              const controlsGutter = activeLine === block.lines[0] ? 176 : 0
+              const controlsGutter =
+                activeLine === block.lines[0] ? resolveCodeControlsGutter(fence) : 0
               const rightEdge = contentRect.right - controlsGutter - 8
               let next = activeContent.scrollLeft
               if (caretX < leftEdge) next -= leftEdge - caretX
@@ -756,7 +785,12 @@ class CodeBlockScrollPlugin {
 
 const codeBlockScrolling = ViewPlugin.fromClass(CodeBlockScrollPlugin)
 
-export function readFencedCode(state: EditorState, from: number, to: number): FencedCodeData {
+export function readFencedCode(
+  state: EditorState,
+  from: number,
+  to: number,
+  tree: Tree = syntaxTree(state),
+): FencedCodeData {
   let targetFenceFrom: number | null = null
   let openingMarkFrom: number | null = null
   let openingMarkTo: number | null = null
@@ -769,7 +803,7 @@ export function readFencedCode(state: EditorState, from: number, to: number): Fe
   // Read its direct FencedCode children instead of re-parsing physical lines
   // with a 0–3-space regex: a fence nested under a list legitimately has four
   // or more leading spaces in the source document.
-  syntaxTree(state).iterate({
+  tree.iterate({
     from,
     to,
     enter(node) {
@@ -824,23 +858,34 @@ export function readFencedCode(state: EditorState, from: number, to: number): Fe
   }
 }
 
-/** Find the `FencedCode` node (if any) whose span contains `position`. */
-function fencedCodeAt(state: EditorState, position: number): FencedCodeData | null {
+/**
+ * Find the `FencedCode` node (if any) whose span contains `position`. Accepts
+ * an already-resolved `tree` so callers that raced ahead of the background
+ * parser (via `ensureSyntaxTree`) can supply a complete tree instead of the
+ * possibly-stale one `syntaxTree(state)` would otherwise recompute. Defaults
+ * to `syntaxTree(state)` for every other (hot-path) caller, unchanged from
+ * before.
+ */
+function fencedCodeAt(
+  state: EditorState,
+  position: number,
+  tree: Tree = syntaxTree(state),
+): FencedCodeData | null {
   let result: FencedCodeData | null = null
-  syntaxTree(state).iterate({
+  tree.iterate({
     from: Math.max(0, position - 1),
     to: Math.min(state.doc.length, position + 1),
     enter(node) {
       if (node.name !== 'FencedCode' || position < node.from || position > node.to) return
-      result = readFencedCode(state, node.from, node.to)
+      result = readFencedCode(state, node.from, node.to, tree)
       return false
     },
   })
   return result
 }
 
-function fencedCodeAtSelection(state: EditorState): FencedCodeData | null {
-  return fencedCodeAt(state, state.selection.main.head)
+function fencedCodeAtSelection(state: EditorState, tree?: Tree): FencedCodeData | null {
+  return fencedCodeAt(state, state.selection.main.head, tree)
 }
 
 /** Use the browser's native selection painting only for a single range that is
@@ -1038,12 +1083,37 @@ export function partiallyDeletesFencedCodeFence(transaction: Transaction): boole
  * Cmd/Ctrl+A inside a fenced code block selects only its body, excluding both
  * fences (mirroring copy/paste semantics — see the copy control above).
  * Returns `null` outside a code block so the caller can fall through to
- * CM6's default select-all.
+ * CM6's default select-all. Accepts an optional pre-resolved `tree` (see
+ * `fencedCodeAt`'s doc comment) for the same reason as `fencedCodeContentRange`.
  */
-export function fencedCodeSelectAll(state: EditorState): TransactionSpec | null {
-  const data = fencedCodeAtSelection(state)
+export function fencedCodeSelectAll(state: EditorState, tree?: Tree): TransactionSpec | null {
+  const data = fencedCodeAtSelection(state, tree)
   if (!data) return null
   return { selection: { anchor: data.codeFrom, head: data.codeTo } }
+}
+
+/**
+ * Pure query: the fenced code body range (excluding both fence lines) that
+ * contains `position`, or `null` outside any fenced code block. This is the
+ * single source of truth for "what does Cmd/Ctrl+A select inside a code
+ * block" — both this module's own `Mod-a` keymap (via `fencedCodeSelectAll`
+ * above) and the app-level `selectAllScope` (`src/lib/editorCommands.ts`)
+ * resolve through it, replacing a second hand-rolled tree walk + regex that
+ * had drifted out of sync with `readFencedCode`'s tree-driven fence
+ * detection (which correctly handles a fence indented ≥4 spaces under a
+ * list item; a regex re-derived from physical lines does not). `tree` may be
+ * an already-resolved `Tree` from `ensureSyntaxTree` for callers that need
+ * to get ahead of the background parser; it is never called with
+ * `ensureSyntaxTree` internally so this stays cheap for hot paths that pass
+ * only `state`.
+ */
+export function fencedCodeContentRange(
+  state: EditorState,
+  position: number,
+  tree?: Tree,
+): { from: number; to: number } | null {
+  const data = fencedCodeAt(state, position, tree)
+  return data ? { from: data.codeFrom, to: data.codeTo } : null
 }
 
 /**
@@ -1282,7 +1352,20 @@ export function markdownCodeBlockPreview(options: CodeBlockPreviewOptions = {}):
         {
           key: 'Mod-a',
           run: (view) => {
-            const spec = fencedCodeSelectAll(view.state)
+            // Background parsing may not have reached the caret yet (a busy
+            // editor, or a document just opened). Force it up to the caret
+            // first so a not-yet-parsed fence doesn't make this fall back to
+            // selecting the whole document — the same race `selectAllScope`
+            // in `src/lib/editorCommands.ts` guards against. `ensureSyntaxTree`
+            // returns a tree independent of `syntaxTree(state)`'s cached
+            // field, so its result must be threaded through explicitly.
+            const tree =
+              ensureSyntaxTree(
+                view.state,
+                Math.min(view.state.doc.length, view.state.selection.main.head + 1),
+                100,
+              ) ?? undefined
+            const spec = fencedCodeSelectAll(view.state, tree)
             if (!spec) return false
             view.dispatch(spec)
             return true

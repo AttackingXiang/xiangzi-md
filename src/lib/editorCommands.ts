@@ -1,7 +1,8 @@
 import { EditorSelection, type EditorState } from '@codemirror/state'
-import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
+import { ensureSyntaxTree } from '@codemirror/language'
 import { activeCm6Commands } from '../features/cm6-editor/commands'
 import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
+import { fencedCodeContentRange } from '../features/cm6-editor/codeBlockPreview'
 import { computeCm6ToolbarState } from '../features/cm6-editor/toolbarState'
 import { linkPromptBridge } from './linkPromptBridge'
 import { tableCellCommandBridge, type TableCellInlineFormat } from './tableCellCommandBridge'
@@ -129,18 +130,13 @@ export function selectAllScope(state: EditorState): {
   // in the parallel test suite) syntaxTree() can still be the initial partial
   // tree, which made Cmd/Ctrl+A intermittently select the whole document while
   // the caret was inside a fenced block. Ensure parsing has reached the caret
-  // before resolving its ancestors; keep the existing tree as a safe fallback.
-  const tree =
-    ensureSyntaxTree(state, Math.min(state.doc.length, range.head + 1), 100) ?? syntaxTree(state)
-  let node: ReturnType<typeof syntaxTree>['topNode'] | null = tree.resolveInner(range.head, -1)
-  while (node && node.name !== 'FencedCode') node = node.parent
-  if (!node) return { from: 0, to: state.doc.length }
-
-  const opening = state.doc.lineAt(node.from)
-  const possibleClosing = state.doc.lineAt(Math.max(node.from, node.to - 1))
-  const closesFence = /^( {0,3})(`{3,}|~{3,})[ \t]*$/.test(possibleClosing.text)
-  return {
-    from: Math.min(state.doc.length, opening.to + 1),
-    to: closesFence ? Math.max(opening.to + 1, possibleClosing.from - 1) : node.to,
-  }
+  // before resolving its ancestors; keep the existing tree as a safe fallback
+  // (`fencedCodeContentRange` defaults to `syntaxTree(state)` when omitted).
+  const tree = ensureSyntaxTree(state, Math.min(state.doc.length, range.head + 1), 100) ?? undefined
+  // Delegate to the same tree-driven fence detection the CM6 `Mod-a` keymap
+  // uses (`fencedCodeContentRange` in `codeBlockPreview.ts`) instead of a
+  // second hand-rolled tree walk + closing-fence regex, which could disagree
+  // with it for a fence indented ≥4 spaces under a list item.
+  const scope = fencedCodeContentRange(state, range.head, tree)
+  return scope ?? { from: 0, to: state.doc.length }
 }

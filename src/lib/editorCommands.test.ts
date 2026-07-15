@@ -4,6 +4,7 @@ import { GFM } from '@lezer/markdown'
 import type { EditorView } from '@codemirror/view'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
+import { fencedCodeContentRange } from '../features/cm6-editor/codeBlockPreview'
 import {
   editorCmd,
   hasWysiwyg,
@@ -61,6 +62,31 @@ describe('CM6 editor command adapter', () => {
       extensions: [...extensions, EditorState.readOnly.of(true)],
     })
     expect(selectAllScope(readingMode)).toEqual({ from: 0, to: doc.length })
+  })
+
+  it('agrees with the CM6 Mod-a keymap query for a fence indented 4 spaces under a list item', () => {
+    // `selectAllScope` used to re-derive fence boundaries with its own tree
+    // walk plus a `^( {0,3})(`{3,}|~{3,})[ \t]*$` closing-fence regex, which
+    // misjudges a fence nested under a list item (that fence legitimately
+    // has 4+ leading spaces — see `readFencedCode`'s doc comment in
+    // codeBlockPreview.ts). It must now resolve through the same
+    // `fencedCodeContentRange` query the editor's own `Mod-a` keymap uses,
+    // so both entry points can never disagree on what gets selected.
+    const doc = '- item\n\n    ```js\n    const x = 1\n    ```\n'
+    const extensions = [markdown({ base: markdownLanguage, extensions: GFM })]
+    const cursor = doc.indexOf('const x')
+    const state = EditorState.create({
+      doc,
+      selection: EditorSelection.cursor(cursor),
+      extensions,
+    })
+
+    const viaKeymapQuery = fencedCodeContentRange(state, cursor)
+    expect(viaKeymapQuery).not.toBeNull()
+    expect(selectAllScope(state)).toEqual(viaKeymapQuery)
+    expect(
+      state.doc.sliceString(viaKeymapQuery!.from, viaKeymapQuery!.to),
+    ).toContain('const x = 1')
   })
 
   it('does not expose formatting actions while the active editor is read-only', () => {
