@@ -1,9 +1,15 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
 import { desktop } from '../platform'
 import { generateExportHTML } from '../features/export/generateExportHtml'
+import { createEditorRasterImage } from '../features/export/editorDomExport'
 import { t } from '../lib/i18n'
 import { dirName } from '../lib/path'
 import type { Tab } from '../types'
+
+export interface ExportActivity {
+  label: string
+  percent?: number
+}
 
 interface ExportState {
   tabs: Tab[]
@@ -13,6 +19,7 @@ interface ExportState {
 export function useExportActions(
   stateRef: { current: ExportState },
   setExportResultPath: Dispatch<SetStateAction<string | null>>,
+  setExportActivity: Dispatch<SetStateAction<ExportActivity | null>>,
 ) {
   const exportInProgressRef = useRef(false)
   const exportHTML = useCallback(async () => {
@@ -22,11 +29,7 @@ export function useExportActions(
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, false, {
-        docDir: tab?.path ? dirName(tab.path) : null,
-        target: 'html',
-      })
-      if (!html) return
+      const html = await generateExportHTML(tab?.name ?? 'document')
       const res = await desktop.exportHTML(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
     } catch (error) {
@@ -43,11 +46,7 @@ export function useExportActions(
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, true, {
-        docDir: tab?.path ? dirName(tab.path) : null,
-        target: 'pdf',
-      })
-      if (!html) return
+      const html = await generateExportHTML(tab?.name ?? 'document')
       const res = await desktop.exportPDF(html, tab?.name ?? 'document')
       if (res) setExportResultPath(res.path)
     } catch (error) {
@@ -64,19 +63,27 @@ export function useExportActions(
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      const html = await generateExportHTML(tab?.name ?? 'document', tab?.content, true, {
-        docDir: tab?.path ? dirName(tab.path) : null,
-        target: 'image',
-      })
-      if (!html) return
-      const res = await desktop.exportImage(html, tab?.name ?? 'document')
+      const res = await desktop.exportImage(
+        tab?.name ?? 'document',
+        createEditorRasterImage,
+        ({ phase, percent }) => {
+          if (phase === 'preparing') {
+            setExportActivity({ label: t('正在准备长图…') })
+          } else if (phase === 'rendering') {
+            setExportActivity({ label: t('正在渲染并传输长图…'), percent })
+          } else {
+            setExportActivity({ label: t('正在编码图片…') })
+          }
+        },
+      )
       if (res) setExportResultPath(res.path)
     } catch (error) {
       window.alert(t('图片导出失败：\n') + (error as Error).message)
     } finally {
+      setExportActivity(null)
       exportInProgressRef.current = false
     }
-  }, [setExportResultPath, stateRef])
+  }, [setExportActivity, setExportResultPath, stateRef])
 
   const exportDocx = useCallback(async () => {
     if (exportInProgressRef.current) return

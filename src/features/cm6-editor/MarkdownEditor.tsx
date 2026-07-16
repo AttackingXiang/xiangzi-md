@@ -3,19 +3,13 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createCm6Editor } from './controller'
-import { markdownLivePreview } from './livePreview'
-import { markdownCodeBlockPreview } from './codeBlockPreview'
-import { markdownImagePreview } from './imagePreview'
 import { imageInsertion } from './imageInsertion'
 import { typewriterScrolling } from './writingModes'
-import { markdownTablePreview } from './tablePreview'
-import { markdownMathPreview } from './mathPreview'
-import { markdownMermaidPreview } from './mermaidPreview'
-import { renderMermaidForExport, renderMermaidForPreview } from '../../lib/mermaidPreview'
 import { setupRichClipboard } from '../../lib/richClipboard'
-import katex from 'katex'
 import { t } from '../../lib/i18n'
 import type { Cm6EditorController } from './types'
+import { createMarkdownPreviewExtensions } from './previewExtensions'
+import { markdownEditorExportBridge } from './exportBridge'
 import './livePreview.css'
 import './codeBlockPreview.css'
 import './imagePreview.css'
@@ -106,6 +100,7 @@ export function MarkdownEditor({
   className,
   ariaLabel = 'Markdown editor',
 }: MarkdownEditorProps): ReactNode {
+  const rootRef = useRef<HTMLDivElement>(null)
   const mountRef = useRef<HTMLDivElement>(null)
   const controllerRef = useRef<Cm6EditorController | null>(null)
   const onChangeRef = useRef(onChange)
@@ -132,6 +127,12 @@ export function MarkdownEditor({
     imageInsertionExtensionRef.current = null
   }
   const imageUploadEnabled = Boolean(uploadImage)
+  const previewOptionsRef = useRef({
+    allowRemoteImages,
+    codeBlockLineWrapping,
+    imageMaxWidth,
+    previewThemeVersion,
+  })
   const [tagPortalHost, setTagPortalHost] = useState<HTMLElement | null>(null)
   const tagPortalHostRef = useRef<HTMLElement | null>(null)
   const hasTagBar = Boolean(tagBar)
@@ -142,6 +143,12 @@ export function MarkdownEditor({
   resolveImageSrcRef.current = resolveImageSrc
   uploadImageRef.current = uploadImage
   onImageErrorRef.current = onImageError
+  previewOptionsRef.current = {
+    allowRemoteImages,
+    codeBlockLineWrapping,
+    imageMaxWidth,
+    previewThemeVersion,
+  }
 
   useLayoutEffect(() => {
     const mount = mountRef.current
@@ -159,38 +166,15 @@ export function MarkdownEditor({
       value: content,
       readOnly: readingMode,
       extensions: [
-        livePreview ? markdownLivePreview() : [],
-        livePreview
-          ? markdownCodeBlockPreview({
-              copyLabel: '复制',
-              copiedLabel: '已复制',
-              lineWrapping: codeBlockLineWrapping,
-            })
-          : [],
-        livePreview
-          ? markdownImagePreview({
-              resolveSrc: stableImageResolverRef.current,
-              allowRemote: allowRemoteImages,
-              maxWidth: imageMaxWidth,
-            })
-          : [],
-        livePreview ? markdownTablePreview() : [],
+        createMarkdownPreviewExtensions({
+          enabled: livePreview,
+          resolveImageSrc: stableImageResolverRef.current,
+          allowRemoteImages,
+          imageMaxWidth,
+          codeBlockLineWrapping,
+          previewThemeVersion,
+        }),
         imageInsertionExtensionRef.current ?? [],
-        livePreview
-          ? markdownMathPreview({
-              render: (source, container, displayMode) =>
-                katex.render(source, container, { displayMode, throwOnError: true }),
-              errorLabel: '公式语法有误',
-            })
-          : [],
-        livePreview
-          ? markdownMermaidPreview({
-              render: renderMermaidForPreview,
-              renderForCopy: renderMermaidForExport,
-              version: previewThemeVersion,
-              errorLabel: '图表语法有误',
-            })
-          : [],
         typewriterMode ? typewriterScrolling() : [],
         hasTagBar ? tagBarExtension(portalHost) : [],
       ],
@@ -200,6 +184,35 @@ export function MarkdownEditor({
     })
     controllerRef.current = controller
     setTagPortalHost(portalHost)
+
+    const unregisterExport = markdownEditorExportBridge.register(() => {
+      const current = controllerRef.current
+      const root = rootRef.current
+      if (!current || !root) return null
+      const tagBarClone = tagPortalHostRef.current?.cloneNode(true)
+      const options = previewOptionsRef.current
+      return {
+        value: current.view.state.doc.toString(),
+        width: Math.max(1, Math.round(root.getBoundingClientRect().width || 920)),
+        className: [
+          'xmd-cm-editor',
+          tagBarClone ? 'has-tag-bar' : '',
+          'is-reading',
+          'is-live-preview',
+          'xmd-export-renderer',
+        ]
+          .filter(Boolean)
+          .join(' '),
+        extensions: [
+          createMarkdownPreviewExtensions({
+            enabled: true,
+            resolveImageSrc: stableImageResolverRef.current,
+            ...options,
+          }),
+          tagBarClone instanceof HTMLElement ? tagBarExtension(tagBarClone) : [],
+        ],
+      }
+    })
 
     const scroller = controller.view.scrollDOM
     const disposeRichClipboard = setupRichClipboard(mount)
@@ -228,6 +241,7 @@ export function MarkdownEditor({
       disposeRichClipboard()
       // Persist the actual position even when the component unmounts during restore.
       onScrollTopChangeRef.current?.(scroller.scrollTop)
+      unregisterExport()
       controllerRef.current = null
       tagPortalHostRef.current = null
       controller.destroy()
@@ -248,38 +262,15 @@ export function MarkdownEditor({
     const portalHost = tagPortalHostRef.current
     if (!portalHost) return
     controllerRef.current?.setExtensions([
-      livePreview ? markdownLivePreview() : [],
-      livePreview
-        ? markdownCodeBlockPreview({
-            copyLabel: '复制',
-            copiedLabel: '已复制',
-            lineWrapping: codeBlockLineWrapping,
-          })
-        : [],
-      livePreview
-        ? markdownImagePreview({
-            resolveSrc: stableImageResolverRef.current,
-            allowRemote: allowRemoteImages,
-            maxWidth: imageMaxWidth,
-          })
-        : [],
-      livePreview ? markdownTablePreview() : [],
+      createMarkdownPreviewExtensions({
+        enabled: livePreview,
+        resolveImageSrc: stableImageResolverRef.current,
+        allowRemoteImages,
+        imageMaxWidth,
+        codeBlockLineWrapping,
+        previewThemeVersion,
+      }),
       imageInsertionExtensionRef.current ?? [],
-      livePreview
-        ? markdownMathPreview({
-            render: (source, container, displayMode) =>
-              katex.render(source, container, { displayMode, throwOnError: true }),
-            errorLabel: '公式语法有误',
-          })
-        : [],
-      livePreview
-        ? markdownMermaidPreview({
-            render: renderMermaidForPreview,
-            renderForCopy: renderMermaidForExport,
-            version: previewThemeVersion,
-            errorLabel: '图表语法有误',
-          })
-        : [],
       typewriterMode ? typewriterScrolling() : [],
       hasTagBar ? tagBarExtension(portalHost) : [],
     ])
@@ -320,6 +311,7 @@ export function MarkdownEditor({
 
   return (
     <div
+      ref={rootRef}
       className={rootClassName}
       onKeyDownCapture={(event) => {
         if (!readingMode || event.metaKey || event.ctrlKey || event.altKey) return

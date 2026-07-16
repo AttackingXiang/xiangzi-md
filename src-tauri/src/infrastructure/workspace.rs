@@ -17,7 +17,7 @@ use tauri_plugin_fs::FsExt;
 use walkdir::WalkDir;
 
 pub use super::workspace_mutations::{create_dir, create_file, move_item, rename_item, trash_item};
-pub use super::workspace_write::{write_binary_file, write_file};
+pub use super::workspace_write::{write_binary_file, write_file, write_streamed_file};
 
 const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx"];
 /// 文件树里可见并可用 TextEditor 打开的纯文本 / 代码 / 结构化数据扩展名。

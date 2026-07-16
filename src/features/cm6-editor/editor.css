@@ -133,6 +133,42 @@
   display: none;
 }
 
+/* The export view is a second, read-only CM6 instance. Keep the document
+   renderer identical while removing transient editing chrome and allowing the
+   host to choose either a bounded capture viewport or a full HTML viewport. */
+.xmd-cm-editor.xmd-export-renderer {
+  background: var(--bg);
+  contain: layout paint style;
+}
+
+.xmd-cm-editor.xmd-export-renderer .cm-content {
+  caret-color: transparent;
+  min-height: 0;
+}
+
+.xmd-cm-editor.xmd-export-renderer
+  :is(
+    .cm-cursor,
+    .cm-dropCursor,
+    .cm-selectionLayer,
+    .cm-tooltip,
+    .cm-panels,
+    .xmd-cm-code-preview-header,
+    .xmd-cm-code-scrollbar,
+    .xmd-cm-preview-copy,
+    .xmd-cm-mermaid-actions,
+    .xmd-cm-math-actions,
+    .xmd-cm-table-menu,
+    .xmd-cm-mermaid-preview-toggle,
+    .xmd-cm-math-preview-toggle
+  ) {
+  display: none !important;
+}
+
+.xmd-cm-editor.xmd-export-renderer :is(button, input, textarea, [contenteditable]) {
+  pointer-events: none;
+}
+
 @media (max-width: 760px) {
   .xmd-cm-editor .cm-content {
     padding-inline: 24px;

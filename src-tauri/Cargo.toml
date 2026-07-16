@@ -43,6 +43,8 @@ blake3 = "1"
 reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "rustls-no-provider"] }
 # docx 是 zip，用于导出后字体后处理（deflate 读写）
 zip = { version = "2", default-features = false, features = ["deflate"] }
+png = "0.18.1"
+image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
 
 [target.'cfg(unix)'.dependencies]
 xattr = "1"

@@ -24,6 +24,7 @@ pub fn run() {
         .manage(SettingsStore::default())
         .manage(SearchCancellation::default())
         .manage(LifecycleState::default())
+        .manage(commands::raster_export::RasterExportStore::default())
         .manage(infrastructure::workspace::DocumentWriteCoordinator::default())
         .register_uri_scheme_protocol("xmd", infrastructure::protocol::handle_xmd)
         .setup(|app| {
@@ -57,6 +58,10 @@ pub fn run() {
             commands::workspace::read_binary_file,
             commands::workspace::write_file,
             commands::workspace::write_binary_file,
+            commands::raster_export::begin_raster_export,
+            commands::raster_export::append_raster_export,
+            commands::raster_export::finish_raster_export,
+            commands::raster_export::cancel_raster_export,
             commands::workspace::read_dir,
             commands::workspace::list_files,
             commands::workspace::create_file,

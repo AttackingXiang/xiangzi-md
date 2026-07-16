@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  encodeJpegRgba,
-  imageFormatForPath,
-  measuredExportHeight,
-  plannedExportImageDimensions,
-  planPdfLinkAnnotations,
-  planPdfPages,
-} from './exportDocument'
-import { exportFileStem } from './exportFormat'
+import { measuredExportHeight, planPdfLinkAnnotations, planPdfPages } from './exportDocument'
+import { exportFileStem, imageFormatForPath } from './exportFormat'
 
 describe('exportDocument', () => {
   it('selects JPEG only for JPEG file extensions', () => {
@@ -76,41 +69,5 @@ describe('exportDocument', () => {
 
   it('does not truncate documents taller than the former 20,000px limit', () => {
     expect(measuredExportHeight(42_345.2)).toBe(42_366)
-  })
-
-  it('keeps normal long images at full resolution', () => {
-    expect(plannedExportImageDimensions(920, 20_000)).toEqual({
-      width: 920,
-      height: 20_000,
-      scale: 1,
-    })
-  })
-
-  it('bounds pathological long-image memory without cropping document height', () => {
-    const dimensions = plannedExportImageDimensions(920, 100_000)
-    expect(dimensions.width * dimensions.height).toBeLessThanOrEqual(32_000_000)
-    expect(dimensions.width / dimensions.height).toBeCloseTo(920 / 100_000, 4)
-    expect(dimensions.height).toBeGreaterThan(0)
-    expect(dimensions.scale).toBeLessThan(1)
-  })
-
-  it('encodes JPEG in a browser runtime without Node Buffer', async () => {
-    const runtime = globalThis as unknown as { Buffer?: unknown }
-    const previousBuffer = runtime.Buffer
-    delete runtime.Buffer
-    try {
-      const encoded = await encodeJpegRgba({
-        data: new Uint8Array([255, 0, 0, 255]),
-        width: 1,
-        height: 1,
-      })
-
-      expect(Array.from(encoded.slice(0, 2))).toEqual([0xff, 0xd8])
-      expect(Array.from(encoded.slice(-2))).toEqual([0xff, 0xd9])
-      expect(runtime.Buffer).toBeUndefined()
-    } finally {
-      if (previousBuffer === undefined) delete runtime.Buffer
-      else runtime.Buffer = previousBuffer
-    }
   })
 })

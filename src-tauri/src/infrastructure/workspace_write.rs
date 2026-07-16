@@ -119,13 +119,27 @@ pub fn write_file(
 }
 
 pub fn write_binary_file(app: &AppHandle, path: &Path, bytes: &[u8]) -> AppResult<PathResult> {
-    ensure_write_allowed(app, path)?;
     if bytes.len() as u64 > MAX_BINARY_WRITE_BYTES {
         return Err(AppError::new(
             "file_too_large",
             "导出文件超过 128 MB，已停止写入",
         ));
     }
+    write_streamed_file(app, path, |file| {
+        file.write_all(bytes)
+            .map_err(|error| AppError::io("写入临时文件失败", error))
+    })
+}
+
+/// Atomically writes an export without requiring the complete encoded file in
+/// memory. The caller writes into a temporary file in the destination folder;
+/// permissions/xattrs and the final rename keep the same guarantees as normal
+/// binary exports.
+pub fn write_streamed_file<F>(app: &AppHandle, path: &Path, write: F) -> AppResult<PathResult>
+where
+    F: FnOnce(&mut fs::File) -> AppResult<()>,
+{
+    ensure_write_allowed(app, path)?;
     let parent = path
         .parent()
         .ok_or_else(|| AppError::new("invalid_path", "目标路径没有父目录"))?;
@@ -133,9 +147,7 @@ pub fn write_binary_file(app: &AppHandle, path: &Path, bytes: &[u8]) -> AppResul
     let original_metadata = fs::metadata(path).ok();
     let mut temporary =
         NamedTempFile::new_in(parent).map_err(|error| AppError::io("创建临时文件失败", error))?;
-    temporary
-        .write_all(bytes)
-        .map_err(|error| AppError::io("写入临时文件失败", error))?;
+    write(temporary.as_file_mut())?;
     temporary
         .as_file()
         .sync_all()

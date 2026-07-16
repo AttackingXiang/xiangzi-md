@@ -1,13 +1,9 @@
-import { EXPORT_RASTER_WIDTH, MAX_EXPORT_DOCUMENT_PIXELS } from './imageBudget'
-
-const RENDER_CHUNK_HEIGHT = 4_000
+const EXPORT_DOCUMENT_WIDTH = 920
 const PDF_PAGE_WIDTH_PT = 595.28
 const PDF_PAGE_HEIGHT_PT = 841.89
 const PDF_RENDER_SCALE = 1.5
 const EXPORT_IMAGE_LOAD_TIMEOUT_MS = 15_000
 const EXPORT_FONT_LOAD_TIMEOUT_MS = 5_000
-
-export type { ExportImageFormat } from './exportFormat'
 
 export interface PdfBlockBoundary {
   top: number
@@ -143,7 +139,7 @@ async function createExportFrame(html: string): Promise<ExportFrame> {
     'position:fixed',
     'left:-100000px',
     'top:0',
-    `width:${EXPORT_RASTER_WIDTH}px`,
+    `width:${EXPORT_DOCUMENT_WIDTH}px`,
     'height:800px',
     'border:0',
     'pointer-events:none',
@@ -170,7 +166,7 @@ async function createExportFrame(html: string): Promise<ExportFrame> {
       frame,
       document: doc,
       root,
-      width: EXPORT_RASTER_WIDTH,
+      width: EXPORT_DOCUMENT_WIDTH,
       height,
       backgroundColor,
     }
@@ -206,79 +202,6 @@ async function renderSection(
     y,
   })
 }
-
-export interface ExportImageDimensions {
-  width: number
-  height: number
-  scale: number
-}
-
-/** Preserve the whole long document while bounding its peak RGBA allocation. */
-export function plannedExportImageDimensions(
-  width: number,
-  height: number,
-  maxPixels = MAX_EXPORT_DOCUMENT_PIXELS,
-): ExportImageDimensions {
-  const safeWidth = Math.max(1, Math.floor(Number.isFinite(width) ? width : 1))
-  const safeHeight = Math.max(1, Math.floor(Number.isFinite(height) ? height : 1))
-  const scale = Math.min(1, Math.sqrt(Math.max(1, maxPixels) / (safeWidth * safeHeight)))
-  return {
-    width: Math.max(1, Math.floor(safeWidth * scale)),
-    height: Math.max(1, Math.floor(safeHeight * scale)),
-    scale,
-  }
-}
-
-interface RenderedRgba extends ExportImageDimensions {
-  data: Uint8Array
-}
-
-async function renderRgba(exportFrame: ExportFrame): Promise<RenderedRgba> {
-  const dimensions = plannedExportImageDimensions(exportFrame.width, exportFrame.height)
-  const pixels = new Uint8Array(dimensions.width * dimensions.height * 4)
-
-  for (let y = 0; y < exportFrame.height; y += RENDER_CHUNK_HEIGHT) {
-    const height = Math.min(RENDER_CHUNK_HEIGHT, exportFrame.height - y)
-    const canvas = await renderSection(exportFrame, y, height, dimensions.scale)
-    const outputTop = Math.floor(y * dimensions.scale)
-    const outputBottom =
-      y + height >= exportFrame.height
-        ? dimensions.height
-        : Math.floor((y + height) * dimensions.scale)
-    const outputHeight = Math.max(1, outputBottom - outputTop)
-    let normalized: HTMLCanvasElement | null = null
-    try {
-      let source = canvas
-      if (canvas.width !== dimensions.width || canvas.height !== outputHeight) {
-        normalized = document.createElement('canvas')
-        normalized.width = dimensions.width
-        normalized.height = outputHeight
-        const normalizationContext = normalized.getContext('2d')
-        if (!normalizationContext) throw new Error('无法调整导出图片分片')
-        normalizationContext.imageSmoothingEnabled = true
-        normalizationContext.imageSmoothingQuality = 'high'
-        normalizationContext.drawImage(canvas, 0, 0, dimensions.width, outputHeight)
-        source = normalized
-      }
-      const context = source.getContext('2d', { willReadFrequently: true })
-      if (!context) throw new Error('无法读取导出图片')
-      const imageData = context.getImageData(0, 0, dimensions.width, outputHeight)
-      pixels.set(imageData.data, outputTop * dimensions.width * 4)
-    } finally {
-      canvas.width = 1
-      canvas.height = 1
-      if (normalized) {
-        normalized.width = 1
-        normalized.height = 1
-      }
-    }
-    await nextPaint()
-  }
-
-  return { ...dimensions, data: pixels }
-}
-
-export { imageFormatForPath } from './exportFormat'
 
 export function planPdfPages(
   documentHeight: number,
@@ -349,9 +272,13 @@ export function planPdfLinkAnnotations(
 
 function collectPdfBlocks(doc: Document): PdfBlockBoundary[] {
   const rootTop = doc.documentElement.getBoundingClientRect().top
-  const selector = ['.export-content > *', '.mermaid-export', 'pre', 'table', 'blockquote'].join(
-    ',',
-  )
+  const selector = [
+    '.xmd-export-renderer .cm-content > *',
+    '.xmd-cm-mermaid-block',
+    '.xmd-cm-math-block',
+    'table',
+    'blockquote',
+  ].join(',')
 
   return Array.from(doc.querySelectorAll<HTMLElement>(selector)).map((element) => {
     const rect = element.getBoundingClientRect()
@@ -361,69 +288,18 @@ function collectPdfBlocks(doc: Document): PdfBlockBoundary[] {
 
 function collectPdfLinks(doc: Document): PdfLinkBoundary[] {
   const rootRect = doc.documentElement.getBoundingClientRect()
-  return Array.from(doc.querySelectorAll<HTMLAnchorElement>('.export-content a[href]')).flatMap(
-    (anchor) => {
-      const href = anchor.getAttribute('href') ?? ''
-      return Array.from(anchor.getClientRects()).map((rect) => ({
-        href,
-        left: rect.left - rootRect.left,
-        top: rect.top - rootRect.top,
-        width: rect.width,
-        height: rect.height,
-      }))
-    },
-  )
-}
-
-interface JpegBufferCompat {
-  from(value: ArrayLike<number>): Uint8Array
-}
-
-/**
- * jpeg-js is published as CommonJS and its encoder returns Buffer.from(...)
- * whenever the bundler supplies a CommonJS `module`. WebViews do not provide
- * Node's Buffer, and Vite intentionally externalizes `import('buffer')` to an
- * empty browser module. Install only the one synchronous operation the encoder
- * needs, then restore the host global immediately.
- */
-export async function encodeJpegRgba(
-  image: { data: Uint8Array; width: number; height: number },
-  quality = 92,
-): Promise<Uint8Array> {
-  const { default: jpeg } = await import('jpeg-js')
-  const runtime = globalThis as unknown as { Buffer?: JpegBufferCompat }
-  const previousBuffer = runtime.Buffer
-  if (!previousBuffer) runtime.Buffer = { from: (value) => Uint8Array.from(value) }
-  try {
-    return new Uint8Array(jpeg.encode(image, quality).data)
-  } finally {
-    if (previousBuffer) runtime.Buffer = previousBuffer
-    else delete runtime.Buffer
-  }
-}
-
-export async function renderDocumentImage(
-  html: string,
-  format: ExportImageFormat,
-): Promise<Uint8Array> {
-  const exportFrame = await createExportFrame(html)
-  try {
-    const rendered = await renderRgba(exportFrame)
-    if (format === 'jpeg') {
-      return encodeJpegRgba(rendered)
-    }
-
-    const { encode } = await import('fast-png')
-    return encode({
-      width: rendered.width,
-      height: rendered.height,
-      data: rendered.data,
-      depth: 8,
-      channels: 4,
-    })
-  } finally {
-    exportFrame.frame.remove()
-  }
+  return Array.from(
+    doc.querySelectorAll<HTMLAnchorElement>('.xmd-export-renderer a[href]'),
+  ).flatMap((anchor) => {
+    const href = anchor.getAttribute('href') ?? ''
+    return Array.from(anchor.getClientRects()).map((rect) => ({
+      href,
+      left: rect.left - rootRect.left,
+      top: rect.top - rootRect.top,
+      width: rect.width,
+      height: rect.height,
+    }))
+  })
 }
 
 export async function renderDocumentPdf(html: string): Promise<Uint8Array> {
@@ -467,4 +343,3 @@ export async function renderDocumentPdf(html: string): Promise<Uint8Array> {
     exportFrame.frame.remove()
   }
 }
-import type { ExportImageFormat } from './exportFormat'

@@ -18,7 +18,6 @@ import type {
   SearchResponse,
   UpdaterPort,
 } from './contracts'
-import { releaseExportObjectUrls } from '../lib/exportImageAsset'
 import { exportFileStem, imageFormatForPath } from '../lib/exportFormat'
 import { dirName } from '../lib/path'
 
@@ -254,38 +253,63 @@ export const tauriDesktopAdapter: DesktopPort = {
     return { path }
   },
   exportPDF: async (html, suggestedName) => {
-    try {
-      const path = await save({
-        defaultPath: exportFileStem(suggestedName) + '.pdf',
-        filters: [{ name: 'PDF', extensions: ['pdf'] }],
-      })
-      if (!path) return null
-      const { renderDocumentPdf } = await import('../lib/exportDocument')
-      await invoke('write_binary_file', await renderDocumentPdf(html), {
-        headers: { 'x-xmd-output-path': encodeURIComponent(path) },
-      })
-      return { path }
-    } finally {
-      releaseExportObjectUrls(html)
-    }
+    const path = await save({
+      defaultPath: exportFileStem(suggestedName) + '.pdf',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    })
+    if (!path) return null
+    const { renderDocumentPdf } = await import('../lib/exportDocument')
+    await invoke('write_binary_file', await renderDocumentPdf(html), {
+      headers: { 'x-xmd-output-path': encodeURIComponent(path) },
+    })
+    return { path }
   },
-  exportImage: async (html, suggestedName) => {
+  exportImage: async (suggestedName, render, onProgress) => {
+    const path = await save({
+      defaultPath: exportFileStem(suggestedName) + '.png',
+      filters: [
+        { name: 'PNG 图片', extensions: ['png'] },
+        { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
+      ],
+    })
+    if (!path) return null
+
+    onProgress?.({ phase: 'preparing' })
+    const source = await render(imageFormatForPath(path))
+    let sessionId: string | null = null
     try {
-      const path = await save({
-        defaultPath: exportFileStem(suggestedName) + '.png',
-        filters: [
-          { name: 'PNG 图片', extensions: ['png'] },
-          { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] },
-        ],
+      sessionId = await invoke<string>('begin_raster_export', {
+        outputPath: path,
+        width: source.width,
+        height: source.height,
+        format: imageFormatForPath(path),
       })
-      if (!path) return null
-      const { renderDocumentImage } = await import('../lib/exportDocument')
-      await invoke('write_binary_file', await renderDocumentImage(html, imageFormatForPath(path)), {
-        headers: { 'x-xmd-output-path': encodeURIComponent(path) },
-      })
-      return { path }
+      const expectedBytes = source.width * source.height * 4
+      let writtenBytes = 0
+      onProgress?.({ phase: 'rendering', percent: 0 })
+      for await (const chunk of source.chunks()) {
+        await invoke('append_raster_export', chunk, {
+          headers: { 'x-xmd-raster-session': sessionId },
+        })
+        writtenBytes += chunk.byteLength
+        onProgress?.({
+          phase: 'rendering',
+          percent: Math.min(100, Math.round((writtenBytes / expectedBytes) * 100)),
+        })
+      }
+      onProgress?.({ phase: 'encoding' })
+      return await invoke<{ path: string }>('finish_raster_export', { sessionId })
+    } catch (error) {
+      if (sessionId) {
+        try {
+          await invoke('cancel_raster_export', { sessionId })
+        } catch {
+          // Preserve the original render/write error.
+        }
+      }
+      throw error
     } finally {
-      releaseExportObjectUrls(html)
+      source.dispose()
     }
   },
   pandocStatus: () => invoke<{ path: string; version: string } | null>('pandoc_status'),

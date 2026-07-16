@@ -36,6 +36,7 @@ import ContextMenu, { type ContextMenuState, type MenuItem } from './components/
 import TableGridPicker from './components/TableGridPicker'
 import InputDialog from './components/InputDialog'
 import ExportCompleteDialog from './components/ExportCompleteDialog'
+import ExportProgressToast from './components/ExportProgressToast'
 import DraftRecoveryDialog from './components/DraftRecoveryDialog'
 import UnsavedChangesDialog, {
   type CloseDecision,
@@ -67,7 +68,7 @@ import { useTreeOps } from './hooks/useTreeOps'
 import { useUpdater } from './hooks/useUpdater'
 import { useDraftRecovery } from './hooks/useDraftRecovery'
 import { useEditorContextMenu } from './hooks/useEditorContextMenu'
-import { useExportActions } from './hooks/useExportActions'
+import { useExportActions, type ExportActivity } from './hooks/useExportActions'
 import { useAppCommands } from './hooks/useAppCommands'
 import { useNativeIntegration } from './hooks/useNativeIntegration'
 import type { SettingsSection } from './components/Settings'
@@ -423,6 +424,7 @@ export default function App(): JSX.Element {
     return () => linkPromptBridge.setHandler(null)
   }, [])
   const [exportResultPath, setExportResultPath] = useState<string | null>(null)
+  const [exportActivity, setExportActivity] = useState<ExportActivity | null>(null)
 
   const updater = useUpdater(settings?.checkUpdatesOnStartup ?? false)
 
@@ -791,6 +793,7 @@ export default function App(): JSX.Element {
   const { exportHTML, exportPDF, exportImage, exportDocx } = useExportActions(
     stateRef,
     setExportResultPath,
+    setExportActivity,
   )
 
   // ── 导入 Word 文档 ──────────────────────────────────────────────────────────
@@ -1232,6 +1235,10 @@ export default function App(): JSX.Element {
                   width={outlineWidth}
                 />
               </>
+            )}
+
+            {exportActivity && (
+              <ExportProgressToast label={exportActivity.label} percent={exportActivity.percent} />
             )}
           </div>
 

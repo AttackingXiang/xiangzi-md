@@ -4,7 +4,7 @@ import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { check } from '@tauri-apps/plugin-updater'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderDocumentImage, renderDocumentPdf } from '../lib/exportDocument'
+import { renderDocumentPdf } from '../lib/exportDocument'
 import { tauriDesktopAdapter, tauriUpdaterAdapter } from './tauriAdapter'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
@@ -21,8 +21,6 @@ vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(), revealItemInDir:
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }))
 vi.mock('@tauri-apps/plugin-updater', () => ({ check: vi.fn() }))
 vi.mock('../lib/exportDocument', () => ({
-  imageFormatForPath: vi.fn((path: string) => (/\.jpe?g$/i.test(path) ? 'jpeg' : 'png')),
-  renderDocumentImage: vi.fn(),
   renderDocumentPdf: vi.fn(),
 }))
 
@@ -33,7 +31,6 @@ const writeImageMock = vi.mocked(writeImage)
 const openMock = vi.mocked(open)
 const saveMock = vi.mocked(save)
 const checkMock = vi.mocked(check)
-const renderDocumentImageMock = vi.mocked(renderDocumentImage)
 const renderDocumentPdfMock = vi.mocked(renderDocumentPdf)
 
 describe('tauriDesktopAdapter', () => {
@@ -45,7 +42,6 @@ describe('tauriDesktopAdapter', () => {
     writeImageMock.mockReset()
     openMock.mockReset()
     saveMock.mockReset()
-    renderDocumentImageMock.mockReset()
     renderDocumentPdfMock.mockReset()
     checkMock.mockReset()
   })
@@ -229,43 +225,61 @@ describe('tauriDesktopAdapter', () => {
   })
 
   it('uses JPEG encoding when the selected image path has a JPEG extension', async () => {
-    const bytes = new Uint8Array([255, 216, 255])
+    const chunk = new Uint8Array([255, 0, 0, 255])
+    const dispose = vi.fn()
+    const onProgress = vi.fn()
+    const render = vi.fn().mockResolvedValue({
+      width: 1,
+      height: 1,
+      async *chunks() {
+        yield await Promise.resolve(chunk)
+      },
+      dispose,
+    })
     saveMock.mockResolvedValueOnce('/notes/a.jpeg')
-    renderDocumentImageMock.mockResolvedValueOnce(bytes)
+    invokeMock.mockImplementation((command) => {
+      if (command === 'begin_raster_export') return Promise.resolve('raster-1')
+      if (command === 'finish_raster_export') return Promise.resolve({ path: '/notes/a.jpeg' })
+      return Promise.resolve(undefined)
+    })
 
-    await expect(tauriDesktopAdapter.exportImage('<h1>A</h1>', 'a.md')).resolves.toEqual({
+    await expect(tauriDesktopAdapter.exportImage('a.md', render, onProgress)).resolves.toEqual({
       path: '/notes/a.jpeg',
     })
-    expect(renderDocumentImageMock).toHaveBeenCalledWith('<h1>A</h1>', 'jpeg')
-    expect(invokeMock).toHaveBeenCalledWith('write_binary_file', bytes, {
-      headers: { 'x-xmd-output-path': encodeURIComponent('/notes/a.jpeg') },
+    expect(render).toHaveBeenCalledWith('jpeg')
+    expect(invokeMock).toHaveBeenCalledWith('begin_raster_export', {
+      outputPath: '/notes/a.jpeg',
+      width: 1,
+      height: 1,
+      format: 'jpeg',
     })
+    expect(invokeMock).toHaveBeenCalledWith('append_raster_export', chunk, {
+      headers: { 'x-xmd-raster-session': 'raster-1' },
+    })
+    expect(invokeMock).toHaveBeenCalledWith('finish_raster_export', {
+      sessionId: 'raster-1',
+    })
+    expect(onProgress).toHaveBeenNthCalledWith(1, { phase: 'preparing' })
+    expect(onProgress).toHaveBeenNthCalledWith(2, { phase: 'rendering', percent: 0 })
+    expect(onProgress).toHaveBeenNthCalledWith(3, { phase: 'rendering', percent: 100 })
+    expect(onProgress).toHaveBeenNthCalledWith(4, { phase: 'encoding' })
+    expect(dispose).toHaveBeenCalledOnce()
   })
 
   it('does not render a PDF when the save dialog is cancelled', async () => {
-    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
     saveMock.mockResolvedValueOnce(null)
 
-    await expect(
-      tauriDesktopAdapter.exportPDF('<img data-xmd-export-owned-url="blob:cancelled">', 'a.md'),
-    ).resolves.toBeNull()
+    await expect(tauriDesktopAdapter.exportPDF('<p>A</p>', 'a.md')).resolves.toBeNull()
     expect(renderDocumentPdfMock).not.toHaveBeenCalled()
     expect(invokeMock).not.toHaveBeenCalled()
-    expect(revoke).toHaveBeenCalledWith('blob:cancelled')
-    revoke.mockRestore()
   })
 
-  it('releases export assets when PDF rendering fails', async () => {
-    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+  it('does not write a PDF when rendering fails', async () => {
     saveMock.mockResolvedValueOnce('/notes/a.pdf')
     renderDocumentPdfMock.mockRejectedValueOnce(new Error('canvas failed'))
 
-    await expect(
-      tauriDesktopAdapter.exportPDF('<img data-xmd-export-owned-url="blob:failed">', 'a.md'),
-    ).rejects.toThrow('canvas failed')
+    await expect(tauriDesktopAdapter.exportPDF('<p>A</p>', 'a.md')).rejects.toThrow('canvas failed')
     expect(invokeMock).not.toHaveBeenCalled()
-    expect(revoke).toHaveBeenCalledWith('blob:failed')
-    revoke.mockRestore()
   })
 
   it('selects Pandoc and Word reference template files', async () => {

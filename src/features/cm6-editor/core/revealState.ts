@@ -2,6 +2,7 @@ import { syntaxTree } from '@codemirror/language'
 import type { EditorState } from '@codemirror/state'
 import { StateField } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
+import { cm6ExportMode } from './exportMode'
 import { policyFor } from './nodePolicy'
 import { mergeRanges, rangesTouch, type PreviewRange } from './types'
 
@@ -28,6 +29,7 @@ function collectAncestors(node: SyntaxNode | null, into: PreviewRange[]): void {
 
 /** Pure function: computes revealed construct ranges for `state.selection`. */
 export function computeRevealedRanges(state: EditorState): RevealedRanges {
+  if (state.facet(cm6ExportMode)) return EMPTY_REVEALED
   const tree = syntaxTree(state)
   const collected: PreviewRange[] = []
 

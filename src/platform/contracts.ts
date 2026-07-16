@@ -1,3 +1,5 @@
+import type { ExportImageFormat } from '../lib/exportFormat'
+
 export interface AppInfo {
   name: string
   version: string
@@ -188,6 +190,18 @@ export interface UpdaterPort {
   relaunch(): Promise<void>
 }
 
+export interface RasterImageSource {
+  width: number
+  height: number
+  chunks(): AsyncIterable<Uint8Array>
+  dispose(): void
+}
+
+export interface RasterExportProgress {
+  phase: 'preparing' | 'rendering' | 'encoding'
+  percent?: number
+}
+
 export interface DesktopPort {
   getAppInfo(): Promise<AppInfo>
   openFolder(initialPath?: string): Promise<Folder | null>
@@ -243,7 +257,11 @@ export interface DesktopPort {
   stopFind(): Promise<void>
   exportHTML(html: string, suggestedName: string): Promise<{ path: string } | null>
   exportPDF(html: string, suggestedName: string): Promise<{ path: string } | null>
-  exportImage(html: string, suggestedName: string): Promise<{ path: string } | null>
+  exportImage(
+    suggestedName: string,
+    render: (format: ExportImageFormat) => Promise<RasterImageSource>,
+    onProgress?: (progress: RasterExportProgress) => void,
+  ): Promise<{ path: string } | null>
   pandocStatus(): Promise<{ path: string; version: string } | null>
   exportDocx(
     markdown: string,

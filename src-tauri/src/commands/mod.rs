@@ -3,6 +3,7 @@ pub mod assets;
 pub mod attachment;
 pub mod drafts;
 pub mod pandoc;
+pub mod raster_export;
 pub mod search;
 pub mod settings;
 pub mod workspace;
