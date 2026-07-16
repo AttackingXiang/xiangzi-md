@@ -50,19 +50,31 @@ export function planExternalDocumentChange(
   return { from, to: currentTo, insert: nextValue.slice(from, nextTo) }
 }
 
+/**
+ * Builds the transaction that replays an external document change (e.g. a
+ * file reload) into the live CM6 doc.
+ *
+ * Contract: `currentValue` must already be LF-normalized — the same model
+ * CM6's own `doc` uses internally (see `normalizeEditorDocument`). Callers
+ * that keep their own string mirror of the document (controller.ts's
+ * `mirror`) are responsible for that invariant; it is never re-normalized
+ * here; only `value`, the external input, is. A caller that violates the
+ * contract by passing un-normalized (e.g. CRLF) content will trip the
+ * `state.doc.length` check below with a `RangeError` rather than silently
+ * diffing against the wrong text.
+ */
 export function createExternalSyncTransaction(
   state: EditorState,
   value: string,
   currentValue = state.doc.toString(),
 ): TransactionSpec | null {
-  const normalizedCurrentValue = normalizeEditorDocument(currentValue)
   const normalizedValue = normalizeEditorDocument(value)
-  if (normalizedCurrentValue.length !== state.doc.length) {
+  if (currentValue.length !== state.doc.length) {
     throw new RangeError(
-      `CM6 external sync length mismatch: mirror=${normalizedCurrentValue.length}, doc=${state.doc.length}`,
+      `CM6 external sync length mismatch: mirror=${currentValue.length}, doc=${state.doc.length}`,
     )
   }
-  const change = planExternalDocumentChange(normalizedCurrentValue, normalizedValue)
+  const change = planExternalDocumentChange(currentValue, normalizedValue)
   if (!change) return null
   return {
     changes: change,

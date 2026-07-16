@@ -350,10 +350,10 @@ describe('CM6 Markdown live preview: lists and quotes', () => {
 
     expect(listLines).toHaveLength(4)
     expect(listLines.map(({ style }) => style)).toEqual([
-      '--xmd-list-depth:0;--xmd-list-hang:1.75em',
-      '--xmd-list-depth:1;--xmd-list-hang:3.1em',
-      '--xmd-list-depth:0;--xmd-list-hang:1.75em',
-      '--xmd-list-depth:0;--xmd-list-hang:1.36em',
+      '--xmd-list-hang:1.75em',
+      '--xmd-list-hang:3.1em',
+      '--xmd-list-hang:1.75em',
+      '--xmd-list-hang:1.36em',
     ])
     expect(replacements.some(({ from, to }) => from === 0 && to === 2)).toBe(true)
     expect(replacements.some(({ from, to }) => from === 8 && to === 12)).toBe(true)

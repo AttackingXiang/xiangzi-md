@@ -64,13 +64,18 @@ export function createCm6Editor(options: Cm6EditorOptions): Cm6EditorController 
     },
     setValue: (value) => {
       if (destroyed) return
-      const normalizedValue = normalizeEditorDocument(value)
-      const transaction = createExternalSyncTransaction(view.state, normalizedValue, mirror)
+      // `mirror` is always LF-normalized (see sync.ts's `createExternalSyncTransaction`
+      // doc comment for the contract), so it can be passed straight through as
+      // `currentValue` — normalizing `value` here too would just repeat the
+      // normalization `createExternalSyncTransaction` already does internally.
+      const transaction = createExternalSyncTransaction(view.state, value, mirror)
       if (transaction) {
         // EditorView.dispatch is synchronous: the listener applies the external
-        // ChangeSet to the old mirror before this assignment confirms the value.
+        // ChangeSet to the old mirror first. Re-derive mirror from the now
+        // up-to-date (and by construction LF-normalized) view doc instead of
+        // normalizing `value` a second time.
         view.dispatch(transaction)
-        mirror = normalizedValue
+        mirror = view.state.doc.toString()
       }
     },
     setReadOnly: (readOnly) => reconfigure(editable.reconfigure(editableExtension(readOnly))),

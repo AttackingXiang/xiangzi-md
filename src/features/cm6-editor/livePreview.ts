@@ -96,7 +96,25 @@ function parseInlineHtmlTag(
   return color ? { closing: false, name, color } : null
 }
 
+// `buildLivePreviewDecorations` and `collectHiddenRanges` both need the same
+// inline-HTML span analysis for the same viewport range on every repaint —
+// without memoization each does its own full `syntaxTree.iterate` pass.
+// `inlineHtmlSpans` depends on nothing but `state.doc` and `syntaxTree(state)`,
+// and a CM6 `EditorState` is immutable: a given instance's doc and syntax
+// tree never change after construction, a new state is created for every
+// edit. That makes memoizing by `state` object identity always safe — a
+// cache hit can never observe a doc/tree that differs from the one the
+// cached spans were computed against. The inner key is the requested
+// `[from, to)` window so distinct probes (e.g. viewport paint vs. a
+// single-character hidden-boundary probe) don't collide.
+const inlineHtmlSpansCache = new WeakMap<EditorState, Map<string, InlineHtmlSpan[]>>()
+
 function inlineHtmlSpans(state: EditorState, visible: PreviewRange): InlineHtmlSpan[] {
+  let cacheForState = inlineHtmlSpansCache.get(state)
+  const cacheKey = `${visible.from}:${visible.to}`
+  const cached = cacheForState?.get(cacheKey)
+  if (cached) return cached
+
   const spans: InlineHtmlSpan[] = []
   const stack: InlineHtmlOpeningTag[] = []
   // Hidden-boundary key commands query only one character around the caret.
@@ -132,6 +150,11 @@ function inlineHtmlSpans(state: EditorState, visible: PreviewRange): InlineHtmlS
     },
   })
 
+  if (!cacheForState) {
+    cacheForState = new Map()
+    inlineHtmlSpansCache.set(state, cacheForState)
+  }
+  cacheForState.set(cacheKey, spans)
   return spans
 }
 
@@ -218,7 +241,12 @@ export function buildLivePreviewDecorations(
               Decoration.line({
                 class: 'xmd-cm-list-line',
                 attributes: {
-                  style: `--xmd-list-depth:${depth};--xmd-list-hang:${hangingIndent}em`,
+                  // `--xmd-list-depth` is not set here: the only consumer,
+                  // `.xmd-cm-list-marker` in livePreview.css, reads the copy
+                  // `ListMarkerWidget` sets on its own element (see
+                  // livePreviewWidgets.ts), which shadows any value
+                  // inherited from this line. Setting it here would be dead.
+                  style: `--xmd-list-hang:${hangingIndent}em`,
                 },
               }).range(state.doc.lineAt(node.from).from),
               Decoration.replace({

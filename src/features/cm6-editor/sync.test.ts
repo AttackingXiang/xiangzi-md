@@ -29,12 +29,18 @@ describe('CM6 external document synchronization', () => {
   })
 
   it('opens and externally updates CRLF documents without a mirror mismatch', () => {
+    // `state.doc` is CM6's own line model: it silently drops the \r from a
+    // CRLF-seeded doc string on creation. `currentValue` must reflect that
+    // already-LF-normalized model per createExternalSyncTransaction's
+    // contract (a caller's own mirror, like controller.ts's, is expected to
+    // maintain this invariant) — only `value`, the external input, still
+    // arrives here as raw CRLF and gets normalized internally.
     const initialValue = 'heading\r\n\r\n```sh\r\necho old\r\n```\r\n'
     const state = EditorState.create({ doc: initialValue })
     const spec = createExternalSyncTransaction(
       state,
       'heading\r\n\r\n```sh\r\necho new\r\n```\r\n',
-      initialValue,
+      normalizeEditorDocument(initialValue),
     )
     const transaction = state.update(spec!)
 
@@ -84,5 +90,21 @@ describe('CM6 external document synchronization', () => {
   it('rejects a stale mirror before it can corrupt the editor document', () => {
     const state = EditorState.create({ doc: 'actual' })
     expect(() => createExternalSyncTransaction(state, 'next', 'stale')).toThrow(RangeError)
+  })
+
+  it('rejects a non-normalized (CRLF) currentValue instead of silently normalizing it', () => {
+    // Per the currentValue contract documented on createExternalSyncTransaction,
+    // callers must already hand in an LF-normalized mirror. A raw CRLF
+    // currentValue is longer than the \r-stripped `state.doc`, so it now
+    // trips the length check rather than being quietly re-normalized.
+    const initialValue = 'heading\r\n\r\n```sh\r\necho old\r\n```\r\n'
+    const state = EditorState.create({ doc: initialValue })
+    expect(() =>
+      createExternalSyncTransaction(
+        state,
+        'heading\r\n\r\n```sh\r\necho new\r\n```\r\n',
+        initialValue,
+      ),
+    ).toThrow(RangeError)
   })
 })
