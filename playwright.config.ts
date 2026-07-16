@@ -27,7 +27,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Local development can reuse an installed Chrome with
+        // PLAYWRIGHT_CHANNEL=chrome; CI installs Playwright Chromium explicitly.
+        channel: process.env.PLAYWRIGHT_CHANNEL,
+      },
     },
   ],
   webServer: {

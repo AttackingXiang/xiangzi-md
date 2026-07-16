@@ -37,6 +37,9 @@ vitest.config.d.ts
 
 # Local Playwright CLI sessions and snapshots.
 /.playwright-cli/
+/test-results/
+/playwright-report/
+/coverage/
 
 # Local doc assets that are not meant to be versioned.
 /docs/assets/

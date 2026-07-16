@@ -67,7 +67,7 @@ npx playwright install chromium   # 只需一次，下载浏览器
 npm run test:e2e
 ```
 
-**当前状态：套件已编写、尚未执行过**（编写轮次不允许起 dev server / 下载浏览器）。首跑如失败，优先排查测试内注释标出的选择器与键盘输入流假设，而不是先怀疑被测行为。
+**当前状态：套件已在 macOS 系统 Chrome 与 CI 配置的 Playwright Chromium 路径完成验证。** 本地已有 Chrome 时可用 `PLAYWRIGHT_CHANNEL=chrome npm run test:e2e`，CI 则先执行 `npx playwright install --with-deps chromium`。新增交互回归必须进入该套件，不能只依赖 Node 环境单测。
 
 在相同机器与语料上测量；数据写入 release 记录。
 

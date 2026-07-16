@@ -152,9 +152,35 @@ jobs:
             echo "${DELIMITER}"
           } >> "${GITHUB_OUTPUT}"
 
+  audit:
+    name: Release security and browser gate
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm run security:npm
+      - run: npm run test:coverage
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: cargo install cargo-audit --version 0.22.1 --locked
+      - run: cargo audit --file src-tauri/Cargo.lock
+
   quality:
     name: Release gate ${{ matrix.os }}
-    needs: prepare
+    needs: [prepare, audit]
     if: needs.prepare.outputs.publish == 'true'
     strategy:
       fail-fast: false

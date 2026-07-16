@@ -45,7 +45,7 @@
 ## 安全扫描
 
 - `npm audit --omit=dev`：0 个已知漏洞。
-- `cargo audit`：0 个阻断漏洞；报告 18 个 warning。GTK3/glib 项来自 Tauri 的 Linux target 依赖，不进入当前 macOS/Windows 产物；`bincode` 来自 persisted-scope，其他 UNIC/proc-macro 项为 Tauri 构建链传递依赖。它们标记为 unmaintained/unsound warning 而非可利用漏洞，继续由 Dependabot 和 Tauri 升级窗口跟踪。
+- `cargo audit`：2026-07-16 复核无当前 macOS/Windows 发布目标的阻断漏洞；`plist 1.10.0` 已把发布链路升级到 `quick-xml 0.41.0`。Linux-only `wayland-scanner` 仍引用旧版，两个 RUSTSEC 项以带说明的 audit ignore 跟踪，恢复 Linux 发布前必须清零。仍报告 18 个 warning：GTK3/glib 项来自 Tauri 的 Linux target 依赖，不进入当前 macOS/Windows 产物；`bincode` 来自 persisted-scope，其他 UNIC/proc-macro 项为 Tauri 构建链传递依赖，继续由 Dependabot 和 Tauri 升级窗口跟踪。
 - CSP 限制脚本到应用自身；外部链接交给系统浏览器；文件访问仍由对话框和运行时 scope 授权。
 - Tauri 的 `freezePrototype` 与当前 Milkdown/ProseMirror 不兼容，会导致编辑器空白，因此未启用；这一点通过最终可视回归验证，而不是静默保留一个破坏功能的“安全开关”。
 

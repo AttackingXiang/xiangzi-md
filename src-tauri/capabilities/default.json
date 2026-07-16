@@ -19,7 +19,6 @@
       "allow": [{ "url": "https://*" }]
     },
     "opener:allow-reveal-item-in-dir",
-    "opener:allow-open-path",
     "updater:default",
     "process:allow-restart"
   ]

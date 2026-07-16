@@ -29,12 +29,21 @@ git status --short --branch
 
 ```bash
 npm ci
+npm run security:npm
 npm run check
+npm run test:coverage
+npx playwright install chromium
+npm run test:e2e
+npm run knip
 npm run rust:check
+cargo audit --file src-tauri/Cargo.lock
 ```
 
-`npm run check` 包含 Prettier、ESLint、前端测试、类型检查和 Vite 构建；
-`npm run rust:check` 包含 rustfmt、Clippy 和 Rust 测试。任何一步失败都不要打 tag。
+`npm run check` 包含 Prettier、ESLint、前端测试、类型检查、Vite 构建和 bundle 预算；
+`npm run test:coverage` 执行覆盖率下限，`npm run test:e2e` 覆盖真实浏览器光标/选区/滚动；
+`npm run rust:check` 包含 rustfmt、Clippy 和 Rust 测试。首次使用 `cargo audit` 前需安装固定版本的 `cargo-audit 0.22.1`。任何一步失败都不要打 tag。
+
+`.cargo/audit.toml` 仅临时忽略 Linux-only `wayland-scanner` 链路中的 `quick-xml 0.39.4` 告警；当前发行目标只有 macOS/Windows。恢复 Linux 发布前必须先升级上游并删除该忽略，不能直接沿用现有审计结果。
 
 ## 2. 提交并推送 main
 
@@ -84,10 +93,11 @@ tag 必须满足 `vX.Y.Z` 格式，版本必须与五处应用版本一致，且
 ### Release Desktop
 
 1. `Resolve release version`：校验 tag、五处版本和 main 祖先关系，生成发布说明。
-2. `Release gate`：macOS 和 Windows 并行执行前端与 Rust 门禁。
-3. `Build`：macOS Universal 和 Windows x64 并行构建、签名，生成校验和、SBOM、attestation，并上传 7 天保留的临时 Actions Artifact。
-4. `Publish unified GitHub Release`：等待两个平台完成，验证完整产物集，将附件文件名中的空格统一规范化为点号，再根据最终文件名生成唯一的跨平台 `latest.json`，创建 GitHub Release 并统一上传所有附件。
-5. `Verify every published asset and updater URL`：从 GitHub 的公开下载地址逐个完整下载所有 Release 附件，要求 HTTP 成功且下载字节数与 GitHub API 记录一致；随后校验 `latest.json` 六个平台中的 URL 必须精确对应已发布附件。任何 404、超时、大小不符或名称漂移都会让发布失败。
+2. `Release security and browser gate`：执行 npm/RustSec 审计、覆盖率门禁和 Playwright Chromium 回归。
+3. `Release gate`：macOS 和 Windows 并行执行前端与 Rust 门禁。
+4. `Build`：macOS Universal 和 Windows x64 并行构建、签名，生成校验和、SBOM、attestation，并上传 7 天保留的临时 Actions Artifact。
+5. `Publish unified GitHub Release`：等待两个平台完成，验证完整产物集，将附件文件名中的空格统一规范化为点号，再根据最终文件名生成唯一的跨平台 `latest.json`，创建 GitHub Release 并统一上传所有附件。
+6. `Verify every published asset and updater URL`：从 GitHub 的公开下载地址逐个完整下载所有 Release 附件，要求 HTTP 成功且下载字节数与 GitHub API 记录一致；随后校验 `latest.json` 六个平台中的 URL 必须精确对应已发布附件。任何 404、超时、大小不符或名称漂移都会让发布失败。
 
 最终 `latest.json` 必须包含：
 

@@ -1,0 +1,7 @@
+[advisories]
+# quick-xml 0.39.4 is retained only by wayland-scanner, reached through the
+# Linux-only clipboard backend. Xiangzi MD currently builds/releases macOS and
+# Windows only. The shipped plist/Tauri path is upgraded to quick-xml 0.41.0.
+# Remove these ignores when wayland-scanner upgrades its quick-xml dependency
+# or before restoring Linux as a supported release target.
+ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]

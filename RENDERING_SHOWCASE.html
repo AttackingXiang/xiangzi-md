@@ -522,14 +522,6 @@ kbd { background: var(--bg-elevated); border-top-width: ; border-right-width: ; 
 .milkdown .milkdown-table-block { position: relative; }
 .milkdown .milkdown-table-block th, .milkdown .milkdown-table-block td, .milkdown th, .milkdown td { vertical-align: top; white-space: normal; word-break: break-word; overflow-wrap: anywhere; }
 .milkdown .milkdown-table-block .xmd-table-drop-line { z-index: 20; background: var(--accent,#4c7dff); pointer-events: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent,#4c7dff) 35%, transparent); border-radius: 2px; position: absolute; }
-.table-zoom-backdrop { z-index: 220; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); background: rgba(0, 0, 0, 0.45); justify-content: center; align-items: center; padding: 40px; display: flex; position: fixed; inset: 0px; }
-.table-zoom-panel { background: var(--bg-elevated); border: 1px solid var(--border); max-width: min(96vw, 1400px); max-height: 90vh; box-shadow: var(--shadow); border-radius: 12px; flex-direction: column; display: flex; position: relative; overflow: hidden; }
-.table-zoom-close { z-index: 1; background: var(--bg-hover); width: 30px; height: 30px; color: var(--text-muted); cursor: pointer; border: medium; border-radius: 7px; justify-content: center; align-items: center; padding: 0px; transition: background 0.12s, color 0.12s; display: inline-flex; position: absolute; top: 10px; right: 10px; }
-.table-zoom-close:hover { background: var(--bg-active); color: var(--text); }
-.table-zoom-scroll { padding: 44px 28px 28px; overflow: auto; }
-.table-zoom-content table { table-layout: fixed; border-collapse: collapse; width: 100%; font-size: 14px; }
-.table-zoom-content th, .table-zoom-content td { border: 1px solid var(--border-strong,var(--border)); vertical-align: top; white-space: normal; word-break: break-word; padding: 8px 12px; }
-.table-zoom-content th { background: var(--bg-hover); font-weight: 600; }
 .ctx-backdrop { z-index: 150; position: fixed; inset: 0px; }
 .ctx-menu { background: var(--bg-elevated); border: 1px solid var(--border); width: 216px; max-height: 80vh; box-shadow: var(--shadow); -webkit-user-select: none; border-radius: 8px; padding: 4px; font-size: 12.5px; position: fixed; overflow-y: auto; }
 .ctx-item { width: 100%; font-style: inherit; font-variant-caps: inherit; font-weight: inherit; font-width: inherit; font-size: inherit; line-height: inherit; font-family: inherit; font-size-adjust: inherit; font-kerning: inherit; font-variant-alternates: inherit; font-variant-ligatures: inherit; font-variant-numeric: inherit; font-variant-east-asian: inherit; font-variant-position: inherit; font-variant-emoji: inherit; font-feature-settings: inherit; font-optical-sizing: inherit; font-variation-settings: inherit; text-align: left; cursor: pointer; color: var(--text); background: 0px 0px; border: 0px; border-radius: 5px; align-items: center; gap: 8px; padding: 5px 8px; display: flex; }

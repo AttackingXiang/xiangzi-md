@@ -55,12 +55,35 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run security:npm
       - run: npm run check
-      # Dead-code / dependency report. Informational: surfaces unused files,
-      # exports and dependencies on each PR without failing the build.
-      - name: Dead-code report (knip)
-        run: npm run knip
-        continue-on-error: true
+      - run: npm run test:coverage
+      - run: npm run knip
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          workspaces: src-tauri
+      - run: cargo install cargo-audit --version 0.22.1 --locked
+      - run: cargo audit --file src-tauri/Cargo.lock
 
   rust:
     strategy:

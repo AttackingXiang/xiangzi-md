@@ -1,5 +1,4 @@
-import { LanguageDescription, ensureSyntaxTree, syntaxTree } from '@codemirror/language'
-import { languages } from '@codemirror/language-data'
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import type { Tree } from '@lezer/common'
 import {
   EditorState,
@@ -21,6 +20,35 @@ import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import type { PreviewRange } from './core/types'
 import { viewportDecorationExtension } from './viewportDecorations'
 import { checkIcon, copyIcon } from './widgetIcons'
+import {
+  matchingCodeLanguageOptions,
+  normalizedLanguageValue,
+  resolveCodeLanguageInput,
+} from './codeBlockLanguage'
+import type { CodeLanguageOption } from './codeBlockLanguage'
+import {
+  CODE_CONTROLS_HEIGHT,
+  CODE_CONTROLS_INSET,
+  CODE_CONTROLS_MARGIN,
+  CODE_SCROLLBAR_HEIGHT,
+  CODE_SCROLLBAR_INSET,
+  CODE_SCROLLBAR_MARGIN,
+  codeContentCaretX,
+  createCodeScrollbarElement,
+  mountedCodeBlockAt,
+  pinnedOverlayTop,
+  resolveCodeControlsGutter,
+} from './codeBlockGeometry'
+import type { MountedCodeBlock, OverlayPinGeometry } from './codeBlockGeometry'
+
+export { pinnedOverlayTop } from './codeBlockGeometry'
+export type { OverlayPinGeometry } from './codeBlockGeometry'
+
+export {
+  codeLanguageOptions,
+  matchingCodeLanguageOptions,
+  resolveCodeLanguageInput,
+} from './codeBlockLanguage'
 
 export interface CodeBlockPreviewOptions {
   viewportMargin?: number
@@ -42,61 +70,6 @@ interface FencedCodeData {
   firstCodeLineFrom: number
   lastCodeLineFrom: number
   closingFrom: number | null
-}
-
-interface CodeLanguageOption {
-  label: string
-  value: string
-}
-
-export const codeLanguageOptions: readonly CodeLanguageOption[] = [
-  { label: 'Text', value: '' },
-  ...languages
-    .map((description) => ({ label: description.name, value: description.name.toLowerCase() }))
-    .sort((a, b) => a.label.localeCompare(b.label)),
-]
-
-function normalizedLanguageValue(language: string): string {
-  const normalized = language.trim().toLowerCase()
-  if (!normalized) return ''
-  return (
-    LanguageDescription.matchLanguageName(languages, normalized, true)?.name.toLowerCase() ??
-    normalized
-  )
-}
-
-export function resolveCodeLanguageInput(language: string): string {
-  const typed = language.trim().toLowerCase()
-  if (!typed || typed === 'text') return ''
-  const matched = LanguageDescription.matchLanguageName(languages, typed, true)
-  if (matched) return matched.name.toLowerCase()
-  const prefix = codeLanguageOptions.find(
-    (entry) => entry.value.startsWith(typed) || entry.label.toLowerCase().startsWith(typed),
-  )
-  return prefix?.value ?? typed
-}
-
-export function matchingCodeLanguageOptions(
-  language: string,
-  limit = 8,
-): readonly CodeLanguageOption[] {
-  const typed = language.trim().toLowerCase()
-  const matches = typed
-    ? codeLanguageOptions.filter(
-        (entry) =>
-          (entry.value || 'text').startsWith(typed) || entry.label.toLowerCase().startsWith(typed),
-      )
-    : [...codeLanguageOptions]
-  const canonical = typed
-    ? LanguageDescription.matchLanguageName(languages, typed, true)?.name.toLowerCase()
-    : null
-  const canonicalOption = canonical
-    ? codeLanguageOptions.find((entry) => entry.value === canonical)
-    : undefined
-  const ranked = canonicalOption
-    ? [canonicalOption, ...matches.filter((entry) => entry !== canonicalOption)]
-    : matches
-  return ranked.slice(0, Math.max(0, limit))
 }
 
 let codeLanguageMenuSequence = 0
@@ -324,180 +297,6 @@ class CodeBlockControlsOverlay {
   destroy(): void {
     this.dom.remove()
   }
-}
-
-/** The shared horizontal scrollbar for the active code block. Like
- * `CodeBlockControlsOverlay` above, it is a `view.scrollDOM` child owned by
- * `CodeBlockScrollPlugin` rather than a widget on the opening fence, so it
- * survives the fence line leaving CM6's virtualized viewport. */
-function createCodeScrollbarElement(): HTMLElement {
-  const scrollbar = document.createElement('span')
-  scrollbar.className = 'xmd-cm-code-scrollbar'
-  // Parked off-screen until the first measure pass positions it.
-  scrollbar.style.top = '-9999px'
-  scrollbar.tabIndex = -1
-  scrollbar.setAttribute('role', 'scrollbar')
-  scrollbar.setAttribute('aria-label', 'Code block horizontal scroll')
-  scrollbar.setAttribute('aria-orientation', 'horizontal')
-  scrollbar.setAttribute('aria-valuemin', '0')
-  scrollbar.setAttribute('aria-hidden', 'true')
-  return scrollbar
-}
-
-interface MountedCodeBlock {
-  lines: HTMLElement[]
-  contents: HTMLElement[]
-}
-
-/** Collect the contiguous run of *rendered* `.xmd-cm-code-line` rows around
- * `element`. Only rows CM6 currently keeps in the DOM are returned: for a
- * block taller than the viewport (plus margin) this is a window into the
- * block, not the whole block — callers must not treat `lines[0]` as the
- * block's first body line (see `readMeasure`'s controls-overlap check). */
-function mountedCodeBlockAt(element: HTMLElement): MountedCodeBlock {
-  let first = element.closest<HTMLElement>('.cm-line.xmd-cm-code-line')
-  while (
-    first?.previousElementSibling instanceof HTMLElement &&
-    first.previousElementSibling.classList.contains('xmd-cm-code-line')
-  ) {
-    first = first.previousElementSibling
-  }
-  const lines: HTMLElement[] = []
-  let current: Element | null = first
-  while (current instanceof HTMLElement && current.classList.contains('xmd-cm-code-line')) {
-    lines.push(current)
-    current = current.nextElementSibling
-  }
-  return {
-    lines,
-    contents: lines.flatMap((item) =>
-      Array.from(item.querySelectorAll<HTMLElement>('.xmd-cm-code-line-content')),
-    ),
-  }
-}
-
-function textDescendants(node: Node, result: Text[] = []): Text[] {
-  if (node instanceof Text && node.data.length > 0) result.push(node)
-  for (const child of Array.from(node.childNodes)) {
-    textDescendants(child, result)
-  }
-  return result
-}
-
-/** Return the rendered inline coordinate of a document position from the
- * actual text range. Mapping by source-line offset avoids endpoint ambiguity
- * from inclusive marks and syntax-highlighting spans. */
-function codeContentCaretX(content: HTMLElement, lineOffset: number): number | null {
-  const textNodes = textDescendants(content)
-  if (textNodes.length === 0) return null
-  let remaining = Math.max(0, lineOffset)
-  const range = document.createRange()
-  try {
-    for (const text of textNodes) {
-      if (remaining === 0) {
-        range.setStart(text, 0)
-        range.setEnd(text, 1)
-        return range.getBoundingClientRect().left
-      }
-      if (remaining <= text.data.length) {
-        range.setStart(text, remaining - 1)
-        range.setEnd(text, remaining)
-        return range.getBoundingClientRect().right
-      }
-      remaining -= text.data.length
-    }
-    const lastText = textNodes[textNodes.length - 1]
-    if (!lastText) return null
-    range.setStart(lastText, lastText.data.length - 1)
-    range.setEnd(lastText, lastText.data.length)
-    return range.getBoundingClientRect().right
-  } catch {
-    return null
-  }
-}
-
-// Fallback used only when the `--xmd-code-controls-gutter` custom property
-// (defined once in editor.css, alongside the CSS padding it also feeds — see
-// codeBlockPreview.css's `.xmd-cm-code-line-first .xmd-cm-code-line-content`
-// rule) fails to parse, e.g. no stylesheet loaded yet in a test environment.
-const DEFAULT_CODE_CONTROLS_GUTTER = 176
-// Safety margin so the caret does not sit flush against the controls' edge
-// when the *measured* width (rather than the CSS fallback) is the larger one.
-const CODE_CONTROLS_GUTTER_MARGIN = 8
-
-/** Width of the "controls gutter" the caret reveal-scroll math (below) must
- * stay clear of while the caret's row sits under the pinned controls.
- * Copy-button/language-input i18n copy can be wider than the fixed CSS
- * reservation, so this takes the larger of that reservation and the controls
- * header's actual rendered width — the caret must clear real pixels on
- * screen, never a stale CSS constant. The custom property is read from the
- * overlay header itself: it inherits `--xmd-code-controls-gutter` from the
- * `.xmd-cm-editor` root (editor.css) just like the fence line this used to
- * measure. Must only be called from `requestMeasure`'s read phase:
- * `getComputedStyle` and `getBoundingClientRect` both force layout. */
-function resolveCodeControlsGutter(header: HTMLElement): number {
-  const cssValue = Number.parseFloat(
-    getComputedStyle(header).getPropertyValue('--xmd-code-controls-gutter'),
-  )
-  const reserved =
-    Number.isFinite(cssValue) && cssValue > 0 ? cssValue : DEFAULT_CODE_CONTROLS_GUTTER
-  const measured = header.getBoundingClientRect().width + CODE_CONTROLS_GUTTER_MARGIN
-  return Math.max(reserved, measured)
-}
-
-// Geometry constants for the scrollDOM-mounted overlays. The two heights must
-// match the fixed CSS heights in codeBlockPreview.css
-// (`.xmd-cm-code-preview-header` / `.xmd-cm-code-scrollbar`); the margins and
-// insets reproduce the previous fence-anchored placement: header at block top
-// + 10px with a 10px right inset, scrollbar spanning the row minus 16px on
-// each side with its top edge 8px above the block bottom (3px margin + 5px
-// height).
-const CODE_CONTROLS_HEIGHT = 28
-const CODE_CONTROLS_MARGIN = 10
-const CODE_CONTROLS_INSET = 10
-const CODE_SCROLLBAR_HEIGHT = 5
-const CODE_SCROLLBAR_MARGIN = 3
-const CODE_SCROLLBAR_INSET = 16
-
-export interface OverlayPinGeometry {
-  /** Top of the code card (its first body line), in scroller content space. */
-  blockTop: number
-  /** Bottom of the code card (its last body line), same space. */
-  blockBottom: number
-  /** Visible scroller window: `scrollDOM.scrollTop` … `+ clientHeight`. */
-  viewportTop: number
-  viewportBottom: number
-}
-
-/**
- * Pure pinning math for the code-block overlays. While the block intersects
- * the viewport, the element hugs its preferred block edge (`block-start` for
- * the copy/language controls, `block-end` for the shared scrollbar) but is
- * clamped into the viewport — a sticky-header/-footer: with the whole block
- * on screen the result is identical to the old fence-anchored placement, and
- * once the preferred edge scrolls away the element pins to the corresponding
- * viewport edge instead, sliding out together with the block's opposite edge
- * so it never floats over unrelated content. Returns `null` when the block
- * does not intersect the viewport at all (the overlay should hide).
- */
-export function pinnedOverlayTop(
-  edge: 'block-start' | 'block-end',
-  geometry: OverlayPinGeometry,
-  height: number,
-  margin: number,
-): number | null {
-  const { blockTop, blockBottom, viewportTop, viewportBottom } = geometry
-  if (blockBottom <= viewportTop || blockTop >= viewportBottom) return null
-  if (edge === 'block-start') {
-    let top = Math.max(blockTop + margin, viewportTop + margin)
-    // Slide out with the block's bottom edge instead of overflowing it…
-    top = Math.min(top, blockBottom - margin - height)
-    // …but never rise above the block itself.
-    return Math.max(top, blockTop)
-  }
-  let top = Math.min(blockBottom - margin - height, viewportBottom - margin - height)
-  top = Math.max(top, blockTop + margin)
-  return Math.min(top, blockBottom - height)
 }
 
 interface FenceClassMeasure {

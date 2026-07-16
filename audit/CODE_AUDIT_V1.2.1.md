@@ -5,9 +5,11 @@
 审计分支：`audit/v1.2.1-code-scan`  
 版本一致性：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 均为 `1.2.1`
 
+> 说明：第 3–5 节保留 2026-07-01 基线提交的历史发现，不代表当前分支仍存在这些问题。2026-07-16 的复核结果记录在第 2 节；除用户明确保留的“允许构建未签名安装包”外，本轮识别出的可执行整改均已落地。
+
 ## 1. 结论
 
-当前版本的常规质量门禁是健康的：格式、ESLint、TypeScript、前端测试、构建、Rustfmt、Clippy 和 Rust 测试全部通过；npm audit 与 RustSec 都没有报告已知漏洞级 CVE。没有发现硬编码密钥、`unsafe` Rust、`eval`、`new Function` 或前端直接绕过 `DesktopPort` 的调用。
+审计基线的常规质量门禁是健康的：格式、ESLint、TypeScript、前端测试、构建、Rustfmt、Clippy 和 Rust 测试全部通过。当前复核中 npm audit 为 0；RustSec 对 macOS/Windows 发布目标无阻断漏洞，Linux-only 传递依赖例外见第 2 节。没有发现硬编码密钥、`unsafe` Rust、`eval`、`new Function` 或前端直接绕过 `DesktopPort` 的调用。
 
 但“门禁通过”不等于可以无条件发布。本次审计确认了 6 项 P1 问题，其中保存竞态、文件权限变化、附件并发覆盖、会话恢复覆盖用户操作都可能造成数据丢失或数据属性损坏；设置损坏会导致应用无法启动；发布流程则没有被完整测试门禁和平台代码签名保护。建议先修复 P1，再发布下一版本。
 
@@ -23,13 +25,13 @@
 - 205 个受版本控制文件；核心 TypeScript/TSX/CSS/Rust 约 16,007 行。
 - 全量扫描：危险 DOM API、路径与文件 API、IPC、异常吞噬、timer/listener、`unwrap/expect/panic/unsafe`、CI Secret、URL、死导出和依赖使用。
 - 重点人工审阅：文件读写、附件、草稿、设置、搜索、资源协议、生命周期、更新器、导出、标签页/退出流程、GitHub Actions。
-- `npm run check`：通过；18 个测试文件、71 项测试全部通过。
-- `npm run rust:check`：通过；20 项 Rust 测试全部通过。
+- `npm run check`：当前复核通过；68 个测试文件、576 项测试全部通过。
+- `npm run rust:check`：当前复核通过；55 项 Rust 测试全部通过。
 - `npm audit`：0 个漏洞。
-- `cargo audit`：0 个漏洞；17 个“停止维护”告警，1 个 Linux 间接依赖 `glib 0.18.5` 的 unsound 告警。
-- `knip`：确认 5 个无用导出；`buffer` 为动态导入导致的误报，不应删除。
-- 覆盖率：无法生成，仓库缺少 Vitest 配置所需的 `@vitest/coverage-v8`；Rust 未配置 `cargo-llvm-cov`。
-- 生产前端 `dist` 约 8.6 MB；最大业务 chunk 为 `Editor` 821.72 kB（gzip 256.95 kB），构建出现大于 500 kB 的 chunk 警告。
+- `cargo audit`：2026-07-16 复核无当前 macOS/Windows 发布目标的阻断漏洞；`plist 1.10.0` 已把发布链路升级到 `quick-xml 0.41.0`。锁文件中 Linux-only `wayland-scanner` 仍传递引用 `0.39.4`，RUSTSEC-2026-0194/0195 在 `.cargo/audit.toml` 中附带目标范围说明临时忽略；恢复 Linux 发布前必须移除忽略并升级上游。其余为 18 个允许的传递依赖告警。
+- `knip`：当前复核通过；无用表格放大链路及重复配置已删除，动态导入保留显式配置。
+- 覆盖率：`@vitest/coverage-v8` 已接入并设最低阈值；当前 statements 32.90%、branches 31.30%、functions 25.78%、lines 33.81%，门禁通过。
+- Bundle：构建后脚本校验入口 gzip、最大 JS gzip 与 `dist` 总体积；当前分别约 171.1 KiB、171.1 KiB、9,414.6 KiB，均在预算内。
 
 ## 3. P1：发布前必须修复
 

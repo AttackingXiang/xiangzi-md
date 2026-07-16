@@ -10,7 +10,17 @@ export default defineConfig({
     // extend (not replace) the default exclude list with it.
     exclude: [...configDefaults.exclude, 'e2e/**'],
     coverage: {
-      reporter: ['text', 'html'],
+      provider: 'v8',
+      reporter: ['text', 'html', 'json-summary'],
+      reportsDirectory: 'coverage',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/main.tsx', 'src/perfMain.tsx'],
+      thresholds: {
+        statements: 32,
+        branches: 30,
+        functions: 25,
+        lines: 33,
+      },
     },
   },
 })

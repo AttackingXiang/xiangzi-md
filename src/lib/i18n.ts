@@ -296,7 +296,6 @@ const EN: Record<string, string> = {
   智能占满表格: 'Smart fill table',
   按内容适配列宽: 'Fit columns to content',
   所有列等宽: 'Make all columns equal',
-  放大展开: 'Expand table',
   '创建失败：文件可能已存在': 'Create failed: the file may already exist',
   '创建失败：文件夹可能已存在': 'Create failed: the folder may already exist',
   图表语法有误: 'Diagram syntax error',
