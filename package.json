@@ -24,6 +24,7 @@
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:e2e": "playwright test",
     "knip": "knip",
     "check": "npm run format:check && npm run lint && npm run test:run && npm run build",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
@@ -74,6 +75,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "2.11.3",
     "@types/markdown-it": "14.1.2",
     "@types/node": "22.20.0",

@@ -53,9 +53,21 @@
 - 契约测试：每个 DesktopPort 方法至少一个成功和一个结构化失败样例；
 - 集成测试：临时目录内完成打开、编辑、保存、移动、搜索、恢复；
 - 平台手测：菜单、文件关联、单实例、回收站、导出、更新、退出确认；
-- 视觉回归：固定语料的编辑器和三种导出与 Electron 基线对比。
+- 视觉回归：固定语料的编辑器和三种导出与 Electron 基线对比；
+- Playwright 浏览器回归（`e2e/`）：光标/选区/滚动等真实浏览器交互，vitest 的 node 环境纯函数测试覆盖不到的部分。
 
-## 性能预算
+### Playwright 浏览器回归
+
+套件在 `e2e/` 下（配置见根目录 `playwright.config.ts`），基于浏览器预览模式运行：非 Tauri 环境下应用自动切换到 `browserAdapter`，`webServer` 配置会复用或自动拉起 `npm run dev`（http://localhost:1420）。当前覆盖三个历史回归场景：inline HTML 关闭标签右边界退格死键、代码块内 Cmd/Ctrl+A 只选代码体、原生 caret 切换与横向滚动跟随。
+
+首次运行：
+
+```sh
+npx playwright install chromium   # 只需一次，下载浏览器
+npm run test:e2e
+```
+
+**当前状态：套件已编写、尚未执行过**（编写轮次不允许起 dev server / 下载浏览器）。首跑如失败，优先排查测试内注释标出的选择器与键盘输入流假设，而不是先怀疑被测行为。
 
 在相同机器与语料上测量；数据写入 release 记录。
 
