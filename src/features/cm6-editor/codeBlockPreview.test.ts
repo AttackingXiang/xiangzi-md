@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCodeBlockPreviewDecorations,
   caretInsideFencedCode,
+  codeBlockOverlayHorizontalGeometry,
   codeLanguageOptions,
   collectFencedCodeHiddenRanges,
   fencedCodeBoundaryDeletion,
@@ -387,6 +388,36 @@ describe('CM6 fenced code preview', () => {
       expect(scrollbar(tall(1000))).toBe(1792)
       expect(controls(tall(3000))).toBe(3010)
       expect(scrollbar(tall(3000))).toBe(3792)
+    })
+  })
+
+  describe('codeBlockOverlayHorizontalGeometry', () => {
+    it('anchors controls and scrollbar to the code card rather than the padded editor box', () => {
+      const geometry = codeBlockOverlayHorizontalGeometry(
+        { left: 140, width: 720 },
+        { left: 20 },
+        30,
+        1,
+      )
+
+      // Code card occupies scrollDOM content coordinates 150..870.
+      expect(geometry.controlsAnchorLeft).toBe(860)
+      expect(geometry.scrollbarLeft).toBe(166)
+      expect(geometry.trackWidth).toBe(688)
+    })
+
+    it('de-scales browser geometry before writing scrollDOM coordinates', () => {
+      const geometry = codeBlockOverlayHorizontalGeometry(
+        { left: 200, width: 900 },
+        { left: 50 },
+        25,
+        1.5,
+      )
+
+      // Unscaled code card occupies scrollDOM content coordinates 125..725.
+      expect(geometry.controlsAnchorLeft).toBe(715)
+      expect(geometry.scrollbarLeft).toBe(141)
+      expect(geometry.trackWidth).toBe(568)
     })
   })
 

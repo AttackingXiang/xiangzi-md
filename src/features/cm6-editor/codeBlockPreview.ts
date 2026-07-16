@@ -28,11 +28,10 @@ import {
 import type { CodeLanguageOption } from './codeBlockLanguage'
 import {
   CODE_CONTROLS_HEIGHT,
-  CODE_CONTROLS_INSET,
   CODE_CONTROLS_MARGIN,
   CODE_SCROLLBAR_HEIGHT,
-  CODE_SCROLLBAR_INSET,
   CODE_SCROLLBAR_MARGIN,
+  codeBlockOverlayHorizontalGeometry,
   codeContentCaretX,
   createCodeScrollbarElement,
   mountedCodeBlockAt,
@@ -41,8 +40,8 @@ import {
 } from './codeBlockGeometry'
 import type { MountedCodeBlock, OverlayPinGeometry } from './codeBlockGeometry'
 
-export { pinnedOverlayTop } from './codeBlockGeometry'
-export type { OverlayPinGeometry } from './codeBlockGeometry'
+export { codeBlockOverlayHorizontalGeometry, pinnedOverlayTop } from './codeBlockGeometry'
+export type { CodeBlockOverlayHorizontalGeometry, OverlayPinGeometry } from './codeBlockGeometry'
 
 export {
   codeLanguageOptions,
@@ -678,7 +677,6 @@ class CodeBlockScrollPlugin {
     const firstBlock = view.lineBlockAt(data.firstCodeLineFrom)
     const lastBlock = view.lineBlockAt(Math.max(data.codeFrom, data.codeTo))
     const scrollRect = view.scrollDOM.getBoundingClientRect()
-    const contentRect = view.contentDOM.getBoundingClientRect()
     const viewportTop = view.scrollDOM.scrollTop
     const viewportBottom = viewportTop + view.scrollDOM.clientHeight
     // `lineBlockAt` tops are relative to `view.documentTop` (a screen
@@ -693,10 +691,16 @@ class CodeBlockScrollPlugin {
       viewportTop,
       viewportBottom,
     }
-    const contentLeft =
-      (contentRect.left - scrollRect.left) / view.scaleX + view.scrollDOM.scrollLeft
-    const contentWidth = contentRect.width / view.scaleX
-    const trackWidth = Math.max(0, contentWidth - 2 * CODE_SCROLLBAR_INSET)
+    const block = this.activeMountedBlock(data)
+    const firstMountedLine = block?.lines[0]
+    if (!block || !firstMountedLine) return { fences, active: null }
+    const horizontal = codeBlockOverlayHorizontalGeometry(
+      firstMountedLine.getBoundingClientRect(),
+      scrollRect,
+      view.scrollDOM.scrollLeft,
+      view.scaleX,
+    )
+    const { trackWidth } = horizontal
     const controlsTop = pinnedOverlayTop(
       'block-start',
       geometry,
@@ -704,8 +708,7 @@ class CodeBlockScrollPlugin {
       CODE_CONTROLS_MARGIN,
     )
 
-    const block = this.activeMountedBlock(data)
-    const contents = block?.contents ?? []
+    const contents = block.contents
     const contentScrollLefts = contents.map((content) => content.scrollLeft)
     const rowContentWidth = Math.max(
       trackWidth,
@@ -756,14 +759,14 @@ class CodeBlockScrollPlugin {
         revealScrollLeft,
         overflow: rowContentWidth > trackWidth + 1,
         controlsTop,
-        controlsAnchorLeft: contentLeft + contentWidth - CODE_CONTROLS_INSET,
+        controlsAnchorLeft: horizontal.controlsAnchorLeft,
         scrollbarTop: pinnedOverlayTop(
           'block-end',
           geometry,
           CODE_SCROLLBAR_HEIGHT,
           CODE_SCROLLBAR_MARGIN,
         ),
-        scrollbarLeft: contentLeft + CODE_SCROLLBAR_INSET,
+        scrollbarLeft: horizontal.scrollbarLeft,
       },
     }
   }

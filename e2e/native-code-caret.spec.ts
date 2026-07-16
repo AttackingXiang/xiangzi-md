@@ -51,6 +51,21 @@ test('native caret takes over inside code and follows horizontal scroll', async 
   // multi-cursor carets keep the overlay) with `display: none !important`.
   await expect.poll(() => primaryCursorDisplay(page)).toMatch(/^(none|absent)$/)
 
+  // The singleton controls live under scrollDOM rather than inside the code
+  // row, but their right edge must still be measured from the active card.
+  // `.cm-content` has page padding, so anchoring to its outer rect pushes the
+  // controls into that gutter (most visible at non-default zoom levels).
+  const controlsPlacement = await page.evaluate(() => {
+    const line = document.querySelector<HTMLElement>('.cm-line.xmd-cm-code-line')
+    const controls = document.querySelector<HTMLElement>('.xmd-cm-code-preview-header.is-active')
+    if (!line || !controls) return null
+    const card = line.getBoundingClientRect()
+    const header = controls.getBoundingClientRect()
+    return { cardRight: card.right, controlsRight: header.right }
+  })
+  expect(controlsPlacement).not.toBeNull()
+  expect(controlsPlacement!.cardRight - controlsPlacement!.controlsRight).toBeCloseTo(10, 0)
+
   // --- Toggle off: caret back into a plain paragraph ------------------------
   await page.locator('.cm-line', { hasText: 'plain paragraph' }).click()
   await expect(editor).not.toHaveClass(/xmd-cm-native-code-caret/)
@@ -72,6 +87,27 @@ test('native caret takes over inside code and follows horizontal scroll', async 
   // have scrolled: this was exactly the coordinate space the old fake-cursor
   // math ignored.
   await expect.poll(() => codeContent.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
+
+  // The visible shared scrollbar uses the same card-relative horizontal
+  // geometry. Its 16px insets should sit inside the card at both ends, not
+  // inside `.cm-content`'s surrounding page padding.
+  await expect(page.locator('.xmd-cm-code-scrollbar.is-overflowing.is-active')).toBeVisible()
+  const scrollbarPlacement = await page.evaluate(() => {
+    const line = document.querySelector<HTMLElement>('.cm-line.xmd-cm-code-line')
+    const scrollbar = document.querySelector<HTMLElement>(
+      '.xmd-cm-code-scrollbar.is-overflowing.is-active',
+    )
+    if (!line || !scrollbar) return null
+    const card = line.getBoundingClientRect()
+    const track = scrollbar.getBoundingClientRect()
+    return {
+      leftInset: track.left - card.left,
+      rightInset: card.right - track.right,
+    }
+  })
+  expect(scrollbarPlacement).not.toBeNull()
+  expect(scrollbarPlacement!.leftInset).toBeCloseTo(16, 0)
+  expect(scrollbarPlacement!.rightInset).toBeCloseTo(16, 0)
 
   // The DOM selection endpoint (the native caret's anchor) must sit inside
   // the scroller's visible rect — i.e. the caret followed the scroll instead

@@ -97,6 +97,40 @@ export const CODE_SCROLLBAR_HEIGHT = 5
 export const CODE_SCROLLBAR_MARGIN = 3
 export const CODE_SCROLLBAR_INSET = 16
 
+interface HorizontalRect {
+  left: number
+  width: number
+}
+
+export interface CodeBlockOverlayHorizontalGeometry {
+  controlsAnchorLeft: number
+  scrollbarLeft: number
+  trackWidth: number
+}
+
+/** Convert the rendered code-card box into scrollDOM content coordinates.
+ *
+ * The editor's `.cm-content` rectangle includes its page padding, while code
+ * cards fill only the content box inside that padding. Overlay controls must
+ * therefore use a mounted code row as their horizontal reference instead of
+ * the editor container, or they drift into the page gutter as padding/zoom
+ * changes. */
+export function codeBlockOverlayHorizontalGeometry(
+  blockRect: HorizontalRect,
+  scrollRect: Pick<HorizontalRect, 'left'>,
+  scrollLeft: number,
+  scaleX: number,
+): CodeBlockOverlayHorizontalGeometry {
+  const scale = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1
+  const blockLeft = (blockRect.left - scrollRect.left) / scale + scrollLeft
+  const blockWidth = blockRect.width / scale
+  return {
+    controlsAnchorLeft: blockLeft + blockWidth - CODE_CONTROLS_INSET,
+    scrollbarLeft: blockLeft + CODE_SCROLLBAR_INSET,
+    trackWidth: Math.max(0, blockWidth - 2 * CODE_SCROLLBAR_INSET),
+  }
+}
+
 export interface OverlayPinGeometry {
   blockTop: number
   blockBottom: number
