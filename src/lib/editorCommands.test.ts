@@ -84,9 +84,7 @@ describe('CM6 editor command adapter', () => {
     const viaKeymapQuery = fencedCodeContentRange(state, cursor)
     expect(viaKeymapQuery).not.toBeNull()
     expect(selectAllScope(state)).toEqual(viaKeymapQuery)
-    expect(
-      state.doc.sliceString(viaKeymapQuery!.from, viaKeymapQuery!.to),
-    ).toContain('const x = 1')
+    expect(state.doc.sliceString(viaKeymapQuery!.from, viaKeymapQuery!.to)).toContain('const x = 1')
   })
 
   it('does not expose formatting actions while the active editor is read-only', () => {

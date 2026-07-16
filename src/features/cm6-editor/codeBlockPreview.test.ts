@@ -12,11 +12,14 @@ import {
   fencedCodeLineBoundary,
   fencedCodeSelectAll,
   matchingCodeLanguageOptions,
+  needsSecondaryCaretRepaint,
   partiallyDeletesFencedCodeFence,
+  pinnedOverlayTop,
   readFencedCode,
   resolveCodeLanguageInput,
   restoreEmptyFencedCodeBody,
   selectionIntersectsFencedCode,
+  type OverlayPinGeometry,
 } from './codeBlockPreview'
 
 function stateAt(doc: string, cursor: number): EditorState {
@@ -167,7 +170,7 @@ describe('CM6 fenced code preview', () => {
     )
   })
 
-  it('uses editable content marks and only mounts a shared scrollbar when wrapping is off', () => {
+  it('uses editable content marks and hosts no overlay widgets in the decoration set', () => {
     const doc = '```js\nfirst()\nlast()\n```'
     const state = stateAt(doc, doc.indexOf('first'))
     const specs = (
@@ -186,14 +189,17 @@ describe('CM6 fenced code preview', () => {
     const unwrapped = specs(false)
     const wrapped = specs(true)
     const contentMarks = unwrapped.filter(({ spec }) => spec.class === 'xmd-cm-code-line-content')
-    const widgets = unwrapped.filter(({ spec }) => 'widget' in spec)
     expect(contentMarks).toHaveLength(2)
     expect(contentMarks.every(({ spec }) => spec.inclusiveEnd === true)).toBe(true)
-    expect(widgets).toHaveLength(2)
-    // Overlay widgets must stay on the collapsed opening fence. Mounting them
-    // at an editable empty/body-line endpoint corrupts browser caret geometry.
-    expect(widgets.every(({ from, to }) => from === 5 && to === 5)).toBe(true)
-    expect(wrapped.filter(({ spec }) => 'widget' in spec)).toHaveLength(1)
+    // The copy/language controls and the shared scrollbar used to be widgets
+    // anchored to the collapsed opening fence. CM6 only renders lines inside
+    // the viewport ± margin, so those widgets left the DOM whenever the fence
+    // scrolled out while editing a block taller than the screen. They are now
+    // scrollDOM overlays owned by CodeBlockScrollPlugin (`pinnedOverlayTop`
+    // provides the geometry), so the decoration set must contain no widgets
+    // at all, wrapping or not.
+    expect(unwrapped.filter(({ spec }) => 'widget' in spec)).toHaveLength(0)
+    expect(wrapped.filter(({ spec }) => 'widget' in spec)).toHaveLength(0)
   })
 
   it('uses clipped native selection only inside one code block and keeps cross-block selection virtualized', () => {
@@ -270,6 +276,118 @@ describe('CM6 fenced code preview', () => {
     // expose an editable code body for this switch to apply to.
     const mermaid = '```mermaid\ngraph TD\n```'
     expect(caretInsideFencedCode(stateAt(mermaid, mermaid.indexOf('graph') + 2))).toBe(false)
+  })
+
+  describe('needsSecondaryCaretRepaint', () => {
+    const doc = 'before\n```ts\nconst answer = 42\n```\nafter'
+    const codeFrom = doc.indexOf('const')
+    const multiCursor = (...heads: number[]): EditorState =>
+      EditorState.create({
+        doc,
+        selection: EditorSelection.create(heads.map((head) => EditorSelection.cursor(head))),
+        extensions: [markdown(), EditorState.allowMultipleSelections.of(true)],
+      })
+
+    it('never fires for a single caret — that path must stay zero-cost', () => {
+      // Inside a code body a single caret is the browser-native one
+      // (caretInsideFencedCode) and needs no CM6 overlay correction.
+      expect(needsSecondaryCaretRepaint(stateAt(doc, codeFrom + 3))).toBe(false)
+      expect(needsSecondaryCaretRepaint(stateAt(doc, 0))).toBe(false)
+    })
+
+    it('fires when any of multiple cursors sits inside an editable code body', () => {
+      expect(needsSecondaryCaretRepaint(multiCursor(codeFrom + 1, codeFrom + 5))).toBe(true)
+      // One caret outside is enough as long as another is inside: the inside
+      // one is CM6-drawn (multi-cursor keeps the overlay) and can go stale.
+      expect(needsSecondaryCaretRepaint(multiCursor(0, codeFrom + 5))).toBe(true)
+    })
+
+    it('does not fire when every cursor is outside any code body', () => {
+      expect(needsSecondaryCaretRepaint(multiCursor(0, doc.length))).toBe(false)
+    })
+
+    it('ignores Mermaid fences, whose preview owns its own rendering', () => {
+      const mermaid = '```mermaid\ngraph TD\ngraph LR\n```'
+      const first = mermaid.indexOf('graph TD')
+      const second = mermaid.indexOf('graph LR')
+      const state = EditorState.create({
+        doc: mermaid,
+        selection: EditorSelection.create([
+          EditorSelection.cursor(first + 2),
+          EditorSelection.cursor(second + 2),
+        ]),
+        extensions: [markdown(), EditorState.allowMultipleSelections.of(true)],
+      })
+      expect(needsSecondaryCaretRepaint(state)).toBe(false)
+    })
+  })
+
+  describe('pinnedOverlayTop', () => {
+    // Controls: 28px tall, 10px margin — mirrors CODE_CONTROLS_HEIGHT/MARGIN.
+    const controls = (geometry: OverlayPinGeometry): number | null =>
+      pinnedOverlayTop('block-start', geometry, 28, 10)
+    // Scrollbar: 5px tall, 3px margin — its top ends up 8px above the block
+    // bottom, matching the old fence-relative `lastLineRect.bottom - 8`.
+    const scrollbar = (geometry: OverlayPinGeometry): number | null =>
+      pinnedOverlayTop('block-end', geometry, 5, 3)
+
+    it('hides both overlays while the block does not intersect the viewport', () => {
+      const above = { blockTop: -500, blockBottom: -100, viewportTop: 0, viewportBottom: 800 }
+      const below = { blockTop: 900, blockBottom: 1400, viewportTop: 0, viewportBottom: 800 }
+      expect(controls(above)).toBeNull()
+      expect(scrollbar(above)).toBeNull()
+      expect(controls(below)).toBeNull()
+      expect(scrollbar(below)).toBeNull()
+    })
+
+    it('matches the legacy fence-anchored placement while the whole block is visible', () => {
+      const geometry = { blockTop: 100, blockBottom: 400, viewportTop: 0, viewportBottom: 800 }
+      expect(controls(geometry)).toBe(110)
+      expect(scrollbar(geometry)).toBe(392)
+    })
+
+    it('pins the controls to the viewport top once the fence scrolls out', () => {
+      const geometry = { blockTop: -500, blockBottom: 400, viewportTop: 0, viewportBottom: 800 }
+      expect(controls(geometry)).toBe(10)
+    })
+
+    it('pins the scrollbar to the viewport bottom while the block continues below', () => {
+      const geometry = { blockTop: 100, blockBottom: 2000, viewportTop: 0, viewportBottom: 800 }
+      expect(scrollbar(geometry)).toBe(792)
+    })
+
+    it('slides the controls out with the block bottom instead of overflowing it', () => {
+      // Only the last 30px of the block remain visible: the sticky header
+      // must leave through the top rather than float over what follows.
+      const geometry = { blockTop: -500, blockBottom: 30, viewportTop: 0, viewportBottom: 800 }
+      expect(controls(geometry)).toBe(30 - 10 - 28)
+      // …but it never escapes above the block itself.
+      const shallow = { blockTop: 5, blockBottom: 20, viewportTop: 0, viewportBottom: 800 }
+      expect(controls(shallow)).toBe(5)
+    })
+
+    it('keeps the scrollbar inside the block while the block enters from below', () => {
+      const geometry = { blockTop: 700, blockBottom: 2000, viewportTop: 0, viewportBottom: 800 }
+      // Preferred spot (viewportBottom - 8 = 792) is fine here…
+      expect(scrollbar(geometry)).toBe(792)
+      // …but with the block top just at the viewport bottom edge minus a few
+      // pixels, the scrollbar must not float above the block.
+      const entering = { blockTop: 795, blockBottom: 2000, viewportTop: 0, viewportBottom: 800 }
+      expect(scrollbar(entering)).toBe(798)
+    })
+
+    it('follows the viewport while scrolling through a block taller than the screen', () => {
+      const tall = (viewportTop: number): OverlayPinGeometry => ({
+        blockTop: 0,
+        blockBottom: 5000,
+        viewportTop,
+        viewportBottom: viewportTop + 800,
+      })
+      expect(controls(tall(1000))).toBe(1010)
+      expect(scrollbar(tall(1000))).toBe(1792)
+      expect(controls(tall(3000))).toBe(3010)
+      expect(scrollbar(tall(3000))).toBe(3792)
+    })
   })
 
   it('moves Home and End to logical code-line boundaries after horizontal scrolling', () => {

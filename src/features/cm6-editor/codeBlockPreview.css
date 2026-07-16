@@ -96,16 +96,24 @@
   border-radius: 8px;
 }
 
+/* Both overlays (this scrollbar and .xmd-cm-code-preview-header below) are
+   absolutely positioned children of CM6's scroller (.cm-scroller), owned by
+   CodeBlockScrollPlugin — no longer widgets on the opening fence line. CM6
+   only renders lines inside the viewport ± margin, so anything anchored to
+   the fence vanished while editing the middle of a code block taller than
+   the screen. The plugin writes `top`/`left` (and the scrollbar's `width`)
+   inline on every measure pass, pinning each overlay to the visible part of
+   the active block (see pinnedOverlayTop in codeBlockPreview.ts). */
 .xmd-cm-code-scrollbar {
   border-radius: 999px;
   display: block;
+  /* Must match CODE_SCROLLBAR_HEIGHT in codeBlockPreview.ts. */
   height: 5px;
-  inset-inline: 16px;
   opacity: 0;
   pointer-events: none;
   position: absolute;
-  top: var(--xmd-code-scrollbar-top, 0);
   transition: opacity 120ms ease;
+  z-index: 2;
 }
 
 .xmd-cm-code-scrollbar.is-overflowing.is-active,
@@ -152,14 +160,18 @@
   display: inline-flex;
   gap: 4px;
   /* Match the editor's 16px × 1.75 first-line box explicitly. Avoid `lh`
-     here: WKWebView can recompute it inconsistently as CM6 moves widgets
-     between active code blocks. */
+     here: WKWebView can recompute it inconsistently as the overlay moves
+     between active code blocks. Must match CODE_CONTROLS_HEIGHT in
+     codeBlockPreview.ts. */
   height: 28px;
-  inset-inline-end: 10px;
   line-height: 28px;
   pointer-events: none;
   position: absolute;
-  top: 10px;
+  /* The plugin positions the header by its *right* edge: it writes the
+     anchor to `left` and this transform right-aligns the box on it, so the
+     language input growing or shrinking between measure passes never moves
+     the right edge. */
+  transform: translateX(-100%);
   z-index: 2;
 }
 
@@ -191,9 +203,11 @@
     opacity 160ms ease;
 }
 
-.xmd-cm-editor
-  .cm-line.xmd-cm-code-fence-line.xmd-cm-code-block-active
-  .xmd-cm-code-preview-language,
+/* `is-active` is toggled by CodeBlockScrollPlugin on the overlay header
+   itself while it is pinned to the active block (the old selector keyed off
+   the fence line's `xmd-cm-code-block-active` class, but the header no
+   longer lives inside the fence). */
+.xmd-cm-code-preview-header.is-active .xmd-cm-code-preview-language,
 .xmd-cm-code-preview-header:focus-within .xmd-cm-code-preview-language,
 .xmd-cm-code-preview-language:focus-visible {
   color: var(--text);
@@ -270,7 +284,7 @@
   width: 22px;
 }
 
-.xmd-cm-editor .cm-line.xmd-cm-code-fence-line.xmd-cm-code-block-active .xmd-cm-code-preview-copy,
+.xmd-cm-code-preview-header.is-active .xmd-cm-code-preview-copy,
 .xmd-cm-code-preview-header:focus-within .xmd-cm-code-preview-copy,
 .xmd-cm-code-preview-copy:focus-visible {
   opacity: 0.78;

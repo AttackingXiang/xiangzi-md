@@ -12,7 +12,6 @@ import {
   Decoration,
   EditorView,
   ViewPlugin,
-  WidgetType,
   keymap,
   type DecorationSet,
   type KeyBinding,
@@ -102,31 +101,34 @@ export function matchingCodeLanguageOptions(
 
 let codeLanguageMenuSequence = 0
 
-class CodeBlockControlsWidget extends WidgetType {
-  constructor(
-    readonly data: FencedCodeData,
-    readonly copyLabel: string,
-    readonly copiedLabel: string,
-    readonly readOnly: boolean,
-  ) {
-    super()
-  }
+/**
+ * The copy/language controls for the active code block. This is no longer a
+ * `WidgetType` mounted on the opening fence line: CM6 only renders lines
+ * inside the viewport (plus margin), so a fence-anchored widget disappears
+ * from the DOM entirely while the user edits the middle of a code block
+ * taller than the screen. Instead, a single overlay instance is appended to
+ * `view.scrollDOM` — the same officially sanctioned mount point
+ * `@codemirror/view` uses for its own layers, panels and drop cursor — and
+ * `CodeBlockScrollPlugin` pins it to the visible part of the active block on
+ * every measure pass (see `pinnedOverlayTop`).
+ */
+class CodeBlockControlsOverlay {
+  readonly dom: HTMLElement
+  /** Point the overlay at a (possibly different) block. Called from the
+   * measure write phase, so it must only write DOM, never read layout. */
+  readonly setBlock: (data: FencedCodeData, readOnly: boolean) => void
 
-  eq(other: WidgetType): boolean {
-    return (
-      other instanceof CodeBlockControlsWidget &&
-      other.data.from === this.data.from &&
-      other.data.to === this.data.to &&
-      other.data.language === this.data.language &&
-      other.copyLabel === this.copyLabel &&
-      other.copiedLabel === this.copiedLabel &&
-      other.readOnly === this.readOnly
-    )
-  }
+  constructor(view: EditorView, copyLabel: string, copiedLabel: string) {
+    /** `from` of the block the controls currently operate on. */
+    let blockFrom = -1
+    /** Last language committed to (or read from) the document; what Escape
+     * restores. Replaces the per-widget `initialLanguage` capture. */
+    let committedLanguage = ''
 
-  toDOM(view: EditorView): HTMLElement {
     const header = document.createElement('span')
     header.className = 'xmd-cm-code-preview-header'
+    // Parked off-screen until the first measure pass positions it.
+    header.style.top = '-9999px'
 
     const language = document.createElement('input')
     language.className = 'xmd-cm-code-preview-language'
@@ -134,9 +136,7 @@ class CodeBlockControlsWidget extends WidgetType {
     language.autocomplete = 'off'
     language.spellcheck = false
     language.setAttribute('aria-label', 'Code language')
-    language.disabled = this.readOnly
-    const initialLanguage = normalizedLanguageValue(this.data.language)
-    language.value = initialLanguage || 'text'
+    language.value = 'text'
     const menuId = `xmd-code-languages-${++codeLanguageMenuSequence}`
     const menu = document.createElement('span')
     menu.className = 'xmd-cm-code-language-menu'
@@ -159,7 +159,7 @@ class CodeBlockControlsWidget extends WidgetType {
       if (view.state.readOnly) return
       const typed = language.value.trim()
       const nextLanguage = resolveCodeLanguageInput(typed)
-      const current = findFencedCodeAt(view.state, this.data.from)
+      const current = findFencedCodeAt(view.state, blockFrom)
       if (!current) return
       if (nextLanguage !== normalizedLanguageValue(current.language)) {
         view.dispatch({
@@ -260,7 +260,7 @@ class CodeBlockControlsWidget extends WidgetType {
         event.preventDefault()
         event.stopPropagation()
         closeSuggestions()
-        language.value = initialLanguage || 'text'
+        language.value = committedLanguage || 'text'
         view.focus()
       }
     })
@@ -275,91 +275,85 @@ class CodeBlockControlsWidget extends WidgetType {
     const copy = document.createElement('button')
     copy.className = 'xmd-cm-code-preview-copy'
     copy.type = 'button'
-    copy.setAttribute('aria-label', this.copyLabel)
-    copy.title = this.copyLabel
+    copy.setAttribute('aria-label', copyLabel)
+    copy.title = copyLabel
     copy.append(copyIcon())
     copy.addEventListener('click', () => {
-      const current = findFencedCodeAt(view.state, this.data.from)
+      const current = findFencedCodeAt(view.state, blockFrom)
       if (!current || !globalThis.navigator?.clipboard) return
       const code = view.state.doc.sliceString(current.codeFrom, current.codeTo)
       void navigator.clipboard.writeText(code).then(
         () => {
           copy.replaceChildren(checkIcon())
-          copy.title = this.copiedLabel
-          copy.setAttribute('aria-label', this.copiedLabel)
+          copy.title = copiedLabel
+          copy.setAttribute('aria-label', copiedLabel)
           window.setTimeout(() => {
             if (!copy.isConnected) return
             copy.replaceChildren(copyIcon())
-            copy.title = this.copyLabel
-            copy.setAttribute('aria-label', this.copyLabel)
+            copy.title = copyLabel
+            copy.setAttribute('aria-label', copyLabel)
           }, 1200)
         },
         () => {
           copy.replaceChildren(copyIcon())
-          copy.title = this.copyLabel
-          copy.setAttribute('aria-label', this.copyLabel)
+          copy.title = copyLabel
+          copy.setAttribute('aria-label', copyLabel)
         },
       )
     })
 
     header.append(language, menu, copy)
-    return header
+    this.dom = header
+    this.setBlock = (data, readOnly) => {
+      blockFrom = data.from
+      const normalized = normalizedLanguageValue(data.language)
+      committedLanguage = normalized
+      language.disabled = readOnly
+      // Never fight an in-progress edit: only mirror document state into the
+      // input while focus is outside the overlay.
+      if (!header.contains(document.activeElement)) {
+        const nextValue = normalized || 'text'
+        if (language.value !== nextValue) {
+          language.value = nextValue
+          resizeLanguageInput(false)
+        }
+      }
+    }
   }
 
-  ignoreEvent(): boolean {
-    return true
+  destroy(): void {
+    this.dom.remove()
   }
 }
 
-class CodeBlockScrollbarWidget extends WidgetType {
-  constructor(readonly blockFrom: number) {
-    super()
-  }
-
-  eq(other: WidgetType): boolean {
-    return other instanceof CodeBlockScrollbarWidget && other.blockFrom === this.blockFrom
-  }
-
-  toDOM(): HTMLElement {
-    const scrollbar = document.createElement('span')
-    scrollbar.className = 'xmd-cm-code-scrollbar'
-    scrollbar.dataset.blockFrom = String(this.blockFrom)
-    scrollbar.tabIndex = -1
-    scrollbar.setAttribute('role', 'scrollbar')
-    scrollbar.setAttribute('aria-label', 'Code block horizontal scroll')
-    scrollbar.setAttribute('aria-orientation', 'horizontal')
-    scrollbar.setAttribute('aria-valuemin', '0')
-    return scrollbar
-  }
-
-  ignoreEvent(): boolean {
-    return true
-  }
+/** The shared horizontal scrollbar for the active code block. Like
+ * `CodeBlockControlsOverlay` above, it is a `view.scrollDOM` child owned by
+ * `CodeBlockScrollPlugin` rather than a widget on the opening fence, so it
+ * survives the fence line leaving CM6's virtualized viewport. */
+function createCodeScrollbarElement(): HTMLElement {
+  const scrollbar = document.createElement('span')
+  scrollbar.className = 'xmd-cm-code-scrollbar'
+  // Parked off-screen until the first measure pass positions it.
+  scrollbar.style.top = '-9999px'
+  scrollbar.tabIndex = -1
+  scrollbar.setAttribute('role', 'scrollbar')
+  scrollbar.setAttribute('aria-label', 'Code block horizontal scroll')
+  scrollbar.setAttribute('aria-orientation', 'horizontal')
+  scrollbar.setAttribute('aria-valuemin', '0')
+  scrollbar.setAttribute('aria-hidden', 'true')
+  return scrollbar
 }
 
 interface MountedCodeBlock {
-  fence: HTMLElement | null
   lines: HTMLElement[]
   contents: HTMLElement[]
-  scrollbar: HTMLElement | null
 }
 
-interface CodeScrollMeasure extends Omit<MountedCodeBlock, 'fence' | 'scrollbar'> {
-  fence: HTMLElement
-  scrollbar: HTMLElement
-  contentWidth: number
-  scrollLeft: number
-  revealScrollLeft: number | null
-  overflow: boolean
-  active: boolean
-  scrollbarTop: number
-}
-
-/** Code-block overlays are mounted on the collapsed opening fence instead of
- * an editable body position. Keeping contenteditable=false widgets out of a
- * code row is essential: at an empty line or line end they otherwise become
- * part of the browser's caret coordinate range and push the painted caret to
- * the right edge or onto a phantom next line. */
+/** Collect the contiguous run of *rendered* `.xmd-cm-code-line` rows around
+ * `element`. Only rows CM6 currently keeps in the DOM are returned: for a
+ * block taller than the viewport (plus margin) this is a window into the
+ * block, not the whole block — callers must not treat `lines[0]` as the
+ * block's first body line (see `readMeasure`'s controls-overlap check). */
 function mountedCodeBlockAt(element: HTMLElement): MountedCodeBlock {
   let first = element.closest<HTMLElement>('.cm-line.xmd-cm-code-line')
   while (
@@ -368,25 +362,17 @@ function mountedCodeBlockAt(element: HTMLElement): MountedCodeBlock {
   ) {
     first = first.previousElementSibling
   }
-  const fence =
-    element.closest<HTMLElement>('.cm-line.xmd-cm-code-fence-line') ??
-    (first?.previousElementSibling instanceof HTMLElement &&
-    first.previousElementSibling.classList.contains('xmd-cm-code-fence-line')
-      ? first.previousElementSibling
-      : null)
   const lines: HTMLElement[] = []
-  let current: Element | null = first ?? fence?.nextElementSibling ?? null
+  let current: Element | null = first
   while (current instanceof HTMLElement && current.classList.contains('xmd-cm-code-line')) {
     lines.push(current)
     current = current.nextElementSibling
   }
   return {
-    fence,
     lines,
     contents: lines.flatMap((item) =>
       Array.from(item.querySelectorAll<HTMLElement>('.xmd-cm-code-line-content')),
     ),
-    scrollbar: fence?.querySelector<HTMLElement>('.xmd-cm-code-scrollbar') ?? null,
   }
 }
 
@@ -439,35 +425,169 @@ const DEFAULT_CODE_CONTROLS_GUTTER = 176
 // when the *measured* width (rather than the CSS fallback) is the larger one.
 const CODE_CONTROLS_GUTTER_MARGIN = 8
 
-/** Width of the first-row "controls gutter" the caret reveal-scroll math
- * (below) must stay clear of. Copy-button/language-input i18n copy can be
- * wider than the fixed CSS reservation, so this takes the larger of that
- * reservation and the controls header's actual rendered width — the caret
- * must clear real pixels on screen, never a stale CSS constant. Must only be
- * read here, in `requestMeasure`'s read phase: `getComputedStyle` and
- * `getBoundingClientRect` both force layout. */
-function resolveCodeControlsGutter(fence: HTMLElement): number {
+/** Width of the "controls gutter" the caret reveal-scroll math (below) must
+ * stay clear of while the caret's row sits under the pinned controls.
+ * Copy-button/language-input i18n copy can be wider than the fixed CSS
+ * reservation, so this takes the larger of that reservation and the controls
+ * header's actual rendered width — the caret must clear real pixels on
+ * screen, never a stale CSS constant. The custom property is read from the
+ * overlay header itself: it inherits `--xmd-code-controls-gutter` from the
+ * `.xmd-cm-editor` root (editor.css) just like the fence line this used to
+ * measure. Must only be called from `requestMeasure`'s read phase:
+ * `getComputedStyle` and `getBoundingClientRect` both force layout. */
+function resolveCodeControlsGutter(header: HTMLElement): number {
   const cssValue = Number.parseFloat(
-    getComputedStyle(fence).getPropertyValue('--xmd-code-controls-gutter'),
+    getComputedStyle(header).getPropertyValue('--xmd-code-controls-gutter'),
   )
   const reserved =
     Number.isFinite(cssValue) && cssValue > 0 ? cssValue : DEFAULT_CODE_CONTROLS_GUTTER
-  const header = fence.querySelector<HTMLElement>('.xmd-cm-code-preview-header')
-  const measured = header ? header.getBoundingClientRect().width + CODE_CONTROLS_GUTTER_MARGIN : 0
+  const measured = header.getBoundingClientRect().width + CODE_CONTROLS_GUTTER_MARGIN
   return Math.max(reserved, measured)
 }
 
+// Geometry constants for the scrollDOM-mounted overlays. The two heights must
+// match the fixed CSS heights in codeBlockPreview.css
+// (`.xmd-cm-code-preview-header` / `.xmd-cm-code-scrollbar`); the margins and
+// insets reproduce the previous fence-anchored placement: header at block top
+// + 10px with a 10px right inset, scrollbar spanning the row minus 16px on
+// each side with its top edge 8px above the block bottom (3px margin + 5px
+// height).
+const CODE_CONTROLS_HEIGHT = 28
+const CODE_CONTROLS_MARGIN = 10
+const CODE_CONTROLS_INSET = 10
+const CODE_SCROLLBAR_HEIGHT = 5
+const CODE_SCROLLBAR_MARGIN = 3
+const CODE_SCROLLBAR_INSET = 16
+
+export interface OverlayPinGeometry {
+  /** Top of the code card (its first body line), in scroller content space. */
+  blockTop: number
+  /** Bottom of the code card (its last body line), same space. */
+  blockBottom: number
+  /** Visible scroller window: `scrollDOM.scrollTop` … `+ clientHeight`. */
+  viewportTop: number
+  viewportBottom: number
+}
+
+/**
+ * Pure pinning math for the code-block overlays. While the block intersects
+ * the viewport, the element hugs its preferred block edge (`block-start` for
+ * the copy/language controls, `block-end` for the shared scrollbar) but is
+ * clamped into the viewport — a sticky-header/-footer: with the whole block
+ * on screen the result is identical to the old fence-anchored placement, and
+ * once the preferred edge scrolls away the element pins to the corresponding
+ * viewport edge instead, sliding out together with the block's opposite edge
+ * so it never floats over unrelated content. Returns `null` when the block
+ * does not intersect the viewport at all (the overlay should hide).
+ */
+export function pinnedOverlayTop(
+  edge: 'block-start' | 'block-end',
+  geometry: OverlayPinGeometry,
+  height: number,
+  margin: number,
+): number | null {
+  const { blockTop, blockBottom, viewportTop, viewportBottom } = geometry
+  if (blockBottom <= viewportTop || blockTop >= viewportBottom) return null
+  if (edge === 'block-start') {
+    let top = Math.max(blockTop + margin, viewportTop + margin)
+    // Slide out with the block's bottom edge instead of overflowing it…
+    top = Math.min(top, blockBottom - margin - height)
+    // …but never rise above the block itself.
+    return Math.max(top, blockTop)
+  }
+  let top = Math.min(blockBottom - margin - height, viewportBottom - margin - height)
+  top = Math.max(top, blockTop + margin)
+  return Math.min(top, blockBottom - height)
+}
+
+interface FenceClassMeasure {
+  fence: HTMLElement
+  active: boolean
+}
+
+interface ActiveBlockMeasure {
+  data: FencedCodeData
+  readOnly: boolean
+  /** Rendered content scrollers of the active block, with their scroll
+   * offsets captured during the read phase (reading `scrollLeft` in the
+   * write phase would force layout). */
+  contents: HTMLElement[]
+  contentScrollLefts: number[]
+  contentWidth: number
+  /** Width of the scrollbar track (row width minus its horizontal insets). */
+  trackWidth: number
+  scrollLeft: number
+  revealScrollLeft: number | null
+  overflow: boolean
+  /** Pinned overlay positions in scroller content space; `null` while the
+   * block does not intersect the viewport (overlay hidden). */
+  controlsTop: number | null
+  /** Right-edge anchor for the controls (they render right-aligned on this
+   * `left` via `translateX(-100%)`, so input-width changes between measure
+   * passes keep the right edge fixed). */
+  controlsAnchorLeft: number
+  scrollbarTop: number | null
+  scrollbarLeft: number
+}
+
+interface CodeScrollMeasure {
+  fences: FenceClassMeasure[]
+  active: ActiveBlockMeasure | null
+}
+
+/** The fenced code block owning the primary selection head, when it is an
+ * editable (non-Mermaid) block — the block the singleton overlays serve. */
+function activeEditableFencedCode(state: EditorState): FencedCodeData | null {
+  const data = fencedCodeAtSelection(state)
+  return data !== null && data.language.toLowerCase() !== 'mermaid' ? data : null
+}
+
 /** Keeps every source row full-width while synchronizing their hidden
- * horizontal scrollers with one visible scrollbar at the bottom of the card. */
+ * horizontal scrollers with one visible scrollbar pinned near the bottom of
+ * the card's visible part, and pins the copy/language controls near its top.
+ * Both overlays are plugin-owned `view.scrollDOM` children (see
+ * `CodeBlockControlsOverlay`), so they remain reachable while CM6's
+ * virtualized viewport has dropped the fence lines of a block taller than
+ * the screen — the situation that used to make both widgets vanish. */
 class CodeBlockScrollPlugin {
   private syncing = false
   private frame = 0
+  private repaintFrame = 0
+  private revealPending = true
   private drag: { scrollbar: HTMLElement; pointerId: number; offset: number } | null = null
+  private readonly controls: CodeBlockControlsOverlay
+  private readonly scrollbar: HTMLElement | null
+  // A single stable request object: `view.requestMeasure` deduplicates by
+  // object identity (see `measureRequests.indexOf` in @codemirror/view's
+  // EditorView.requestMeasure), so repeated `schedule()` calls within one
+  // frame coalesce into a single read/write pass.
+  private readonly measureRequest = {
+    read: (view: EditorView): CodeScrollMeasure => this.readMeasure(view),
+    write: (measure: CodeScrollMeasure): void => this.writeMeasure(measure),
+  }
 
-  constructor(readonly view: EditorView) {
-    view.contentDOM.addEventListener('scroll', this.onScroll, true)
-    view.contentDOM.addEventListener('pointerdown', this.onPointerDown)
-    view.contentDOM.addEventListener('keydown', this.onKeyDown)
+  constructor(
+    readonly view: EditorView,
+    options: CodeBlockPreviewOptions = {},
+  ) {
+    this.controls = new CodeBlockControlsOverlay(
+      view,
+      options.copyLabel ?? 'Copy',
+      options.copiedLabel ?? 'Copied',
+    )
+    view.scrollDOM.appendChild(this.controls.dom)
+    this.scrollbar = options.lineWrapping ? null : createCodeScrollbarElement()
+    if (this.scrollbar) {
+      this.scrollbar.addEventListener('pointerdown', this.onPointerDown)
+      this.scrollbar.addEventListener('keydown', this.onKeyDown)
+      view.scrollDOM.appendChild(this.scrollbar)
+    }
+    // Nested code-line scrollers emit non-bubbling `scroll` events, so listen
+    // in the capture phase. Listening on scrollDOM (not contentDOM) also
+    // catches the editor's own scrolling, which must re-pin the overlays even
+    // when the viewport (plus margin) is unchanged and CM6 therefore
+    // dispatches no view update.
+    view.scrollDOM.addEventListener('scroll', this.onScroll, true)
     this.updateSelectionPresentation(view.state)
     this.schedule()
     this.frame = requestAnimationFrame(() => this.schedule())
@@ -475,11 +595,19 @@ class CodeBlockScrollPlugin {
 
   update(update: ViewUpdate): void {
     if (update.docChanged || update.selectionSet) this.updateSelectionPresentation(update.state)
+    // Reveal-scrolling (keeping the caret visible inside the nested
+    // scrollers) only follows caret/content/geometry changes — never plain
+    // scrolling, which would yank a deliberately scrolled-away row back to
+    // the caret on the next measure pass.
+    if (update.docChanged || update.selectionSet || update.geometryChanged) {
+      this.revealPending = true
+    }
     if (
       update.docChanged ||
       update.selectionSet ||
       update.viewportChanged ||
-      update.geometryChanged
+      update.geometryChanged ||
+      update.startState.readOnly !== update.state.readOnly
     ) {
       this.schedule()
     }
@@ -487,15 +615,21 @@ class CodeBlockScrollPlugin {
 
   destroy(): void {
     cancelAnimationFrame(this.frame)
-    this.view.contentDOM.removeEventListener('scroll', this.onScroll, true)
-    this.view.contentDOM.removeEventListener('pointerdown', this.onPointerDown)
-    this.view.contentDOM.removeEventListener('keydown', this.onKeyDown)
+    cancelAnimationFrame(this.repaintFrame)
+    this.view.scrollDOM.removeEventListener('scroll', this.onScroll, true)
     this.view.dom.classList.remove('xmd-cm-native-code-selection')
     this.view.dom.classList.remove('xmd-cm-native-code-caret')
     this.stopDragging()
+    this.controls.destroy()
+    this.scrollbar?.remove()
   }
 
   private readonly onScroll = (event: Event): void => {
+    if (event.target === this.view.scrollDOM) {
+      // Outer scrolling moves the viewport the overlays are pinned against.
+      this.schedule()
+      return
+    }
     if (this.syncing || !(event.target instanceof HTMLElement)) return
     const source = event.target
     if (!source.classList.contains('xmd-cm-code-line-content')) return
@@ -519,8 +653,68 @@ class CodeBlockScrollPlugin {
       if (target !== source && target.scrollLeft !== source.scrollLeft)
         target.scrollLeft = source.scrollLeft
     }
-    if (block.scrollbar) this.updateThumb(block.scrollbar, source.scrollLeft)
     this.syncing = false
+    const first = block.lines[0]
+    if (this.scrollbar && first && this.lineInActiveBlock(first))
+      this.updateThumb(this.scrollbar, source.scrollLeft)
+    // A nested scrollLeft changed outside a view update; see
+    // `queueSecondaryCaretRepaint` (this also covers scrolled rows of a
+    // *non-active* block that a secondary multi-cursor caret may sit in).
+    this.queueSecondaryCaretRepaint()
+  }
+
+  private lineInActiveBlock(line: HTMLElement): boolean {
+    const data = activeEditableFencedCode(this.view.state)
+    if (!data) return false
+    const pos = this.view.posAtDOM(line, 0)
+    return pos >= data.from && pos <= data.to
+  }
+
+  /** The rendered lines of the active block. Looked up per call — CM6
+   * recycles line DOM, so long-lived element references would go stale. */
+  private activeMountedBlock(data: FencedCodeData): MountedCodeBlock | null {
+    for (const line of this.view.contentDOM.querySelectorAll<HTMLElement>(
+      '.cm-line.xmd-cm-code-line',
+    )) {
+      // Only probe the first line of each contiguous run of code rows.
+      if (
+        line.previousElementSibling instanceof HTMLElement &&
+        line.previousElementSibling.classList.contains('xmd-cm-code-line')
+      )
+        continue
+      const pos = this.view.posAtDOM(line, 0)
+      if (pos >= data.from && pos <= data.to) return mountedCodeBlockAt(line)
+    }
+    return null
+  }
+
+  /**
+   * Task-scoped mitigation for stale secondary carets: CM6's `drawSelection`
+   * cursor layer re-measures its markers only during a view update —
+   * `LayerView.update` schedules a measure when `cursorLayer.update()`
+   * returns true, i.e. on `update.docChanged || update.selectionSet` (or a
+   * config change), plus `update.geometryChanged` (see `cursorLayer` and
+   * `LayerView.update` in node_modules/@codemirror/view/dist/index.js). A
+   * nested code-row `scrollLeft` moving *outside* an update — scrollbar
+   * drag/keyboard, `syncFrom`, a reveal-scroll write — therefore leaves
+   * secondary multi-cursor carets (`.cm-cursor-secondary`) painted at stale
+   * coordinates. The primary caret is unaffected: it is the browser-native
+   * one while inside a code body (`caretInsideFencedCode`), and with
+   * multiple ranges CM6 keeps drawing but the same repaint fixes it too.
+   * Re-dispatching the current selection unchanged is the lightest public
+   * trigger that sets `update.selectionSet`; an empty `view.dispatch({})`
+   * sets neither flag and repaints nothing. Strictly gated by
+   * `needsSecondaryCaretRepaint` so the ordinary single-caret path pays
+   * nothing, and rAF-deduplicated so a burst of scroll writes coalesces
+   * into one repaint.
+   */
+  private queueSecondaryCaretRepaint(): void {
+    if (this.repaintFrame !== 0 || !needsSecondaryCaretRepaint(this.view.state)) return
+    this.repaintFrame = requestAnimationFrame(() => {
+      this.repaintFrame = 0
+      if (!needsSecondaryCaretRepaint(this.view.state)) return
+      this.view.dispatch({ selection: this.view.state.selection })
+    })
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
@@ -621,16 +815,25 @@ class CodeBlockScrollPlugin {
 
   private setBlockScroll(scrollbar: HTMLElement, next: number): void {
     const scrollLeft = Math.min(this.maxScroll(scrollbar), Math.max(0, next))
-    const block = mountedCodeBlockAt(scrollbar)
-    if (block.lines.length === 0) return
+    // The scrollbar no longer lives inside the block's DOM; it always serves
+    // the active block, whose rendered rows are looked up from the document.
+    const data = activeEditableFencedCode(this.view.state)
+    const block = data ? this.activeMountedBlock(data) : null
+    if (!block || block.lines.length === 0) return
     this.syncing = true
     for (const content of block.contents) content.scrollLeft = scrollLeft
     this.syncing = false
     this.updateThumb(scrollbar, scrollLeft)
+    this.queueSecondaryCaretRepaint()
   }
 
-  private updateThumb(scrollbar: HTMLElement, scrollLeft: number): void {
-    const viewportWidth = scrollbar.clientWidth
+  /** `viewportWidth` must be passed from the measure write phase (reading
+   * `clientWidth` there would force layout); event handlers may omit it. */
+  private updateThumb(
+    scrollbar: HTMLElement,
+    scrollLeft: number,
+    viewportWidth = scrollbar.clientWidth,
+  ): void {
     const maxScroll = this.maxScroll(scrollbar)
     const contentWidth = viewportWidth + maxScroll
     const thumbWidth = Math.max(36, (viewportWidth * viewportWidth) / contentWidth)
@@ -644,106 +847,203 @@ class CodeBlockScrollPlugin {
   }
 
   private schedule(): void {
-    this.view.requestMeasure({
-      read: (view): CodeScrollMeasure[] => {
-        const measures: CodeScrollMeasure[] = []
-        const activeBlockFrom = fencedCodeAtSelection(view.state)?.from ?? null
-        for (const scrollbar of view.contentDOM.querySelectorAll<HTMLElement>(
-          '.xmd-cm-code-scrollbar',
-        )) {
-          const block = mountedCodeBlockAt(scrollbar)
-          const fence = block.fence
-          if (!fence) continue
-          const lastLine = block.lines.at(-1)
-          if (!lastLine) continue
-          const fenceRect = fence.getBoundingClientRect()
-          const lastLineRect = lastLine.getBoundingClientRect()
-          const contentWidth = Math.max(
-            scrollbar.clientWidth,
-            ...block.contents.map(
-              (content) =>
-                content.scrollWidth + Math.max(0, scrollbar.clientWidth - content.clientWidth),
-            ),
-          )
-          let revealScrollLeft: number | null = null
-          if (Number(scrollbar.dataset.blockFrom) === activeBlockFrom) {
-            const activeLine = block.lines.find((item) => item.classList.contains('cm-activeLine'))
-            const activeContent = activeLine?.querySelector<HTMLElement>(
-              '.xmd-cm-code-line-content',
-            )
-            const head = view.state.selection.main.head
-            const lineOffset = head - view.state.doc.lineAt(head).from
-            const caretX = activeContent ? codeContentCaretX(activeContent, lineOffset) : null
-            if (activeLine && activeContent && caretX !== null) {
-              const contentRect = activeContent.getBoundingClientRect()
-              const leftEdge = contentRect.left + 8
-              // Controls overlay the first row only. Keep the insertion point
-              // clear of them while preserving one stable editable width.
-              const controlsGutter =
-                activeLine === block.lines[0] ? resolveCodeControlsGutter(fence) : 0
-              const rightEdge = contentRect.right - controlsGutter - 8
-              let next = activeContent.scrollLeft
-              if (caretX < leftEdge) next -= leftEdge - caretX
-              else if (caretX > rightEdge) next += caretX - rightEdge
-              revealScrollLeft = next
-            }
-          }
-          measures.push({
-            ...block,
-            fence,
-            scrollbar,
-            contentWidth,
-            scrollLeft: block.contents[0]?.scrollLeft ?? 0,
-            revealScrollLeft,
-            overflow: contentWidth > scrollbar.clientWidth + 1,
-            active: Number(scrollbar.dataset.blockFrom) === activeBlockFrom,
-            scrollbarTop: Math.max(0, lastLineRect.bottom - fenceRect.top - 8),
-          })
-        }
-        return measures
+    this.view.requestMeasure(this.measureRequest)
+  }
+
+  private readMeasure(view: EditorView): CodeScrollMeasure {
+    const reveal = this.revealPending
+    this.revealPending = false
+    const data = activeEditableFencedCode(view.state)
+    // Fence lines still get their active class toggled while they are in the
+    // DOM (their only remaining overlay-independent responsibility); a fence
+    // outside the rendered viewport simply keeps its stale class until it is
+    // re-rendered, which CM6 does from the decoration spec anyway.
+    const fences: FenceClassMeasure[] = []
+    for (const fence of view.contentDOM.querySelectorAll<HTMLElement>(
+      '.cm-line.xmd-cm-code-fence-line',
+    )) {
+      const pos = view.posAtDOM(fence, 0)
+      fences.push({ fence, active: data !== null && pos >= data.from && pos <= data.to })
+    }
+    if (!data) return { fences, active: null }
+
+    // Vertical block geometry comes from the height map (`view.lineBlockAt`)
+    // rather than `view.coordsAtPos`: positions outside the rendered viewport
+    // fall into CM6's internal BlockGapWidget replacements, for which
+    // `DocView.coordsAt` returns null (see `coordsAt` and the `isBlockGap`
+    // gap decorations in node_modules/@codemirror/view/dist/index.js), while
+    // `lineBlockAt` reads the height map, which covers the entire document —
+    // measured heights inside the viewport, estimated ones outside. That is
+    // exactly the precision the viewport-clamped pinning below needs: an
+    // off-screen block edge is clamped to the viewport edge anyway.
+    const firstBlock = view.lineBlockAt(data.firstCodeLineFrom)
+    const lastBlock = view.lineBlockAt(Math.max(data.codeFrom, data.codeTo))
+    const scrollRect = view.scrollDOM.getBoundingClientRect()
+    const contentRect = view.contentDOM.getBoundingClientRect()
+    const viewportTop = view.scrollDOM.scrollTop
+    const viewportBottom = viewportTop + view.scrollDOM.clientHeight
+    // `lineBlockAt` tops are relative to `view.documentTop` (a screen
+    // coordinate). Convert into scrollDOM content space — the coordinate
+    // system absolutely positioned scrollDOM children are styled in — the
+    // same way @codemirror/view's own dropCursor does: screen delta plus the
+    // current scroll offset, de-scaled by the editor's CSS transform.
+    const documentTop = (view.documentTop - scrollRect.top) / view.scaleY + viewportTop
+    const geometry: OverlayPinGeometry = {
+      blockTop: documentTop + firstBlock.top,
+      blockBottom: documentTop + lastBlock.bottom,
+      viewportTop,
+      viewportBottom,
+    }
+    const contentLeft =
+      (contentRect.left - scrollRect.left) / view.scaleX + view.scrollDOM.scrollLeft
+    const contentWidth = contentRect.width / view.scaleX
+    const trackWidth = Math.max(0, contentWidth - 2 * CODE_SCROLLBAR_INSET)
+    const controlsTop = pinnedOverlayTop(
+      'block-start',
+      geometry,
+      CODE_CONTROLS_HEIGHT,
+      CODE_CONTROLS_MARGIN,
+    )
+
+    const block = this.activeMountedBlock(data)
+    const contents = block?.contents ?? []
+    const contentScrollLefts = contents.map((content) => content.scrollLeft)
+    const rowContentWidth = Math.max(
+      trackWidth,
+      ...contents.map(
+        (content) => content.scrollWidth + Math.max(0, trackWidth - content.clientWidth),
+      ),
+    )
+
+    let revealScrollLeft: number | null = null
+    if (reveal && block) {
+      const activeLine = block.lines.find((item) => item.classList.contains('cm-activeLine'))
+      const activeContent = activeLine?.querySelector<HTMLElement>('.xmd-cm-code-line-content')
+      const head = view.state.selection.main.head
+      const lineOffset = head - view.state.doc.lineAt(head).from
+      const caretX = activeContent ? codeContentCaretX(activeContent, lineOffset) : null
+      if (activeLine && activeContent && caretX !== null) {
+        const activeRect = activeContent.getBoundingClientRect()
+        const leftEdge = activeRect.left + 8
+        // Keep the insertion point clear of the pinned controls while they
+        // overlap the caret's row. With the fence on screen this is the
+        // first body row, exactly as before; with the controls stuck to the
+        // viewport top it is whichever row has scrolled underneath them.
+        const lineTop = (activeRect.top - scrollRect.top) / view.scaleY + viewportTop
+        const lineBottom = (activeRect.bottom - scrollRect.top) / view.scaleY + viewportTop
+        const underControls =
+          controlsTop !== null &&
+          lineBottom > controlsTop &&
+          lineTop < controlsTop + CODE_CONTROLS_HEIGHT
+        const controlsGutter = underControls ? resolveCodeControlsGutter(this.controls.dom) : 0
+        const rightEdge = activeRect.right - controlsGutter - 8
+        let next = activeContent.scrollLeft
+        if (caretX < leftEdge) next -= leftEdge - caretX
+        else if (caretX > rightEdge) next += caretX - rightEdge
+        revealScrollLeft = next
+      }
+    }
+
+    return {
+      fences,
+      active: {
+        data,
+        readOnly: view.state.readOnly,
+        contents,
+        contentScrollLefts,
+        contentWidth: rowContentWidth,
+        trackWidth,
+        scrollLeft: contentScrollLefts[0] ?? 0,
+        revealScrollLeft,
+        overflow: rowContentWidth > trackWidth + 1,
+        controlsTop,
+        controlsAnchorLeft: contentLeft + contentWidth - CODE_CONTROLS_INSET,
+        scrollbarTop: pinnedOverlayTop(
+          'block-end',
+          geometry,
+          CODE_SCROLLBAR_HEIGHT,
+          CODE_SCROLLBAR_MARGIN,
+        ),
+        scrollbarLeft: contentLeft + CODE_SCROLLBAR_INSET,
       },
-      write: (measures) => {
-        for (const measure of measures) {
-          const visible = measure.overflow && measure.active
-          const maxScroll = Math.max(0, measure.contentWidth - measure.scrollbar.clientWidth)
-          const scrollLeft = Math.min(
-            maxScroll,
-            Math.max(0, measure.revealScrollLeft ?? measure.scrollLeft),
-          )
-          measure.fence.classList.toggle('xmd-cm-code-block-active', measure.active)
-          measure.scrollbar.style.setProperty(
-            '--xmd-code-scrollbar-top',
-            `${measure.scrollbarTop}px`,
-          )
-          measure.scrollbar.dataset.maxScroll = String(maxScroll)
-          measure.scrollbar.classList.toggle('is-overflowing', measure.overflow)
-          measure.scrollbar.classList.toggle('is-active', measure.active)
-          measure.scrollbar.tabIndex = visible ? 0 : -1
-          measure.scrollbar.setAttribute('aria-hidden', visible ? 'false' : 'true')
-          measure.scrollbar.setAttribute('aria-valuemax', String(Math.round(maxScroll)))
-          if (scrollLeft !== measure.scrollLeft) {
-            this.syncing = true
-            for (const content of measure.contents) content.scrollLeft = scrollLeft
-            this.syncing = false
-          }
-          // No follow-up rAF re-measure here (there used to be one, gated on
-          // a `geometryChanged` flag). It existed only to chase the deleted
-          // cursor-transform hack: CM6 re-renders `.cm-cursor-primary` outside
-          // of this plugin's control and would silently wipe the inline
-          // `transform` we set, so a second pass was needed to reapply it a
-          // frame later (the one-frame flash on every keypress mentioned in
-          // the task). The scrollLeft write above needs no such follow-up:
-          // `updateThumb` below already derives the thumb geometry from the
-          // same synchronous `scrollLeft`/`maxScroll` values written this
-          // pass, not from a DOM read that could still be stale.
-          this.updateThumb(measure.scrollbar, scrollLeft)
-        }
-      },
-    })
+    }
+  }
+
+  private writeMeasure(measure: CodeScrollMeasure): void {
+    for (const { fence, active } of measure.fences) {
+      fence.classList.toggle('xmd-cm-code-block-active', active)
+    }
+
+    const active = measure.active
+    const controlsDom = this.controls.dom
+    if (!active || active.controlsTop === null) {
+      controlsDom.classList.remove('is-active')
+      // Keep the overlay in place while the user is interacting with it (the
+      // CSS :focus-within rules keep it visible during e.g. a language edit
+      // whose commit will move the selection); park it off-screen otherwise.
+      if (!controlsDom.contains(document.activeElement)) {
+        controlsDom.style.top = '-9999px'
+      }
+    } else {
+      this.controls.setBlock(active.data, active.readOnly)
+      controlsDom.classList.add('is-active')
+      controlsDom.style.top = `${active.controlsTop}px`
+      controlsDom.style.left = `${active.controlsAnchorLeft}px`
+    }
+
+    const scrollbar = this.scrollbar
+    if (!scrollbar) return
+    if (!active || active.scrollbarTop === null) {
+      scrollbar.classList.remove('is-overflowing')
+      scrollbar.classList.remove('is-active')
+      scrollbar.tabIndex = -1
+      scrollbar.setAttribute('aria-hidden', 'true')
+      if (document.activeElement !== scrollbar) scrollbar.style.top = '-9999px'
+      return
+    }
+    const maxScroll = Math.max(0, active.contentWidth - active.trackWidth)
+    const scrollLeft = Math.min(
+      maxScroll,
+      Math.max(0, active.revealScrollLeft ?? active.scrollLeft),
+    )
+    const visible = active.overflow
+    scrollbar.style.top = `${active.scrollbarTop}px`
+    scrollbar.style.left = `${active.scrollbarLeft}px`
+    scrollbar.style.width = `${active.trackWidth}px`
+    scrollbar.dataset.maxScroll = String(maxScroll)
+    scrollbar.classList.toggle('is-overflowing', active.overflow)
+    scrollbar.classList.add('is-active')
+    scrollbar.tabIndex = visible ? 0 : -1
+    scrollbar.setAttribute('aria-hidden', visible ? 'false' : 'true')
+    scrollbar.setAttribute('aria-valuemax', String(Math.round(maxScroll)))
+    let wroteScrollLeft = false
+    this.syncing = true
+    for (const [index, content] of active.contents.entries()) {
+      // Sync per row against the offsets captured in the read phase: a row
+      // CM6 (re-)rendered since the last pass starts at scrollLeft 0 and must
+      // be caught up even when the reference row already matches the target.
+      if (active.contentScrollLefts[index] !== scrollLeft) {
+        content.scrollLeft = scrollLeft
+        wroteScrollLeft = true
+      }
+    }
+    this.syncing = false
+    // No follow-up rAF re-measure here (there used to be one, gated on a
+    // `geometryChanged` flag). It existed only to chase the deleted
+    // cursor-transform hack. `updateThumb` derives the thumb geometry from
+    // the same synchronous `scrollLeft`/`maxScroll`/`trackWidth` values
+    // written this pass, not from a DOM read that could still be stale.
+    this.updateThumb(scrollbar, scrollLeft, active.trackWidth)
+    // Programmatic scrollLeft writes (reveal-scroll, row catch-up) move the
+    // nested scrollers outside CM6's update cycle; see
+    // `queueSecondaryCaretRepaint`.
+    if (wroteScrollLeft) this.queueSecondaryCaretRepaint()
   }
 }
 
-const codeBlockScrolling = ViewPlugin.fromClass(CodeBlockScrollPlugin)
+function codeBlockScrolling(options: CodeBlockPreviewOptions): Extension {
+  return ViewPlugin.define((view) => new CodeBlockScrollPlugin(view, options))
+}
 
 export function readFencedCode(
   state: EditorState,
@@ -888,6 +1188,26 @@ export function caretInsideFencedCode(state: EditorState): boolean {
     range.head >= data.codeFrom &&
     range.head <= data.codeTo
   )
+}
+
+/** Whether a stale-secondary-caret repaint is warranted after a nested
+ * code-row scroller moved outside a view update (see
+ * `queueSecondaryCaretRepaint` for the full mechanism): only a multi-cursor
+ * selection with at least one range head inside an editable (non-Mermaid)
+ * fenced code body can have a CM6-drawn caret whose painted position depends
+ * on a nested `scrollLeft`. Everything else — in particular the ordinary
+ * single-caret path — must return `false` so it costs nothing. */
+export function needsSecondaryCaretRepaint(state: EditorState): boolean {
+  if (state.selection.ranges.length < 2) return false
+  return state.selection.ranges.some((range) => {
+    const data = fencedCodeAt(state, range.head)
+    return (
+      data !== null &&
+      data.language.toLowerCase() !== 'mermaid' &&
+      range.head >= data.codeFrom &&
+      range.head <= data.codeTo
+    )
+  })
 }
 
 /** Move to the logical source-line boundary inside fenced code. CM6's default
@@ -1162,6 +1482,11 @@ function mergeVisibleRanges(
 /**
  * Decorates fenced code without replacing its contents. CodeText remains a set
  * of ordinary outer-editor lines, so CM6 owns one document and one selection.
+ * The copy/language controls and the shared scrollbar are deliberately *not*
+ * part of this decoration set: as widgets anchored to the opening fence they
+ * left the DOM whenever CM6's virtualized viewport dropped that line, taking
+ * the controls with them mid-edit. They are scrollDOM overlays owned by
+ * `CodeBlockScrollPlugin` instead.
  */
 export function buildCodeBlockPreviewDecorations(
   state: EditorState,
@@ -1171,8 +1496,6 @@ export function buildCodeBlockPreviewDecorations(
   const decorations: Array<ReturnType<Decoration['range']>> = []
   const seen = new Set<number>()
   const margin = Math.max(0, options.viewportMargin ?? 256)
-  const copyLabel = options.copyLabel ?? 'Copy'
-  const copiedLabel = options.copiedLabel ?? 'Copied'
   const codeLineClass = options.lineWrapping ? 'xmd-cm-code-line-wrap' : ''
 
   for (const visible of mergeVisibleRanges(state, visibleRanges, margin)) {
@@ -1215,20 +1538,6 @@ export function buildCodeBlockPreviewDecorations(
           }
           if (line.number >= state.doc.lines) break
           line = state.doc.line(line.number + 1)
-        }
-        decorations.push(
-          Decoration.widget({
-            widget: new CodeBlockControlsWidget(data, copyLabel, copiedLabel, state.readOnly),
-            side: 1,
-          }).range(opening.to),
-        )
-        if (!options.lineWrapping) {
-          decorations.push(
-            Decoration.widget({
-              widget: new CodeBlockScrollbarWidget(data.from),
-              side: 1,
-            }).range(opening.to),
-          )
         }
         return false
       },
@@ -1293,16 +1602,18 @@ export function collectFencedCodeHiddenRanges(
 
 export function markdownCodeBlockPreview(options: CodeBlockPreviewOptions = {}): Extension {
   return [
-    codeBlockScrolling,
+    codeBlockScrolling(options),
     viewportDecorationExtension(
       (view) => buildCodeBlockPreviewDecorations(view.state, view.visibleRanges, options),
       // None of these decorations depends on the selection. Rebuilding the
       // StateField after every caret move makes CM6 invalidate line geometry
       // in a microtask, which produces a visible two-stage caret jump.
+      // (No `rebuildOnUpdate` readOnly trigger anymore: the read-only flag
+      // only affected the controls widget, which is no longer a decoration —
+      // CodeBlockScrollPlugin re-applies it to the overlay on measure.)
       {
         rebuildOnSelection: false,
         rebuildOnSyntaxTree: true,
-        rebuildOnUpdate: (update) => update.startState.readOnly !== update.state.readOnly,
       },
     ),
     hiddenRangeSource.of(({ state, visibleRanges }) =>

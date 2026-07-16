@@ -29,10 +29,7 @@ describe('CM6 live preview styles', () => {
     // the caret reveal-scroll math and this padding can never drift apart
     // the way two separately hardcoded `176`s once could.
     const editorCss = readFileSync(new URL('./editor.css', import.meta.url), 'utf8')
-    const codeBlockCss = readFileSync(
-      new URL('./codeBlockPreview.css', import.meta.url),
-      'utf8',
-    )
+    const codeBlockCss = readFileSync(new URL('./codeBlockPreview.css', import.meta.url), 'utf8')
     const editorScope = editorCss.match(/\.xmd-cm-editor\s*\{([^}]*)\}/)?.[1]
     const firstLineContent = codeBlockCss.match(
       /\.xmd-cm-code-line-first \.xmd-cm-code-line-content\s*\{([^}]*)\}/,
