@@ -182,6 +182,20 @@ describe('CM6 Markdown commands', () => {
     expect(task.doc).toBe('- [ ] 甲\n- [ ] 乙')
   })
 
+  it('keeps an empty toolbar-created bullet from becoming a Setext heading underline', () => {
+    const doc = '正文内容\n'
+    expect(run(doc, EditorSelection.cursor(doc.length), toggleBulletList)).toEqual({
+      doc: '正文内容\n\n- ',
+      from: 8,
+      to: 8,
+    })
+    expect(run('', EditorSelection.cursor(0), toggleBulletList)).toEqual({
+      doc: '- ',
+      from: 2,
+      to: 2,
+    })
+  })
+
   it('inserts a fenced block and selects the original content', () => {
     expect(run('你好', EditorSelection.range(0, 2), insertCodeFence('ts'))).toEqual({
       doc: '```ts\n你好\n```',

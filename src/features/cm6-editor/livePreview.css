@@ -207,6 +207,11 @@
   width: 1.3em;
 }
 
+.xmd-cm-list-marker.is-bullet {
+  font-size: 1.25em;
+  line-height: 1;
+}
+
 .xmd-cm-list-marker.is-task {
   margin-right: 0;
   width: 0;

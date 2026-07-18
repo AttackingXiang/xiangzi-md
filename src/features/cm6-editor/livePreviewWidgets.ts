@@ -99,7 +99,8 @@ export class ListMarkerWidget extends WidgetType {
 
   toDOM(): HTMLElement {
     const element = document.createElement('span')
-    element.className = `xmd-cm-list-marker${this.task ? ' is-task' : ''}`
+    const variantClass = this.task ? ' is-task' : this.label === '•' ? ' is-bullet' : ''
+    element.className = `xmd-cm-list-marker${variantClass}`
     element.style.setProperty('--xmd-list-depth', String(this.depth))
     element.setAttribute('aria-hidden', 'true')
     element.textContent = this.label

@@ -273,6 +273,7 @@ function linePrefixPlan(
     line: string,
     index: number,
     remove: boolean,
+    from: number,
   ) => { offset?: number; remove: number; insert: string },
   isApplied: (line: string) => boolean,
 ): MarkdownEditPlan {
@@ -281,7 +282,7 @@ function linePrefixPlan(
   const remove = meaningful.length > 0 && meaningful.every(({ text }) => isApplied(text))
   const changes = lines.flatMap(({ from, text }, index) => {
     if (!text && remove) return []
-    const edit = prefixFor(text, index, remove)
+    const edit = prefixFor(text, index, remove, from)
     if (edit.remove === 0 && edit.insert === '') return []
     const offset = edit.offset ?? 0
     return [{ from: from + offset, to: from + offset + edit.remove, insert: edit.insert }]
@@ -291,6 +292,20 @@ function linePrefixPlan(
 
 const quotePattern = /^( {0,3})> ?/
 const listPattern = /^(\s*)(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/
+
+function followsTopLevelParagraph(state: EditorState, lineFrom: number): boolean {
+  const line = state.doc.lineAt(lineFrom)
+  if (line.number === 1) return false
+  const previous = state.doc.line(line.number - 1)
+  if (previous.length === 0) return false
+
+  let node: MarkdownSyntaxNode | null = syntaxTree(state).resolveInner(previous.to - 1, 1)
+  while (node) {
+    if (node.name === 'Paragraph') return node.parent?.name === 'Document'
+    node = node.parent
+  }
+  return false
+}
 
 function quotePrefixLength(line: string): number {
   let offset = 0
@@ -336,7 +351,7 @@ function lineKindPlan(state: EditorState, kind: LineKind): MarkdownEditPlan {
 
   return linePrefixPlan(
     state,
-    (line, index, remove) => {
+    (line, index, remove, from) => {
       if (kind === 'blockquote') {
         const match = quotePattern.exec(line)
         if (remove) return { remove: match?.[0].length ?? 0, insert: match?.[1] ?? '' }
@@ -349,7 +364,15 @@ function lineKindPlan(state: EditorState, kind: LineKind): MarkdownEditPlan {
       const removeLength = match?.[0].length ?? indentation.length
       if (remove) return { offset, remove: removeLength, insert: indentation }
       const marker = kind === 'task' ? '- [ ] ' : kind === 'ordered' ? `${index + 1}. ` : '- '
-      return { offset, remove: removeLength, insert: indentation + marker }
+      // A bare `- ` immediately after a top-level paragraph is parsed as a
+      // Setext H2 underline until the user types the first list-item character.
+      // Keep toolbar-created empty bullets structurally stable from the first
+      // transaction by inserting the Markdown block separator they require.
+      const separator =
+        kind === 'bullet' && line.trim().length === 0 && followsTopLevelParagraph(state, from)
+          ? '\n'
+          : ''
+      return { offset, remove: removeLength, insert: separator + indentation + marker }
     },
     matcher,
   )
