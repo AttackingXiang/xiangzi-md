@@ -51,6 +51,7 @@ import {
   bracketMatching,
 } from '@codemirror/language'
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
+import { contextMenuSelection } from '../features/cm6-editor/contextMenuSelection'
 import { codeMirrorTheme } from '../lib/codeTheme'
 import { resolveTextLanguage, isStandardJsonFile, isFoldableFile } from '../lib/textLanguages'
 import { unwrapText, wrapText, type TextEnvelope, type Eol } from '../lib/textFidelity'
@@ -188,6 +189,7 @@ export default function TextEditor({
       closeBrackets(),
       rectangularSelection(),
       crosshairCursor(),
+      contextMenuSelection(),
       highlightSelectionMatches(),
       search({ top: true }),
       ...(getLang() === 'zh' ? [EditorState.phrases.of(SEARCH_PHRASES_ZH)] : []),

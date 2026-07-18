@@ -298,6 +298,10 @@ class MathWidget extends WidgetType {
     }
 
     const edit = (): void => {
+      // Native `title` popovers can remain visible after a double-click swaps the
+      // preview for its source range. Remove the trigger before entering edit mode;
+      // a newly-rendered preview receives the hint again.
+      content.removeAttribute('title')
       view.focus()
       view.dispatch({
         effects: setMathSourceRange.of(this.expression),
@@ -339,6 +343,7 @@ class MathWidget extends WidgetType {
     editButton.addEventListener('click', (event) => {
       event.preventDefault()
       event.stopPropagation()
+      editButton.removeAttribute('title')
       edit()
     })
     const copyButton = document.createElement('button')

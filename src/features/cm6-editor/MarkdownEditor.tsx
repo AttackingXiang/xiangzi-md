@@ -9,6 +9,7 @@ import { setupRichClipboard } from '../../lib/richClipboard'
 import { t } from '../../lib/i18n'
 import type { Cm6EditorController } from './types'
 import { createMarkdownPreviewExtensions } from './previewExtensions'
+import type { TableColumnWidthMode } from './tablePreview'
 import { markdownEditorExportBridge } from './exportBridge'
 import './livePreview.css'
 import './codeBlockPreview.css'
@@ -33,6 +34,8 @@ export interface MarkdownEditorProps {
   typewriterMode?: boolean
   /** Wrap long lines in fenced code blocks; off by default. */
   codeBlockLineWrapping?: boolean
+  tableColumnWidthMode?: TableColumnWidthMode
+  tableAutoResize?: boolean
   previewThemeVersion?: string
   initialScrollTop?: number
   onScrollTopChange?: (scrollTop: number) => void
@@ -92,6 +95,8 @@ export function MarkdownEditor({
   focusMode = false,
   typewriterMode = false,
   codeBlockLineWrapping = false,
+  tableColumnWidthMode = 'distribute',
+  tableAutoResize = true,
   previewThemeVersion = 'default',
   initialScrollTop = 0,
   onScrollTopChange,
@@ -132,6 +137,8 @@ export function MarkdownEditor({
     codeBlockLineWrapping,
     imageMaxWidth,
     previewThemeVersion,
+    tableColumnWidthMode,
+    tableAutoResize,
   })
   const [tagPortalHost, setTagPortalHost] = useState<HTMLElement | null>(null)
   const tagPortalHostRef = useRef<HTMLElement | null>(null)
@@ -148,6 +155,8 @@ export function MarkdownEditor({
     codeBlockLineWrapping,
     imageMaxWidth,
     previewThemeVersion,
+    tableColumnWidthMode,
+    tableAutoResize,
   }
 
   useLayoutEffect(() => {
@@ -173,6 +182,8 @@ export function MarkdownEditor({
           imageMaxWidth,
           codeBlockLineWrapping,
           previewThemeVersion,
+          tableColumnWidthMode,
+          tableAutoResize,
         }),
         imageInsertionExtensionRef.current ?? [],
         typewriterMode ? typewriterScrolling() : [],
@@ -269,6 +280,8 @@ export function MarkdownEditor({
         imageMaxWidth,
         codeBlockLineWrapping,
         previewThemeVersion,
+        tableColumnWidthMode,
+        tableAutoResize,
       }),
       imageInsertionExtensionRef.current ?? [],
       typewriterMode ? typewriterScrolling() : [],
@@ -282,6 +295,8 @@ export function MarkdownEditor({
     imageUploadEnabled,
     livePreview,
     previewThemeVersion,
+    tableAutoResize,
+    tableColumnWidthMode,
     typewriterMode,
   ])
 

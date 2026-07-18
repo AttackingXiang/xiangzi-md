@@ -30,7 +30,7 @@ describe('computeRevealedRanges', () => {
   })
 
   it('reveals a construct fully contained by a non-empty selection even if the edges do not touch it', () => {
-    const doc = 'before **bold** after'
+    const doc = 'x before **bold** after y'
     const from = doc.indexOf('before')
     const to = doc.indexOf('after') + 'after'.length
     const state = createState(doc, from).update({
@@ -40,6 +40,15 @@ describe('computeRevealedRanges', () => {
 
     const boldFrom = doc.indexOf('**bold**')
     expect(isRevealed(revealed, boldFrom, boldFrom + 8)).toBe(true)
+  })
+
+  it('keeps a whole-document selection rendered instead of exposing Markdown source', () => {
+    const doc = 'before **bold** and `code` after'
+    const state = createState(doc, 0).update({
+      selection: EditorSelection.range(0, doc.length),
+    }).state
+
+    expect(computeRevealedRanges(state).ranges).toHaveLength(0)
   })
 
   it('reveals only the construct(s) a multi-selection touches', () => {

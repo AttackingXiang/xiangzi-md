@@ -120,6 +120,21 @@
   margin: 3px 4px;
 }
 
+.ctx-tooltip {
+  position: fixed;
+  z-index: 151;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  box-shadow: 0 4px 12px color-mix(in srgb, #000 18%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 16px;
+}
+
 /* ---------- 表格网格选择器（浮动面板） ---------- */
 .table-picker-panel {
   position: fixed;

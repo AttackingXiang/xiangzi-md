@@ -34,6 +34,7 @@ import FindBar from './components/FindBar'
 import Lightbox from './components/Lightbox'
 import ContextMenu, { type ContextMenuState, type MenuItem } from './components/ContextMenu'
 import TableGridPicker from './components/TableGridPicker'
+import TableZoomModal from './components/TableZoomModal'
 import InputDialog from './components/InputDialog'
 import ExportCompleteDialog from './components/ExportCompleteDialog'
 import ExportProgressToast from './components/ExportProgressToast'
@@ -59,6 +60,7 @@ import { setCopyPreferences } from './lib/copyPreferences'
 import { cm6ActiveViewBridge } from './features/cm6-editor/activeViewBridge'
 import { reorderHeading, revealHeading } from './features/cm6-editor/outline'
 import { tablePickerBridge } from './lib/tablePickerBridge'
+import { tableZoomBridge } from './lib/tableZoomBridge'
 import { linkPromptBridge } from './lib/linkPromptBridge'
 import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
@@ -410,6 +412,11 @@ export default function App(): JSX.Element {
   useEffect(() => {
     tablePickerBridge.setHandler((x, y, onInsert) => setTablePicker({ x, y, onInsert }))
     return () => tablePickerBridge.setHandler(null)
+  }, [])
+  const [tableZoomHtml, setTableZoomHtml] = useState<string | null>(null)
+  useEffect(() => {
+    tableZoomBridge.setHandler(setTableZoomHtml)
+    return () => tableZoomBridge.setHandler(null)
   }, [])
   const [inputDialog, setInputDialog] = useState<{
     title: string
@@ -1148,6 +1155,8 @@ export default function App(): JSX.Element {
                     }
                     allowRemoteImages={settings.allowRemoteImages ?? false}
                     codeBlockLineWrapping={settings.codeBlockLineWrapping ?? false}
+                    tableColumnWidthMode={settings.tableAutoWidth ?? 'distribute'}
+                    tableAutoResize={settings.tableAutoResize ?? true}
                     imageMaxWidth={settings.imageMaxWidth}
                     uploadImage={async (file) => {
                       if (!activeTab.path || !activeDocDir) {
@@ -1327,6 +1336,10 @@ export default function App(): JSX.Element {
           onInsert={tablePicker.onInsert}
           onClose={() => setTablePicker(null)}
         />
+      )}
+
+      {tableZoomHtml !== null && (
+        <TableZoomModal html={tableZoomHtml} onClose={() => setTableZoomHtml(null)} />
       )}
 
       {inputDialog && (

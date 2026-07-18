@@ -49,5 +49,17 @@ describe('richClipboard', () => {
         expect(CLIPBOARD_CHROME_SELECTOR).toContain(selector)
       }
     })
+
+    it('strips CM6 virtualization artifacts and preview controls', () => {
+      for (const selector of [
+        '.cm-widgetBuffer',
+        '.cm-gap',
+        '.xmd-cm-math-actions',
+        '.xmd-cm-mermaid-actions',
+        '.xmd-cm-table-menu',
+      ]) {
+        expect(CLIPBOARD_CHROME_SELECTOR).toContain(selector)
+      }
+    })
   })
 })

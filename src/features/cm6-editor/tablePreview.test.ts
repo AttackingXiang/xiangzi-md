@@ -12,6 +12,7 @@ import {
   indexOfCellAtHorizontalCoordinate,
   insertColumnAt,
   insertRowAt,
+  isSyntheticCellSelection,
   markdownTablePreview,
   moveColumnAt,
   moveRowAt,
@@ -193,12 +194,34 @@ describe('Markdown table preview', () => {
     expect(caretOnBoundaryVisualLine(line(1.5), content, true)).toBe(true)
   })
 
-  it('keeps table layout content-driven while containing horizontal overflow', () => {
+  it('tells the engine’s own cell selection apart from the user’s', () => {
+    // Both strips WebKit builds, as `Selection.toString()` actually projects
+    // them. A lone tab is the observed one: clicking a cell's lower padding
+    // ranges from the text's end to the next `<td>`'s start, and a cell
+    // boundary serializes as a tab, not as the newline one would expect.
+    expect(isSyntheticCellSelection('\t')).toBe(true)
+    expect(isSyntheticCellSelection('\n')).toBe(true)
+    expect(isSyntheticCellSelection('​')).toBe(true)
+    expect(isSyntheticCellSelection('​\n')).toBe(true)
+    expect(isSyntheticCellSelection('')).toBe(true)
+    // Real text is the user's, including a deliberate double-click on the gap
+    // between two words. Trimming whitespace here would call this synthetic and
+    // teleport the caret to the cell's end.
+    expect(isSyntheticCellSelection('   ')).toBe(false)
+    expect(isSyntheticCellSelection('ordinary')).toBe(false)
+    expect(isSyntheticCellSelection('two words')).toBe(false)
+    // A genuine drag across cells carries content between the boundaries, so
+    // the tab rule must not swallow it.
+    expect(isSyntheticCellSelection('Markdown\t文档')).toBe(false)
+  })
+
+  it('keeps horizontal overflow contained and defines explicit per-table layout styling', () => {
     const styles = readFileSync(new URL('./tablePreview.css', import.meta.url), 'utf8')
     expect(styles).toContain('overflow-x: auto')
     expect(styles).toContain('table-layout: auto')
+    expect(styles).toContain('[data-xmd-table-layout]')
+    expect(styles).toContain('.xmd-table-zoom-table')
     expect(styles).toContain('white-space: pre-wrap')
     expect(styles).not.toContain('min-height:')
-    expect(styles).not.toContain('table-layout: fixed')
   })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useFloatingPanelPosition } from '../hooks/useFloatingPanelPosition'
 
 export interface MenuItem {
@@ -50,6 +50,11 @@ interface Props extends ContextMenuData {
   onClose: () => void
 }
 
+interface ContextMenuTooltip {
+  label: string
+  anchor: DOMRect
+}
+
 export default function ContextMenu({
   x,
   y,
@@ -58,7 +63,21 @@ export default function ContextMenu({
   preserveSelection,
 }: Props): JSX.Element {
   const menuRef = useRef<HTMLDivElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
+  const [tooltip, setTooltip] = useState<ContextMenuTooltip | null>(null)
   const style = useFloatingPanelPosition(menuRef, x, y, 0.8)
+
+  useLayoutEffect(() => {
+    const element = tooltipRef.current
+    if (!element || !tooltip) return
+    const tooltipRect = element.getBoundingClientRect()
+    const preferredLeft = tooltip.anchor.left + (tooltip.anchor.width - tooltipRect.width) / 2
+    const left = Math.min(window.innerWidth - tooltipRect.width - 8, Math.max(8, preferredLeft))
+    const preferredTop = tooltip.anchor.top - tooltipRect.height - 6
+    const top = preferredTop >= 8 ? preferredTop : tooltip.anchor.bottom + 6
+    element.style.left = `${left}px`
+    element.style.top = `${top}px`
+  }, [tooltip])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -69,6 +88,12 @@ export default function ContextMenu({
   }, [onClose])
 
   const entries = layoutItems(items)
+  const showTooltip = (event: React.PointerEvent<HTMLButtonElement>, label: string): void => {
+    setTooltip({ label, anchor: event.currentTarget.getBoundingClientRect() })
+  }
+  const showFocusedTooltip = (event: React.FocusEvent<HTMLButtonElement>, label: string): void => {
+    setTooltip({ label, anchor: event.currentTarget.getBoundingClientRect() })
+  }
 
   // 保留编辑器选区：阻止菜单上的 mousedown 夺走焦点/清除选区
   const guard = preserveSelection ? (e: React.MouseEvent): void => e.preventDefault() : undefined
@@ -102,11 +127,22 @@ export default function ContextMenu({
                       key={`${item.label}-${itemIndex}`}
                       type="button"
                       className={`ctx-compact-item${item.danger ? ' danger' : ''}`}
-                      title={item.hint ? `${item.label}  ${item.hint}` : item.label}
                       aria-label={item.label}
                       disabled={item.disabled}
+                      onPointerEnter={(event) =>
+                        showTooltip(event, item.hint ? `${item.label} (${item.hint})` : item.label)
+                      }
+                      onPointerLeave={() => setTooltip(null)}
+                      onFocus={(event) =>
+                        showFocusedTooltip(
+                          event,
+                          item.hint ? `${item.label} (${item.hint})` : item.label,
+                        )
+                      }
+                      onBlur={() => setTooltip(null)}
                       onMouseDown={guard}
                       onClick={() => {
+                        setTooltip(null)
                         item.onClick()
                         onClose()
                       }}
@@ -142,6 +178,11 @@ export default function ContextMenu({
           )
         })}
       </div>
+      {tooltip && (
+        <div ref={tooltipRef} className="ctx-tooltip" role="tooltip">
+          {tooltip.label}
+        </div>
+      )}
     </div>
   )
 }

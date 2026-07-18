@@ -6,7 +6,7 @@ import { markdownImagePreview } from './imagePreview'
 import { markdownLivePreview } from './livePreview'
 import { markdownMathPreview } from './mathPreview'
 import { markdownMermaidPreview } from './mermaidPreview'
-import { markdownTablePreview } from './tablePreview'
+import { markdownTablePreview, type TableColumnWidthMode } from './tablePreview'
 
 export interface MarkdownPreviewExtensionOptions {
   enabled?: boolean
@@ -15,6 +15,8 @@ export interface MarkdownPreviewExtensionOptions {
   imageMaxWidth: number
   codeBlockLineWrapping: boolean
   previewThemeVersion: string
+  tableColumnWidthMode?: TableColumnWidthMode
+  tableAutoResize?: boolean
 }
 
 /**
@@ -38,7 +40,10 @@ export function createMarkdownPreviewExtensions(
       allowRemote: options.allowRemoteImages,
       maxWidth: options.imageMaxWidth,
     }),
-    markdownTablePreview(),
+    markdownTablePreview({
+      columnWidthMode: options.tableColumnWidthMode,
+      autoResize: options.tableAutoResize,
+    }),
     markdownMathPreview({
       render: (source, container, displayMode) =>
         katex.render(source, container, { displayMode, throwOnError: true }),

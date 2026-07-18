@@ -12,6 +12,7 @@ import {
   highlightActiveLine,
   keymap,
 } from '@codemirror/view'
+import { contextMenuSelection } from './contextMenuSelection'
 import { cm6ToolbarState } from './toolbarState'
 
 export const defaultCm6Theme = EditorView.theme({
@@ -57,6 +58,7 @@ export function createBaseExtensions(): Extension[] {
     dropCursor(),
     bracketMatching(),
     highlightActiveLine(),
+    contextMenuSelection(),
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     EditorState.allowMultipleSelections.of(true),

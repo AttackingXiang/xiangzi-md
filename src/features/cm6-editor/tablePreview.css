@@ -15,6 +15,11 @@
   border-collapse: collapse;
   table-layout: auto;
 }
+.xmd-cm-table-preview[data-xmd-table-layout] th,
+.xmd-cm-table-preview[data-xmd-table-layout] td {
+  min-width: 0;
+  max-width: none;
+}
 .xmd-cm-table-preview th,
 .xmd-cm-table-preview td {
   min-width: 6rem;
@@ -60,14 +65,14 @@
 .xmd-cm-table-menu {
   background: var(--code-card-bg);
   border: 1px solid var(--code-card-border);
-  border-radius: 8px;
+  border-radius: 10px;
   box-shadow: 0 8px 24px color-mix(in srgb, #000 20%, transparent);
   box-sizing: border-box;
-  min-width: 160px;
+  width: max-content;
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px);
   overflow-y: auto;
-  padding: 4px;
+  padding: 8px;
   position: fixed;
   z-index: 1000;
 }
@@ -81,31 +86,163 @@
   color: var(--text);
   cursor: pointer;
   display: flex;
-  font: inherit;
-  font-size: 13px;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 8px;
-  text-align: left;
+  height: 32px;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
   width: 100%;
 }
 
-.xmd-cm-table-menu-item:hover:not(:disabled) {
+.xmd-cm-table-menu-item:hover:not(:disabled):not(.is-selected) {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .xmd-cm-table-menu-item:disabled {
   color: var(--text-muted);
   cursor: default;
+  opacity: 0.55;
 }
 
-.xmd-cm-table-menu-shortcut {
+.xmd-cm-table-menu-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -2px;
+}
+
+.xmd-cm-table-menu-section {
+  display: block;
+}
+
+.xmd-cm-table-menu-section + .xmd-cm-table-menu-section {
+  border-top: 1px solid var(--code-card-border);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.xmd-cm-table-menu-section-title {
   color: var(--text-muted);
+  display: block;
   font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 14px;
+  padding: 0 4px 3px;
 }
 
-.xmd-cm-table-menu-separator {
-  background: var(--code-card-border);
-  height: 1px;
-  margin: 4px 2px;
+.xmd-cm-table-menu-compact-group {
+  display: grid;
+  gap: 4px;
+  grid-auto-columns: 32px;
+  grid-auto-flow: column;
+  justify-content: start;
+}
+
+.xmd-cm-table-menu-icon {
+  display: block;
+  flex: none;
+  height: 18px;
+  width: 18px;
+}
+
+.xmd-cm-table-menu-item.is-selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent);
+}
+
+.xmd-cm-table-menu-item.is-danger {
+  color: var(--danger, #c43d4d);
+}
+
+.xmd-cm-table-menu-item.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger, #c43d4d) 10%, transparent);
+}
+
+.xmd-cm-table-menu-tooltip {
+  background: var(--bg-elevated, var(--code-card-bg));
+  border: 1px solid var(--code-card-border);
+  border-radius: 5px;
+  box-shadow: 0 4px 12px color-mix(in srgb, #000 18%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 16px;
+  padding: 3px 6px;
+  pointer-events: none;
+  position: fixed;
+  white-space: nowrap;
+  z-index: 1100;
+}
+
+/* ---------- Full-screen table expansion ---------- */
+.table-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: color-mix(in srgb, #000 45%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.table-zoom-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(96vw, 1400px);
+  max-height: 90vh;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.table-zoom-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.table-zoom-close:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.table-zoom-scroll {
+  overflow: auto;
+  padding: 44px 28px 28px;
+}
+
+.xmd-table-zoom-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.xmd-table-zoom-table th,
+.xmd-table-zoom-table td {
+  border: 1px solid var(--border-strong, var(--border));
+  padding: 8px 12px;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.xmd-table-zoom-table th {
+  background: var(--bg-hover);
+  font-weight: 600;
 }

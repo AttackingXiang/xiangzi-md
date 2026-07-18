@@ -34,6 +34,12 @@ export function computeRevealedRanges(state: EditorState): RevealedRanges {
   const collected: PreviewRange[] = []
 
   for (const range of state.selection.ranges) {
+    // Selecting the whole document is a document-level clipboard/navigation
+    // action, not a request to edit every inline construct at once. Revealing
+    // all Markdown markers here makes the DOM copied by CodeMirror contain
+    // `**`, backticks, link destinations, and other source syntax instead of
+    // the rendered document the user selected.
+    if (range.from === 0 && range.to === state.doc.length && !range.empty) continue
     if (range.empty) {
       collectAncestors(tree.resolveInner(range.head, 1), collected)
       collectAncestors(tree.resolveInner(range.head, -1), collected)
