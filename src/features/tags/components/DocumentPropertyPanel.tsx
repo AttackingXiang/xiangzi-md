@@ -548,7 +548,10 @@ export default function DocumentPropertyPanel({
   if (disabled && properties.length === 0) return <></>
 
   return (
-    <div className="document-properties" aria-label={t('文档属性')}>
+    <div
+      className={`document-properties${properties.length === 0 ? ' is-empty' : ''}`}
+      aria-label={t('文档属性')}
+    >
       {properties.length > 0 && (
         <div className="prop-rows">
           {properties.map((prop, index) => (

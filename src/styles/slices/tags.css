@@ -57,6 +57,14 @@
   user-select: none;
 }
 
+/* 没有 frontmatter 时只保留一个贴近正文的轻入口，不让空面板和分隔线
+   抢走标题的视觉层级；真正出现属性后仍使用上面的完整面板样式。 */
+.document-properties.is-empty {
+  padding: 4px 40px 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
 .prop-rows {
   display: flex;
   flex-direction: column;
@@ -375,9 +383,23 @@
   cursor: pointer;
 }
 
-.prop-add-button:hover:not(:disabled) {
+.document-properties.is-empty .prop-add-button {
+  min-height: 32px;
+  margin-top: 0;
+  margin-left: -8px;
+  padding-block: 0;
+  color: color-mix(in srgb, var(--text-muted) 68%, var(--text));
+}
+
+.prop-add-button:hover:not(:disabled),
+.prop-add-button:focus-visible {
   color: var(--text);
   background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+}
+
+.prop-add-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
 }
 
 .prop-add-button:disabled {
@@ -389,6 +411,11 @@
   position: relative;
   margin-top: 3px;
   padding: 2px 0 2px 28px;
+}
+
+.document-properties.is-empty .prop-add-editor {
+  margin-top: 0;
+  padding: 3px 0 1px;
 }
 
 .prop-add-editor input {
@@ -421,6 +448,10 @@
   /* 候选项必须盖住正文；workspace-surface 会随背景图片强度变透明。 */
   background: var(--bg);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 16%, transparent);
+}
+
+.document-properties.is-empty .prop-suggest-menu {
+  left: 0;
 }
 
 .prop-suggest-option {
