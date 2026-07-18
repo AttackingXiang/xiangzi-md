@@ -29,6 +29,7 @@ fn legacy_settings_receive_current_defaults() {
     assert!(settings.show_reading_mode_control);
     assert!(settings.show_source_mode_control);
     assert!(settings.show_reveal_button);
+    assert_eq!(settings.clipboard_format, "rich");
 }
 
 #[test]
@@ -139,6 +140,17 @@ fn patch_only_changes_explicit_fields() {
     assert!(!settings.show_status_bar);
     assert!(settings.show_status_path);
     assert_eq!(settings.theme, "system");
+}
+
+#[test]
+fn accepts_supported_clipboard_formats_and_rejects_unknown_ones() {
+    let mut settings = AppSettings::default();
+    for format in ["rich", "plain"] {
+        settings.clipboard_format = format.into();
+        validate_settings(&settings).expect("supported clipboard format");
+    }
+    settings.clipboard_format = "markdown".into();
+    assert!(validate_settings(&settings).is_err());
 }
 
 #[test]

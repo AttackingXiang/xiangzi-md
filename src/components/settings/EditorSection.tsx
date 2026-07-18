@@ -115,6 +115,19 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
         />
       </SettingsCard>
       <SettingsCard title={en ? 'Copy control' : '复制控制'}>
+        <SettingRow label={en ? 'Default copy format' : '默认复制格式'}>
+          <select
+            value={settings.clipboardFormat ?? 'rich'}
+            onChange={(event) =>
+              onChange({
+                clipboardFormat: event.target.value as AppSettings['clipboardFormat'],
+              })
+            }
+          >
+            <option value="rich">{en ? 'Rich text' : '富文本'}</option>
+            <option value="plain">{en ? 'Plain text' : '纯文本'}</option>
+          </select>
+        </SettingRow>
         <SettingRow label={en ? 'Copy images as' : '图片复制为'}>
           <select
             value={settings.imageCopyMode ?? 'image'}
@@ -143,8 +156,8 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
         </SettingRow>
         <p className="settings-hint">
           {en
-            ? 'Applies when the selection contains an image or Mermaid diagram. Defaults to copying the image.'
-            : '当选中内容包含图片或 Mermaid 图表时生效，默认复制图片。'}
+            ? 'Rich text includes a plain-text fallback. Image and Mermaid options apply only to rich-text copying.'
+            : '富文本会同时携带纯文本兜底；图片和 Mermaid 选项仅对富文本复制生效。'}
         </p>
       </SettingsCard>
       <SettingsCard title={en ? 'Tags' : '标签'}>

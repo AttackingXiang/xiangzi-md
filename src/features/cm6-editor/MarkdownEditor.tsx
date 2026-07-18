@@ -226,7 +226,7 @@ export function MarkdownEditor({
     })
 
     const scroller = controller.view.scrollDOM
-    const disposeRichClipboard = setupRichClipboard(mount)
+    const disposeRichClipboard = setupRichClipboard(mount, stableImageResolverRef.current)
     const reportScroll = (): void => {
       if (!restoringScroll) onScrollTopChangeRef.current?.(scroller.scrollTop)
     }

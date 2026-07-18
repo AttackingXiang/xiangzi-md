@@ -309,6 +309,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(show_settings_button);
     replace_if_some!(image_copy_mode);
     replace_if_some!(mermaid_copy_mode);
+    replace_if_some!(clipboard_format);
     replace_if_some!(pandoc_path);
     replace_if_some!(pandoc_reference_doc);
     replace_if_some!(pandoc_export_args);

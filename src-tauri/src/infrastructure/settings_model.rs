@@ -155,6 +155,8 @@ pub struct AppSettings {
     pub image_copy_mode: String,
     /// 复制 Mermaid 图表时：'image' 复制图片（默认），'source' 复制源码文本
     pub mermaid_copy_mode: String,
+    /// 默认复制格式：rich（HTML + 纯文本兜底）或 plain（仅纯文本）
+    pub clipboard_format: String,
     /// pandoc 可执行文件的自定义路径，空字符串表示自动探测
     pub pandoc_path: String,
     /// 自定义 reference.docx；空字符串表示使用 Pandoc 内置模板
@@ -268,6 +270,7 @@ impl Default for AppSettings {
             show_settings_button: false,
             image_copy_mode: "image".into(),
             mermaid_copy_mode: "image".into(),
+            clipboard_format: "rich".into(),
             pandoc_path: String::new(),
             pandoc_reference_doc: String::new(),
             pandoc_export_args: String::new(),
@@ -336,6 +339,7 @@ pub struct SettingsPatch {
     pub show_settings_button: Option<bool>,
     pub image_copy_mode: Option<String>,
     pub mermaid_copy_mode: Option<String>,
+    pub clipboard_format: Option<String>,
     pub pandoc_path: Option<String>,
     pub pandoc_reference_doc: Option<String>,
     pub pandoc_export_args: Option<String>,

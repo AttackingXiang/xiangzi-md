@@ -174,6 +174,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     showSettingsButton: true,
     imageCopyMode: 'image',
     mermaidCopyMode: 'image',
+    clipboardFormat: 'rich',
     pandocPath: '',
     pandocReferenceDoc: '',
     pandocExportArgs: '',

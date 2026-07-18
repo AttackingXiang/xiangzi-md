@@ -12,19 +12,25 @@ export type ImageCopyMode = 'image' | 'address'
 /** 复制 Mermaid 图表时：'image' 复制渲染出的图片（默认），'source' 复制源码文本。 */
 export type MermaidCopyMode = 'image' | 'source'
 
+/** 普通复制的默认载荷：rich 写 HTML + 纯文本兜底，plain 只写纯文本。 */
+export type ClipboardFormat = 'rich' | 'plain'
+
 export interface CopyPreferences {
   imageCopyMode: ImageCopyMode
   mermaidCopyMode: MermaidCopyMode
+  clipboardFormat: ClipboardFormat
 }
 
 const current: CopyPreferences = {
   imageCopyMode: 'image',
   mermaidCopyMode: 'image',
+  clipboardFormat: 'rich',
 }
 
 export function setCopyPreferences(prefs: Partial<CopyPreferences>): void {
   if (prefs.imageCopyMode) current.imageCopyMode = prefs.imageCopyMode
   if (prefs.mermaidCopyMode) current.mermaidCopyMode = prefs.mermaidCopyMode
+  if (prefs.clipboardFormat) current.clipboardFormat = prefs.clipboardFormat
 }
 
 export function getImageCopyMode(): ImageCopyMode {
@@ -33,4 +39,8 @@ export function getImageCopyMode(): ImageCopyMode {
 
 export function getMermaidCopyMode(): MermaidCopyMode {
   return current.mermaidCopyMode
+}
+
+export function getClipboardFormat(): ClipboardFormat {
+  return current.clipboardFormat
 }

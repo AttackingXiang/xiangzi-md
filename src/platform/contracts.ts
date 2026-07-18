@@ -117,6 +117,8 @@ export interface AppSettings {
   imageCopyMode: 'image' | 'address'
   /** 复制 Mermaid 图表时：'image' 复制图片（默认），'source' 复制源码文本 */
   mermaidCopyMode: 'image' | 'source'
+  /** 默认复制格式：富文本同时携带纯文本兜底，纯文本不写入 HTML。 */
+  clipboardFormat: 'rich' | 'plain'
   pandocPath: string
   pandocReferenceDoc: string
   pandocExportArgs: string

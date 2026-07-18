@@ -1,4 +1,5 @@
 * text=auto eol=lf
+src/lib/richClipboard.ts text diff
 
 *.icns binary
 *.ico binary

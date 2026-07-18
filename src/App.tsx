@@ -687,8 +687,9 @@ export default function App(): JSX.Element {
     setCopyPreferences({
       imageCopyMode: settings?.imageCopyMode ?? 'image',
       mermaidCopyMode: settings?.mermaidCopyMode ?? 'image',
+      clipboardFormat: settings?.clipboardFormat ?? 'rich',
     })
-  }, [settings?.imageCopyMode, settings?.mermaidCopyMode])
+  }, [settings?.clipboardFormat, settings?.imageCopyMode, settings?.mermaidCopyMode])
 
   // ── System open-path (file association / double-click) ────────────────────
   useEffect(() => {

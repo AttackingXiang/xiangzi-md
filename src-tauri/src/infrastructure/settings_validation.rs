@@ -90,6 +90,9 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full") {
         settings.editor_width = "full".into();
     }
+    if !matches!(settings.clipboard_format.as_str(), "rich" | "plain") {
+        settings.clipboard_format = "rich".into();
+    }
     if !matches!(
         settings.table_auto_width.as_str(),
         "distribute" | "fit" | "equal"
@@ -160,6 +163,7 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
             "system" | "light" | "dark" | "warm" | "mint" | "blue" | "summer" | "sakura"
         )
         || !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full")
+        || !matches!(settings.clipboard_format.as_str(), "rich" | "plain")
         || !matches!(
             settings.table_auto_width.as_str(),
             "distribute" | "fit" | "equal"
