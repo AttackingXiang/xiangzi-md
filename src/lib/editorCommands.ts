@@ -80,6 +80,9 @@ export const editorCmd = {
   italic: (): void => runInlineCommand('italic', activeCm6Commands.italic),
   strike: (): void => runInlineCommand('strike', activeCm6Commands.strike),
   inlineCode: (): void => runInlineCommand('inlineCode', activeCm6Commands.inlineCode),
+  textColor: (color: string | null): void => {
+    if (!tableCellCommandBridge.isFocused()) activeCm6Commands.textColor(color)
+  },
   heading: (level: number): void => {
     if (level >= 1 && level <= 6) {
       runBlockCommand(() => activeCm6Commands.heading(level as HeadingLevel))

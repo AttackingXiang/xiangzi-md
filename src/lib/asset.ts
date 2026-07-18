@@ -63,6 +63,32 @@ export function imageMimeType(path: string): string {
   return 'image/png'
 }
 
+/** Detect the validated remote image payload instead of trusting a URL suffix. */
+export function imageMimeTypeFromBytes(bytes: Uint8Array, fallbackPath = ''): string {
+  if (
+    bytes.length >= 8 &&
+    bytes.slice(0, 8).every((value, index) => value === [137, 80, 78, 71, 13, 10, 26, 10][index])
+  ) {
+    return 'image/png'
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg'
+  }
+  if (bytes.length >= 6 && new TextDecoder().decode(bytes.slice(0, 6)).startsWith('GIF8')) {
+    return 'image/gif'
+  }
+  if (
+    bytes.length >= 12 &&
+    new TextDecoder().decode(bytes.slice(0, 4)) === 'RIFF' &&
+    new TextDecoder().decode(bytes.slice(8, 12)) === 'WEBP'
+  ) {
+    return 'image/webp'
+  }
+  const prefix = new TextDecoder().decode(bytes.slice(0, Math.min(bytes.length, 256))).trimStart()
+  if (/^(?:<\?xml[^>]*>\s*)?<svg\b/i.test(prefix)) return 'image/svg+xml'
+  return imageMimeType(fallbackPath)
+}
+
 /** Reuse an owned ArrayBuffer when possible and copy only shared or sliced views. */
 export function blobPartFromBytes(bytes: Uint8Array | ArrayBuffer): ArrayBuffer {
   // 防御 IPC 边界：tauri::ipc::Response 在前端是 ArrayBuffer，直接透传；

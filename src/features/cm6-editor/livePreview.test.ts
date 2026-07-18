@@ -6,6 +6,7 @@ import {
   buildHiddenMarkdownMarkerRanges,
   safeMarkdownLinkHref,
 } from './livePreview'
+import { pointerSelectionActiveState, setPointerSelectionActive } from './core/revealState'
 
 interface SeenDecoration {
   from: number
@@ -115,7 +116,7 @@ describe('CM6 Markdown live preview: reveal-on-selection inline marks', () => {
     expect(seen.some((item) => item.className === 'xmd-cm-strong')).toBe(true)
   })
 
-  it('reveals the marker characters the instant the selection enters the construct', () => {
+  it('reveals the marker characters the instant the caret enters the construct', () => {
     const doc = '**bold** and plain'
     const state = createState(doc, 4) // inside "bold"
     const seen = decorations(state, 0, doc.length)
@@ -126,7 +127,18 @@ describe('CM6 Markdown live preview: reveal-on-selection inline marks', () => {
     expect(seen.some((item) => item.className === 'xmd-cm-strong')).toBe(true)
   })
 
-  it('hides again once the selection leaves the construct', () => {
+  it('keeps markers hidden while a non-empty selection crosses formatted text', () => {
+    const doc = 'before **bold** after'
+    const from = doc.indexOf('bold')
+    const state = createState(doc, from).update({
+      selection: EditorSelection.range(from, from + 'bold'.length),
+    }).state
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    expect(hidden.filter((item) => item.to - item.from === 2)).toHaveLength(2)
+  })
+
+  it('hides again once the caret leaves the construct', () => {
     const doc = '**bold** and plain'
     const revealed = hiddenRanges(createState(doc, 4), 0, doc.length)
     const hidden = hiddenRanges(createState(doc, doc.indexOf('plain')), 0, doc.length)
@@ -201,6 +213,37 @@ describe('CM6 Markdown live preview: safe inline HTML formatting', () => {
     ).toBe(true)
     expect(hidden.some(({ from, to }) => from === 0 && to === openingEnd)).toBe(false)
     expect(hidden.some(({ from, to }) => from === closingStart && to === doc.length)).toBe(false)
+  })
+
+  it('keeps color tags hidden for a non-empty text selection', () => {
+    const doc = '<font color="#ff0000">notice</font>'
+    const from = doc.indexOf('notice')
+    const state = createState(doc, from).update({
+      selection: EditorSelection.range(from, from + 'notice'.length),
+    }).state
+    const hidden = hiddenRanges(state, 0, doc.length)
+    const openingEnd = doc.indexOf('>') + 1
+    const closingStart = doc.indexOf('</font>')
+
+    expect(hidden).toContainEqual({ from: 0, to: openingEnd })
+    expect(hidden).toContainEqual({ from: closingStart, to: doc.length })
+  })
+
+  it('keeps color tags hidden during the initial pointer-down caret frame', () => {
+    const doc = '<font color="#ff0000">notice</font>'
+    const cursor = doc.indexOf('notice') + 2
+    const initial = EditorState.create({
+      doc,
+      selection: EditorSelection.cursor(cursor),
+      extensions: [markdown({ base: markdownLanguage }), pointerSelectionActiveState],
+    })
+    const state = initial.update({ effects: setPointerSelectionActive.of(true) }).state
+    const hidden = hiddenRanges(state, 0, doc.length)
+    const openingEnd = doc.indexOf('>') + 1
+    const closingStart = doc.indexOf('</font>')
+
+    expect(hidden).toContainEqual({ from: 0, to: openingEnd })
+    expect(hidden).toContainEqual({ from: closingStart, to: doc.length })
   })
 
   it('reveals a complete HTML pair whenever the caret touches either boundary, fixing the Backspace dead key', () => {
@@ -409,7 +452,7 @@ describe('CM6 Markdown live preview: links', () => {
     expect(seen.every((item) => item.from <= firstEnd)).toBe(true)
   })
 
-  it('hides the bracket/destination syntax while the selection is outside the link', () => {
+  it('hides the bracket/destination syntax while the caret is outside the link', () => {
     const doc = 'before [label](https://example.com "caption") after'
     const linkTo = doc.indexOf(' after')
     const state = createState(doc, 0)
@@ -422,7 +465,7 @@ describe('CM6 Markdown live preview: links', () => {
     expect(hidden.some((item) => item.from === labelTo && item.to === linkTo)).toBe(true)
   })
 
-  it('reveals the full raw link syntax once the selection enters it', () => {
+  it('reveals the full raw link syntax once the caret enters it', () => {
     const doc = 'before [label](https://example.com) after'
     const linkFrom = doc.indexOf('[label]')
     const state = createState(doc, linkFrom + 3) // inside "label"

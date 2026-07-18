@@ -1,7 +1,12 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { computeRevealedRanges, isRevealed } from './revealState'
+import {
+  computeRevealedRanges,
+  isRevealed,
+  pointerSelectionActiveState,
+  setPointerSelectionActive,
+} from './revealState'
 
 function createState(doc: string, ...cursors: number[]): EditorState {
   return EditorState.create({
@@ -29,7 +34,7 @@ describe('computeRevealedRanges', () => {
     }
   })
 
-  it('reveals a construct fully contained by a non-empty selection even if the edges do not touch it', () => {
+  it('keeps constructs rendered for non-empty selections so their geometry stays stable', () => {
     const doc = 'x before **bold** after y'
     const from = doc.indexOf('before')
     const to = doc.indexOf('after') + 'after'.length
@@ -39,7 +44,7 @@ describe('computeRevealedRanges', () => {
     const revealed = computeRevealedRanges(state)
 
     const boldFrom = doc.indexOf('**bold**')
-    expect(isRevealed(revealed, boldFrom, boldFrom + 8)).toBe(true)
+    expect(isRevealed(revealed, boldFrom, boldFrom + 8)).toBe(false)
   })
 
   it('keeps a whole-document selection rendered instead of exposing Markdown source', () => {
@@ -49,6 +54,21 @@ describe('computeRevealedRanges', () => {
     }).state
 
     expect(computeRevealedRanges(state).ranges).toHaveLength(0)
+  })
+
+  it('keeps a pointer-down caret rendered until pointer selection finishes', () => {
+    const doc = '**bold**'
+    const cursor = doc.indexOf('bold') + 2
+    const initial = EditorState.create({
+      doc,
+      selection: EditorSelection.cursor(cursor),
+      extensions: [markdown({ base: markdownLanguage }), pointerSelectionActiveState],
+    })
+    const selecting = initial.update({ effects: setPointerSelectionActive.of(true) }).state
+    const finished = selecting.update({ effects: setPointerSelectionActive.of(false) }).state
+
+    expect(computeRevealedRanges(selecting).ranges).toHaveLength(0)
+    expect(isRevealed(computeRevealedRanges(finished), 0, doc.length)).toBe(true)
   })
 
   it('reveals only the construct(s) a multi-selection touches', () => {

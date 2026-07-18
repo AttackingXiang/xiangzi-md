@@ -3,6 +3,7 @@ import {
   BLOCKED_REMOTE_IMAGE,
   blobPartFromBytes,
   imageMimeType,
+  imageMimeTypeFromBytes,
   resolveAssetURL,
   xmdAssetPaths,
 } from './asset'
@@ -24,6 +25,16 @@ describe('xmd assets', () => {
     expect(xmdAssetPaths('https://example.com/image.png')).toEqual([])
     expect(imageMimeType('/notes/photo.jpg')).toBe('image/jpeg')
     expect(imageMimeType('C:\\notes\\diagram.svg')).toBe('image/svg+xml')
+  })
+
+  it('detects remote image MIME types from payload signatures', () => {
+    expect(imageMimeTypeFromBytes(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10]))).toBe(
+      'image/png',
+    )
+    expect(imageMimeTypeFromBytes(new Uint8Array([0xff, 0xd8, 0xff]))).toBe('image/jpeg')
+    expect(imageMimeTypeFromBytes(new TextEncoder().encode('<svg viewBox="0 0 1 1"></svg>'))).toBe(
+      'image/svg+xml',
+    )
   })
 
   it('parses the Windows http://xmd.localhost mapped form', () => {

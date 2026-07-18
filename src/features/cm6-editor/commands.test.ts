@@ -16,6 +16,7 @@ import {
   insertTable,
   planRemoveLink,
   removeLink,
+  setTextColor,
   setHeading,
   setParagraph,
   toggleBlockquote,
@@ -73,6 +74,38 @@ describe('CM6 Markdown commands', () => {
         from: 0,
         to: 2,
       },
+    )
+  })
+
+  it('applies, changes, and removes portable inline HTML text colors', () => {
+    const redOpen = '<font color="#dc2626">'
+    const blueOpen = '<font color="#2563eb">'
+    const colored = run('重点', EditorSelection.range(0, 2), setTextColor('#dc2626'))
+    expect(colored).toEqual({
+      doc: `${redOpen}重点</font>`,
+      from: redOpen.length,
+      to: redOpen.length + 2,
+    })
+
+    const changed = run(
+      colored.doc,
+      EditorSelection.range(colored.from, colored.to),
+      setTextColor('#2563eb'),
+    )
+    expect(changed).toEqual({
+      doc: `${blueOpen}重点</font>`,
+      from: blueOpen.length,
+      to: blueOpen.length + 2,
+    })
+    expect(
+      run(changed.doc, EditorSelection.range(changed.from, changed.to), setTextColor(null)),
+    ).toEqual({ doc: '重点', from: 0, to: 2 })
+  })
+
+  it('applies color as independent inline HTML spans across selected lines', () => {
+    const open = '<font color="#16a34a">'
+    expect(run('第一行\n第二行', EditorSelection.range(0, 7), setTextColor('#16a34a')).doc).toBe(
+      `${open}第一行</font>\n${open}第二行</font>`,
     )
   })
 

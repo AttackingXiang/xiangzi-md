@@ -53,10 +53,9 @@
    selection stays visible on top of the card instead of being painted over
    by an opaque line background. */
 .xmd-cm-editor .cm-line.xmd-cm-code-line::before {
-  /* Keep the code card distinguishable without the heavy grey slab produced
-     by using the shared table/card colour at full strength.  Mixing with the
-     active page background also keeps custom themes visually coherent. */
-  background: color-mix(in srgb, var(--code-card-bg) 60%, var(--bg) 40%);
+  /* The appearance setting is a real surface opacity: the page/background
+     remains visible beneath the code card at lower values. */
+  background: color-mix(in srgb, var(--code-card-bg) var(--code-block-opacity, 30%), transparent);
   border-left: 1px solid var(--code-card-border);
   border-right: 1px solid var(--code-card-border);
   content: '';

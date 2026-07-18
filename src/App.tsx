@@ -8,7 +8,7 @@ import {
   lazy,
   Suspense,
 } from 'react'
-import { desktop } from './platform'
+import { desktop, isBrowserPreview } from './platform'
 import Sidebar from './components/Sidebar'
 import SidebarHeader from './components/SidebarHeader'
 import TabBar from './components/TabBar'
@@ -77,7 +77,7 @@ import type { SettingsSection } from './components/Settings'
 import { groupKeysToCollapse } from './features/tags/tagTree'
 import { replaceMarkdownBody } from './features/tags/frontmatter'
 import { useTagFeature } from './features/tags/useTagFeature'
-import { resolveAssetURL } from './lib/asset'
+import { blobPartFromBytes, imageMimeTypeFromBytes, resolveAssetURL } from './lib/asset'
 import { headingOffsetForAnchor, resolveRelativeMarkdownLink } from './lib/linkNavigation'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
@@ -192,6 +192,71 @@ export default function App(): JSX.Element {
   const activeDocDir = activeTab
     ? (dirName(activeTab.path ?? activeTab.recoverySourcePath ?? null) ?? folder?.root ?? null)
     : null
+  const remoteImageCacheRef = useRef({
+    generation: 0,
+    urls: new Map<string, string>(),
+    pending: new Map<string, Promise<string | null>>(),
+  })
+  const clearRemoteImageCache = useCallback((): void => {
+    const cache = remoteImageCacheRef.current
+    cache.generation += 1
+    for (const url of cache.urls.values()) URL.revokeObjectURL(url)
+    cache.urls.clear()
+    cache.pending.clear()
+  }, [])
+  useEffect(() => clearRemoteImageCache, [clearRemoteImageCache])
+  useEffect(() => {
+    if (!settings?.allowRemoteImages) clearRemoteImageCache()
+  }, [clearRemoteImageCache, settings?.allowRemoteImages])
+
+  const resolveEditorImageSrc = useCallback(
+    (src: string): Promise<string | null> | string => {
+      const allowRemote = settings?.allowRemoteImages ?? false
+      if (!isBrowserPreview && allowRemote && /^https?:/i.test(src)) {
+        const cache = remoteImageCacheRef.current
+        const ready = cache.urls.get(src)
+        if (ready) return ready
+        const existing = cache.pending.get(src)
+        if (existing) return existing
+        const generation = cache.generation
+        const request = desktop
+          .readRemoteImage(src)
+          .then((bytes) => {
+            if (remoteImageCacheRef.current.generation !== generation) return null
+            const objectUrl = URL.createObjectURL(
+              new Blob([blobPartFromBytes(bytes)], {
+                type: imageMimeTypeFromBytes(bytes, src),
+              }),
+            )
+            const urls = remoteImageCacheRef.current.urls
+            urls.set(src, objectUrl)
+            while (urls.size > 128) {
+              const oldest = urls.entries().next().value
+              if (!oldest) break
+              urls.delete(oldest[0])
+              URL.revokeObjectURL(oldest[1])
+            }
+            return objectUrl
+          })
+          .catch(() => null)
+          .finally(() => {
+            if (remoteImageCacheRef.current.pending.get(src) === request) {
+              remoteImageCacheRef.current.pending.delete(src)
+            }
+          })
+        cache.pending.set(src, request)
+        return request
+      }
+      return resolveAssetURL(
+        activeDocDir,
+        src,
+        folder?.root ?? null,
+        settings?.assetSearchPaths ?? [],
+        allowRemote,
+      )
+    },
+    [activeDocDir, folder?.root, settings?.allowRemoteImages, settings?.assetSearchPaths],
+  )
   // 编辑器会在标签切换时卸载；滚动位置按标签保存。源码/实时预览共享同一个 CM6。
   // 使用 ref 避免滚动过程中触发整棵应用树重渲染。
   const wysiwygScrollPositions = useRef(new Map<string, number>())
@@ -1145,15 +1210,9 @@ export default function App(): JSX.Element {
                     key={activeTab.id}
                     content={activeFrontmatter.body}
                     livePreview={!sourceMode}
-                    resolveImageSrc={(src) =>
-                      resolveAssetURL(
-                        activeDocDir,
-                        src,
-                        folder?.root ?? null,
-                        settings.assetSearchPaths ?? [],
-                        settings.allowRemoteImages ?? false,
-                      )
-                    }
+                    showSelectionToolbar={settings.showSelectionToolbar ?? false}
+                    lang={settings.language}
+                    resolveImageSrc={resolveEditorImageSrc}
                     allowRemoteImages={settings.allowRemoteImages ?? false}
                     codeBlockLineWrapping={settings.codeBlockLineWrapping ?? false}
                     tableColumnWidthMode={settings.tableAutoWidth ?? 'distribute'}

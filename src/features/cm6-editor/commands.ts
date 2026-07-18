@@ -197,6 +197,57 @@ function inlineMarkPlan(state: EditorState, mark: InlineMark): MarkdownEditPlan 
   }
 }
 
+const DIRECT_COLOR_OPENING = /<font\s+color\s*=\s*(?:"[^"]+"|'[^']+'|[^\s>]+)\s*>$/i
+const DIRECT_COLOR_CLOSING = /^<\/font\s*>/i
+
+function textColorPlan(state: EditorState, color: string | null): MarkdownEditPlan | null {
+  const range = state.selection.main
+  const normalized = color?.trim() ?? null
+  if (normalized && !/^#[\da-f]{6}$/i.test(normalized)) return null
+
+  const lineFrom = state.doc.lineAt(range.from).from
+  const lineTo = state.doc.lineAt(range.to).to
+  const before = state.sliceDoc(lineFrom, range.from)
+  const after = state.sliceDoc(range.to, lineTo)
+  const opening = DIRECT_COLOR_OPENING.exec(before)
+  const closing = DIRECT_COLOR_CLOSING.exec(after)
+
+  if (opening && closing) {
+    const openingFrom = range.from - opening[0].length
+    const changes: ChangeSpec[] = normalized
+      ? [{ from: openingFrom, to: range.from, insert: `<font color="${normalized}">` }]
+      : [
+          { from: openingFrom, to: range.from, insert: '' },
+          { from: range.to, to: range.to + closing[0].length, insert: '' },
+        ]
+    return { changes, selection: selectionMappedThrough(state, changes) }
+  }
+
+  if (!normalized) return null
+  const openingTag = `<font color="${normalized}">`
+  const closingTag = '</font>'
+  const selected = state.sliceDoc(range.from, range.to)
+  if (selected.includes('\n')) {
+    const changes: ChangeSpec[] = []
+    const firstLine = state.doc.lineAt(range.from).number
+    const lastLine = state.doc.lineAt(Math.max(range.from, range.to - 1)).number
+    for (let number = firstLine; number <= lastLine; number += 1) {
+      const line = state.doc.line(number)
+      const from = Math.max(range.from, line.from)
+      const to = Math.min(range.to, line.to)
+      if (from >= to) continue
+      changes.push({ from, insert: openingTag }, { from: to, insert: closingTag })
+    }
+    return changes.length ? { changes, selection: selectionMappedThrough(state, changes) } : null
+  }
+  return {
+    changes: { from: range.from, to: range.to, insert: `${openingTag}${selected}${closingTag}` },
+    selection: range.empty
+      ? selection(range.from + openingTag.length)
+      : selection(range.from + openingTag.length, range.to + openingTag.length),
+  }
+}
+
 function selectedLines(state: EditorState): Array<{ from: number; text: string }> {
   const range = state.selection.main
   const first = state.doc.lineAt(range.from).number
@@ -472,6 +523,8 @@ export const toggleBold = applyPlan((state) => inlineMarkPlan(state, '**'))
 export const toggleItalic = applyPlan((state) => inlineMarkPlan(state, '*'))
 export const toggleStrike = applyPlan((state) => inlineMarkPlan(state, '~~'))
 export const toggleInlineCode = applyPlan((state) => inlineMarkPlan(state, '`'))
+export const setTextColor = (color: string | null): Command =>
+  applyPlan((state) => textColorPlan(state, color))
 export const setHeading = (level: 1 | 2 | 3 | 4 | 5 | 6): Command =>
   applyPlan((state) => planHeading(state, level))
 export const setParagraph = applyPlan(planParagraph)
@@ -496,6 +549,7 @@ export interface Cm6Commands {
   italic: () => boolean
   strike: () => boolean
   inlineCode: () => boolean
+  textColor: (color: string | null) => boolean
   heading: (level: 1 | 2 | 3 | 4 | 5 | 6) => boolean
   paragraph: () => boolean
   blockquote: () => boolean
@@ -526,6 +580,7 @@ export function createCm6Commands(
     italic: () => run(toggleItalic),
     strike: () => run(toggleStrike),
     inlineCode: () => run(toggleInlineCode),
+    textColor: (color) => run(setTextColor(color)),
     heading: (level) => run(setHeading(level)),
     paragraph: () => run(setParagraph),
     blockquote: () => run(toggleBlockquote),

@@ -17,7 +17,12 @@ import {
 } from './core/boundaryCommands'
 import { hiddenRangeSource, hiddenRangesEngine, type HiddenRange } from './core/hiddenRanges'
 import { HEADING_NODE_NAMES } from './core/nodePolicy'
-import { computeRevealedRanges, isRevealed, type RevealedRanges } from './core/revealState'
+import {
+  computeRevealedRanges,
+  isRevealed,
+  pointerSelectionActiveState,
+  type RevealedRanges,
+} from './core/revealState'
 import { expandedVisibleRanges, rangesTouch, type PreviewRange } from './core/types'
 import { markdownLinkData } from './markdownLinks'
 import {
@@ -366,17 +371,18 @@ export function buildLivePreviewDecorations(
 }
 
 /**
- * Whether the current selection touches `[from, to)` — reuses `rangesTouch`
- * from `core/types.ts`, the same "a caret resting exactly on the boundary
- * counts as touching" semantics `core/revealState.ts`'s `isRevealed` relies
- * on. Inline HTML tag spans are plain `HTMLTag` pairs discovered by hand in
- * `inlineHtmlSpans` above, not `reveal-on-selection` nodes walked by
- * `computeRevealedRanges`'s ancestry search, so they need their own touch
- * check against `state.selection` rather than going through `RevealedRanges`.
+ * Whether a collapsed caret touches `[from, to)` — reuses `rangesTouch` from
+ * `core/types.ts`, including its boundary semantics. Non-empty selections keep
+ * inline HTML rendered so showing tags cannot change line geometry mid-drag.
+ * Inline HTML spans are discovered by hand rather than by `revealState`, so
+ * they need this parallel caret check.
  */
-function selectionTouchesRange(state: EditorState, range: PreviewRange): boolean {
-  return state.selection.ranges.some((selectionRange) =>
-    rangesTouch({ from: selectionRange.from, to: selectionRange.to }, range),
+function caretTouchesRange(state: EditorState, range: PreviewRange): boolean {
+  if (state.field(pointerSelectionActiveState, false)) return false
+  return state.selection.ranges.some(
+    (selectionRange) =>
+      selectionRange.empty &&
+      rangesTouch({ from: selectionRange.from, to: selectionRange.to }, range),
   )
 }
 
@@ -475,12 +481,11 @@ function collectHiddenRanges(
     })
     for (const span of inlineHtmlSpans(state, visible)) {
       // Obsidian semantics, same as `**bold**` via `isRevealed` elsewhere in
-      // this function: when the selection touches the whole span (open tag
-      // through close tag), reveal both tags together instead of hiding them
-      // forever — otherwise there is no keyboard path to see or edit them,
-      // and a caret resting on `closeTo` hits an unconditionally-atomic
-      // range on every Backspace (a dead key).
-      if (selectionTouchesRange(state, { from: span.from, to: span.closeTo })) continue
+      // this function: when a collapsed caret touches the whole span (open tag
+      // through close tag), reveal both tags together. A non-empty selection
+      // keeps them hidden so dragging never changes line geometry. Boundary
+      // carets must still reveal them to avoid an unrecoverable Backspace key.
+      if (caretTouchesRange(state, { from: span.from, to: span.closeTo })) continue
       hidden.push(
         { from: span.from, to: span.to, paint: true },
         { from: span.closeFrom, to: span.closeTo, paint: true },

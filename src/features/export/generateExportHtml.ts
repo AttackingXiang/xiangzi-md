@@ -202,10 +202,16 @@ export async function generateExportHTML(title: string): Promise<string> {
   const styles = await inlineExportCssAssets(preferWoff2FontSources(liveStyles), document.baseURI)
   const theme = document.documentElement.getAttribute('data-theme') ?? ''
   const headingNumber = document.documentElement.getAttribute('data-heading-number') ?? ''
+  const codeBlockOpacity = document.documentElement.style
+    .getPropertyValue('--code-block-opacity')
+    .trim()
   const htmlAttrs = [
     'lang="zh-CN"',
     theme ? `data-theme="${escapeHtmlText(theme)}"` : '',
     headingNumber ? `data-heading-number="${escapeHtmlText(headingNumber)}"` : '',
+    /^\d+(?:\.\d+)?%$/.test(codeBlockOpacity)
+      ? `style="--code-block-opacity:${escapeHtmlText(codeBlockOpacity)}"`
+      : '',
   ]
     .filter(Boolean)
     .join(' ')

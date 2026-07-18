@@ -18,9 +18,9 @@ export interface NodePolicy {
 
 /**
  * Inline formatting markers (`**`, `_`, `~~`, `` ` ``, link brackets/target).
- * Obsidian semantics: hidden while the selection is outside the construct,
- * shown verbatim the moment the selection touches any part of it. Driven by
- * `revealState.ts`.
+ * Obsidian-like editing semantics: hidden while the caret is outside the
+ * construct, shown verbatim when a collapsed caret enters it. Non-empty
+ * selections keep the rendered form stable. Driven by `revealState.ts`.
  */
 const REVEAL_ON_SELECTION = new Set([
   'StrongEmphasis',

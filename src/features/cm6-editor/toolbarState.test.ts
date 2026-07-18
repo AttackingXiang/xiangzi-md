@@ -2,7 +2,7 @@ import { history } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { computeCm6ToolbarState } from './toolbarState'
+import { computeCm6ToolbarState, selectionTouchesCodeBlock } from './toolbarState'
 
 function stateAt(doc: string, needle: string, offset = 0): EditorState {
   const position = doc.indexOf(needle)
@@ -45,6 +45,34 @@ describe('CM6 toolbar state', () => {
   it('derives fenced code context', () => {
     const state = stateAt('```ts\nconst value = 1\n```', 'value')
     expect(computeCm6ToolbarState(state).codeBlock).toBe(true)
+  })
+
+  it('suppresses the selection toolbar for block code but not inline code or prose', () => {
+    const fenced = 'before\n\n```ts\nconst value = 1\n```\n\nafter'
+    const codeFrom = fenced.indexOf('const')
+    const codeTo = codeFrom + 'const value'.length
+    const fencedState = EditorState.create({
+      doc: fenced,
+      selection: EditorSelection.range(codeFrom, codeTo),
+      extensions: [markdown()],
+    })
+    expect(selectionTouchesCodeBlock(fencedState)).toBe(true)
+
+    const spanningState = EditorState.create({
+      doc: fenced,
+      selection: EditorSelection.range(fenced.indexOf('before'), fenced.indexOf('after') + 5),
+      extensions: [markdown()],
+    })
+    expect(selectionTouchesCodeBlock(spanningState)).toBe(true)
+
+    const inline = 'plain `inline code` text'
+    const inlineFrom = inline.indexOf('inline')
+    const inlineState = EditorState.create({
+      doc: inline,
+      selection: EditorSelection.range(inlineFrom, inlineFrom + 6),
+      extensions: [markdown()],
+    })
+    expect(selectionTouchesCodeBlock(inlineState)).toBe(false)
   })
 
   it('derives history availability from CM6 history', () => {

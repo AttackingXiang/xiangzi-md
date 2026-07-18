@@ -42,6 +42,14 @@ describe('CM6 live preview styles', () => {
     expect(firstLineContent).toContain('padding-inline-end: var(--xmd-code-controls-gutter')
   })
 
+  it('uses the configured code-block opacity for the editor card surface', () => {
+    const css = readFileSync(new URL('./codeBlockPreview.css', import.meta.url), 'utf8')
+    const card = css.match(/\.cm-line\.xmd-cm-code-line::before\s*\{([\s\S]*?)\n\}/)?.[1]
+
+    expect(card).toContain('var(--code-block-opacity, 30%)')
+    expect(card).toContain('transparent')
+  })
+
   it('hides the CM6-drawn primary caret and restores the native one while xmd-cm-native-code-caret is active', () => {
     // codeBlockPreview.ts's `caretInsideFencedCode` toggles this class on the
     // editor root while the sole selection is a collapsed caret inside an

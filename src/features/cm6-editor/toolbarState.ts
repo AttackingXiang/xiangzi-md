@@ -2,6 +2,7 @@ import { redoDepth, undoDepth } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
 import type { EditorState } from '@codemirror/state'
 import { ViewPlugin, type ViewUpdate } from '@codemirror/view'
+import type { SyntaxNode } from '@lezer/common'
 import {
   DEFAULT_TOOLBAR_ACTIVE_STATE,
   toolbarStateBridge,
@@ -11,6 +12,32 @@ import {
 const HEADING_NODE = /^(?:ATX|Setext)Heading([1-6])$/
 const CODE_BLOCK_NODES = new Set(['FencedCode', 'CodeBlock', 'IndentedCode'])
 const LINK_NODES = new Set(['Link', 'Autolink'])
+
+export function selectionTouchesCodeBlock(state: EditorState): boolean {
+  const range = state.selection.main
+  const tree = syntaxTree(state)
+  const positions = [range.from, Math.max(range.from, range.to - 1)]
+  for (const position of positions) {
+    let node: SyntaxNode | null = tree.resolveInner(position, -1)
+    while (node) {
+      if (CODE_BLOCK_NODES.has(node.name)) return true
+      node = node.parent
+    }
+  }
+
+  if (range.empty) return false
+  let found = false
+  tree.iterate({
+    from: range.from,
+    to: range.to,
+    enter(node) {
+      if (!CODE_BLOCK_NODES.has(node.name)) return
+      found = true
+      return false
+    },
+  })
+  return found
+}
 
 function nodeNamesNearSelection(state: EditorState): Set<string> {
   const names = new Set<string>()

@@ -22,6 +22,7 @@ import {
   Undo2,
   Redo2,
   Pilcrow,
+  Palette,
 } from 'lucide-react'
 import {
   DEFAULT_TOOLBAR_ACTIVE_STATE,
@@ -35,6 +36,7 @@ import {
   tableCellCommandBridge,
   type TableCellCommandState,
 } from '../lib/tableCellCommandBridge'
+import TextColorPalette from './TextColorPalette'
 
 interface Props {
   lang: 'zh' | 'en'
@@ -45,6 +47,7 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
   const [cellState, setCellState] = useState<TableCellCommandState>(
     DEFAULT_TABLE_CELL_COMMAND_STATE,
   )
+  const [showColors, setShowColors] = useState(false)
 
   useEffect(() => {
     toolbarStateBridge.setListener(setTs)
@@ -182,6 +185,31 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
         () => editorCmd.inlineCode(),
         cellState.focused && !cellState.hasSelection,
       )}
+      <div className="toolbar-color-control">
+        <button
+          type="button"
+          className={`toolbar-btn${showColors ? ' is-active' : ''}`}
+          title={t('文字颜色', 'Text color')}
+          aria-label={t('文字颜色', 'Text color')}
+          aria-expanded={showColors}
+          disabled={cellState.focused}
+          onMouseDown={preserveEditorSelection}
+          onClick={() => setShowColors((visible) => !visible)}
+        >
+          <Palette size={15} />
+        </button>
+        {showColors && !cellState.focused && (
+          <div className="toolbar-color-popover">
+            <TextColorPalette
+              lang={lang}
+              onSelect={(color) => {
+                editorCmd.textColor(color)
+                setShowColors(false)
+              }}
+            />
+          </div>
+        )}
+      </div>
 
       <span className="toolbar-sep" />
 
