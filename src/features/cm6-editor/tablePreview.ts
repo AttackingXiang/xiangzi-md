@@ -1619,78 +1619,39 @@ export function isSyntheticCellSelection(selectedText: string): boolean {
 }
 
 /**
- * Drop a cell selection the engine invented rather than the user: a click, a
- * double-click or a drag landing in a cell's lower padding leaves WebKit with a
- * range running out of the cell and into the next `<td>`, which paints as a
- * wide strip across the rest of the line.
+ * Collapse a table selection WebKit built spanning two adjacent cells' separate
+ * `contentEditable` islands — not a state any gesture reaches on purpose, since
+ * a GFM cell can hold neither a tab nor a run into a sibling cell, so its text
+ * projection is structure only (`isSyntheticCellSelection`).
  *
- * Bound to `mouseup`, not to one gesture each. All three gestures finish there
- * with the selection already built — a browser makes it back on mousedown — so
- * a single rule covers them where per-gesture handlers only drift apart. It
- * also keeps the strip from outliving the gesture that made it: WebKit does not
- * repaint these away when the selection moves to another cell, so they pile up
- * one per visited cell (a document has only one selection — the rest are paint
- * WebKit never invalidated).
+ * Reacts to `selectionchange`, not to a specific pointer event, and that turns
+ * out to be load-bearing rather than a style choice. Once WebKit crosses this
+ * boundary it freezes the selection at that first bad range and stops tracking
+ * the pointer — confirmed by instrumenting a live repro: a drag that started by
+ * double-clicking into a header cell froze the selection spanning that cell and
+ * its neighbour, then `mouseup` fired rows away, on a cell containing neither
+ * endpoint. A handler bound to *a* mouse event on *a* cell inspects the wrong
+ * place as soon as the event and the frozen range disagree on which cell that
+ * is; `selectionchange` inspects the selection itself, wherever it lives, and
+ * — per the same repro — reports the freeze before that mouseup even fires.
+ *
+ * Collapsing to the range's own start rather than to this event's pointer
+ * position is deliberate for the same reason: once frozen, there is no live
+ * pointer position left that means anything — the start is simply the last
+ * point WebKit was still tracking correctly before it gave up.
  */
-// TEMP PROBE 3 — remove once the multi-cell drag residue is pinned down.
-// Every field is a flat string/boolean/number on purpose: Safari's console
-// collapses nested objects/arrays into an unexpandable "Object"/"Array"
-// placeholder when the log is copied as plain text, which is exactly the
-// information probe 2 lost.
-function cellLabel(table: HTMLTableElement | null, node: Node | null): string {
-  if (!node || !table) return '无'
-  const cells = [...table.querySelectorAll('td, th')]
-  const idx = cells.findIndex((c) => c.contains(node))
-  if (idx < 0) return '不在任何格子里！'
-  const c = cells[idx]
-  return `#${idx}(${c.tagName} "${(c.textContent ?? '').slice(0, 6)}")`
-}
-
-function collapseSyntheticCellSelection(cell: HTMLElement, x: number, y: number): void {
-  const table = cell.closest('table')
-  const oneLine = (tag: string): void => {
-    const s = window.getSelection()
-    const r = s && s.rangeCount ? s.getRangeAt(0) : null
-    console.log(
-      `[cellsel3] ${tag}`,
-      'mouseupCell=',
-      `${cell.tagName} "${(cell.textContent ?? '').slice(0, 6)}"`,
-      'text=',
-      JSON.stringify(s ? s.toString() : null),
-      'collapsed=',
-      r ? r.collapsed : null,
-      'startCell=',
-      cellLabel(table, r?.startContainer ?? null),
-      'endCell=',
-      cellLabel(table, r?.endContainer ?? null),
-    )
-  }
-  oneLine('A mouseup 进入')
-  setTimeout(() => oneLine('B 一个宏任务后'), 0)
-  requestAnimationFrame(() => oneLine('C 下一帧'))
-  if (!(window as unknown as { __selchangeHooked?: boolean }).__selchangeHooked) {
-    ;(window as unknown as { __selchangeHooked?: boolean }).__selchangeHooked = true
-    let n = 0
-    document.addEventListener('selectionchange', () => {
-      n += 1
-      oneLine(`SC selectionchange #${n}`)
-    })
-  }
-
+function settleTableSelection(root: HTMLElement): void {
   const selection = window.getSelection()
-  if (!selection?.rangeCount) return console.log('[cellsel3] 退出：没有 range')
+  if (!selection?.rangeCount) return
   const range = selection.getRangeAt(0)
-  if (range.collapsed) return console.log('[cellsel3] 退出：选区本来就是收起的')
-  if (!cell.contains(range.startContainer) && !cell.contains(range.endContainer)) {
-    return console.log('[cellsel3] 退出：mouseup 所在格子既不含 start 也不含 end')
-  }
-  if (!isSyntheticCellSelection(selection.toString())) {
-    return console.log('[cellsel3] 退出：判定为用户的真实选区，保留')
-  }
-  console.log('[cellsel3] 判定为引擎造的选区 → 准备收起')
-  selection.removeAllRanges()
-  selection.addRange(caretRangeAtPoint(cell, x, y))
-  oneLine('D 收起代码已执行，写入后立刻检查')
+  if (range.collapsed) return
+  const anchor =
+    range.startContainer instanceof Element
+      ? range.startContainer
+      : range.startContainer.parentElement
+  if (!anchor || !root.contains(anchor) || !anchor.closest('.xmd-cm-table-preview')) return
+  if (!isSyntheticCellSelection(selection.toString())) return
+  selection.collapseToStart()
 }
 
 /**
@@ -1957,11 +1918,10 @@ class TableWidget extends WidgetType {
       const cell = controller.cellByElement.get(element)
       if (cell) setTableCellContent(element, cell.text)
     })
-    element.addEventListener('mouseup', (event) => {
+    element.addEventListener('mouseup', () => {
       // A pointer interaction re-anchors the caret; the next vertical run
       // starts a fresh goal column from wherever the user clicked.
       controller.verticalGoalX = undefined
-      collapseSyntheticCellSelection(element, event.clientX, event.clientY)
       tableCellCommandBridge.refresh(element)
     })
     element.addEventListener('keyup', () => tableCellCommandBridge.refresh(element))
@@ -2198,6 +2158,11 @@ export function markdownTablePreview(options: MarkdownTablePreviewOptions = {}):
 
       constructor(readonly view: EditorView) {
         this.schedule()
+        document.addEventListener('selectionchange', this.onSelectionChange)
+      }
+
+      private onSelectionChange = (): void => {
+        settleTableSelection(this.view.dom)
       }
 
       update(update: ViewUpdate): void {
@@ -2217,6 +2182,7 @@ export function markdownTablePreview(options: MarkdownTablePreviewOptions = {}):
 
       destroy(): void {
         this.destroyed = true
+        document.removeEventListener('selectionchange', this.onSelectionChange)
       }
 
       private schedule(): void {
