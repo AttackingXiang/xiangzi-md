@@ -266,6 +266,37 @@ describe('tauriDesktopAdapter', () => {
     expect(dispose).toHaveBeenCalledOnce()
   })
 
+  it('cancels the native raster session when image export is aborted', async () => {
+    const abortController = new AbortController()
+    const chunk = new Uint8Array([255, 0, 0, 255])
+    const dispose = vi.fn()
+    const render = vi.fn().mockResolvedValue({
+      width: 1,
+      height: 1,
+      async *chunks() {
+        yield await Promise.resolve(chunk)
+      },
+      dispose,
+    })
+    saveMock.mockResolvedValueOnce('/notes/a.png')
+    invokeMock.mockImplementation((command) => {
+      if (command === 'begin_raster_export') return Promise.resolve('raster-1')
+      if (command === 'append_raster_export') {
+        abortController.abort()
+        return Promise.resolve(undefined)
+      }
+      return Promise.resolve(undefined)
+    })
+
+    await expect(
+      tauriDesktopAdapter.exportImage('a.md', render, undefined, abortController.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(render).toHaveBeenCalledWith('png', abortController.signal)
+    expect(invokeMock).toHaveBeenCalledWith('cancel_raster_export', { sessionId: 'raster-1' })
+    expect(invokeMock).not.toHaveBeenCalledWith('finish_raster_export', expect.anything())
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+
   it('does not render a PDF when the save dialog is cancelled', async () => {
     saveMock.mockResolvedValueOnce(null)
 

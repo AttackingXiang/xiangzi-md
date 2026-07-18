@@ -28,19 +28,55 @@ interface PrintableEditorView extends EditorView {
   measure(): void
 }
 
-function nextPaint(): Promise<void> {
-  return new Promise((resolve) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+function abortError(signal?: AbortSignal): Error {
+  return signal?.reason instanceof Error
+    ? signal.reason
+    : new DOMException('导出已取消', 'AbortError')
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError(signal)
+}
+
+function nextPaint(signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (signal?.aborted) {
+          reject(abortError(signal))
+          return
+        }
+        resolve()
+      }),
+    ),
   )
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError(signal))
+      return
+    }
+    const timeout = window.setTimeout(() => {
+      signal?.removeEventListener('abort', abort)
+      resolve()
+    }, milliseconds)
+    const abort = (): void => {
+      window.clearTimeout(timeout)
+      reject(abortError(signal))
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+  })
 }
 
-async function waitForFonts(): Promise<void> {
+async function waitForFonts(signal?: AbortSignal): Promise<void> {
   if (!document.fonts) return
-  await Promise.race([document.fonts.ready.then(() => undefined), delay(FONT_SETTLE_TIMEOUT_MS)])
+  await Promise.race([
+    document.fonts.ready.then(() => undefined),
+    delay(FONT_SETTLE_TIMEOUT_MS, signal),
+  ])
+  throwIfAborted(signal)
 }
 
 function viewportSignature(session: EditorDomExportSession): string {
@@ -60,14 +96,16 @@ function viewportSignature(session: EditorDomExportSession): string {
 async function settleViewport(
   session: EditorDomExportSession,
   timeoutMs = ASSET_SETTLE_TIMEOUT_MS,
+  signal?: AbortSignal,
 ): Promise<void> {
   const deadline = performance.now() + timeoutMs
   let previous = ''
   let stableFrames = 0
 
   while (performance.now() < deadline) {
+    throwIfAborted(signal)
     session.view.requestMeasure()
-    await nextPaint()
+    await nextPaint(signal)
     const signature = viewportSignature(session)
     const pendingImage = Array.from(session.root.querySelectorAll<HTMLImageElement>('img')).some(
       (image) => !image.complete,
@@ -76,7 +114,7 @@ async function settleViewport(
     stableFrames = signature === previous ? stableFrames + 1 : 0
     previous = signature
     if (stableFrames >= 2 && !pendingImage && !pendingMermaid) return
-    await delay(32)
+    await delay(32, signal)
   }
   // Missing images deliberately fall back to source/placeholder UI. Export
   // what the editor settled on instead of making one unavailable asset block
@@ -95,10 +133,14 @@ function rasterDocumentHeight(view: EditorView): number {
   return Math.max(1, view.scrollDOM.scrollHeight)
 }
 
-async function scrollTo(session: EditorDomExportSession, top: number): Promise<number> {
+async function scrollTo(
+  session: EditorDomExportSession,
+  top: number,
+  signal?: AbortSignal,
+): Promise<number> {
   session.view.scrollDOM.scrollTop = Math.max(0, Math.floor(top))
   session.view.requestMeasure()
-  await settleViewport(session)
+  await settleViewport(session, ASSET_SETTLE_TIMEOUT_MS, signal)
   return Math.max(0, Math.floor(session.view.scrollDOM.scrollTop))
 }
 
@@ -106,6 +148,7 @@ async function positionOutputViewport(
   session: EditorDomExportSession,
   outputTop: number,
   viewportHeight: number,
+  signal?: AbortSignal,
 ): Promise<number> {
   let desiredTop = Math.min(
     Math.max(0, outputTop - CAPTURE_OVERLAP),
@@ -113,7 +156,7 @@ async function positionOutputViewport(
   )
   let actualTop = 0
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    actualTop = await scrollTo(session, desiredTop)
+    actualTop = await scrollTo(session, desiredTop, signal)
     if (actualTop <= outputTop && outputTop - actualTop < viewportHeight) return actualTop
     desiredTop = Math.max(0, desiredTop - Math.ceil(viewportHeight / 2))
   }
@@ -123,8 +166,9 @@ async function positionOutputViewport(
 async function stabilizeRasterDocument(
   session: EditorDomExportSession,
   viewportHeight: number,
+  signal?: AbortSignal,
 ): Promise<number> {
-  await waitForFonts()
+  await waitForFonts(signal)
   let previousHeight = -1
   let stablePasses = 0
 
@@ -132,7 +176,8 @@ async function stabilizeRasterDocument(
     let outputTop = 0
     let height = rasterDocumentHeight(session.view)
     while (outputTop < height) {
-      const actualTop = await positionOutputViewport(session, outputTop, viewportHeight)
+      throwIfAborted(signal)
+      const actualTop = await positionOutputViewport(session, outputTop, viewportHeight, signal)
       const availableRows = viewportHeight - Math.max(0, outputTop - actualTop)
       if (actualTop > outputTop || availableRows <= 0) break
       outputTop += Math.min(height - outputTop, availableRows)
@@ -142,13 +187,13 @@ async function stabilizeRasterDocument(
     const nextHeight = rasterDocumentHeight(session.view)
     stablePasses = nextHeight === previousHeight ? stablePasses + 1 : 0
     if (stablePasses >= 1) {
-      await scrollTo(session, 0)
+      await scrollTo(session, 0, signal)
       return nextHeight
     }
     previousHeight = nextHeight
   }
 
-  await scrollTo(session, 0)
+  await scrollTo(session, 0, signal)
   return rasterDocumentHeight(session.view)
 }
 
@@ -246,19 +291,20 @@ async function captureViewport(
  */
 export async function createEditorRasterImage(
   _format: ExportImageFormat,
+  signal?: AbortSignal,
 ): Promise<RasterImageSource> {
   void _format
   const session = await createEditorDomExportSession()
   try {
     const availableViewportHeight = session.root.clientHeight
-    const height = await stabilizeRasterDocument(session, availableViewportHeight)
+    const height = await stabilizeRasterDocument(session, availableViewportHeight, signal)
     const viewportHeight = Math.min(availableViewportHeight, height)
     if (session.root.clientHeight !== viewportHeight) {
       session.root.style.height = `${viewportHeight}px`
       session.view.requestMeasure()
     }
     const width = Math.max(1, session.root.clientWidth)
-    const stableHeight = await stabilizeRasterDocument(session, viewportHeight)
+    const stableHeight = await stabilizeRasterDocument(session, viewportHeight, signal)
     const backgroundColor = exportBackgroundColor()
 
     return {
@@ -267,14 +313,16 @@ export async function createEditorRasterImage(
       async *chunks() {
         let outputTop = 0
         while (outputTop < stableHeight) {
+          throwIfAborted(signal)
           // Rendering a newly visible widget can refine CM6's height map and
           // nudge scrollTop. Capture with an overlap and advance by the rows we
           // actually emitted, so those corrections never create gaps or make
           // the final crop exceed its canvas.
-          const actualTop = await positionOutputViewport(session, outputTop, viewportHeight)
+          const actualTop = await positionOutputViewport(session, outputTop, viewportHeight, signal)
           const cropTop = Math.max(0, outputTop - actualTop)
           const canvas = await captureViewport(session, backgroundColor)
           try {
+            throwIfAborted(signal)
             const context = canvas.getContext('2d', { willReadFrequently: true })
             if (!context) throw new Error('无法读取导出图片分片')
             const rows = Math.min(stableHeight - outputTop, canvas.height - cropTop)

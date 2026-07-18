@@ -360,7 +360,7 @@
   left: 50%;
   max-width: calc(100% - 32px);
   padding: 10px 12px;
-  pointer-events: none;
+  pointer-events: auto;
   position: absolute;
   transform: translateX(-50%);
   width: min(340px, calc(100% - 32px));
@@ -389,6 +389,27 @@
   font-weight: 500;
   gap: 14px;
   justify-content: space-between;
+}
+
+.export-progress-detail {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.export-progress-cancel {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.export-progress-cancel:hover {
+  background: var(--hover);
 }
 
 .export-progress-content progress {

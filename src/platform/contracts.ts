@@ -261,8 +261,9 @@ export interface DesktopPort {
   exportPDF(html: string, suggestedName: string): Promise<{ path: string } | null>
   exportImage(
     suggestedName: string,
-    render: (format: ExportImageFormat) => Promise<RasterImageSource>,
+    render: (format: ExportImageFormat, signal?: AbortSignal) => Promise<RasterImageSource>,
     onProgress?: (progress: RasterExportProgress) => void,
+    signal?: AbortSignal,
   ): Promise<{ path: string } | null>
   pandocStatus(): Promise<{ path: string; version: string } | null>
   exportDocx(

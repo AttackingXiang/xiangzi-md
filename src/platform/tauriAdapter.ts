@@ -264,7 +264,7 @@ export const tauriDesktopAdapter: DesktopPort = {
     })
     return { path }
   },
-  exportImage: async (suggestedName, render, onProgress) => {
+  exportImage: async (suggestedName, render, onProgress, signal) => {
     const path = await save({
       defaultPath: exportFileStem(suggestedName) + '.png',
       filters: [
@@ -274,29 +274,35 @@ export const tauriDesktopAdapter: DesktopPort = {
     })
     if (!path) return null
 
+    signal?.throwIfAborted()
     onProgress?.({ phase: 'preparing' })
-    const source = await render(imageFormatForPath(path))
+    const format = imageFormatForPath(path)
+    const source = signal ? await render(format, signal) : await render(format)
     let sessionId: string | null = null
     try {
+      signal?.throwIfAborted()
       sessionId = await invoke<string>('begin_raster_export', {
         outputPath: path,
         width: source.width,
         height: source.height,
-        format: imageFormatForPath(path),
+        format,
       })
       const expectedBytes = source.width * source.height * 4
       let writtenBytes = 0
       onProgress?.({ phase: 'rendering', percent: 0 })
       for await (const chunk of source.chunks()) {
+        signal?.throwIfAborted()
         await invoke('append_raster_export', chunk, {
           headers: { 'x-xmd-raster-session': sessionId },
         })
+        signal?.throwIfAborted()
         writtenBytes += chunk.byteLength
         onProgress?.({
           phase: 'rendering',
           percent: Math.min(100, Math.round((writtenBytes / expectedBytes) * 100)),
         })
       }
+      signal?.throwIfAborted()
       onProgress?.({ phase: 'encoding' })
       return await invoke<{ path: string }>('finish_raster_export', { sessionId })
     } catch (error) {

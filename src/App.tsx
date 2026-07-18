@@ -863,7 +863,7 @@ export default function App(): JSX.Element {
     return () => document.removeEventListener('xmd-relative-link', openRelativeLink)
   }, [openPath, stateRef])
 
-  const { exportHTML, exportPDF, exportImage, exportDocx } = useExportActions(
+  const { exportHTML, exportPDF, exportImage, exportDocx, cancelExport } = useExportActions(
     stateRef,
     setExportResultPath,
     setExportActivity,
@@ -1307,7 +1307,13 @@ export default function App(): JSX.Element {
             )}
 
             {exportActivity && (
-              <ExportProgressToast label={exportActivity.label} percent={exportActivity.percent} />
+              <ExportProgressToast
+                label={exportActivity.label}
+                detail={exportActivity.detail}
+                percent={exportActivity.percent}
+                cancellable={exportActivity.cancellable}
+                onCancel={cancelExport}
+              />
             )}
           </div>
 
