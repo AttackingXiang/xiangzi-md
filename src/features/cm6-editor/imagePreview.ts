@@ -278,7 +278,7 @@ export function findVisibleMarkdownImages(
  * core engine (`core/hiddenRanges.ts`), replacing the standalone
  * `EditorView.atomicRanges` provider this module used to maintain directly
  * off its own decoration `ViewPlugin`. An `Image` node's span is registered
- * with `paint: false` since the `ViewPlugin` below already paints the
+ * with `presentation: 'external'` since the `ViewPlugin` below already paints the
  * `ImagePreviewWidget` replacement over the same range.
  *
  * Only the *synchronously* determinable fallback-to-source cases —
@@ -300,7 +300,7 @@ export function collectImageHiddenRanges(
   for (const match of findVisibleMarkdownImages(state, visibleRanges, bufferChars)) {
     if (!isSafeImageSource(match.src)) continue
     if (!options.allowRemote && isRemoteImageSource(match.src)) continue
-    hidden.push({ from: match.from, to: match.to, paint: false })
+    hidden.push({ from: match.from, to: match.to, presentation: 'external' })
   }
   return hidden
 }

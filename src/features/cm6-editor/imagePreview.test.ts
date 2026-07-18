@@ -120,9 +120,13 @@ describe('visible Markdown image discovery', () => {
       bufferChars: 0,
     })
     expect(ranges).toEqual([
-      { from: 0, to: '![first](a.png)'.length, paint: false },
-      { from: doc.indexOf('![inline]'), to: doc.indexOf(' text'), paint: false },
-      { from: doc.indexOf('![last]'), to: doc.length, paint: false },
+      { from: 0, to: '![first](a.png)'.length, presentation: 'external' },
+      {
+        from: doc.indexOf('![inline]'),
+        to: doc.indexOf(' text'),
+        presentation: 'external',
+      },
+      { from: doc.indexOf('![last]'), to: doc.length, presentation: 'external' },
     ])
     // Invariant 3 (core/README.md): the only atomicRanges provider is the
     // aggregated one installed by hiddenRangesEngine() in markdownLivePreview.
@@ -148,7 +152,13 @@ describe('visible Markdown image discovery', () => {
         bufferChars: 0,
         allowRemote: true,
       }),
-    ).toEqual([{ from: fallbackDoc.indexOf('![remote]'), to: fallbackDoc.length, paint: false }])
+    ).toEqual([
+      {
+        from: fallbackDoc.indexOf('![remote]'),
+        to: fallbackDoc.length,
+        presentation: 'external',
+      },
+    ])
   })
 })
 

@@ -11,8 +11,8 @@
 - `revealState.ts` — `computeRevealedRanges`(纯函数) + `revealState`(StateField)：选区当前
   "揭示" 了哪些 `reveal-on-selection` 节点。
 - `hiddenRanges.ts` — `hiddenRangeSource`(Facet) + `hiddenRangesEngine()`：把所有 feature
-  注册的隐藏范围聚合成**唯一一个** `EditorView.atomicRanges` provider 和一份"不可见"
-  decoration 集合。
+  注册的隐藏范围聚合成**唯一一个** `EditorView.atomicRanges` provider 和一份按
+  `presentation` 构建的 decoration 集合。
 - `boundaryCommands.ts` — 最小边界命令集：标题/列表/引用行首 Backspace、块拆分/合并、
   Enter/Shift-Enter、"删空即清除"。
 - `types.ts` — `PreviewRange`/`mergeRanges`/`rangesTouch`/`expandedVisibleRanges` 等与
@@ -33,13 +33,14 @@
 - **`atomic-block`**：整节点级的跨行隐藏，`reveal-on-selection`/`always-hidden`/`widget`
   都要求隐藏范围不跨越换行符（不变式 2），`atomic-block` 是唯一的例外。Phase 2 起
   `FencedCode`（代码块围栏，开/闭两行）注册为这一策略——`codeBlockPreview.ts` 通过
-  `hiddenRangeSource` 把每条围栏行（含其后的换行符）登记为 `paint: false` 的隐藏范围：
+  `hiddenRangeSource` 把每条围栏行（含其后的换行符）登记为
+  `presentation: 'external'` 的隐藏范围：
   该范围仍然是"原子"的（无法把光标停在围栏文字与换行符之间），但视觉绘制留给
   `codeBlockPreview.ts` 自己的 `viewportDecorationExtension` StateField（跨行 replace
-  只能从 StateField 安全提供，见 `hiddenRanges.ts` 里 `HiddenRange.paint` 的说明）。
+  只能从 StateField 安全提供，见 `hiddenRanges.ts` 里 `HiddenRange.presentation` 的说明）。
   Phase 3 起表格（`Table`）、图片（`Image`）、数学块、Mermaid 图表也都以同样的
-  `paint: false` 方式接入，见下面的 "Phase 3" 一节。缩进代码块（`CodeBlock`）目前不
-  隐藏任何源码字符（live preview 未渲染成卡片），因此未注册。
+  `presentation: 'external'` 方式接入，见下面的 "Phase 3" 一节。缩进代码块
+  （`CodeBlock`）目前不隐藏任何源码字符（live preview 未渲染成卡片），因此未注册。
 
 ## 不变式
 
@@ -58,6 +59,37 @@
    同一行内的 `Decoration.replace` 隐藏（因此视觉上仍然是"看起来空白但可寻址"的一行）。
 5. 自定义的 `moveVertically` keymap 已删除。一旦不再有零高度行，CM6 原生的
    `moveVertically`（依赖可视行几何）就能正确工作，不需要再手动跳过"分隔行"。
+
+## 隐藏范围的呈现策略
+
+`HiddenRange` 的原子语义与 DOM 呈现相互独立：所有注册范围都会进入同一份
+`EditorView.atomicRanges`，`presentation` 只决定用户看到的 DOM。
+
+- `replace`（默认）用 `Decoration.replace` 从布局中移除源码，适合普通行内标记和整行隐藏。
+- `preserve-text` 用 `Decoration.mark` 保留可寻址的源码文本节点，再由
+  `.xmd-cm-preserved-hidden-source` 将其压缩到视觉上可忽略的正宽度。引擎会自动识别物理行
+  开头由缩进和连续隐藏源码组成、后面仍有可见正文的前缀链，例如 `> # **标题**`；链中的
+  引用、标题和行内标记统一使用此策略，不按语法类型逐个打补丁。CM6 `drawSelection` 在自动
+  换行模式下会从视觉行两侧调用 `posAtCoords`，零宽 replacement 恰好位于行首时，
+  Chromium/WebKit 都可能把同一边界映射到 replacement 前后两个位置，进而错误绘制一块
+  全行选区矩形。保留文本节点消除了这个不稳定 DOM 边界，同时 atomic range 继续阻止光标
+  进入源码前缀。
+- `external` 不由 core 生成可见 decoration，适合列表 marker、任务框、代码块、表格、图片、
+  数学和 Mermaid 等由 feature 自己绘制 widget 的范围。
+
+自动识别遇到 `external` widget、首个可见字符、整行隐藏或跨行范围就停止；因此列表 widget、
+Setext 下划线、链接引用定义和 atomic block 不会被误改成文本呈现。
+
+保留行首文本解决了 replacement 边界不稳定，但引用行等带动态行级 padding 的布局仍可能让
+CM6 `wrappedLine` 的左右探测结果不一致。`livePreview.ts` 因此还提供一层正交的选区呈现策略：
+编辑器聚焦时，单一、非空、完全位于同一物理行的选区使用浏览器原生 Range 绘制；跨物理行、
+多选区和失焦状态继续使用 CM6 selection layer，以保留虚拟化、跨块选区和次级光标能力。代码块
+已有的“块内原生选区”策略范围更宽（允许跨代码行并负责嵌套横向滚动裁剪），两者可以同时存在，
+互不替代。
+
+`preserve-text` 节点带 `data-xmd-hidden-source`，只属于编辑器几何，不属于渲染文档语义。
+HTML 导出和便携剪贴板必须通过 `lib/hiddenSourceDom.ts` 的共享清理函数删除这些节点后，才能
+读取 `textContent`、生成标题 slug 或序列化 HTML。不要在各消费者里复制选择器字符串。
 
 ## 为什么删除了 `editableBlankParagraph` / `visualGapEdit` / `explicitBlankParagraphDeletion`
 
@@ -78,11 +110,12 @@ Backspace/Delete 已经能正确处理"删除一个真实的空行"。
 `EditorView.atomicRanges`：
 
 - `collectFencedCodeHiddenRanges` 通过 `hiddenRangeSource` 登记两条围栏行（开/闭
-  ` ``` `，各自含其后的换行符）为 `paint: false` 的 `atomic-block` 范围（Mermaid 语言
+  ` ``` `，各自含其后的换行符）为 `presentation: 'external'` 的 `atomic-block` 范围
+  （Mermaid 语言
   的围栏排除在外，仍由 `mermaidPreview.ts` 单独处理，见下面的已知缺口）。视觉绘制继续由
   `codeBlockPreview.ts` 自己的 `viewportDecorationExtension` StateField 承担——这正是
-  `HiddenRange.paint: false` 存在的原因：core 的 ViewPlugin 聚合器只能安全承载不跨行的
-  paint 范围，跨行（含换行符）的 replace 必须留在 StateField。
+  `HiddenRange.presentation: 'external'` 存在的原因：core 的 ViewPlugin 聚合器只能安全
+  承载不跨行的 paint 范围，跨行（含换行符）的 replace 必须留在 StateField。
 - Backspace/Delete 在块内的边界行为改为 `fencedCodeBoundaryDeletion(state, forward)`
   ——与 `core/boundaryCommands.ts` 同样的纯函数、返回 `TransactionSpec | null` 风格：
   Delete 在空白最后一行行首吞键（返回 `{}`）防止吃掉紧邻隐藏闭围栏前的边界；Backspace
@@ -133,8 +166,9 @@ Backspace/Delete 已经能正确处理"删除一个真实的空行"。
 - 四个模块都新增了一个 `collect*HiddenRanges(state, visibleRanges, options)` 纯函数
   （`collectTableHiddenRanges`/`collectImageHiddenRanges`/`collectMathHiddenRanges`/
   `collectMermaidHiddenRanges`），通过 `hiddenRangeSource.of(...)` 注册进本引擎，范围
-  与各自现有的 widget 替换 decoration 完全重合、`paint: false`——视觉绘制继续由各模块
-  自己的 StateField/ViewPlugin 承担，做法与 Phase 2 的 `collectFencedCodeHiddenRanges`
+  与各自现有的 widget 替换 decoration 完全重合、`presentation: 'external'`——视觉绘制
+  继续由各模块自己的 StateField/ViewPlugin 承担，做法与 Phase 2 的
+  `collectFencedCodeHiddenRanges`
   一致。`imagePreview.ts` 原先直接从自己的 ViewPlugin `provide: EditorView.atomicRanges`；
   `mathPreview.ts` 原先给 `viewportDecorationExtension` 传 `atomic: true`；两者都已删除，
   `viewportDecorations.ts` 的 `atomic` 选项也随最后一个使用者一起移除（该模块从此只

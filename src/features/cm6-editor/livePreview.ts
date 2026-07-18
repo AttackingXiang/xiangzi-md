@@ -15,7 +15,13 @@ import {
   splitContainerMarkdownBlock,
   splitTopLevelMarkdownBlock,
 } from './core/boundaryCommands'
-import { hiddenRangeSource, hiddenRangesEngine, type HiddenRange } from './core/hiddenRanges'
+import {
+  buildHiddenRangeSets,
+  hiddenRangeSource,
+  hiddenRangesEngine,
+  type HiddenRange,
+  type HiddenRangeSets,
+} from './core/hiddenRanges'
 import { HEADING_NODE_NAMES } from './core/nodePolicy'
 import {
   computeRevealedRanges,
@@ -41,6 +47,8 @@ export interface LivePreviewOptions {
   /** Extra source characters parsed around each viewport boundary. */
   viewportMargin?: number
 }
+
+export const NATIVE_LINE_SELECTION_CLASS = 'xmd-cm-native-line-selection'
 
 const MARKER_NAMES = new Set([
   'HeaderMark',
@@ -386,6 +394,44 @@ function caretTouchesRange(state: EditorState, range: PreviewRange): boolean {
   )
 }
 
+/**
+ * CM6's wrapped-line rectangle probing can disagree at decorated line starts.
+ * A single selection contained by one physical line needs neither multi-range
+ * painting nor cross-viewport virtualization, so the browser's native Range
+ * is both simpler and more accurate there.
+ */
+export function isSinglePhysicalLineSelection(state: EditorState): boolean {
+  if (state.selection.ranges.length !== 1) return false
+  const range = state.selection.main
+  if (range.empty) return false
+  return state.doc.lineAt(range.from).number === state.doc.lineAt(range.to).number
+}
+
+function nativeLineSelectionPresentation(): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      constructor(readonly view: EditorView) {
+        this.sync()
+      }
+
+      update(): void {
+        this.sync()
+      }
+
+      destroy(): void {
+        this.view.dom.classList.remove(NATIVE_LINE_SELECTION_CLASS)
+      }
+
+      private sync(): void {
+        this.view.dom.classList.toggle(
+          NATIVE_LINE_SELECTION_CLASS,
+          this.view.hasFocus && isSinglePhysicalLineSelection(this.view.state),
+        )
+      }
+    },
+  )
+}
+
 /** Split a node's range into per-line pieces so no hidden range crosses a newline. */
 function perLineRanges(state: EditorState, from: number, to: number): PreviewRange[] {
   const pieces: PreviewRange[] = []
@@ -403,10 +449,9 @@ function perLineRanges(state: EditorState, from: number, to: number): PreviewRan
 /**
  * The single source of hidden/atomic ranges this feature contributes to the
  * core engine (`core/hiddenRanges.ts`). Every range here becomes atomic;
- * ranges with `paint !== false` are additionally painted invisible by core.
- * Ranges the feature paints itself (list markers, task checkboxes, HR,
- * callout labels — see `buildLivePreviewDecorations` above) are contributed
- * with `paint: false` so core does not double-paint them.
+ * `presentation` independently selects replacement, source-preserving, or
+ * feature-owned rendering. Widgets painted by this module use `external` so
+ * core never double-paints them.
  */
 function collectHiddenRanges(
   state: EditorState,
@@ -426,8 +471,7 @@ function collectHiddenRanges(
           return false
 
         if (node.name === 'LinkReference') {
-          for (const piece of perLineRanges(state, node.from, node.to))
-            hidden.push({ ...piece, paint: true })
+          for (const piece of perLineRanges(state, node.from, node.to)) hidden.push(piece)
           return false
         }
 
@@ -435,25 +479,25 @@ function collectHiddenRanges(
           const link = markdownLinkData(state, node.node)
           if (link && !isRevealed(revealed, node.from, node.to)) {
             for (const range of link.hidden) {
-              if (range.to > range.from) hidden.push({ ...range, paint: true })
+              if (range.to > range.from) hidden.push(range)
             }
           }
           return
         }
 
         if (node.name === 'HorizontalRule') {
-          hidden.push({ from: node.from, to: node.to, paint: false })
+          hidden.push({ from: node.from, to: node.to, presentation: 'external' })
           return false
         }
 
         if (node.name === 'ListMark') {
           const prefix = listLinePrefix(state, node.node)
-          if (prefix) hidden.push({ from: prefix.from, to: prefix.to, paint: false })
+          if (prefix) hidden.push({ from: prefix.from, to: prefix.to, presentation: 'external' })
           return
         }
 
         if (node.name === 'TaskMarker') {
-          hidden.push({ from: node.from, to: node.to, paint: false })
+          hidden.push({ from: node.from, to: node.to, presentation: 'external' })
           return
         }
 
@@ -461,21 +505,21 @@ function collectHiddenRanges(
         // revealed (see core/nodePolicy.ts: 'always-hidden' and 'widget').
         // Inline emphasis/code markers reveal with their parent construct.
         if (node.name === 'HeaderMark' || node.name === 'QuoteMark') {
-          hidden.push({ ...hiddenMarkerRange(state, node.node), paint: true })
+          hidden.push(hiddenMarkerRange(state, node.node))
         } else if (
           MARKER_NAMES.has(node.name) &&
           !['Link', 'Autolink'].includes(node.node.parent?.name ?? '')
         ) {
           const parent = node.node.parent
           if (!parent || !isRevealed(revealed, parent.from, parent.to)) {
-            hidden.push({ from: node.from, to: node.to, paint: true })
+            hidden.push({ from: node.from, to: node.to })
           }
         }
 
         if (node.name === 'HardBreak') {
           // Our hard-break command writes `\\\n`; keep the semantic newline
           // but hide its source backslash in live preview.
-          hidden.push({ from: node.from, to: node.from + 1, paint: true })
+          hidden.push({ from: node.from, to: node.from + 1 })
         }
       },
     })
@@ -486,16 +530,18 @@ function collectHiddenRanges(
       // keeps them hidden so dragging never changes line geometry. Boundary
       // carets must still reveal them to avoid an unrecoverable Backspace key.
       if (caretTouchesRange(state, { from: span.from, to: span.closeTo })) continue
-      hidden.push(
-        { from: span.from, to: span.to, paint: true },
-        { from: span.closeFrom, to: span.closeTo, paint: true },
-      )
+      hidden.push({ from: span.from, to: span.to }, { from: span.closeFrom, to: span.closeTo })
     }
     const firstLine = state.doc.lineAt(visible.from)
     const lastLine = state.doc.lineAt(visible.to)
     for (let lineNumber = firstLine.number; lineNumber <= lastLine.number; lineNumber += 1) {
       const alert = calloutStartAtLine(state, lineNumber)
-      if (alert) hidden.push({ from: alert.markerFrom, to: alert.markerTo, paint: false })
+      if (alert)
+        hidden.push({
+          from: alert.markerFrom,
+          to: alert.markerTo,
+          presentation: 'external',
+        })
     }
   }
 
@@ -507,17 +553,13 @@ function collectHiddenRanges(
  * contributes (used directly by unit tests and as the pure core the
  * `hiddenRangeSource` builder below wraps).
  */
-export function buildHiddenMarkdownMarkerRanges(
+export function buildHiddenMarkdownMarkerSets(
   state: EditorState,
   visibleRanges: readonly PreviewRange[],
   options: LivePreviewOptions = {},
-): DecorationSet {
+): HiddenRangeSets {
   const revealed = computeRevealedRanges(state)
-  const hidden = collectHiddenRanges(state, visibleRanges, revealed, options)
-  return Decoration.set(
-    hidden.map(({ from, to }) => Decoration.replace({}).range(from, to)),
-    true,
-  )
+  return buildHiddenRangeSets(state, collectHiddenRanges(state, visibleRanges, revealed, options))
 }
 
 /** CM6 live-preview extension. The Markdown language extension is supplied by the caller. */
@@ -567,6 +609,7 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
       return cleanup ? [transaction, cleanup] : transaction
     }),
     paint,
+    nativeLineSelectionPresentation(),
     Prec.high(
       keymap.of([
         {

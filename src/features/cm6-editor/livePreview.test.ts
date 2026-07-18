@@ -3,7 +3,8 @@ import { EditorSelection, EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
   buildLivePreviewDecorations,
-  buildHiddenMarkdownMarkerRanges,
+  buildHiddenMarkdownMarkerSets,
+  isSinglePhysicalLineSelection,
   safeMarkdownLinkHref,
 } from './livePreview'
 import { pointerSelectionActiveState, setPointerSelectionActive } from './core/revealState'
@@ -42,11 +43,30 @@ function decorations(state: EditorState, from: number, to: number): SeenDecorati
 
 function hiddenRanges(state: EditorState, from: number, to: number): PreviewRangeLike[] {
   const result: PreviewRangeLike[] = []
-  buildHiddenMarkdownMarkerRanges(state, [{ from, to }], { viewportMargin: 0 }).between(
+  buildHiddenMarkdownMarkerSets(state, [{ from, to }], { viewportMargin: 0 }).atomic.between(
     0,
     state.doc.length,
     (rangeFrom, rangeTo) => {
       result.push({ from: rangeFrom, to: rangeTo })
+    },
+  )
+  return result
+}
+
+function hiddenDecorations(state: EditorState, from: number, to: number): SeenDecoration[] {
+  const result: SeenDecoration[] = []
+  buildHiddenMarkdownMarkerSets(state, [{ from, to }], { viewportMargin: 0 }).decorations.between(
+    0,
+    state.doc.length,
+    (rangeFrom, rangeTo, value) => {
+      const spec = value.spec as { class?: string; attributes?: Record<string, string> }
+      result.push({
+        from: rangeFrom,
+        to: rangeTo,
+        className: spec.class,
+        replacement: rangeTo > rangeFrom && spec.class === undefined,
+        style: spec.attributes?.style,
+      })
     },
   )
   return result
@@ -65,7 +85,81 @@ function createState(doc: string, cursor = 0): EditorState {
   })
 }
 
+describe('CM6 Markdown live preview: selection presentation', () => {
+  it('uses native painting only for one non-empty physical-line selection', () => {
+    const doc = '> quoted\nplain'
+    const sameLine = createState(doc).update({
+      selection: EditorSelection.range(0, doc.indexOf('\n')),
+    }).state
+    const crossLine = createState(doc).update({
+      selection: EditorSelection.range(0, doc.length),
+    }).state
+    const multiple = EditorState.create({
+      doc,
+      selection: EditorSelection.create([
+        EditorSelection.range(0, 3),
+        EditorSelection.range(doc.indexOf('plain'), doc.length),
+      ]),
+      extensions: [EditorState.allowMultipleSelections.of(true)],
+    })
+
+    expect(isSinglePhysicalLineSelection(sameLine)).toBe(true)
+    expect(isSinglePhysicalLineSelection(crossLine)).toBe(false)
+    expect(isSinglePhysicalLineSelection(createState(doc))).toBe(false)
+    expect(isSinglePhysicalLineSelection(multiple)).toBe(false)
+  })
+})
+
 describe('CM6 Markdown live preview: heading rendering', () => {
+  it('keeps an ATX opening prefix as collapsed source text while retaining atomic boundaries', () => {
+    const doc = '  ### Heading ###'
+    const state = createState(doc, doc.length)
+    const atomic = hiddenRanges(state, 0, doc.length)
+    const paint = hiddenDecorations(state, 0, doc.length)
+
+    expect(atomic).toContainEqual({ from: 2, to: 6 })
+    expect(paint).toContainEqual(
+      expect.objectContaining({
+        from: 2,
+        to: 6,
+        className: 'xmd-cm-preserved-hidden-source',
+        replacement: false,
+      }),
+    )
+    // Closing ATX markers do not sit on the unstable visual line-start
+    // boundary, so they keep the ordinary replacement presentation.
+    expect(paint).toContainEqual(expect.objectContaining({ from: 14, to: 17, replacement: true }))
+  })
+
+  it('preserves nested quote, heading, and emphasis prefixes through the shared line-leading policy', () => {
+    const doc = '> # **quoted heading**\n\nplain'
+    const state = createState(doc, doc.indexOf('plain'))
+    const paint = hiddenDecorations(state, 0, doc.length)
+
+    expect(paint).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          from: 0,
+          to: 2,
+          className: 'xmd-cm-preserved-hidden-source',
+          replacement: false,
+        }),
+        expect.objectContaining({
+          from: 2,
+          to: 4,
+          className: 'xmd-cm-preserved-hidden-source',
+          replacement: false,
+        }),
+        expect.objectContaining({
+          from: 4,
+          to: 6,
+          className: 'xmd-cm-preserved-hidden-source',
+          replacement: false,
+        }),
+      ]),
+    )
+  })
+
   it('renders Setext headings as one visual row and hides their underline as an ordinary blank-looking line', () => {
     const doc = 'Heading\n======='
     const state = createState(doc)
@@ -80,6 +174,12 @@ describe('CM6 Markdown live preview: heading rendering', () => {
     const underlineLine = state.doc.line(2)
     expect(
       hidden.some(({ from, to }) => from === underlineLine.from && to === underlineLine.to),
+    ).toBe(true)
+    expect(
+      hiddenDecorations(state, 0, doc.length).some(
+        ({ from, to, replacement }) =>
+          from === underlineLine.from && to === underlineLine.to && replacement,
+      ),
     ).toBe(true)
   })
 
@@ -106,6 +206,22 @@ describe('CM6 Markdown live preview: heading rendering', () => {
 })
 
 describe('CM6 Markdown live preview: reveal-on-selection inline marks', () => {
+  it('preserves a hidden inline marker when it is the visual line prefix', () => {
+    const doc = '**bold** and plain'
+    const state = createState(doc, doc.indexOf('plain'))
+    const paint = hiddenDecorations(state, 0, doc.length)
+
+    expect(paint).toContainEqual(
+      expect.objectContaining({
+        from: 0,
+        to: 2,
+        className: 'xmd-cm-preserved-hidden-source',
+        replacement: false,
+      }),
+    )
+    expect(paint).toContainEqual(expect.objectContaining({ from: 6, to: 8, replacement: true }))
+  })
+
   it('hides strong markers while the selection sits outside the construct, keeping the rendered style', () => {
     const doc = '**bold** and plain'
     const state = createState(doc, doc.indexOf('plain'))

@@ -63,13 +63,13 @@ const WIDGET = new Set(['ListMark', 'TaskMarker', 'QuoteMark'])
  * Node names whose source is hidden as a whole cross-line unit rather than
  * per-line (see core/README.md, invariant 2's `atomic-block` exception).
  * Fenced code (`codeBlockPreview.ts`) registers its fence lines through
- * `hiddenRangeSource` with `paint: false` and was the first construct to use
+ * `hiddenRangeSource` with `presentation: 'external'` and was the first construct to use
  * this policy — see `core/hiddenRanges.ts` for why an `atomic-block` range
  * is allowed to cross its own trailing newline while Phase 1's inline
  * hidden ranges are not. `tablePreview.ts` (`Table`) and `imagePreview.ts`
  * (`Image`) followed in Phase 3, each registering their widget's exact
  * replace span (`table.from`..`table.to` / `match.from`..`match.to`) with
- * `paint: false` since their own decoration set already paints the widget.
+ * `presentation: 'external'` since their own decoration set already paints the widget.
  *
  * Indented code blocks (`CodeBlock`) are intentionally not registered here:
  * live preview does not currently hide or restyle their source at all (no

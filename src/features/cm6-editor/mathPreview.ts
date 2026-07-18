@@ -451,7 +451,7 @@ export function buildMathPreviewDecorations(
  * toggled by `MathWidget`'s edit affordances) is excluded so its raw LaTeX
  * stays ordinary, editable text — matching `buildMathPreviewDecorations`,
  * which likewise skips painting a widget over it. Every other expression's
- * span is registered with `paint: false`: this module's own
+ * span is registered with `presentation: 'external'`: this module's own
  * `viewportDecorationExtension` StateField already paints the `MathWidget`
  * replacement, so core must not paint a second, invisible one on top of it.
  */
@@ -467,7 +467,7 @@ export function collectMathHiddenRanges(
     options.viewportMargin,
   )) {
     if (isSourceExpression(state, expression)) continue
-    hidden.push({ from: expression.from, to: expression.to, paint: false })
+    hidden.push({ from: expression.from, to: expression.to, presentation: 'external' })
   }
   return hidden
 }

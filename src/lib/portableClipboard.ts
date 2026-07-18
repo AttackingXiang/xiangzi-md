@@ -1,3 +1,5 @@
+import { removeHiddenSource } from './hiddenSourceDom'
+
 const INLINE_SEMANTIC_ELEMENTS = [
   ['.xmd-cm-strong', 'strong'],
   ['.xmd-cm-emphasis', 'em'],
@@ -210,6 +212,9 @@ function stripEditorOnlySpans(root: HTMLElement): void {
 
 /** Convert CM6's class-driven preview DOM into compact, portable clipboard HTML. */
 export function materializePortableClipboard(root: HTMLElement): void {
+  // Must run before headings and paragraphs are materialized, otherwise
+  // visually collapsed Markdown source becomes semantic clipboard text.
+  removeHiddenSource(root)
   materializeLinks(root)
   materializeInlineFormatting(root)
   materializeImagesAndTables(root)

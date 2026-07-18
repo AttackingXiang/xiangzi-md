@@ -320,7 +320,7 @@ export function findVisibleMarkdownTables(
  * maintain on its own. A `Table` node's whole source span (`table.from`..
  * `table.to`) is the `atomic-block` case registered in `core/nodePolicy.ts`:
  * it matches exactly the range `markdownTablePreview`'s own decoration field
- * already replaces with a `TableWidget`, so `paint: false` here means core
+ * already replaces with a `TableWidget`, so `presentation: 'external'` means core
  * never paints a second, redundant invisible replacement over it — this
  * module's own StateField already does that.
  */
@@ -332,7 +332,7 @@ export function collectTableHiddenRanges(
   return findVisibleMarkdownTables(state, visibleRanges, bufferChars).map((table) => ({
     from: table.from,
     to: table.to,
-    paint: false,
+    presentation: 'external',
   }))
 }
 

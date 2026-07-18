@@ -142,7 +142,11 @@ describe('Markdown table preview', () => {
     const prefix = 'before\n\n'
     const state = makeState(prefix)
     expect(collectTableHiddenRanges(state, [{ from: 0, to: state.doc.length }], 0)).toEqual([
-      { from: prefix.length, to: prefix.length + source.length, paint: false },
+      {
+        from: prefix.length,
+        to: prefix.length + source.length,
+        presentation: 'external',
+      },
     ])
     // Invariant 3 (core/README.md): the only atomicRanges provider is the
     // aggregated one installed by hiddenRangesEngine() in markdownLivePreview.

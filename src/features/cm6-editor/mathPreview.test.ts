@@ -175,7 +175,13 @@ describe('CM6 math preview', () => {
     expect(state.facet(EditorView.atomicRanges)).toHaveLength(0)
     expect(
       collectMathHiddenRanges(state, [{ from: 0, to: doc.length }], { viewportMargin: 0 }),
-    ).toEqual([{ from: doc.indexOf('$'), to: doc.lastIndexOf('$') + 1, paint: false }])
+    ).toEqual([
+      {
+        from: doc.indexOf('$'),
+        to: doc.lastIndexOf('$') + 1,
+        presentation: 'external',
+      },
+    ])
   })
 
   it('leaves a formula in source-edit mode out of the hidden atomic ranges', () => {

@@ -23,6 +23,32 @@ describe('CM6 live preview styles', () => {
     expect(listLine).toContain('text-indent: calc(0px - var(--xmd-list-hang))')
   })
 
+  it('keeps preserved line-leading source measurable but visually negligible', () => {
+    const css = readFileSync(new URL('./livePreview.css', import.meta.url), 'utf8')
+    const hiddenSource = css.match(/\.xmd-cm-preserved-hidden-source\s*\{([^}]*)\}/)?.[1]
+
+    expect(hiddenSource).toContain('font-size: 0.125px')
+    expect(hiddenSource).toContain('color: transparent')
+    expect(hiddenSource).toContain('line-height: 0')
+    expect(hiddenSource).not.toContain('display: none')
+    expect(hiddenSource).not.toContain('position: absolute')
+    expect(hiddenSource).not.toContain('user-select: none')
+  })
+
+  it('uses native painting only while the single-line selection class is active', () => {
+    const css = readFileSync(new URL('./livePreview.css', import.meta.url), 'utf8')
+    const hidesLayer = css.match(
+      /\.xmd-cm-native-line-selection \.cm-selectionLayer\s*\{([^}]*)\}/,
+    )?.[1]
+    const nativeSelection = css.match(
+      /\.xmd-cm-native-line-selection \.cm-line \*::selection\s*\{([^}]*)\}/,
+    )?.[1]
+
+    expect(hidesLayer).toContain('display: none')
+    expect(nativeSelection).toContain('var(--accent)')
+    expect(nativeSelection).toContain('!important')
+  })
+
   it('keeps the code-block controls gutter as a single CSS custom property, not a duplicated magic number', () => {
     // codeBlockPreview.ts's CodeBlockScrollPlugin reads this same
     // `--xmd-code-controls-gutter` custom property (via getComputedStyle) so

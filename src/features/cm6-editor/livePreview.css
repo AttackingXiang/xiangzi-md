@@ -59,6 +59,35 @@
   text-decoration: none;
 }
 
+/* Keep hidden source at a visual line start as real text nodes so browser
+   hit-testing can distinguish the line's document boundary under wrapping.
+   A tiny, positive font size is deliberate: exact zero collapses every source
+   offset onto the same coordinate in some WebKit builds, recreating the
+   ambiguity this mode removes. Common heading/quote prefix chains stay below
+   one CSS pixel at this size. */
+.xmd-cm-editor .xmd-cm-preserved-hidden-source {
+  color: transparent;
+  font-size: 0.125px;
+  letter-spacing: 0;
+  line-height: 0;
+  -webkit-text-fill-color: transparent;
+}
+
+/* CM6's wrapped-line selection layer probes both editor edges with
+   posAtCoords. Decorated line starts (especially quote padding) can make those
+   probes disagree and create a full-width bridge rectangle. A focused,
+   single-range selection contained by one physical line uses the browser's
+   already-synchronized DOM Range instead. Cross-line and multi-range
+   selections keep CM6 painting for virtualization and secondary cursors. */
+.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-selectionLayer {
+  display: none;
+}
+
+.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-line::selection,
+.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-line *::selection {
+  background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+}
+
 .xmd-cm-editor .cm-line.xmd-cm-heading-1 {
   font-size: 2em;
 }

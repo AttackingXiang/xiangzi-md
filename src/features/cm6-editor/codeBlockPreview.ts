@@ -1357,7 +1357,7 @@ export function buildCodeBlockPreviewDecorations(
  * `core/nodePolicy.ts`: unlike Phase 1's inline hidden ranges, an
  * `atomic-block` range is allowed to cross its own line's newline boundary
  * (see core/README.md, invariant 2), which is what keeps a caret from ever
- * resting between the fence text and its line break. `paint: false` on every
+ * resting between the fence text and its line break. `presentation: 'external'` on every
  * range here means core never paints them — this module's own
  * `viewportDecorationExtension` StateField already does that (a cross-line
  * replace is only safe from a StateField, not core's ViewPlugin aggregator).
@@ -1385,14 +1385,14 @@ export function collectFencedCodeHiddenRanges(
         hidden.push({
           from: opening.from,
           to: Math.min(state.doc.length, opening.to + 1),
-          paint: false,
+          presentation: 'external',
         })
         if (data.closingFrom !== null) {
           const closing = state.doc.lineAt(data.closingFrom)
           hidden.push({
             from: closing.from,
             to: Math.min(state.doc.length, closing.to + 1),
-            paint: false,
+            presentation: 'external',
           })
         }
         return false

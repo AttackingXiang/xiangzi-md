@@ -3,6 +3,7 @@ import { blobPartFromBytes, imageMimeType, xmdAssetPaths } from '../../lib/asset
 import { mapWithConcurrencyLimit } from '../../lib/asyncPool'
 import { escapeHtmlText, serializeStyleSheets } from '../../lib/exportStyles'
 import { markdownHeadingSlug } from '../../lib/linkNavigation'
+import { removeHiddenSource } from '../../lib/hiddenSourceDom'
 import { createFullEditorDom } from './editorDomExport'
 
 const EXPORT_WORK_CONCURRENCY = 2
@@ -62,6 +63,9 @@ function materializeLinks(root: HTMLElement): void {
 }
 
 function removeInteractiveChrome(root: HTMLElement): void {
+  // Source-preserving live-preview markers exist only to stabilize editor
+  // geometry. Remove them before heading text is read or HTML is serialized.
+  removeHiddenSource(root)
   root
     .querySelectorAll(
       [

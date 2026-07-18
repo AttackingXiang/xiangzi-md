@@ -377,7 +377,7 @@ export function buildMermaidPreviewDecorations(
  * excluded so its raw Mermaid text stays ordinary, editable fenced-code
  * content — matching `buildMermaidPreviewDecorations`, which likewise skips
  * painting a widget over it. Every other block's span is registered with
- * `paint: false`: this module's own `viewportDecorationExtension` StateField
+ * `presentation: 'external'`: this module's own `viewportDecorationExtension` StateField
  * already paints the `MermaidWidget` replacement.
  */
 export function collectMermaidHiddenRanges(
@@ -392,7 +392,7 @@ export function collectMermaidHiddenRanges(
     Math.max(0, options.viewportMargin ?? 256),
   )) {
     if (isSourceBlock(state, block)) continue
-    hidden.push({ from: block.from, to: block.to, paint: false })
+    hidden.push({ from: block.from, to: block.to, presentation: 'external' })
   }
   return hidden
 }

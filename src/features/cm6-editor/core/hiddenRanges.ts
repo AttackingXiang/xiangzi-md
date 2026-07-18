@@ -14,15 +14,22 @@ import {
   type RevealedRanges,
 } from './revealState'
 import type { PreviewRange } from './types'
+import { HIDDEN_SOURCE_ATTRIBUTE } from '../../../lib/hiddenSourceDom'
+
+export type HiddenRangePresentation = 'replace' | 'preserve-text' | 'external'
+
+export const PRESERVED_HIDDEN_SOURCE_CLASS = 'xmd-cm-preserved-hidden-source'
 
 export interface HiddenRange extends PreviewRange {
   /**
-   * False when the registering feature paints its own decoration (e.g. a
-   * list-marker widget) over this exact range. Core always marks the range
-   * atomic either way; it only additionally contributes an invisible
-   * `Decoration.replace` when `paint` is not `false`.
+   * How the source is represented in the editor DOM. Atomic cursor behaviour
+   * is independent from this choice and is always installed for the range.
+   *
+   * - `replace` (default): remove source text from layout with a replacement.
+   * - `preserve-text`: keep addressable text nodes and collapse them visually.
+   * - `external`: let the owning feature paint its own widget/decoration.
    */
-  paint?: boolean
+  presentation?: HiddenRangePresentation
 }
 
 export interface HiddenRangeContext {
@@ -37,9 +44,9 @@ export type HiddenRangeBuilder = (context: HiddenRangeContext) => readonly Hidde
  * Every feature that hides or atomizes source characters registers exactly
  * one builder here instead of standing up its own `EditorView.atomicRanges`
  * provider. `hiddenRangesEngine()` aggregates all of them into a single
- * atomic-ranges provider and a single "invisible" decoration set, which is
- * the only thing that lets independently-authored preview features share an
- * editor without their atomic ranges fighting (see core/README.md).
+ * atomic-ranges provider and a single presentation decoration set. This lets
+ * independently-authored preview features share an editor without their
+ * atomic ranges or painting strategies fighting (see core/README.md).
  */
 export const hiddenRangeSource = Facet.define<HiddenRangeBuilder>()
 
@@ -49,8 +56,103 @@ export interface HiddenRangeSets {
 }
 
 /**
+ * Preserve every consecutive core-painted source range at a physical line's
+ * visual start. The chain may contain indentation and multiple constructs
+ * (`> # **title**`), but stops at the first visible character or feature-owned
+ * widget. Whole-line and cross-line ranges stay replacements because they do
+ * not border editable content on that line.
+ */
+export function preserveLineLeadingHiddenSource(
+  state: EditorState,
+  ranges: readonly HiddenRange[],
+): HiddenRange[] {
+  const normalized = ranges.map((range) => ({ ...range }))
+  const byLine = new Map<number, number[]>()
+
+  normalized.forEach((range, index) => {
+    const line = state.doc.lineAt(range.from)
+    if (range.to > line.to) return
+    const indexes = byLine.get(line.from)
+    if (indexes) indexes.push(index)
+    else byLine.set(line.from, [index])
+  })
+
+  for (const [lineFrom, indexes] of byLine) {
+    const line = state.doc.lineAt(lineFrom)
+    let cursor = line.from
+    indexes.sort((left, right) => {
+      const leftRange = normalized[left]
+      const rightRange = normalized[right]
+      return leftRange.from - rightRange.from || leftRange.to - rightRange.to
+    })
+
+    for (const index of indexes) {
+      const range = normalized[index]
+      const presentation = range.presentation ?? 'replace'
+      const gap = state.doc.sliceString(cursor, range.from)
+      const visibleAfter = state.doc.sliceString(range.to, line.to).trim().length > 0
+      if (
+        range.from < cursor ||
+        !/^[\t ]*$/.test(gap) ||
+        !visibleAfter ||
+        presentation === 'external'
+      ) {
+        break
+      }
+      if (presentation === 'replace') range.presentation = 'preserve-text'
+      cursor = range.to
+    }
+  }
+
+  return normalized
+}
+
+/** Build atomic and visual sets from already-discovered hidden ranges. */
+export function buildHiddenRangeSets(
+  state: EditorState,
+  ranges: Iterable<HiddenRange>,
+): HiddenRangeSets {
+  const decorations: Array<ReturnType<Decoration['range']>> = []
+  const atomic: Array<ReturnType<Decoration['range']>> = []
+
+  for (const range of preserveLineLeadingHiddenSource(state, Array.from(ranges))) {
+    if (range.to <= range.from) continue
+    atomic.push(Decoration.replace({}).range(range.from, range.to))
+
+    const presentation = range.presentation ?? 'replace'
+    switch (presentation) {
+      case 'replace':
+        decorations.push(Decoration.replace({}).range(range.from, range.to))
+        break
+      case 'preserve-text':
+        decorations.push(
+          Decoration.mark({
+            class: PRESERVED_HIDDEN_SOURCE_CLASS,
+            attributes: {
+              [HIDDEN_SOURCE_ATTRIBUTE]: 'true',
+              'aria-hidden': 'true',
+            },
+          }).range(range.from, range.to),
+        )
+        break
+      case 'external':
+        break
+      default: {
+        const exhaustive: never = presentation
+        throw new Error(`Unsupported hidden-range presentation: ${String(exhaustive)}`)
+      }
+    }
+  }
+
+  return {
+    decorations: Decoration.set(decorations, true),
+    atomic: Decoration.set(atomic, true),
+  }
+}
+
+/**
  * Pure aggregation step: gathers every registered builder's contributions for
- * `state`/`visibleRanges` into one atomic set and one invisible-paint set.
+ * `state`/`visibleRanges` into one atomic set and one presentation set.
  * Factored out of the ViewPlugin below so it can be unit tested without a
  * real `EditorView` (this package's tests run without a DOM).
  */
@@ -68,19 +170,13 @@ export function aggregateHiddenRanges(
     revealed: revealed ?? computeRevealedRanges(state),
   }
 
-  const paint: Array<ReturnType<Decoration['range']>> = []
-  const atomic: Array<ReturnType<Decoration['range']>> = []
+  const ranges: HiddenRange[] = []
   for (const build of builders) {
     for (const range of build(context)) {
-      if (range.to <= range.from) continue
-      atomic.push(Decoration.replace({}).range(range.from, range.to))
-      if (range.paint !== false) paint.push(Decoration.replace({}).range(range.from, range.to))
+      ranges.push(range)
     }
   }
-  return {
-    decorations: Decoration.set(paint, true),
-    atomic: Decoration.set(atomic, true),
-  }
+  return buildHiddenRangeSets(state, ranges)
 }
 
 function buildSets(view: EditorView): HiddenRangeSets {

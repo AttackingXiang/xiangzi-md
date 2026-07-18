@@ -79,7 +79,11 @@ describe('CM6 Mermaid preview boundary', () => {
     const state = EditorState.create({ doc, extensions: [markdown()] })
     const options = { render: () => Promise.resolve('<svg />'), viewportMargin: 0 }
     expect(collectMermaidHiddenRanges(state, [{ from: 0, to: doc.length }], options)).toEqual([
-      { from: doc.indexOf('```'), to: doc.indexOf('\nafter'), paint: false },
+      {
+        from: doc.indexOf('```'),
+        to: doc.indexOf('\nafter'),
+        presentation: 'external',
+      },
     ])
     // Invariant 3 (core/README.md): the only atomicRanges provider is the
     // aggregated one installed by hiddenRangesEngine() in markdownLivePreview.
@@ -99,7 +103,7 @@ describe('CM6 Mermaid preview boundary', () => {
       viewportMargin: 0,
     })
     const mermaidEnd = doc.indexOf('\n\n')
-    expect(mermaid).toEqual([{ from: 0, to: mermaidEnd, paint: false }])
+    expect(mermaid).toEqual([{ from: 0, to: mermaidEnd, presentation: 'external' }])
     // codeBlockPreview owns only the non-Mermaid fence lines.
     expect(fenced.every((range) => range.from > mermaidEnd)).toBe(true)
   })

@@ -148,11 +148,19 @@ describe('CM6 fenced code preview', () => {
 
     expect(visualPoints).toContain(firstFrom)
     expect(visualPoints).toContain(lastFrom)
-    expect(hidden.every((range) => range.paint === false)).toBe(true)
-    expect(hidden).toContainEqual({ from: 0, to: doc.indexOf('first'), paint: false })
+    expect(hidden.every((range) => range.presentation === 'external')).toBe(true)
+    expect(hidden).toContainEqual({
+      from: 0,
+      to: doc.indexOf('first'),
+      presentation: 'external',
+    })
     const closingFrom = doc.indexOf('```', 3)
     const closingLineTo = doc.indexOf('\nafter')
-    expect(hidden).toContainEqual({ from: closingFrom, to: closingLineTo + 1, paint: false })
+    expect(hidden).toContainEqual({
+      from: closingFrom,
+      to: closingLineTo + 1,
+      presentation: 'external',
+    })
     expect(hidden.some(({ from, to }) => from <= firstFrom && to > firstFrom)).toBe(false)
   })
 
@@ -503,7 +511,7 @@ describe('CM6 fenced code preview', () => {
     expect(hidden).toContainEqual({
       from: closingLineFrom,
       to: doc.indexOf('\n- 下一步') + 1,
-      paint: false,
+      presentation: 'external',
     })
   })
 
