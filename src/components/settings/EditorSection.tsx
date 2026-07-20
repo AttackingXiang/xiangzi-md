@@ -14,8 +14,12 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
     >
       <SettingsCard>
         <ToggleRow
-          label={t('标题自动编号')}
-          description={en ? 'Show hierarchical numbers before headings.' : '在标题前显示层级编号。'}
+          label={en ? 'Show heading numbers' : '显示标题层级编号'}
+          description={
+            en
+              ? 'Show 1, 1.1, and 1.1.1 in the editor and HTML/PDF/image exports without changing the Markdown source. Word export is configured separately under Pandoc.'
+              : '在编辑器及 HTML/PDF/图片导出中显示 1、1.1、1.1.1，不修改 Markdown 源文档；Word 导出请在 Pandoc 集成中单独设置。'
+          }
           checked={settings.headingNumber}
           onChange={(checked) => onChange({ headingNumber: checked })}
         />

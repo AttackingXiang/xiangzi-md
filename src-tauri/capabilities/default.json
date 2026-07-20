@@ -11,6 +11,8 @@
     "core:window:allow-start-dragging",
     "core:window:allow-set-fullscreen",
     "dialog:default",
+    "fs:allow-watch",
+    "fs:allow-unwatch",
     "clipboard-manager:allow-write-html",
     "clipboard-manager:allow-write-image",
     "clipboard-manager:allow-write-text",

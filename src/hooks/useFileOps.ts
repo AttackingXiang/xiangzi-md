@@ -5,12 +5,21 @@ import { ErrorCode } from '../lib/errorCodes'
 import { createTaskQueue, mapWithConcurrencyLimit } from '../lib/asyncPool'
 import { InFlightCache } from '../lib/inFlightCache'
 import { LatestTaskQueue } from '../lib/latestTask'
-import { completePersistedTransform, completeSave, updateTabContent } from '../lib/saveState'
+import {
+  acceptExternalRead,
+  completePersistedTransform,
+  completeSave,
+  markExternalUnavailable,
+  reconcileExternalRead,
+  updateTabContent,
+} from '../lib/saveState'
 import { activateOrAppendTab, mergeRestoredTabs, tabsAreClean } from '../lib/documentState'
 import { isKnownTextFile } from '../lib/fileKind'
 import { applyLineEnding, detectLineEnding } from '../lib/lineEndings'
 import type { Draft, Tab } from '../types'
+import type { OpenedFile } from '../platform/contracts'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
+import { useExternalFileWatcher } from './useExternalFileWatcher'
 
 let tabSeq = 0
 const MAX_RESTORED_TABS = 12
@@ -56,6 +65,17 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   const openTasksRef = useRef(new InFlightCache<string, void>())
   const saveQueuesRef = useRef(new LatestTaskQueue<string, boolean>())
   const savedVersionsRef = useRef(new Map<string, Tab['version']>())
+  const savingIdsRef = useRef(new Set<string>())
+  const pendingExternalChecksRef = useRef(new Set<string>())
+  const externalCheckSequenceRef = useRef(new Map<string, number>())
+  const checkExternalChangesRef = useRef<(paths?: readonly string[]) => Promise<void>>(() =>
+    Promise.resolve(),
+  )
+  const [externalReloadNotice, setExternalReloadNotice] = useState<{
+    sequence: number
+    name: string
+  } | null>(null)
+  const externalReloadSequenceRef = useRef(0)
 
   // Always-fresh ref for use inside callbacks
   const stateRef = useRef({ tabs, activeId })
@@ -229,6 +249,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
     async (id: string, force = false): Promise<boolean> => {
       const tab = stateRef.current.tabs.find((t) => t.id === id)
       if (!tab) return false
+      if (tab.path) savingIdsRef.current.add(id)
       try {
         if (tab.path) {
           // tab.content/mirror 一律是编辑器吐出的纯 LF 文本；磁盘要按这份文档原始
@@ -252,21 +273,8 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
                 ? String(error.code)
                 : ''
             if (code !== ErrorCode.FILE_CONFLICT) throw error
-            const overwrite = await desktop.confirm(
-              getLang() === 'en'
-                ? `”${tab.name}” changed on disk. Overwrite the external changes?`
-                : `「${tab.name}」已被其他程序修改，是否覆盖外部更改？`,
-              t('文件冲突'),
-              t('仍然覆盖'),
-              t('取消'),
-            )
-            if (!overwrite) return false
-            result = await desktop.writeFile(
-              tab.path,
-              diskContent,
-              savedVersionsRef.current.get(id) ?? tab.version,
-              true,
-            )
+            pendingExternalChecksRef.current.add(id)
+            return false
           }
           savedVersionsRef.current.set(id, result.version)
           setTabs((prev) =>
@@ -307,6 +315,13 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
             : `保存「${tab.name}」失败，请检查磁盘空间或权限。`,
         )
         return false
+      } finally {
+        if (tab.path) {
+          savingIdsRef.current.delete(id)
+          if (pendingExternalChecksRef.current.delete(id)) {
+            queueMicrotask(() => void checkExternalChangesRef.current([tab.path as string]))
+          }
+        }
       }
     },
     [recordDocEdit, setTabs],
@@ -376,6 +391,114 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
     },
     [setTabs],
   )
+
+  const checkExternalChanges = useCallback(
+    async (paths?: readonly string[]): Promise<void> => {
+      const targets = paths ? new Set(paths) : null
+      const candidates = stateRef.current.tabs.filter(
+        (tab) => tab.path && tab.version && (!targets || targets.has(tab.path)),
+      )
+      await mapWithConcurrencyLimit(candidates, 4, async (candidate) => {
+        if (!candidate.path) return
+        if (savingIdsRef.current.has(candidate.id)) {
+          pendingExternalChecksRef.current.add(candidate.id)
+          return
+        }
+        const checkSequence = (externalCheckSequenceRef.current.get(candidate.id) ?? 0) + 1
+        externalCheckSequenceRef.current.set(candidate.id, checkSequence)
+
+        let file: OpenedFile | undefined
+        try {
+          file = await desktop.readFile(candidate.path)
+        } catch {
+          let shouldMarkUnavailable = true
+          // Atomic-save tools can briefly remove the destination between rename events.
+          await new Promise((resolve) => setTimeout(resolve, 180))
+          try {
+            file = await desktop.readFile(candidate.path)
+            shouldMarkUnavailable = false
+          } catch {
+            // The banner deliberately says unavailable rather than assuming deletion.
+          }
+          if (shouldMarkUnavailable) {
+            if (externalCheckSequenceRef.current.get(candidate.id) !== checkSequence) return
+            setTabs((previous) =>
+              previous.map((tab) =>
+                tab.id === candidate.id && tab.path === candidate.path
+                  ? markExternalUnavailable(tab, Date.now())
+                  : tab,
+              ),
+            )
+            return
+          }
+        }
+        if (!file) return
+        if (externalCheckSequenceRef.current.get(candidate.id) !== checkSequence) return
+
+        let reloadedName: string | null = null
+        let reloadedVersion: Tab['version'] = null
+        setTabs((previous) =>
+          previous.map((tab) => {
+            if (tab.id !== candidate.id || tab.path !== candidate.path) return tab
+            const result = reconcileExternalRead(tab, file)
+            if (result.outcome === 'reloaded') {
+              reloadedName = tab.name
+              reloadedVersion = file.version
+            }
+            return result.tab
+          }),
+        )
+        if (reloadedVersion) savedVersionsRef.current.set(candidate.id, reloadedVersion)
+        if (reloadedName) {
+          setExternalReloadNotice({
+            sequence: ++externalReloadSequenceRef.current,
+            name: reloadedName,
+          })
+        }
+      })
+    },
+    [setTabs],
+  )
+  checkExternalChangesRef.current = checkExternalChanges
+
+  const reloadTabFromDisk = useCallback(
+    async (id: string): Promise<void> => {
+      const tab = stateRef.current.tabs.find((item) => item.id === id)
+      if (!tab?.path) return
+      const requestedRevision = tab.revision
+      try {
+        const file = await desktop.readFile(tab.path)
+        let accepted = false
+        setTabs((previous) =>
+          previous.map((current) => {
+            if (current.id !== id || current.path !== tab.path) return current
+            if (current.revision !== requestedRevision) {
+              return reconcileExternalRead(current, file).tab
+            }
+            accepted = true
+            return acceptExternalRead(current, file)
+          }),
+        )
+        if (accepted) savedVersionsRef.current.set(id, file.version)
+      } catch {
+        setTabs((previous) =>
+          previous.map((current) =>
+            current.id === id ? markExternalUnavailable(current, Date.now()) : current,
+          ),
+        )
+      }
+    },
+    [setTabs],
+  )
+
+  const overwriteExternalTab = useCallback(
+    async (id: string): Promise<void> => {
+      await saveTab(id, true)
+    },
+    [saveTab],
+  )
+
+  useExternalFileWatcher({ tabs, activeId, checkPaths: checkExternalChanges })
 
   // ── Close ──────────────────────────────────────────────────────────────────
   const confirmCloseTargets = useCallback(
@@ -592,5 +715,10 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
     restoreSession,
     confirmCloseTabs,
     closeTabsWithoutPrompt,
+    checkExternalChanges,
+    reloadTabFromDisk,
+    overwriteExternalTab,
+    externalReloadNotice,
+    dismissExternalReloadNotice: () => setExternalReloadNotice(null),
   }
 }

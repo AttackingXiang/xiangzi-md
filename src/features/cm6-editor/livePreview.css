@@ -59,6 +59,19 @@
   text-decoration: none;
 }
 
+/* Numbering is presentation-only: the Markdown source remains unchanged.
+   Labels are calculated from the complete source because CM6 only mounts the
+   visible part of a document, which makes ordinary CSS counters unreliable. */
+[data-heading-number='on'] .xmd-cm-editor .cm-line.xmd-cm-heading[data-xmd-heading-number]::before {
+  color: var(--text-muted);
+  content: attr(data-xmd-heading-number);
+  display: inline-block;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  margin-inline-end: 0.32em;
+  vertical-align: baseline;
+}
+
 /* Keep hidden source at a visual line start as real text nodes so browser
    hit-testing can distinguish the line's document boundary under wrapping.
    A tiny, positive font size is deliberate: exact zero collapses every source

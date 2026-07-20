@@ -35,9 +35,22 @@ interface Props {
   en: boolean
 }
 
+type SupportQr = 'alipay' | 'wechat' | 'paypal'
+
 export default function AboutSection({ appVersion, updater, en }: Props): JSX.Element {
   const [licenseOpen, setLicenseOpen] = useState(false)
   const [supportOpen, setSupportOpen] = useState(false)
+  const [expandedSupportQr, setExpandedSupportQr] = useState<SupportQr | null>(null)
+
+  const closeSupport = (): void => {
+    setExpandedSupportQr(null)
+    setSupportOpen(false)
+  }
+
+  const qrActionLabel = (name: string, expanded = false): string => {
+    if (en) return `${expanded ? 'Reduce' : 'Enlarge'} ${name} QR code`
+    return `${expanded ? '取消放大' : '放大'}${name}二维码`
+  }
 
   return (
     <>
@@ -169,7 +182,7 @@ export default function AboutSection({ appVersion, updater, en }: Props): JSX.El
           className="modal-backdrop support-backdrop"
           onClick={(event) => {
             event.stopPropagation()
-            setSupportOpen(false)
+            closeSupport()
           }}
         >
           <section
@@ -184,7 +197,7 @@ export default function AboutSection({ appVersion, updater, en }: Props): JSX.El
               <button
                 className="icon-btn sm"
                 aria-label={en ? 'Close support options' : '关闭支持方式'}
-                onClick={() => setSupportOpen(false)}
+                onClick={closeSupport}
               >
                 <X size={16} />
               </button>
@@ -198,27 +211,48 @@ export default function AboutSection({ appVersion, updater, en }: Props): JSX.El
               <div className="support-options">
                 <article className="support-option support-option-alipay">
                   <h3>{en ? 'Alipay' : '支付宝'}</h3>
-                  <div className="support-qr-crop support-qr-crop-alipay">
-                    <img
-                      src={alipaySupportQr}
-                      alt={en ? 'Alipay support QR code' : '支付宝支持二维码'}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    className="support-qr-trigger"
+                    aria-label={qrActionLabel(en ? 'Alipay' : '支付宝')}
+                    onClick={() => setExpandedSupportQr('alipay')}
+                  >
+                    <span className="support-qr-crop support-qr-crop-alipay">
+                      <img
+                        src={alipaySupportQr}
+                        alt={en ? 'Alipay support QR code' : '支付宝支持二维码'}
+                      />
+                    </span>
+                  </button>
                   <p>{en ? 'Scan with Alipay' : '使用支付宝扫码支持'}</p>
                 </article>
                 <article className="support-option support-option-wechat">
                   <h3>{en ? 'WeChat Pay' : '微信支付'}</h3>
-                  <div className="support-qr-crop support-qr-crop-wechat">
-                    <img
-                      src={wechatSupportQr}
-                      alt={en ? 'WeChat Pay support QR code' : '微信支付支持二维码'}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    className="support-qr-trigger"
+                    aria-label={qrActionLabel(en ? 'WeChat Pay' : '微信支付')}
+                    onClick={() => setExpandedSupportQr('wechat')}
+                  >
+                    <span className="support-qr-crop support-qr-crop-wechat">
+                      <img
+                        src={wechatSupportQr}
+                        alt={en ? 'WeChat Pay support QR code' : '微信支付支持二维码'}
+                      />
+                    </span>
+                  </button>
                   <p>{en ? 'Scan with WeChat' : '使用微信扫码支持'}</p>
                 </article>
                 <article className="support-option support-option-paypal">
                   <h3>PayPal</h3>
-                  <img src={paypalSupportQr} alt="PayPal support QR code" />
+                  <button
+                    type="button"
+                    className="support-qr-trigger support-qr-trigger-paypal"
+                    aria-label={qrActionLabel('PayPal')}
+                    onClick={() => setExpandedSupportQr('paypal')}
+                  >
+                    <img src={paypalSupportQr} alt="PayPal support QR code" />
+                  </button>
                   <button
                     className="secondary-btn"
                     onClick={() => void desktop.openExternal(PAYPAL_SUPPORT_URL)}
@@ -235,6 +269,53 @@ export default function AboutSection({ appVersion, updater, en }: Props): JSX.El
               </p>
             </div>
           </section>
+          {expandedSupportQr && (
+            <button
+              type="button"
+              className="support-qr-lightbox"
+              aria-label={qrActionLabel(
+                expandedSupportQr === 'alipay'
+                  ? en
+                    ? 'Alipay'
+                    : '支付宝'
+                  : expandedSupportQr === 'wechat'
+                    ? en
+                      ? 'WeChat Pay'
+                      : '微信支付'
+                    : 'PayPal',
+                true,
+              )}
+              onClick={(event) => {
+                event.stopPropagation()
+                setExpandedSupportQr(null)
+              }}
+            >
+              {expandedSupportQr === 'paypal' ? (
+                <img
+                  className="support-qr-lightbox-paypal"
+                  src={paypalSupportQr}
+                  alt="PayPal support QR code"
+                />
+              ) : (
+                <span
+                  className={`support-qr-crop support-qr-lightbox-crop support-qr-crop-${expandedSupportQr}`}
+                >
+                  <img
+                    src={expandedSupportQr === 'alipay' ? alipaySupportQr : wechatSupportQr}
+                    alt={
+                      expandedSupportQr === 'alipay'
+                        ? en
+                          ? 'Alipay support QR code'
+                          : '支付宝支持二维码'
+                        : en
+                          ? 'WeChat Pay support QR code'
+                          : '微信支付支持二维码'
+                    }
+                  />
+                </span>
+              )}
+            </button>
+          )}
         </div>
       )}
     </>

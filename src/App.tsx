@@ -43,6 +43,9 @@ import UnsavedChangesDialog, {
   type CloseDecision,
   type CloseReason,
 } from './components/UnsavedChangesDialog'
+import ExternalChangeBanner from './components/ExternalChangeBanner'
+import ExternalChangeDialog from './components/ExternalChangeDialog'
+import ExternalReloadToast from './components/ExternalReloadToast'
 import SearchPanel from './components/SearchPanel'
 import CommandPalette from './components/CommandPalette'
 import RelatedDocumentsSidebar from './features/tags/components/RelatedDocumentsSidebar'
@@ -177,7 +180,18 @@ export default function App(): JSX.Element {
     restoreSession,
     confirmCloseTabs,
     closeTabsWithoutPrompt,
+    checkExternalChanges,
+    reloadTabFromDisk,
+    overwriteExternalTab,
+    externalReloadNotice,
+    dismissExternalReloadNotice,
   } = useFileOps({ lang, requestCloseDecision, recordDocEdit })
+  const [externalReviewId, setExternalReviewId] = useState<string | null>(null)
+  const externalReviewTab = externalReviewId
+    ? (tabs.find((tab) => tab.id === externalReviewId) ?? null)
+    : null
+  const externalReviewSnapshot =
+    externalReviewTab?.diskState?.kind === 'changed' ? externalReviewTab.diskState.snapshot : null
 
   const getCurrentTabs = useCallback((): Tab[] => stateRef.current.tabs, [stateRef])
   const {
@@ -977,10 +991,18 @@ export default function App(): JSX.Element {
   // Only the active tab participates; background dirty tabs are protected by
   // useDraftRecovery snapshots, which fire independently every 1.2 s / 5 s.
   useEffect(() => {
-    if (!settings?.autoSave || !activeTab?.path || !activeTab.dirty) return
+    if (!settings?.autoSave || !activeTab?.path || !activeTab.dirty || activeTab.diskState) return
     const id = setTimeout(() => void saveTab(activeTab.id), 1200)
     return () => clearTimeout(id)
-  }, [settings?.autoSave, activeTab?.content, activeTab?.dirty, activeTab?.id, saveTab])
+  }, [
+    settings?.autoSave,
+    activeTab?.content,
+    activeTab?.dirty,
+    activeTab?.diskState,
+    activeTab?.id,
+    activeTab?.path,
+    saveTab,
+  ])
 
   useNativeIntegration({
     stateRef,
@@ -1156,6 +1178,20 @@ export default function App(): JSX.Element {
             </Suspense>
           )}
 
+          {activeTab?.diskState && (
+            <ExternalChangeBanner
+              tab={activeTab}
+              onReview={() => setExternalReviewId(activeTab.id)}
+              onReload={() => setExternalReviewId(activeTab.id)}
+              onOverwrite={() => void overwriteExternalTab(activeTab.id)}
+              onRetry={() =>
+                void checkExternalChanges(activeTab.path ? [activeTab.path] : undefined)
+              }
+              onSaveAs={() => void saveAsTab(activeTab.id)}
+              onClose={() => void closeTab(activeTab.id)}
+            />
+          )}
+
           <div
             className="editor-area"
             onMouseDownCapture={() => window.dispatchEvent(new Event('xmd-clear-select-all'))}
@@ -1315,6 +1351,14 @@ export default function App(): JSX.Element {
                 onCancel={cancelExport}
               />
             )}
+
+            {externalReloadNotice && (
+              <ExternalReloadToast
+                name={externalReloadNotice.name}
+                sequence={externalReloadNotice.sequence}
+                onClose={dismissExternalReloadNotice}
+              />
+            )}
           </div>
 
           {settings.showStatusBar && (
@@ -1423,6 +1467,22 @@ export default function App(): JSX.Element {
           tabs={unsavedCloseRequest.tabs}
           reason={unsavedCloseRequest.reason}
           onDecision={resolveCloseDecision}
+        />
+      )}
+
+      {externalReviewTab && externalReviewSnapshot && (
+        <ExternalChangeDialog
+          tab={externalReviewTab}
+          snapshot={externalReviewSnapshot}
+          onCancel={() => setExternalReviewId(null)}
+          onReload={() => {
+            setExternalReviewId(null)
+            void reloadTabFromDisk(externalReviewTab.id)
+          }}
+          onOverwrite={() => {
+            setExternalReviewId(null)
+            void overwriteExternalTab(externalReviewTab.id)
+          }}
         />
       )}
 

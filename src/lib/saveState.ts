@@ -1,5 +1,26 @@
-import type { FileVersion } from '../platform/contracts'
+import type { FileVersion, OpenedFile } from '../platform/contracts'
 import type { Tab } from '../types'
+import { detectLineEnding } from './lineEndings'
+
+export type ExternalReadOutcome = 'unchanged' | 'reloaded' | 'conflict'
+
+export interface ExternalReadResult {
+  tab: Tab
+  outcome: ExternalReadOutcome
+}
+
+export function acceptExternalRead(current: Tab, file: OpenedFile): Tab {
+  return {
+    ...current,
+    content: file.content,
+    savedContent: file.content,
+    dirty: false,
+    revision: current.revision + (current.content === file.content ? 0 : 1),
+    version: file.version,
+    eol: detectLineEnding(file.content),
+    diskState: undefined,
+  }
+}
 
 export function completeSave(
   current: Tab,
@@ -14,6 +35,7 @@ export function completeSave(
     // number must not make that byte-identical document look unsaved.
     dirty: current.content !== snapshot.content,
     version,
+    diskState: undefined,
   }
 }
 
@@ -26,6 +48,37 @@ export function updateTabContent(current: Tab, content: string): Tab {
     dirty: content !== current.savedContent,
     revision: current.revision + 1,
   }
+}
+
+/** Reconciles a verified disk read without ever overwriting unsaved editor content. */
+export function reconcileExternalRead(current: Tab, file: OpenedFile): ExternalReadResult {
+  if (current.version?.contentHash === file.version.contentHash) {
+    if (!current.diskState) return { tab: current, outcome: 'unchanged' }
+    return { tab: { ...current, diskState: undefined }, outcome: 'unchanged' }
+  }
+
+  if (current.dirty) {
+    if (
+      current.diskState?.kind === 'changed' &&
+      current.diskState.snapshot.version.contentHash === file.version.contentHash
+    ) {
+      return { tab: current, outcome: 'conflict' }
+    }
+    return {
+      tab: { ...current, diskState: { kind: 'changed', snapshot: file } },
+      outcome: 'conflict',
+    }
+  }
+
+  return {
+    tab: acceptExternalRead(current, file),
+    outcome: 'reloaded',
+  }
+}
+
+export function markExternalUnavailable(current: Tab, detectedAt: number): Tab {
+  if (current.diskState?.kind === 'unavailable') return current
+  return { ...current, diskState: { kind: 'unavailable', detectedAt } }
 }
 
 /**
@@ -45,6 +98,7 @@ export function completePersistedTransform(
       savedContent: persistedContent,
       dirty: current.content !== persistedContent,
       version,
+      diskState: undefined,
     }
   }
   return {
@@ -54,5 +108,6 @@ export function completePersistedTransform(
     dirty: false,
     revision: current.revision + (persistedContent === baseContent ? 0 : 1),
     version,
+    diskState: undefined,
   }
 }

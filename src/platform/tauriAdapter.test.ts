@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { open, save } from '@tauri-apps/plugin-dialog'
+import { watch } from '@tauri-apps/plugin-fs'
 import { check } from '@tauri-apps/plugin-updater'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderDocumentPdf } from '../lib/exportDocument'
@@ -17,6 +18,7 @@ vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
   writeImage: vi.fn(),
 }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ ask: vi.fn(), open: vi.fn(), save: vi.fn() }))
+vi.mock('@tauri-apps/plugin-fs', () => ({ watch: vi.fn() }))
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(), revealItemInDir: vi.fn() }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }))
 vi.mock('@tauri-apps/plugin-updater', () => ({ check: vi.fn() }))
@@ -30,6 +32,7 @@ const writeHtmlMock = vi.mocked(writeHtml)
 const writeImageMock = vi.mocked(writeImage)
 const openMock = vi.mocked(open)
 const saveMock = vi.mocked(save)
+const watchMock = vi.mocked(watch)
 const checkMock = vi.mocked(check)
 const renderDocumentPdfMock = vi.mocked(renderDocumentPdf)
 
@@ -42,6 +45,7 @@ describe('tauriDesktopAdapter', () => {
     writeImageMock.mockReset()
     openMock.mockReset()
     saveMock.mockReset()
+    watchMock.mockReset()
     renderDocumentPdfMock.mockReset()
     checkMock.mockReset()
   })
@@ -52,6 +56,37 @@ describe('tauriDesktopAdapter', () => {
 
     await expect(tauriDesktopAdapter.readFile(file.path)).resolves.toEqual(file)
     expect(invokeMock).toHaveBeenCalledWith('read_file', { path: file.path })
+  })
+
+  it('watches paths with debounce while ignoring read-access feedback events', async () => {
+    const stop = vi.fn()
+    let callback: Parameters<typeof watch>[1] | undefined
+    watchMock.mockImplementationOnce((_paths, cb) => {
+      callback = cb
+      return Promise.resolve(stop)
+    })
+    const onChange = vi.fn()
+
+    await expect(
+      tauriDesktopAdapter.watchPaths(['/notes'], onChange, { recursive: false, delayMs: 350 }),
+    ).resolves.toBe(stop)
+    expect(watchMock).toHaveBeenCalledWith(['/notes'], expect.any(Function), {
+      recursive: false,
+      delayMs: 350,
+    })
+
+    callback?.({
+      type: { access: { kind: 'open', mode: 'read' } },
+      paths: ['/notes/a.md'],
+      attrs: {},
+    })
+    callback?.({
+      type: { modify: { kind: 'data', mode: 'content' } },
+      paths: ['/notes/a.md'],
+      attrs: {},
+    })
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenCalledWith({ paths: ['/notes/a.md'] })
   })
 
   it('reads bounded binary files through the Rust command', async () => {

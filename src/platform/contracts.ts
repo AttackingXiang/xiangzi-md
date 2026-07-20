@@ -136,6 +136,15 @@ export interface OpenedFile {
   version: FileVersion
 }
 
+export interface FileWatchEvent {
+  paths: string[]
+}
+
+export interface FileWatchOptions {
+  recursive?: boolean
+  delayMs?: number
+}
+
 export interface WriteResult {
   path: string
   version: FileVersion
@@ -187,9 +196,32 @@ export interface AvailableUpdate {
   close(): Promise<void>
 }
 
+/** A published release, for the version-rollback picker in Settings. */
+export interface ReleaseSummary {
+  tag: string
+  version: string
+  name: string
+  notes: string
+  publishedAt?: string
+  prerelease: boolean
+  /** Whether this is the version currently installed. */
+  isCurrent: boolean
+  /** Which host this list actually came from (the primary host may be unreachable). */
+  source: 'github' | 'gitee'
+}
+
 export interface UpdaterPort {
   check(timeoutMs: number): Promise<AvailableUpdate | null>
   relaunch(): Promise<void>
+  /**
+   * Live release lookup — deliberately never cached, since the operator can
+   * delete an old release at any time and a stale local list would offer a
+   * version that no longer downloads. Falls back to a mirror if the primary
+   * host is unreachable.
+   */
+  listReleases(): Promise<ReleaseSummary[]>
+  /** Points the updater at one specific release tag instead of "latest". */
+  checkRelease(tag: string): Promise<AvailableUpdate | null>
 }
 
 export interface RasterImageSource {
@@ -213,6 +245,11 @@ export interface DesktopPort {
   openContainingFolder(filePath: string): Promise<Folder | null>
   openFile(): Promise<OpenedFile | null>
   readFile(path: string): Promise<OpenedFile>
+  watchPaths(
+    paths: string[],
+    onChange: (event: FileWatchEvent) => void,
+    options?: FileWatchOptions,
+  ): Promise<() => void>
   readBinaryFile(path: string, maxBytes?: number): Promise<Uint8Array>
   readRemoteImage(url: string): Promise<Uint8Array>
   writeFile(

@@ -6,6 +6,7 @@ pub mod pandoc;
 pub mod raster_export;
 pub mod search;
 pub mod settings;
+pub mod updates;
 pub mod workspace;
 
 use crate::domain::error::{AppError, AppResult};

@@ -148,7 +148,6 @@ const EN: Record<string, string> = {
   关闭窗口: 'Close window',
   最小化窗口: 'Minimize window',
   最大化或还原窗口: 'Maximize or restore window',
-  标题自动编号: 'Auto heading numbers',
   '开启后，已保存过的文档在停止输入约 1 秒后自动写回磁盘。':
     'When on, saved documents are written to disk ~1s after you stop typing.',
   '自定义主题 CSS': 'Custom theme CSS',
@@ -306,8 +305,22 @@ const EN: Record<string, string> = {
   '仅显示部分变更…': 'Showing a partial preview…',
   // Alerts / misc
   '文件不存在或无法打开：\n': 'File not found or cannot be opened:\n',
-  文件冲突: 'File conflict',
-  仍然覆盖: 'Overwrite',
+  外部文件更改: 'External file changes',
+  外部更改预览: 'External changes preview',
+  比较更改: 'Compare changes',
+  重新加载: 'Reload',
+  保留我的版本: 'Keep my version',
+  使用磁盘版本: 'Use disk version',
+  已从磁盘更新: 'Updated from disk',
+  重试: 'Retry',
+  '此文件已被其他程序修改。你的未保存内容尚未被覆盖。':
+    'This file was changed by another program. Your unsaved edits are still safe.',
+  '此文件已被删除或暂时无法访问。编辑内容仍安全保留在当前标签中。':
+    'This file was deleted or is temporarily unavailable. Your edits remain safe in this tab.',
+  '下方显示当前编辑内容与最新磁盘版本之间的差异。':
+    'The diff below compares your current edits with the latest version on disk.',
+  '重新加载会丢弃当前编辑；保留我的版本会覆盖磁盘上的外部更改。':
+    'Reloading discards your edits; keeping your version overwrites the external changes.',
   '另存为失败。': 'Save As failed.',
   '文件夹不存在：\n': 'Folder not found:\n',
   '移动失败：\n': 'Move failed:\n',

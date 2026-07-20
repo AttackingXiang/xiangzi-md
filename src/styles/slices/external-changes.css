@@ -1,0 +1,107 @@
+.external-change-banner {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px 6px 12px;
+  border-bottom: 1px solid color-mix(in srgb, #f59e0b 38%, var(--workspace-divider));
+  background: color-mix(in srgb, #f59e0b 9%, var(--workspace-surface));
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.external-change-banner > svg {
+  flex: 0 0 auto;
+  color: #d97706;
+}
+
+.external-change-banner.unavailable {
+  border-color: color-mix(in srgb, #ef4444 30%, var(--workspace-divider));
+  background: color-mix(in srgb, #ef4444 7%, var(--workspace-surface));
+}
+
+.external-change-banner.unavailable > svg {
+  color: #dc2626;
+}
+
+.external-change-message {
+  min-width: 0;
+  flex: 1;
+}
+
+.external-change-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.external-change-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.external-change-actions button:hover {
+  background: var(--bg-hover);
+}
+
+.external-change-actions .external-overwrite {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent-text);
+}
+
+.external-reload-toast {
+  position: absolute;
+  z-index: 66;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  max-width: min(380px, calc(100% - 28px));
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  box-shadow: var(--shadow);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.external-reload-toast > svg {
+  color: var(--accent-text);
+}
+
+.external-reload-toast strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .external-change-banner {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .external-change-message {
+    padding-top: 2px;
+  }
+
+  .external-change-actions {
+    width: 100%;
+    padding-left: 26px;
+  }
+}

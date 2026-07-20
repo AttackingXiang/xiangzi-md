@@ -244,6 +244,7 @@ export const browserDesktopAdapter: DesktopPort = {
   openContainingFolder: async () => previewFolder(),
   openFile: async () => requireFile(SAMPLE_PATH),
   readFile: async (path) => requireFile(path),
+  watchPaths: async () => () => undefined,
   readBinaryFile: async () => new Uint8Array(),
   readRemoteImage: async (url) => new Uint8Array(await (await fetch(url)).arrayBuffer()),
   writeFile: async (path, content) => {
@@ -394,4 +395,6 @@ export const browserDesktopAdapter: DesktopPort = {
 export const browserUpdaterAdapter: UpdaterPort = {
   check: async () => null,
   relaunch: async () => window.location.reload(),
+  listReleases: async () => [],
+  checkRelease: async () => null,
 }

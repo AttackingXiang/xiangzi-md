@@ -183,9 +183,11 @@ export default function PandocSettingsPage({
           onChange={(pandocToc) => onChange({ pandocToc })}
         />
         <ToggleRow
-          label={en ? 'Number headings' : '标题自动编号'}
+          label={en ? 'Number Word headings' : 'Word 标题编号'}
           description={
-            en ? 'Number document sections during export.' : '导出时为章节标题生成编号。'
+            en
+              ? 'Generate section numbers when exporting a Word document.'
+              : '导出 Word 文档时为章节标题生成编号。'
           }
           checked={settings.pandocNumberSections}
           onChange={(pandocNumberSections) => onChange({ pandocNumberSections })}

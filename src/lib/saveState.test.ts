@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Tab } from '../types'
-import { completePersistedTransform, completeSave, updateTabContent } from './saveState'
+import {
+  completePersistedTransform,
+  completeSave,
+  markExternalUnavailable,
+  reconcileExternalRead,
+  updateTabContent,
+} from './saveState'
 
 const version = { sizeBytes: 3, modifiedNanos: 1, contentHash: 'hash' }
 
@@ -73,6 +79,75 @@ describe('save completion', () => {
       revision: 4,
       dirty: false,
       version,
+    })
+  })
+})
+
+describe('external disk reconciliation', () => {
+  const baseVersion = { sizeBytes: 4, modifiedNanos: 1, contentHash: 'base' }
+  const diskVersion = { sizeBytes: 8, modifiedNanos: 2, contentHash: 'external' }
+  const diskFile = {
+    path: '/notes/a.md',
+    name: 'a.md',
+    content: 'external',
+    version: diskVersion,
+  }
+
+  it('automatically reloads a clean tab and advances its disk baseline', () => {
+    const current = {
+      ...tab('base', 3),
+      savedContent: 'base',
+      dirty: false,
+      version: baseVersion,
+    }
+    const result = reconcileExternalRead(current, diskFile)
+    expect(result.outcome).toBe('reloaded')
+    expect(result.tab).toMatchObject({
+      content: 'external',
+      savedContent: 'external',
+      dirty: false,
+      revision: 4,
+      version: diskVersion,
+    })
+  })
+
+  it('keeps unsaved editor content and stores the external snapshot as a conflict', () => {
+    const current = {
+      ...tab('my edit', 5),
+      savedContent: 'base',
+      version: baseVersion,
+    }
+    const result = reconcileExternalRead(current, diskFile)
+    expect(result.outcome).toBe('conflict')
+    expect(result.tab).toMatchObject({
+      content: 'my edit',
+      savedContent: 'base',
+      dirty: true,
+      version: baseVersion,
+      diskState: { kind: 'changed', snapshot: diskFile },
+    })
+  })
+
+  it('clears a stale warning when disk content matches the known version again', () => {
+    const current = {
+      ...tab('my edit', 5),
+      savedContent: 'base',
+      version: baseVersion,
+      diskState: { kind: 'changed' as const, snapshot: diskFile },
+    }
+    const originalFile = { ...diskFile, content: 'base', version: baseVersion }
+    const result = reconcileExternalRead(current, originalFile)
+    expect(result.outcome).toBe('unchanged')
+    expect(result.tab.content).toBe('my edit')
+    expect(result.tab.diskState).toBeUndefined()
+  })
+
+  it('marks an unavailable file without modifying its editor content', () => {
+    const current = tab('my edit', 5)
+    expect(markExternalUnavailable(current, 123)).toMatchObject({
+      content: 'my edit',
+      dirty: true,
+      diskState: { kind: 'unavailable', detectedAt: 123 },
     })
   })
 })

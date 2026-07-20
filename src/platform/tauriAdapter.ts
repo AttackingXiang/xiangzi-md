@@ -3,9 +3,10 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Image } from '@tauri-apps/api/image'
 import { writeHtml, writeImage, writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { ask, message, open, save } from '@tauri-apps/plugin-dialog'
+import { watch } from '@tauri-apps/plugin-fs'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { check, type Update } from '@tauri-apps/plugin-updater'
+import { check, Update } from '@tauri-apps/plugin-updater'
 import type {
   AvailableUpdate,
   AppInfo,
@@ -15,6 +16,7 @@ import type {
   FileVersion,
   Folder,
   OpenedFile,
+  ReleaseSummary,
   SearchResponse,
   UpdaterPort,
 } from './contracts'
@@ -50,6 +52,16 @@ function subscribe<T>(
   }
 }
 
+/** `@tauri-apps/plugin-updater` declares this shape but doesn't export it. */
+interface UpdateMetadata {
+  rid: number
+  currentVersion: string
+  version: string
+  date?: string
+  body?: string
+  rawJson: Record<string, unknown>
+}
+
 function updateSource(update: Update): 'github' | 'gitee' {
   return JSON.stringify(update.rawJson).toLowerCase().includes('gitee.com') ? 'gitee' : 'github'
 }
@@ -80,6 +92,11 @@ export const tauriUpdaterAdapter: UpdaterPort = {
     return update ? adaptUpdate(update) : null
   },
   relaunch,
+  listReleases: () => invoke<ReleaseSummary[]>('list_release_versions'),
+  checkRelease: async (tag) => {
+    const metadata = await invoke<UpdateMetadata | null>('check_release_version', { tag })
+    return metadata ? adaptUpdate(new Update(metadata)) : null
+  },
 }
 
 export const tauriDesktopAdapter: DesktopPort = {
@@ -152,6 +169,16 @@ export const tauriDesktopAdapter: DesktopPort = {
     return path ? invoke<OpenedFile>('read_file', { path }) : null
   },
   readFile: (path) => invoke<OpenedFile>('read_file', { path }),
+  watchPaths: (paths, onChange, options) =>
+    watch(
+      paths,
+      ({ paths: changedPaths, type }) => {
+        // Reading a file to verify its hash must not recursively schedule another read.
+        if (typeof type === 'object' && type !== null && 'access' in type) return
+        onChange({ paths: changedPaths })
+      },
+      options,
+    ),
   readBinaryFile: async (path, maxBytes = MAX_BINARY_READ_BYTES) => {
     const limit = binaryReadLimit(maxBytes)
     // Rust 侧返回 tauri::ipc::Response（原始二进制通道），前端实际收到的是

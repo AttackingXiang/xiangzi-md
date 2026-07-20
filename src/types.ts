@@ -1,4 +1,4 @@
-import type { FileVersion } from './platform/contracts'
+import type { FileVersion, OpenedFile } from './platform/contracts'
 
 export type {
   AppSettings,
@@ -37,6 +37,10 @@ export interface Tab {
   revision: number
   /** Rust 返回的磁盘版本，用于保存时检测外部修改。 */
   version: FileVersion | null
+  /** 与 dirty 正交的外部磁盘状态；缺省表示内容与最近一次已知磁盘版本同步。 */
+  diskState?:
+    | { kind: 'changed'; snapshot: OpenedFile }
+    | { kind: 'unavailable'; detectedAt: number }
   /** 锁定后无法被关闭（close / close-others / close-all 均跳过） */
   locked?: boolean
   /**

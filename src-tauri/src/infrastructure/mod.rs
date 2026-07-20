@@ -3,6 +3,7 @@ pub mod drafts;
 pub mod lifecycle;
 pub mod menu;
 pub mod protocol;
+pub mod release_sources;
 pub mod remote_image;
 pub mod search;
 pub mod settings;

@@ -6,6 +6,7 @@
 @import './slices/settings-shell.css';
 @import './slices/settings-content.css';
 @import './slices/unsaved.css';
+@import './slices/external-changes.css';
 @import './slices/overlays.css';
 @import './slices/drafts.css';
 @import './slices/lightbox-patches.css';

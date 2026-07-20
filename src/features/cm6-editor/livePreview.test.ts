@@ -17,6 +17,7 @@ interface SeenDecoration {
   href?: string
   editing?: string
   style?: string
+  headingNumber?: string
 }
 
 function decorations(state: EditorState, from: number, to: number): SeenDecoration[] {
@@ -35,6 +36,7 @@ function decorations(state: EditorState, from: number, to: number): SeenDecorati
         href: spec.attributes?.['data-xmd-href'],
         editing: spec.attributes?.['data-xmd-editing'],
         style: spec.attributes?.style,
+        headingNumber: spec.attributes?.['data-xmd-heading-number'],
       })
     },
   )
@@ -111,6 +113,34 @@ describe('CM6 Markdown live preview: selection presentation', () => {
 })
 
 describe('CM6 Markdown live preview: heading rendering', () => {
+  it('assigns stable hierarchical numbers from the complete document', () => {
+    const doc = '# One\n\n### Deep\n\n## Two\n\n# Next\n\n## Child'
+    const state = createState(doc)
+    const seen = decorations(state, 0, doc.length)
+    const numbered = seen
+      .filter(({ headingNumber }) => headingNumber)
+      .map(({ from, headingNumber }) => ({ from, headingNumber }))
+
+    expect(numbered).toEqual([
+      { from: 0, headingNumber: '1' },
+      { from: doc.indexOf('### Deep'), headingNumber: '1.0.1' },
+      { from: doc.indexOf('## Two'), headingNumber: '1.1' },
+      { from: doc.indexOf('# Next'), headingNumber: '2' },
+      { from: doc.indexOf('## Child'), headingNumber: '2.1' },
+    ])
+  })
+
+  it('keeps numbering stable when only a later viewport is mounted', () => {
+    const doc = '# One\n\n## Hidden child\n\n## Visible child'
+    const state = createState(doc)
+    const visibleFrom = doc.indexOf('## Visible child')
+    const seen = decorations(state, visibleFrom, doc.length)
+
+    expect(seen).toContainEqual(
+      expect.objectContaining({ from: visibleFrom, headingNumber: '1.2' }),
+    )
+  })
+
   it('keeps an ATX opening prefix as collapsed source text while retaining atomic boundaries', () => {
     const doc = '  ### Heading ###'
     const state = createState(doc, doc.length)

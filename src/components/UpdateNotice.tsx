@@ -52,12 +52,19 @@ export default function UpdateNotice({ updater }: Props): JSX.Element | null {
             <p className="update-meta">
               {state.currentVersion
                 ? en
-                  ? `Update from ${state.currentVersion}`
-                  : `从 ${state.currentVersion} 更新`
+                  ? `Updating from your current version, ${state.currentVersion}`
+                  : `将从当前版本 v${state.currentVersion} 更新`
                 : en
                   ? 'A new version is ready'
                   : '新版本已准备好'}
             </p>
+            {state.currentVersion && !failed && (
+              <p className="update-rollback-note">
+                {en
+                  ? `Not happy with it? You can reinstall v${state.currentVersion} anytime from Settings → Software updates.`
+                  : `如果不满意，可随时在「设置 → 软件更新」中重新安装回退到当前的 v${state.currentVersion}。`}
+              </p>
+            )}
             {failed && (
               <p className="update-error" role="alert">
                 {en

@@ -3,6 +3,7 @@ import { EditorState, Prec, type Extension } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import type { EditorView } from '@codemirror/view'
 import { Decoration, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import { markdownHeadings } from '../../lib/linkNavigation'
 import {
   cleanupEmptyMarkdownFormatting,
   deleteAtHiddenBoundary,
@@ -64,6 +65,33 @@ const INLINE_CLASSES: Readonly<Record<string, string>> = {
   Emphasis: 'xmd-cm-emphasis',
   Strikethrough: 'xmd-cm-strikethrough',
   InlineCode: 'xmd-cm-inline-code',
+}
+
+/**
+ * Heading numbers must come from the complete source rather than the mounted
+ * CM6 DOM. The DOM is virtualized, so CSS counters would restart whenever the
+ * user scrolls to a different part of a long document.
+ *
+ * Cache by the immutable Text document. Selection-only transactions retain
+ * the same document object and therefore do not reparse the Markdown.
+ */
+const headingNumbersCache = new WeakMap<object, ReadonlyMap<number, string>>()
+
+function headingNumbers(state: EditorState): ReadonlyMap<number, string> {
+  const document = state.doc as object
+  const cached = headingNumbersCache.get(document)
+  if (cached) return cached
+
+  const result = new Map<number, string>()
+  const counters = [0, 0, 0, 0, 0, 0]
+  for (const heading of markdownHeadings(state.doc.toString())) {
+    const index = heading.level - 1
+    counters[index] += 1
+    counters.fill(0, index + 1)
+    result.set(heading.offset, counters.slice(0, heading.level).join('.'))
+  }
+  headingNumbersCache.set(document, result)
+  return result
 }
 
 interface InlineHtmlOpeningTag {
@@ -272,10 +300,12 @@ export function buildLivePreviewDecorations(
         const headingLevel = HEADING_NODE_NAMES.get(node.name)
         if (headingLevel) {
           const line = state.doc.lineAt(node.from)
+          const number = headingNumbers(state).get(line.from)
           ranges.push(
-            Decoration.line({ class: `xmd-cm-heading xmd-cm-heading-${headingLevel}` }).range(
-              line.from,
-            ),
+            Decoration.line({
+              class: `xmd-cm-heading xmd-cm-heading-${headingLevel}`,
+              attributes: number ? { 'data-xmd-heading-number': number } : undefined,
+            }).range(line.from),
           )
         }
 

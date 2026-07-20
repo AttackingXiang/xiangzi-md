@@ -386,6 +386,11 @@ class CodeBlockScrollPlugin {
     // when the viewport (plus margin) is unchanged and CM6 therefore
     // dispatches no view update.
     view.scrollDOM.addEventListener('scroll', this.onScroll, true)
+    // A search bridge (FindBar) dispatches match selections while its own
+    // input keeps DOM focus, so a focus/blur transition can flip which
+    // presentation is correct without any accompanying selection change.
+    view.contentDOM.addEventListener('focus', this.onFocusChange)
+    view.contentDOM.addEventListener('blur', this.onFocusChange)
     this.updateSelectionPresentation(view.state)
     this.schedule()
     this.frame = requestAnimationFrame(() => this.schedule())
@@ -415,6 +420,8 @@ class CodeBlockScrollPlugin {
     cancelAnimationFrame(this.frame)
     cancelAnimationFrame(this.repaintFrame)
     this.view.scrollDOM.removeEventListener('scroll', this.onScroll, true)
+    this.view.contentDOM.removeEventListener('focus', this.onFocusChange)
+    this.view.contentDOM.removeEventListener('blur', this.onFocusChange)
     this.view.dom.classList.remove('xmd-cm-native-code-selection')
     this.view.dom.classList.remove('xmd-cm-native-code-caret')
     this.stopDragging()
@@ -434,12 +441,25 @@ class CodeBlockScrollPlugin {
     this.syncFrom(source)
   }
 
+  private readonly onFocusChange = (): void => this.updateSelectionPresentation(this.view.state)
+
   private updateSelectionPresentation(state: EditorState): void {
+    // The native browser selection/caret this presentation relies on (see the
+    // rationale on `selectionIntersectsFencedCode`/`caretInsideFencedCode`)
+    // only renders while the editor actually holds DOM focus. A search bridge
+    // (FindBar) selects matches by dispatching to the view while its own
+    // input keeps focus; without this gate that leaves a match inside a code
+    // block with no visible presentation at all, since it also hides CM6's
+    // own decorative selection layer that would otherwise show it.
+    const nativePresentation = this.view.hasFocus
     this.view.dom.classList.toggle(
       'xmd-cm-native-code-selection',
-      selectionIntersectsFencedCode(state),
+      nativePresentation && selectionIntersectsFencedCode(state),
     )
-    this.view.dom.classList.toggle('xmd-cm-native-code-caret', caretInsideFencedCode(state))
+    this.view.dom.classList.toggle(
+      'xmd-cm-native-code-caret',
+      nativePresentation && caretInsideFencedCode(state),
+    )
   }
 
   private syncFrom(source: HTMLElement): void {
