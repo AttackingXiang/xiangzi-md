@@ -3,6 +3,7 @@ import { redo as cm6Redo, undo as cm6Undo } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
 import type { Command, EditorView } from '@codemirror/view'
 import { cm6ActiveViewBridge } from './activeViewBridge'
+import { INLINE_MARK_FILLER } from './core/boundaryCommands'
 
 export interface MarkdownEditPlan {
   changes: ChangeSpec | readonly ChangeSpec[]
@@ -185,8 +186,16 @@ function inlineMarkPlan(state: EditorState, mark: InlineMark): MarkdownEditPlan 
   }
 
   if (range.empty) {
+    // A bare `****`/`~~~~` (2-char marks doubled with nothing between them)
+    // is valid CommonMark for a thematic break or a fenced-code opener on an
+    // otherwise-empty line — inserting it verbatim would flip the live
+    // preview to an <hr> or an open code block instead of leaving the caret
+    // between two empty markers. A single-char mark doubled (`**`, `` `` ``)
+    // never reaches that 3-character threshold, so only 2-char marks need
+    // the filler (see INLINE_MARK_FILLER's doc comment).
+    const filler = mark.length > 1 ? INLINE_MARK_FILLER : ''
     return {
-      changes: { from: range.from, insert: mark + mark },
+      changes: { from: range.from, insert: mark + filler + mark },
       selection: selection(range.from + mark.length),
     }
   }

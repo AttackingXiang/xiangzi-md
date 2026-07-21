@@ -203,6 +203,23 @@ export function hiddenRangesEngine(): Extension {
       }
 
       update(update: ViewUpdate): void {
+        // See the matching guard in livePreview.ts's `paint` plugin: a full
+        // rebuild creates new Decoration objects even at unchanged
+        // positions, and CM6 diffs replace decorations by reference, so it
+        // touches that DOM again on every keystroke — including the
+        // always-hidden marker immediately before wherever the user is
+        // typing. Doing that mid-IME-composition drops the composition.
+        // Remapping instead of rebuilding keeps positions correct without
+        // disturbing decoration identity; the deferred rebuild runs on the
+        // next update once composition ends (its own commit is a
+        // doc-changing transaction, so that update always follows).
+        if (update.view.compositionStarted) {
+          if (update.docChanged) {
+            this.decorations = this.decorations.map(update.changes)
+            this.atomic = this.atomic.map(update.changes)
+          }
+          return
+        }
         const syntaxTreeChanged = syntaxTree(update.startState) !== syntaxTree(update.state)
         if (
           update.docChanged ||

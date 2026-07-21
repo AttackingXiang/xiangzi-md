@@ -441,6 +441,53 @@ export function cleanupEmptyMarkdownFormatting(transaction: Transaction): Transa
 }
 
 /**
+ * Inserted between an empty `**`/`~~` pair (see `inlineMarkPlan` in
+ * `../commands.ts`) so the toolbar's Bold/Strikethrough buttons never emit a
+ * bare `****`/`~~~~` on their own line — CommonMark reads four asterisks
+ * alone as a thematic break and four tildes as a fenced-code opener, so
+ * without a filler the "empty, ready to type" state briefly renders as an
+ * `<hr>` or an open code block instead of two markers with the caret between
+ * them. A zero-width space is invisible and, per `@lezer/markdown` with the
+ * GFM preset (`extensions.ts`), still lets the pair parse as a proper empty
+ * `StrongEmphasis`/`Strikethrough` node instead of either misreading.
+ */
+export const INLINE_MARK_FILLER = '\u200b'
+
+/**
+ * Removes the filler the instant real text is typed next to it, so it never
+ * survives into saved content. Runs from `transaction.state` (the *post*-edit
+ * tree), matching the coordinate space the `[transaction, cleanup]` pairing
+ * in `livePreview.ts`'s `transactionFilter` expects for a follow-up change.
+ */
+export function stripInlineMarkFillerOnType(transaction: Transaction): TransactionSpec | null {
+  if (!transaction.docChanged || !transaction.isUserEvent('input')) return null
+
+  const state = transaction.state
+  let fillerFrom = -1
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (fillerFrom >= 0) return false
+      if (node.name !== 'StrongEmphasis' && node.name !== 'Strikethrough') return
+      const construct = markdownConstruct(state, node.node)
+      if (!construct) return
+      const content = state.sliceDoc(construct.contentFrom, construct.contentTo)
+      const index = content.indexOf(INLINE_MARK_FILLER)
+      // Only strip while the filler is the sole leftover placeholder — once
+      // real content surrounds it on both sides across separate edits this
+      // node is no longer "freshly inserted, about to be typed into".
+      if (index < 0 || content.indexOf(INLINE_MARK_FILLER, index + 1) >= 0) return
+      if (content.length === INLINE_MARK_FILLER.length) return
+      fillerFrom = construct.contentFrom + index
+    },
+  })
+  if (fillerFrom < 0) return null
+  return {
+    changes: { from: fillerFrom, to: fillerFrom + INLINE_MARK_FILLER.length, insert: '' },
+    sequential: true,
+  }
+}
+
+/**
  * Give the visual left edge of an ATX/Setext heading ordinary rich-text
  * semantics. Backspace at heading-content-start: a blank line directly
  * above is removed on its own (the heading moves up, keeping its level);

@@ -5,6 +5,7 @@ import {
   type Transaction,
 } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { syntaxTree } from '@codemirror/language'
 import type { Command, EditorView } from '@codemirror/view'
 import { GFM } from '@lezer/markdown'
 import { history } from '@codemirror/commands'
@@ -58,11 +59,32 @@ function execute(
 
 describe('CM6 Markdown commands', () => {
   it('inserts an inline pair at an empty cursor and places the cursor inside', () => {
-    expect(run('中文', EditorSelection.cursor(2), toggleBold)).toEqual({
-      doc: '中文****',
-      from: 4,
-      to: 4,
+    expect(run('中文', EditorSelection.cursor(2), toggleInlineCode)).toEqual({
+      doc: '中文``',
+      from: 3,
+      to: 3,
     })
+  })
+
+  it('separates an empty bold/strike pair with a filler so it cannot be misread as an <hr> or a code fence', () => {
+    // A bare `****`/`~~~~` on its own line is valid CommonMark for a
+    // thematic break / fenced-code opener; without the filler the live
+    // preview would flip to an <hr> or an open code block instead of
+    // leaving the caret between two empty markers.
+    const bold = run('', EditorSelection.cursor(0), toggleBold)
+    expect(bold.doc).toBe('**​**')
+    expect(bold.from).toBe(2)
+    const strike = run('', EditorSelection.cursor(0), toggleStrike)
+    expect(strike.doc).toBe('~~​~~')
+    expect(strike.from).toBe(2)
+
+    const tree = syntaxTree(EditorState.create({ doc: bold.doc, extensions: [markdownExtension] }))
+    expect(tree.topNode.getChild('HorizontalRule')).toBeNull()
+    expect(tree.topNode.getChild('Paragraph')?.getChild('StrongEmphasis')).not.toBeNull()
+  })
+
+  it('does not add a filler for single-character marks, which cannot collide with a thematic break', () => {
+    expect(run('', EditorSelection.cursor(0), toggleInlineCode).doc).toBe('``')
   })
 
   it('wraps and unwraps a Chinese selection without losing the selection', () => {

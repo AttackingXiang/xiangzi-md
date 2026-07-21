@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cleanupEmptyMarkdownFormatting,
   headingBoundaryDeletion,
+  INLINE_MARK_FILLER,
   insertContainerMarkdownHardBreak,
   insertMarkdownHardBreak,
   joinContainerMarkdownBlock,
@@ -11,6 +12,7 @@ import {
   quoteBoundaryDeletion,
   splitContainerMarkdownBlock,
   splitTopLevelMarkdownBlock,
+  stripInlineMarkFillerOnType,
 } from './boundaryCommands'
 
 function createState(doc: string, cursor = doc.length): EditorState {
@@ -274,5 +276,35 @@ describe('cleanupEmptyMarkdownFormatting', () => {
     const state = createState(doc)
     const from = doc.indexOf('bold')
     expect(deleteAsUser(state, from, from + 4).doc.toString()).toBe('```md\n****\n```')
+  })
+})
+
+describe('stripInlineMarkFillerOnType', () => {
+  function typeAsUser(state: EditorState, from: number, insert: string): EditorState {
+    const change = {
+      changes: { from, insert },
+      annotations: Transaction.userEvent.of('input.type'),
+    }
+    const transaction = state.update(change)
+    const strip = stripInlineMarkFillerOnType(transaction)
+    return strip ? state.update(change, strip).state : transaction.state
+  }
+
+  it('removes the filler once real text is typed right after it', () => {
+    const doc = `**${INLINE_MARK_FILLER}**`
+    const state = createState(doc, 2)
+    expect(typeAsUser(state, 2, 'x').doc.toString()).toBe('**x**')
+  })
+
+  it('leaves the filler alone until something is actually typed', () => {
+    const doc = `**${INLINE_MARK_FILLER}**`
+    const state = createState(doc, 2)
+    const transaction = state.update({ selection: { anchor: 2 } })
+    expect(stripInlineMarkFillerOnType(transaction)).toBeNull()
+  })
+
+  it('does not touch a filler-free bold span', () => {
+    const state = createState('**bold**', 2)
+    expect(typeAsUser(state, 4, 'x').doc.toString()).toBe('**boxld**')
   })
 })

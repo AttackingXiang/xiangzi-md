@@ -15,6 +15,7 @@ import {
   quoteLinePrefixes,
   splitContainerMarkdownBlock,
   splitTopLevelMarkdownBlock,
+  stripInlineMarkFillerOnType,
 } from './core/boundaryCommands'
 import {
   buildHiddenRangeSets,
@@ -603,6 +604,22 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
       }
 
       update(update: ViewUpdate): void {
+        // A full rebuild constructs brand-new Decoration objects even where
+        // nothing logically changed, so CM6's diff (reference equality for
+        // replace decorations) touches that DOM again on every keystroke —
+        // including the always-hidden heading marker immediately before
+        // where a user is actively typing. Recreating that neighbouring DOM
+        // node mid-IME-composition makes the browser silently drop the
+        // in-progress composition (see core/README.md's IME note). Just
+        // remapping the existing set keeps every position correct without
+        // touching decoration identity, so composition is left undisturbed;
+        // the deferred full rebuild runs on the very next update once
+        // `compositionStarted` clears (composition's own commit is itself a
+        // doc-changing transaction, so that update always follows).
+        if (update.view.compositionStarted) {
+          if (update.docChanged) this.decorations = this.decorations.map(update.changes)
+          return
+        }
         const syntaxTreeChanged = syntaxTree(update.startState) !== syntaxTree(update.state)
         if (
           update.docChanged ||
@@ -636,7 +653,9 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
     ),
     EditorState.transactionFilter.of((transaction) => {
       const cleanup = cleanupEmptyMarkdownFormatting(transaction)
-      return cleanup ? [transaction, cleanup] : transaction
+      if (cleanup) return [transaction, cleanup]
+      const fillerCleanup = stripInlineMarkFillerOnType(transaction)
+      return fillerCleanup ? [transaction, fillerCleanup] : transaction
     }),
     paint,
     nativeLineSelectionPresentation(),
