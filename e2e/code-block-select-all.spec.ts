@@ -10,8 +10,6 @@ import { openNewDocument } from './helpers'
  * `fencedCodeContentRange` (src/features/cm6-editor/codeBlockPreview.ts), and
  * this test pins the user-visible behaviour.
  *
- * NOTE: this suite has been written but not executed — see
- * docs/ENGINEERING_CONSTRAINTS.md ("测试金字塔" → Playwright 浏览器回归).
  */
 test('Cmd/Ctrl+A inside a fenced code block selects only the code body', async ({ page }) => {
   await openNewDocument(page)

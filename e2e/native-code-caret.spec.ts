@@ -1,21 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 import { openNewDocument } from './helpers'
 
-/**
- * Historical bug (fixed in commit 40fd735, "native caret inside fenced code,
- * drop cursor transform hack"): CM6's drawSelection paints `.cm-cursor` at
- * coordinates it computes itself, with no awareness of the nested
- * `.xmd-cm-code-line-content` horizontal scroller code rows use — once that
- * scroller moved, the painted cursor drifted away from the real insertion
- * point (an earlier transform-based compensation hack was itself buggy). The
- * fix hides CM6's primary fake cursor while the caret is inside a code body
- * (`xmd-cm-native-code-caret` on the editor root, codeBlockPreview.ts's
- * `updateSelectionPresentation`) and lets the browser's native caret — which
- * is positioned in and clipped by that same scroller — take over.
- *
- * NOTE: this suite has been written but not executed — see
- * docs/ENGINEERING_CONSTRAINTS.md ("测试金字塔" → Playwright 浏览器回归).
- */
+/** Code rows use nested horizontal scrollers. Cursor-layer repainting must
+ * remain singular while those scrollers move, and the shared controls must
+ * stay anchored to the card rather than the padded editor root. */
 
 /** display of `.cm-cursor-primary` — 'absent' when drawSelection has not
  * painted one at all (also an acceptable "no fake caret" state). */
@@ -26,7 +14,7 @@ async function primaryCursorDisplay(page: Page): Promise<string> {
   })
 }
 
-test('native caret takes over inside code and follows horizontal scroll', async ({ page }) => {
+test('CM6 caret stays singular inside horizontally scrolled code', async ({ page }) => {
   await openNewDocument(page)
 
   await page.keyboard.type('plain paragraph')
@@ -42,14 +30,14 @@ test('native caret takes over inside code and follows horizontal scroll', async 
   const codeContent = page.locator('.xmd-cm-code-line-content', { hasText: 'const seed' })
   await expect(codeContent).toBeVisible()
 
-  // --- Toggle on: caret into the code body ---------------------------------
+  // Code blocks intentionally use the same CM6 cursor layer as prose. The
+  // former native-caret switch left WebKit paint trails after arrow movement.
   await codeContent.click()
-  // Bug fixed by 40fd735: without the class toggle the fake cursor stayed
-  // visible inside code rows and drifted once the row scrolled.
-  await expect(editor).toHaveClass(/xmd-cm-native-code-caret/)
-  // codeBlockPreview.css hides only the primary fake cursor (secondary
-  // multi-cursor carets keep the overlay) with `display: none !important`.
-  await expect.poll(() => primaryCursorDisplay(page)).toMatch(/^(none|absent)$/)
+  await expect(editor).not.toHaveClass(/xmd-cm-native-code-caret/)
+  await expect.poll(() => primaryCursorDisplay(page)).toBe('block')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator('.cm-cursor-primary')).toHaveCount(1)
 
   // The singleton controls live under scrollDOM rather than inside the code
   // row, but their right edge must still be measured from the active card.
@@ -64,14 +52,11 @@ test('native caret takes over inside code and follows horizontal scroll', async 
     return { cardRight: card.right, controlsRight: header.right }
   })
   expect(controlsPlacement).not.toBeNull()
-  expect(controlsPlacement!.cardRight - controlsPlacement!.controlsRight).toBeCloseTo(10, 0)
+  expect(controlsPlacement!.cardRight - controlsPlacement!.controlsRight).toBeCloseTo(0, 0)
 
-  // --- Toggle off: caret back into a plain paragraph ------------------------
+  // The same cursor remains active after returning to prose.
   await page.locator('.cm-line', { hasText: 'plain paragraph' }).click()
   await expect(editor).not.toHaveClass(/xmd-cm-native-code-caret/)
-  // The fake caret must come back for normal text — regression guard for the
-  // class getting stuck on after leaving the block. (The editor is focused,
-  // so drawSelection paints a visible primary cursor again.)
   await expect.poll(() => primaryCursorDisplay(page)).toBe('block')
 
   // --- Caret follows the nested scroller -----------------------------------

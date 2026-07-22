@@ -135,7 +135,7 @@ The frontend isolates desktop capabilities behind the contracts in `src/platform
 
 ### Local development
 
-Install Node.js 22, npm 10, and the stable Rust toolchain. macOS development also requires Xcode Command Line Tools.
+Install Node.js 24, npm 10 or newer, and the stable Rust toolchain. macOS development also requires Xcode Command Line Tools.
 
 ```bash
 npm ci

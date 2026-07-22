@@ -5,9 +5,6 @@ import { defineConfig, devices } from '@playwright/test'
 // needs an actual DOM and trusted input events, which Playwright's
 // page.keyboard/page.mouse provide and jsdom-less Node tests cannot.
 //
-// NOTE: as of this writing this suite has been written but not executed —
-// see docs/ENGINEERING_CONSTRAINTS.md's "测试金字塔" section for the
-// first-run instructions and current status.
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,

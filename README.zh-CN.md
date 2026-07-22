@@ -135,7 +135,7 @@ docs/                 # 架构、用户指南、发布和验收资料
 
 ### 本地开发
 
-先准备 Node.js 22、npm 10 和 Rust stable；macOS 还需要 Xcode Command Line Tools。
+先准备 Node.js 24、npm 10 或更高版本和 Rust stable；macOS 还需要 Xcode Command Line Tools。
 
 ```bash
 npm ci

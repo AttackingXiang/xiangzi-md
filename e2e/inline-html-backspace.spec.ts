@@ -11,8 +11,6 @@ import { activeLineText, editorText, openNewDocument } from './helpers'
  * inline-HTML span loop) reveals both tags whenever the selection touches the
  * span, so the caret at the close tag's boundary sees plain editable text.
  *
- * NOTE: this suite has been written but not executed — see
- * docs/ENGINEERING_CONSTRAINTS.md ("测试金字塔" → Playwright 浏览器回归).
  */
 test('backspace at the </font> right boundary edits instead of dying', async ({ page }) => {
   await openNewDocument(page)
