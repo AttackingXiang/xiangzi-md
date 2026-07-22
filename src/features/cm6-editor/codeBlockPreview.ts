@@ -1,6 +1,7 @@
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import type { Tree } from '@lezer/common'
 import {
+  Annotation,
   EditorState,
   Prec,
   type Extension,
@@ -27,20 +28,26 @@ import {
 } from './codeBlockLanguage'
 import type { CodeLanguageOption } from './codeBlockLanguage'
 import {
-  CODE_CONTROLS_HEIGHT,
-  CODE_CONTROLS_MARGIN,
   CODE_SCROLLBAR_HEIGHT,
   CODE_SCROLLBAR_MARGIN,
+  codeControlsTop,
   codeBlockOverlayHorizontalGeometry,
   codeContentCaretX,
   createCodeScrollbarElement,
   mountedCodeBlockAt,
   pinnedOverlayTop,
-  resolveCodeControlsGutter,
 } from './codeBlockGeometry'
 import type { MountedCodeBlock, OverlayPinGeometry } from './codeBlockGeometry'
 
-export { codeBlockOverlayHorizontalGeometry, pinnedOverlayTop } from './codeBlockGeometry'
+/** Marks a selection re-dispatch whose only purpose is to make CM6 measure
+ * its cursor layer after a nested code-row scroller moved. */
+const codeCaretRepaint = Annotation.define<boolean>()
+
+export {
+  codeBlockOverlayHorizontalGeometry,
+  codeControlsTop,
+  pinnedOverlayTop,
+} from './codeBlockGeometry'
 export type { CodeBlockOverlayHorizontalGeometry, OverlayPinGeometry } from './codeBlockGeometry'
 
 export {
@@ -406,7 +413,12 @@ class CodeBlockScrollPlugin {
     // the browser has placed the caret.
     const pointerSelection =
       update.selectionSet && update.transactions.some((tr) => tr.isUserEvent('select.pointer'))
-    if (update.docChanged || (update.selectionSet && !pointerSelection) || update.geometryChanged) {
+    const repaintOnly = update.transactions.some((tr) => tr.annotation(codeCaretRepaint))
+    if (
+      update.docChanged ||
+      (update.selectionSet && !pointerSelection && !repaintOnly) ||
+      update.geometryChanged
+    ) {
       this.revealPending = true
     }
     if (
@@ -526,7 +538,10 @@ class CodeBlockScrollPlugin {
     this.repaintFrame = requestAnimationFrame(() => {
       this.repaintFrame = 0
       if (!needsCodeCaretRepaint(this.view.state)) return
-      this.view.dispatch({ selection: this.view.state.selection })
+      this.view.dispatch({
+        selection: this.view.state.selection,
+        annotations: codeCaretRepaint.of(true),
+      })
     })
   }
 
@@ -716,12 +731,7 @@ class CodeBlockScrollPlugin {
       view.scaleX,
     )
     const { trackWidth } = horizontal
-    const controlsTop = pinnedOverlayTop(
-      'block-start',
-      geometry,
-      CODE_CONTROLS_HEIGHT,
-      CODE_CONTROLS_MARGIN,
-    )
+    const controlsTop = codeControlsTop(geometry)
 
     const contents = block.contents
     const contentScrollLefts = contents.map((content) => content.scrollLeft)
@@ -742,18 +752,7 @@ class CodeBlockScrollPlugin {
       if (activeLine && activeContent && caretX !== null) {
         const activeRect = activeContent.getBoundingClientRect()
         const leftEdge = activeRect.left + 8
-        // Keep the insertion point clear of the pinned controls while they
-        // overlap the caret's row. With the fence on screen this is the
-        // first body row, exactly as before; with the controls stuck to the
-        // viewport top it is whichever row has scrolled underneath them.
-        const lineTop = (activeRect.top - scrollRect.top) / view.scaleY + viewportTop
-        const lineBottom = (activeRect.bottom - scrollRect.top) / view.scaleY + viewportTop
-        const underControls =
-          controlsTop !== null &&
-          lineBottom > controlsTop &&
-          lineTop < controlsTop + CODE_CONTROLS_HEIGHT
-        const controlsGutter = underControls ? resolveCodeControlsGutter(this.controls.dom) : 0
-        const rightEdge = activeRect.right - controlsGutter - 8
+        const rightEdge = activeRect.right - 8
         let next = activeContent.scrollLeft
         if (caretX < leftEdge) next -= leftEdge - caretX
         else if (caretX > rightEdge) next += caretX - rightEdge
@@ -1062,18 +1061,47 @@ function fencedCodeBoundaryKeybinding(
  *   where only the closing fence has been removed (which would let the next
  *   fence in the document parse as this block's new closing marker and
  *   visually merge two blocks).
+ * - Backspace at the start of the first ordinary blank line *after* a closed
+ *   block removes only the closing fence's trailing newline. That newline is
+ *   part of the atomic fence range, so the generic hidden-boundary command
+ *   would otherwise consume the key even though the fence text is untouched.
  */
 export function fencedCodeBoundaryDeletion(
   state: EditorState,
   forward: boolean,
 ): TransactionSpec | null {
   if (state.readOnly || !state.selection.main.empty) return null
+  const position = state.selection.main.head
+  if (!forward && position > 0) {
+    const line = state.doc.lineAt(position)
+    if (position === line.from && line.length === 0) {
+      let followsClosingFence = false
+      syntaxTree(state).iterate({
+        from: position - 1,
+        to: position,
+        enter(node) {
+          if (node.name !== 'FencedCode') return
+          const preceding = readFencedCode(state, node.from, node.to)
+          if (preceding.closingFrom === null) return false
+          const closing = state.doc.lineAt(preceding.closingFrom)
+          if (closing.to + 1 === position) followsClosingFence = true
+          return false
+        },
+      })
+      if (followsClosingFence) {
+        return {
+          changes: { from: position - 1, to: position },
+          selection: { anchor: position - 1 },
+          scrollIntoView: true,
+          userEvent: 'delete.backward',
+        }
+      }
+    }
+  }
   const data = fencedCodeAtSelection(state)
   if (!data || data.closingFrom === null || data.codeFrom > data.closingFrom) return null
   const lastLine = state.doc.lineAt(Math.max(data.codeFrom, data.closingFrom - 1))
   if (lastLine.length !== 0) return null
-  const position = state.selection.main.head
-
   if (forward) {
     return position === lastLine.from ? {} : null
   }

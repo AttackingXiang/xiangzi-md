@@ -77,22 +77,7 @@ export function codeContentCaretX(content: HTMLElement, lineOffset: number): num
   }
 }
 
-const DEFAULT_CODE_CONTROLS_GUTTER = 176
-const CODE_CONTROLS_GUTTER_MARGIN = 8
-
-export function resolveCodeControlsGutter(header: HTMLElement): number {
-  const cssValue = Number.parseFloat(
-    getComputedStyle(header).getPropertyValue('--xmd-code-controls-gutter'),
-  )
-  const reserved =
-    Number.isFinite(cssValue) && cssValue > 0 ? cssValue : DEFAULT_CODE_CONTROLS_GUTTER
-  const measured = header.getBoundingClientRect().width + CODE_CONTROLS_GUTTER_MARGIN
-  return Math.max(reserved, measured)
-}
-
 export const CODE_CONTROLS_HEIGHT = 28
-export const CODE_CONTROLS_MARGIN = 10
-export const CODE_CONTROLS_INSET = 10
 export const CODE_SCROLLBAR_HEIGHT = 5
 export const CODE_SCROLLBAR_MARGIN = 3
 export const CODE_SCROLLBAR_INSET = 16
@@ -125,7 +110,9 @@ export function codeBlockOverlayHorizontalGeometry(
   const blockLeft = (blockRect.left - scrollRect.left) / scale + scrollLeft
   const blockWidth = blockRect.width / scale
   return {
-    controlsAnchorLeft: blockLeft + blockWidth - CODE_CONTROLS_INSET,
+    // The controls tab shares the card's right border. Keeping the old 10px
+    // inset leaves an awkward ledge between the tab and the rounded corner.
+    controlsAnchorLeft: blockLeft + blockWidth,
     scrollbarLeft: blockLeft + CODE_SCROLLBAR_INSET,
     trackWidth: Math.max(0, blockWidth - 2 * CODE_SCROLLBAR_INSET),
   }
@@ -154,4 +141,18 @@ export function pinnedOverlayTop(
   let top = Math.min(blockBottom - margin - height, viewportBottom - margin - height)
   top = Math.max(top, blockTop + margin)
   return Math.min(top, blockBottom - height)
+}
+
+/** Place the active code controls as a tab joined to the card's top-right
+ * edge. When that edge has scrolled above the viewport, keep the controls
+ * reachable inside the visible part of the card instead of clipping them. */
+export function codeControlsTop(
+  geometry: OverlayPinGeometry,
+  height = CODE_CONTROLS_HEIGHT,
+): number | null {
+  const { blockTop, blockBottom, viewportTop, viewportBottom } = geometry
+  if (blockBottom <= viewportTop || blockTop >= viewportBottom) return null
+  const earTop = blockTop - height + 1
+  if (earTop >= viewportTop) return earTop
+  return Math.max(blockTop, Math.min(viewportTop, blockBottom - height))
 }

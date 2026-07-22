@@ -69,14 +69,6 @@
   padding-top: 10px;
 }
 
-.xmd-cm-editor .cm-line.xmd-cm-code-line-first .xmd-cm-code-line-content {
-  /* Keep text geometry stable while controls appear/disappear. The trailing
-     scrollable space lets a long first line move fully past the overlay
-     without changing the editable element's width after selection changes. */
-  padding-inline-end: var(--xmd-code-controls-gutter, 176px);
-  width: 100%;
-}
-
 .xmd-cm-editor .cm-line.xmd-cm-code-line-last {
   padding-bottom: 10px;
 }
@@ -156,6 +148,11 @@
 
 .xmd-cm-code-preview-header {
   align-items: center;
+  background: color-mix(in srgb, var(--code-card-bg) var(--code-block-opacity, 30%), var(--bg));
+  border: 1px solid var(--code-card-border);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  box-sizing: border-box;
   display: inline-flex;
   gap: 4px;
   /* Match the editor's 16px × 1.75 first-line box explicitly. Avoid `lh`
@@ -164,6 +161,7 @@
      codeBlockPreview.ts. */
   height: 28px;
   line-height: 28px;
+  padding: 2px 6px 3px;
   pointer-events: none;
   position: absolute;
   /* The plugin positions the header by its *right* edge: it writes the

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCodeBlockPreviewDecorations,
   codeBlockOverlayHorizontalGeometry,
+  codeControlsTop,
   codeLanguageOptions,
   collectFencedCodeHiddenRanges,
   fencedCodeBoundaryDeletion,
@@ -286,9 +287,6 @@ describe('CM6 fenced code preview', () => {
   })
 
   describe('pinnedOverlayTop', () => {
-    // Controls: 28px tall, 10px margin — mirrors CODE_CONTROLS_HEIGHT/MARGIN.
-    const controls = (geometry: OverlayPinGeometry): number | null =>
-      pinnedOverlayTop('block-start', geometry, 28, 10)
     // Scrollbar: 5px tall, 3px margin — its top ends up 8px above the block
     // bottom, matching the old fence-relative `lastLineRect.bottom - 8`.
     const scrollbar = (geometry: OverlayPinGeometry): number | null =>
@@ -297,21 +295,21 @@ describe('CM6 fenced code preview', () => {
     it('hides both overlays while the block does not intersect the viewport', () => {
       const above = { blockTop: -500, blockBottom: -100, viewportTop: 0, viewportBottom: 800 }
       const below = { blockTop: 900, blockBottom: 1400, viewportTop: 0, viewportBottom: 800 }
-      expect(controls(above)).toBeNull()
+      expect(codeControlsTop(above)).toBeNull()
       expect(scrollbar(above)).toBeNull()
-      expect(controls(below)).toBeNull()
+      expect(codeControlsTop(below)).toBeNull()
       expect(scrollbar(below)).toBeNull()
     })
 
     it('matches the legacy fence-anchored placement while the whole block is visible', () => {
       const geometry = { blockTop: 100, blockBottom: 400, viewportTop: 0, viewportBottom: 800 }
-      expect(controls(geometry)).toBe(110)
+      expect(codeControlsTop(geometry)).toBe(73)
       expect(scrollbar(geometry)).toBe(392)
     })
 
     it('pins the controls to the viewport top once the fence scrolls out', () => {
       const geometry = { blockTop: -500, blockBottom: 400, viewportTop: 0, viewportBottom: 800 }
-      expect(controls(geometry)).toBe(10)
+      expect(codeControlsTop(geometry)).toBe(0)
     })
 
     it('pins the scrollbar to the viewport bottom while the block continues below', () => {
@@ -323,10 +321,10 @@ describe('CM6 fenced code preview', () => {
       // Only the last 30px of the block remain visible: the sticky header
       // must leave through the top rather than float over what follows.
       const geometry = { blockTop: -500, blockBottom: 30, viewportTop: 0, viewportBottom: 800 }
-      expect(controls(geometry)).toBe(30 - 10 - 28)
+      expect(codeControlsTop(geometry)).toBe(0)
       // …but it never escapes above the block itself.
       const shallow = { blockTop: 5, blockBottom: 20, viewportTop: 0, viewportBottom: 800 }
-      expect(controls(shallow)).toBe(5)
+      expect(codeControlsTop(shallow)).toBe(5)
     })
 
     it('keeps the scrollbar inside the block while the block enters from below', () => {
@@ -346,9 +344,9 @@ describe('CM6 fenced code preview', () => {
         viewportTop,
         viewportBottom: viewportTop + 800,
       })
-      expect(controls(tall(1000))).toBe(1010)
+      expect(codeControlsTop(tall(1000))).toBe(1000)
       expect(scrollbar(tall(1000))).toBe(1792)
-      expect(controls(tall(3000))).toBe(3010)
+      expect(codeControlsTop(tall(3000))).toBe(3000)
       expect(scrollbar(tall(3000))).toBe(3792)
     })
   })
@@ -363,7 +361,7 @@ describe('CM6 fenced code preview', () => {
       )
 
       // Code card occupies scrollDOM content coordinates 150..870.
-      expect(geometry.controlsAnchorLeft).toBe(860)
+      expect(geometry.controlsAnchorLeft).toBe(870)
       expect(geometry.scrollbarLeft).toBe(166)
       expect(geometry.trackWidth).toBe(688)
     })
@@ -377,7 +375,7 @@ describe('CM6 fenced code preview', () => {
       )
 
       // Unscaled code card occupies scrollDOM content coordinates 125..725.
-      expect(geometry.controlsAnchorLeft).toBe(715)
+      expect(geometry.controlsAnchorLeft).toBe(725)
       expect(geometry.scrollbarLeft).toBe(141)
       expect(geometry.trackWidth).toBe(568)
     })
@@ -490,6 +488,25 @@ describe('CM6 fenced code preview', () => {
   })
 
   describe('fencedCodeBoundaryDeletion', () => {
+    it('deletes the first ordinary blank line after a closed code block', () => {
+      const doc = 'before\n```js\ncode()\n```\n\nafter'
+      const blank = doc.indexOf('\n\nafter') + 1
+      const state = stateAt(doc, blank)
+      const spec = fencedCodeBoundaryDeletion(state, false)
+
+      expect(spec).not.toBeNull()
+      const next = state.update(spec!).state
+      expect(next.doc.toString()).toBe('before\n```js\ncode()\n```\nafter')
+      expect(next.doc.toString()).toContain('```js\ncode()\n```')
+      expect(next.selection.main.head).toBe(blank - 1)
+    })
+
+    it('does not intercept Backspace before ordinary text immediately after a code block', () => {
+      const doc = '```js\ncode()\n```\nafter'
+      const after = doc.indexOf('after')
+      expect(fencedCodeBoundaryDeletion(stateAt(doc, after), false)).toBeNull()
+    })
+
     it('swallows Delete at the blank last row so it cannot reach the hidden closing fence', () => {
       const doc = '```js\n\n```'
       const blank = doc.indexOf('\n\n') + 1
