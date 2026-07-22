@@ -135,17 +135,10 @@ Backspace/Delete 已经能正确处理"删除一个真实的空行"。
   两个 atomicRanges 来源合并成一个之后，CM6 原生的 `moveVertically` 已经足够（同 Phase 1
   不变式 5）。这部分行为需要真实 `EditorView` + 布局几何才能断言，本阶段仍未补充集成
   测试，见下面的已知缺口。
-- 代码块内的光标绘制现在也和选区高亮一样切到浏览器原生：`caretInsideFencedCode`
-  在光标为空选区且落在某个可编辑（非 Mermaid）代码 body 内时，给 `view.dom` 加
-  `xmd-cm-native-code-caret` class（`CodeBlockScrollPlugin.updateSelectionPresentation`，
-  与 `xmd-cm-native-code-selection` 同一处），CSS（codeBlockPreview.css）据此隐藏
-  CM6 `drawSelection` 画的 `.cm-cursor-primary`、并解除该行内容元素上被
-  `drawSelection` 设为 transparent 的 `caret-color`。此前用一个 transform 补偿
-  hack（`CodeBlockScrollPlugin` 的 measure read/write 阶段计算/应用
-  `cursorTranslateX`）纠正假光标位置，已整体删除——原生 caret 天然被嵌套横向
-  滚动容器裁剪/跟随，不需要补偿，也不再有"每次按键闪一帧"“失焦重聚焦补偿静默
-  失效”这类该 hack 特有的缺陷。`revealScrollLeft`（把嵌套滚动容器滚到光标可见位置）
-  不受影响，继续保留：原生 caret 只解决"画在哪"，不解决"滚动容器要不要跟着光标走"。
+- 代码块光标统一由 CM6 `drawSelection` 绘制，不再切换浏览器原生 caret。WKWebView 在
+  嵌套横向滚动容器内移动原生 caret 时可能留下逐帧残影；统一绘制模型可以避免方向键
+  每移动一次就多出一条假光标。嵌套滚动发生后通过 `needsCodeCaretRepaint` 重新派发当前
+  selection，让 CM6 光标层按新几何位置重绘。
 
 ## Phase 2 视觉打磨（已完成）
 

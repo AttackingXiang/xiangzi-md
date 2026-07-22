@@ -399,10 +399,14 @@ class CodeBlockScrollPlugin {
   update(update: ViewUpdate): void {
     if (update.docChanged || update.selectionSet) this.updateSelectionPresentation(update.state)
     // Reveal-scrolling (keeping the caret visible inside the nested
-    // scrollers) only follows caret/content/geometry changes — never plain
-    // scrolling, which would yank a deliberately scrolled-away row back to
-    // the caret on the next measure pass.
-    if (update.docChanged || update.selectionSet || update.geometryChanged) {
+    // scrollers) follows edits, keyboard/programmatic caret movement and
+    // geometry changes — but not a plain pointer selection. The clicked DOM
+    // position is already visible by definition; revealing it again with our
+    // controls-gutter margin makes a long code row jump horizontally after
+    // the browser has placed the caret.
+    const pointerSelection =
+      update.selectionSet && update.transactions.some((tr) => tr.isUserEvent('select.pointer'))
+    if (update.docChanged || (update.selectionSet && !pointerSelection) || update.geometryChanged) {
       this.revealPending = true
     }
     if (
@@ -423,7 +427,6 @@ class CodeBlockScrollPlugin {
     this.view.contentDOM.removeEventListener('focus', this.onFocusChange)
     this.view.contentDOM.removeEventListener('blur', this.onFocusChange)
     this.view.dom.classList.remove('xmd-cm-native-code-selection')
-    this.view.dom.classList.remove('xmd-cm-native-code-caret')
     this.stopDragging()
     this.controls.destroy()
     this.scrollbar?.remove()
@@ -444,8 +447,8 @@ class CodeBlockScrollPlugin {
   private readonly onFocusChange = (): void => this.updateSelectionPresentation(this.view.state)
 
   private updateSelectionPresentation(state: EditorState): void {
-    // The native browser selection/caret this presentation relies on (see the
-    // rationale on `selectionIntersectsFencedCode`/`caretInsideFencedCode`)
+    // The native browser selection highlight this presentation relies on (see
+    // the rationale on `selectionIntersectsFencedCode`)
     // only renders while the editor actually holds DOM focus. A search bridge
     // (FindBar) selects matches by dispatching to the view while its own
     // input keeps focus; without this gate that leaves a match inside a code
@@ -455,10 +458,6 @@ class CodeBlockScrollPlugin {
     this.view.dom.classList.toggle(
       'xmd-cm-native-code-selection',
       nativePresentation && selectionIntersectsFencedCode(state),
-    )
-    this.view.dom.classList.toggle(
-      'xmd-cm-native-code-caret',
-      nativePresentation && caretInsideFencedCode(state),
     )
   }
 
@@ -476,9 +475,9 @@ class CodeBlockScrollPlugin {
     if (this.scrollbar && first && this.lineInActiveBlock(first))
       this.updateThumb(this.scrollbar, source.scrollLeft)
     // A nested scrollLeft changed outside a view update; see
-    // `queueSecondaryCaretRepaint` (this also covers scrolled rows of a
-    // *non-active* block that a secondary multi-cursor caret may sit in).
-    this.queueSecondaryCaretRepaint()
+    // `queueCodeCaretRepaint` (this also covers scrolled rows of a
+    // *non-active* block that a multi-cursor caret may sit in).
+    this.queueCodeCaretRepaint()
   }
 
   private lineInActiveBlock(line: HTMLElement): boolean {
@@ -507,7 +506,7 @@ class CodeBlockScrollPlugin {
   }
 
   /**
-   * Task-scoped mitigation for stale secondary carets: CM6's `drawSelection`
+   * CM6's `drawSelection`
    * cursor layer re-measures its markers only during a view update —
    * `LayerView.update` schedules a measure when `cursorLayer.update()`
    * returns true, i.e. on `update.docChanged || update.selectionSet` (or a
@@ -515,22 +514,18 @@ class CodeBlockScrollPlugin {
    * `LayerView.update` in node_modules/@codemirror/view/dist/index.js). A
    * nested code-row `scrollLeft` moving *outside* an update — scrollbar
    * drag/keyboard, `syncFrom`, a reveal-scroll write — therefore leaves
-   * secondary multi-cursor carets (`.cm-cursor-secondary`) painted at stale
-   * coordinates. The primary caret is unaffected: it is the browser-native
-   * one while inside a code body (`caretInsideFencedCode`), and with
-   * multiple ranges CM6 keeps drawing but the same repaint fixes it too.
+   * primary or secondary cursor markers painted at stale coordinates.
    * Re-dispatching the current selection unchanged is the lightest public
    * trigger that sets `update.selectionSet`; an empty `view.dispatch({})`
    * sets neither flag and repaints nothing. Strictly gated by
-   * `needsSecondaryCaretRepaint` so the ordinary single-caret path pays
-   * nothing, and rAF-deduplicated so a burst of scroll writes coalesces
-   * into one repaint.
+   * `needsCodeCaretRepaint` so unrelated selections pay nothing, and
+   * rAF-deduplicated so a burst of scroll writes coalesces into one repaint.
    */
-  private queueSecondaryCaretRepaint(): void {
-    if (this.repaintFrame !== 0 || !needsSecondaryCaretRepaint(this.view.state)) return
+  private queueCodeCaretRepaint(): void {
+    if (this.repaintFrame !== 0 || !needsCodeCaretRepaint(this.view.state)) return
     this.repaintFrame = requestAnimationFrame(() => {
       this.repaintFrame = 0
-      if (!needsSecondaryCaretRepaint(this.view.state)) return
+      if (!needsCodeCaretRepaint(this.view.state)) return
       this.view.dispatch({ selection: this.view.state.selection })
     })
   }
@@ -642,7 +637,7 @@ class CodeBlockScrollPlugin {
     for (const content of block.contents) content.scrollLeft = scrollLeft
     this.syncing = false
     this.updateThumb(scrollbar, scrollLeft)
-    this.queueSecondaryCaretRepaint()
+    this.queueCodeCaretRepaint()
   }
 
   /** `viewportWidth` must be passed from the measure write phase (reading
@@ -858,8 +853,8 @@ class CodeBlockScrollPlugin {
     this.updateThumb(scrollbar, scrollLeft, active.trackWidth)
     // Programmatic scrollLeft writes (reveal-scroll, row catch-up) move the
     // nested scrollers outside CM6's update cycle; see
-    // `queueSecondaryCaretRepaint`.
-    if (wroteScrollLeft) this.queueSecondaryCaretRepaint()
+    // `queueCodeCaretRepaint`.
+    if (wroteScrollLeft) this.queueCodeCaretRepaint()
   }
 }
 
@@ -988,40 +983,13 @@ export function selectionIntersectsFencedCode(state: EditorState): boolean {
   )
 }
 
-/** Use the browser's native caret when the (sole) selection is a collapsed
- * caret positioned inside an editable fenced code body. Same reasoning as
- * `selectionIntersectsFencedCode` above (see also `xmd-cm-native-code-caret`
- * in codeBlockPreview.css): CM6's `drawSelection` cursor overlay paints a
- * `.cm-cursor` div at un-scrolled inline coordinates, so it has no way to
- * know about the nested horizontal scroller each code line owns and drifts
- * out of place once that scroller has moved. The native caret is painted by
- * the browser at the DOM position and is naturally clipped/positioned by
- * that nested scroller, so it never needs correcting. Multiple ranges keep
- * CM6 drawing — this only concerns the single primary caret; secondary
- * carets in a multi-cursor selection still rely on the overlay. */
-export function caretInsideFencedCode(state: EditorState): boolean {
-  if (state.selection.ranges.length !== 1) return false
-  const range = state.selection.main
-  if (!range.empty) return false
-  const data = fencedCodeAt(state, range.head)
-  return (
-    data !== null &&
-    data.language.toLowerCase() !== 'mermaid' &&
-    range.head >= data.codeFrom &&
-    range.head <= data.codeTo
-  )
-}
-
-/** Whether a stale-secondary-caret repaint is warranted after a nested
- * code-row scroller moved outside a view update (see
- * `queueSecondaryCaretRepaint` for the full mechanism): only a multi-cursor
- * selection with at least one range head inside an editable (non-Mermaid)
- * fenced code body can have a CM6-drawn caret whose painted position depends
- * on a nested `scrollLeft`. Everything else — in particular the ordinary
- * single-caret path — must return `false` so it costs nothing. */
-export function needsSecondaryCaretRepaint(state: EditorState): boolean {
-  if (state.selection.ranges.length < 2) return false
+/** Whether a code-caret repaint is warranted after a nested code-row scroller
+ * moved outside a view update (see `queueCodeCaretRepaint`): any collapsed
+ * CM6 range inside an editable non-Mermaid code body depends on that nested
+ * `scrollLeft`; selections elsewhere do not. */
+export function needsCodeCaretRepaint(state: EditorState): boolean {
   return state.selection.ranges.some((range) => {
+    if (!range.empty) return false
     const data = fencedCodeAt(state, range.head)
     return (
       data !== null &&

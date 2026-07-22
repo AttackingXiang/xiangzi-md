@@ -4,7 +4,6 @@ import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
   buildCodeBlockPreviewDecorations,
-  caretInsideFencedCode,
   codeBlockOverlayHorizontalGeometry,
   codeLanguageOptions,
   collectFencedCodeHiddenRanges,
@@ -13,7 +12,7 @@ import {
   fencedCodeLineBoundary,
   fencedCodeSelectAll,
   matchingCodeLanguageOptions,
-  needsSecondaryCaretRepaint,
+  needsCodeCaretRepaint,
   partiallyDeletesFencedCodeFence,
   pinnedOverlayTop,
   readFencedCode,
@@ -244,50 +243,7 @@ describe('CM6 fenced code preview', () => {
     expect(selectionIntersectsFencedCode(mermaidSelection)).toBe(false)
   })
 
-  it('flags a collapsed caret inside an editable code body for the native-caret CSS switch', () => {
-    const doc = 'before\n```ts\nconst answer = 42\n```\nafter'
-    const codeFrom = doc.indexOf('const')
-    const codeTo = codeFrom + 'const answer = 42'.length
-
-    // Caret in the middle of a code line.
-    expect(caretInsideFencedCode(stateAt(doc, codeFrom + 3))).toBe(true)
-    // Caret exactly on the codeFrom/codeTo boundaries is still "inside".
-    expect(caretInsideFencedCode(stateAt(doc, codeFrom))).toBe(true)
-    expect(caretInsideFencedCode(stateAt(doc, codeTo))).toBe(true)
-    // Caret in the surrounding document (outside any fence) is not inside.
-    expect(caretInsideFencedCode(stateAt(doc, 0))).toBe(false)
-    expect(caretInsideFencedCode(stateAt(doc, doc.length))).toBe(false)
-
-    // A non-empty (range) selection keeps CM6's own cursor drawing.
-    const rangeSelection = EditorState.create({
-      doc,
-      selection: EditorSelection.range(codeFrom, codeFrom + 5),
-      extensions: [markdown()],
-    })
-    expect(caretInsideFencedCode(rangeSelection)).toBe(false)
-
-    // Multiple cursors: only a single primary caret is compensated by this
-    // switch, so any secondary range keeps everything on CM6's overlay.
-    // `allowMultipleSelections` must be enabled explicitly — without it
-    // `EditorState.create` silently collapses to just the primary range.
-    const multiCursor = EditorState.create({
-      doc,
-      selection: EditorSelection.create([
-        EditorSelection.cursor(codeFrom),
-        EditorSelection.cursor(codeFrom + 5),
-      ]),
-      extensions: [markdown(), EditorState.allowMultipleSelections.of(true)],
-    })
-    expect(multiCursor.selection.ranges.length).toBe(2)
-    expect(caretInsideFencedCode(multiCursor)).toBe(false)
-
-    // Mermaid fences keep their own dedicated block-replace preview and never
-    // expose an editable code body for this switch to apply to.
-    const mermaid = '```mermaid\ngraph TD\n```'
-    expect(caretInsideFencedCode(stateAt(mermaid, mermaid.indexOf('graph') + 2))).toBe(false)
-  })
-
-  describe('needsSecondaryCaretRepaint', () => {
+  describe('needsCodeCaretRepaint', () => {
     const doc = 'before\n```ts\nconst answer = 42\n```\nafter'
     const codeFrom = doc.indexOf('const')
     const multiCursor = (...heads: number[]): EditorState =>
@@ -297,22 +253,20 @@ describe('CM6 fenced code preview', () => {
         extensions: [markdown(), EditorState.allowMultipleSelections.of(true)],
       })
 
-    it('never fires for a single caret — that path must stay zero-cost', () => {
-      // Inside a code body a single caret is the browser-native one
-      // (caretInsideFencedCode) and needs no CM6 overlay correction.
-      expect(needsSecondaryCaretRepaint(stateAt(doc, codeFrom + 3))).toBe(false)
-      expect(needsSecondaryCaretRepaint(stateAt(doc, 0))).toBe(false)
+    it('repaints a single CM6 caret inside code but ignores one outside', () => {
+      expect(needsCodeCaretRepaint(stateAt(doc, codeFrom + 3))).toBe(true)
+      expect(needsCodeCaretRepaint(stateAt(doc, 0))).toBe(false)
     })
 
     it('fires when any of multiple cursors sits inside an editable code body', () => {
-      expect(needsSecondaryCaretRepaint(multiCursor(codeFrom + 1, codeFrom + 5))).toBe(true)
+      expect(needsCodeCaretRepaint(multiCursor(codeFrom + 1, codeFrom + 5))).toBe(true)
       // One caret outside is enough as long as another is inside: the inside
       // one is CM6-drawn (multi-cursor keeps the overlay) and can go stale.
-      expect(needsSecondaryCaretRepaint(multiCursor(0, codeFrom + 5))).toBe(true)
+      expect(needsCodeCaretRepaint(multiCursor(0, codeFrom + 5))).toBe(true)
     })
 
     it('does not fire when every cursor is outside any code body', () => {
-      expect(needsSecondaryCaretRepaint(multiCursor(0, doc.length))).toBe(false)
+      expect(needsCodeCaretRepaint(multiCursor(0, doc.length))).toBe(false)
     })
 
     it('ignores Mermaid fences, whose preview owns its own rendering', () => {
@@ -327,7 +281,7 @@ describe('CM6 fenced code preview', () => {
         ]),
         extensions: [markdown(), EditorState.allowMultipleSelections.of(true)],
       })
-      expect(needsSecondaryCaretRepaint(state)).toBe(false)
+      expect(needsCodeCaretRepaint(state)).toBe(false)
     })
   })
 
