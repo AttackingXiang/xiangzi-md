@@ -58,10 +58,6 @@
   width: 24px;
 }
 
-.xmd-cm-mermaid-preview-toggle {
-  margin: 4px 0;
-}
-
 .xmd-cm-mermaid-actions .xmd-cm-preview-copy:hover,
 .xmd-cm-mermaid-source-toggle:hover,
 .xmd-cm-mermaid-preview-toggle:hover {
@@ -86,6 +82,7 @@
 }
 
 .xmd-cm-mermaid-content {
+  cursor: zoom-in;
   max-width: 100%;
   min-width: 0;
   width: 100%;

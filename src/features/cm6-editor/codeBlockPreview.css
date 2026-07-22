@@ -176,6 +176,18 @@
   pointer-events: auto;
 }
 
+.xmd-cm-code-preview-header .xmd-cm-mermaid-preview-toggle {
+  border-right: 1px solid var(--code-card-border);
+  border-radius: 5px 0 0 5px;
+  margin-right: 2px;
+  padding-right: 6px;
+  width: 28px;
+}
+
+.xmd-cm-code-preview-header .xmd-cm-mermaid-preview-toggle[hidden] {
+  display: none;
+}
+
 .xmd-cm-code-preview-language {
   appearance: none;
   background: transparent;

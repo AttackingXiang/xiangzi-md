@@ -346,6 +346,7 @@ const EN: Record<string, string> = {
   '创建失败：文件可能已存在': 'Create failed: the file may already exist',
   '创建失败：文件夹可能已存在': 'Create failed: the folder may already exist',
   图表语法有误: 'Diagram syntax error',
+  图表预览: 'Diagram preview',
   // Shortcuts panel groups
   文件: 'File',
   视图: 'View',

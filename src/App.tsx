@@ -65,6 +65,7 @@ import { reorderHeading, revealHeading } from './features/cm6-editor/outline'
 import { tablePickerBridge } from './lib/tablePickerBridge'
 import { tableZoomBridge } from './lib/tableZoomBridge'
 import { linkPromptBridge } from './lib/linkPromptBridge'
+import { editorZoomSource } from './lib/editorZoom'
 import type { Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
 import { useNow } from './hooks/useNow'
@@ -1197,16 +1198,11 @@ export default function App(): JSX.Element {
             onMouseDownCapture={() => window.dispatchEvent(new Event('xmd-clear-select-all'))}
             onDoubleClickCapture={(event) => {
               if (!(event.target instanceof Element)) return
-              const target = event.target
-              const image =
-                target instanceof HTMLImageElement
-                  ? target
-                  : target.closest('[data-xmd-image]')?.querySelector('img')
-              if (!image) return
+              const src = editorZoomSource(event.target)
+              if (!src) return
               event.preventDefault()
               event.stopPropagation()
-              const src = image.currentSrc || image.src
-              if (src) setZoomSrc(src)
+              setZoomSrc(src)
             }}
             onContextMenu={(e) => {
               if (!activeTab) return

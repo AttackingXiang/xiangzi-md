@@ -1,11 +1,11 @@
 import { syntaxTree } from '@codemirror/language'
 import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
-import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { Decoration, WidgetType, type DecorationSet, type EditorView } from '@codemirror/view'
 import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import type { PreviewRange } from './livePreview'
 import { viewportDecorationExtension } from './viewportDecorations'
 import { copySvgMarkupAsImage } from '../../lib/richClipboard'
-import { checkIcon, codeIcon, copyIcon, eyeIcon } from './widgetIcons'
+import { checkIcon, codeIcon, copyIcon } from './widgetIcons'
 import { isExternalDocumentSync } from './sync'
 
 export type MermaidRenderer = (source: string) => Promise<string>
@@ -51,18 +51,15 @@ export const mermaidSourceRange = StateField.define<MermaidSourceRange | null>({
     }
     return next
   },
-  provide: (source) =>
-    EditorView.decorations.from(source, (range) =>
-      range
-        ? Decoration.set([
-            Decoration.widget({
-              block: true,
-              side: -1,
-              widget: new MermaidPreviewToggleWidget(range),
-            }).range(range.from),
-          ])
-        : Decoration.none,
-    ),
+})
+
+const mermaidModeVersion = StateField.define<number>({
+  create: () => 0,
+  update(value, transaction) {
+    return transaction.effects.some((effect) => effect.is(setMermaidSourceRange))
+      ? value + 1
+      : value
+  },
 })
 
 export class MermaidRenderCache {
@@ -160,6 +157,7 @@ export class MermaidWidget extends WidgetType {
     readonly version: string | number,
     readonly errorLabel: string,
     readonly renderForCopy: MermaidRenderer,
+    readonly modeVersion = 0,
   ) {
     super()
   }
@@ -171,7 +169,8 @@ export class MermaidWidget extends WidgetType {
       other.cache === this.cache &&
       other.version === this.version &&
       other.errorLabel === this.errorLabel &&
-      other.renderForCopy === this.renderForCopy
+      other.renderForCopy === this.renderForCopy &&
+      other.modeVersion === this.modeVersion
     )
   }
 
@@ -307,35 +306,6 @@ export class MermaidWidget extends WidgetType {
   }
 }
 
-class MermaidPreviewToggleWidget extends WidgetType {
-  constructor(readonly block: MermaidSourceRange) {
-    super()
-  }
-
-  toDOM(view: EditorView): HTMLElement {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'xmd-cm-mermaid-preview-toggle'
-    button.append(eyeIcon())
-    button.title = '切换到预览'
-    button.setAttribute('aria-label', '切换到 Mermaid 预览')
-    button.addEventListener('click', (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      view.dispatch({
-        effects: setMermaidSourceRange.of(null),
-        selection: { anchor: this.block.from },
-      })
-      view.focus()
-    })
-    return button
-  }
-
-  ignoreEvent(): boolean {
-    return true
-  }
-}
-
 export function buildMermaidPreviewDecorations(
   state: EditorState,
   visibleRanges: readonly PreviewRange[],
@@ -359,6 +329,7 @@ export function buildMermaidPreviewDecorations(
           options.version ?? 'default',
           options.errorLabel ?? 'Diagram error',
           options.renderForCopy ?? options.render,
+          state.field(mermaidModeVersion, false) ?? 0,
         ),
       }).range(block.from, block.to),
     )
@@ -401,6 +372,7 @@ export function markdownMermaidPreview(options: MermaidPreviewOptions): Extensio
   const cache = new MermaidRenderCache(options.cacheSize)
   return [
     mermaidSourceRange,
+    mermaidModeVersion,
     viewportDecorationExtension(
       (view) => buildMermaidPreviewDecorations(view.state, view.visibleRanges, options, cache),
       {

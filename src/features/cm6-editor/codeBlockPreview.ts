@@ -20,7 +20,8 @@ import {
 import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import type { PreviewRange } from './core/types'
 import { viewportDecorationExtension } from './viewportDecorations'
-import { checkIcon, copyIcon } from './widgetIcons'
+import { mermaidSourceRange, setMermaidSourceRange } from './mermaidPreview'
+import { checkIcon, copyIcon, eyeIcon } from './widgetIcons'
 import {
   matchingCodeLanguageOptions,
   normalizedLanguageValue,
@@ -78,6 +79,20 @@ interface FencedCodeData {
   closingFrom: number | null
 }
 
+/** Mermaid normally owns its whole fenced block as a rendered replacement.
+ * While one diagram is explicitly opened as source, let the ordinary fenced
+ * code presentation own that block so editing looks and behaves like every
+ * other code block. */
+function isEditableMermaidSource(state: EditorState, data: FencedCodeData): boolean {
+  if (data.language.toLowerCase() !== 'mermaid') return false
+  const source = state.field(mermaidSourceRange, false)
+  return source?.from === data.from && source.to === data.to
+}
+
+function isCodeBlockPresentation(state: EditorState, data: FencedCodeData): boolean {
+  return data.language.toLowerCase() !== 'mermaid' || isEditableMermaidSource(state, data)
+}
+
 let codeLanguageMenuSequence = 0
 
 /**
@@ -96,6 +111,7 @@ class CodeBlockControlsOverlay {
   /** Point the overlay at a (possibly different) block. Called from the
    * measure write phase, so it must only write DOM, never read layout. */
   readonly setBlock: (data: FencedCodeData, readOnly: boolean) => void
+  readonly setMermaidSourceVisible: (visible: boolean) => void
 
   constructor(view: EditorView, copyLabel: string, copiedLabel: string) {
     /** `from` of the block the controls currently operate on. */
@@ -281,13 +297,36 @@ class CodeBlockControlsOverlay {
       )
     })
 
-    header.append(language, menu, copy)
+    const mermaidPreview = document.createElement('button')
+    mermaidPreview.className = 'xmd-cm-mermaid-preview-toggle'
+    mermaidPreview.type = 'button'
+    mermaidPreview.hidden = true
+    mermaidPreview.setAttribute('aria-label', '切换到 Mermaid 预览')
+    mermaidPreview.title = '切换到预览'
+    mermaidPreview.append(eyeIcon())
+    mermaidPreview.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const source = view.state.field(mermaidSourceRange, false)
+      if (!source) return
+      view.dispatch({
+        effects: setMermaidSourceRange.of(null),
+        selection: { anchor: source.from },
+      })
+      view.focus()
+    })
+
+    header.append(language, menu, mermaidPreview, copy)
     this.dom = header
+    this.setMermaidSourceVisible = (visible) => {
+      mermaidPreview.hidden = !visible
+    }
     this.setBlock = (data, readOnly) => {
       blockFrom = data.from
       const normalized = normalizedLanguageValue(data.language)
       committedLanguage = normalized
       language.disabled = readOnly
+      this.setMermaidSourceVisible(isEditableMermaidSource(view.state, data))
       // Never fight an in-progress edit: only mirror document state into the
       // input while focus is outside the overlay.
       if (!header.contains(document.activeElement)) {
@@ -344,7 +383,7 @@ interface CodeScrollMeasure {
  * editable (non-Mermaid) block — the block the singleton overlays serve. */
 function activeEditableFencedCode(state: EditorState): FencedCodeData | null {
   const data = fencedCodeAtSelection(state)
-  return data !== null && data.language.toLowerCase() !== 'mermaid' ? data : null
+  return data !== null && isCodeBlockPresentation(state, data) ? data : null
 }
 
 /** Keeps every source row full-width while synchronizing their hidden
@@ -399,11 +438,13 @@ class CodeBlockScrollPlugin {
     view.contentDOM.addEventListener('focus', this.onFocusChange)
     view.contentDOM.addEventListener('blur', this.onFocusChange)
     this.updateSelectionPresentation(view.state)
+    this.syncMermaidSourceControl(view.state)
     this.schedule()
     this.frame = requestAnimationFrame(() => this.schedule())
   }
 
   update(update: ViewUpdate): void {
+    this.syncMermaidSourceControl(update.state)
     if (update.docChanged || update.selectionSet) this.updateSelectionPresentation(update.state)
     // Reveal-scrolling (keeping the caret visible inside the nested
     // scrollers) follows edits, keyboard/programmatic caret movement and
@@ -442,6 +483,14 @@ class CodeBlockScrollPlugin {
     this.stopDragging()
     this.controls.destroy()
     this.scrollbar?.remove()
+  }
+
+  private syncMermaidSourceControl(state: EditorState): void {
+    const source = state.field(mermaidSourceRange, false)
+    const head = state.selection.main.head
+    this.controls.setMermaidSourceVisible(
+      Boolean(source && head >= source.from && head <= source.to),
+    )
   }
 
   private readonly onScroll = (event: Event): void => {
@@ -976,7 +1025,7 @@ export function selectionIntersectsFencedCode(state: EditorState): boolean {
   const data = fencedCodeAt(state, range.from)
   return (
     data !== null &&
-    data.language.toLowerCase() !== 'mermaid' &&
+    isCodeBlockPresentation(state, data) &&
     range.from >= data.codeFrom &&
     range.to <= data.codeTo
   )
@@ -992,7 +1041,7 @@ export function needsCodeCaretRepaint(state: EditorState): boolean {
     const data = fencedCodeAt(state, range.head)
     return (
       data !== null &&
-      data.language.toLowerCase() !== 'mermaid' &&
+      isCodeBlockPresentation(state, data) &&
       range.head >= data.codeFrom &&
       range.head <= data.codeTo
     )
@@ -1013,7 +1062,7 @@ export function fencedCodeLineBoundary(
   const data = fencedCodeAt(state, range.head)
   if (
     !data ||
-    data.language.toLowerCase() === 'mermaid' ||
+    !isCodeBlockPresentation(state, data) ||
     range.head < data.codeFrom ||
     range.head > data.codeTo
   )
@@ -1252,7 +1301,7 @@ export function fencedCodeFenceRedirectTarget(
   linePosition: number,
 ): number | null {
   const data = fencedCodeAt(state, linePosition)
-  if (!data || data.language.toLowerCase() === 'mermaid') return null
+  if (!data || !isCodeBlockPresentation(state, data)) return null
   const line = state.doc.lineAt(linePosition)
   const opening = state.doc.lineAt(data.from)
   if (line.from === opening.from) return data.firstCodeLineFrom
@@ -1324,7 +1373,7 @@ export function buildCodeBlockPreviewDecorations(
         if (node.name !== 'FencedCode' || seen.has(node.from)) return
         seen.add(node.from)
         const data = readFencedCode(state, node.from, node.to)
-        if (data.language.toLowerCase() === 'mermaid') return false
+        if (!isCodeBlockPresentation(state, data)) return false
 
         const opening = state.doc.lineAt(data.from)
         const closing = data.closingFrom === null ? null : state.doc.lineAt(data.closingFrom)
@@ -1395,7 +1444,7 @@ export function collectFencedCodeHiddenRanges(
         if (node.name !== 'FencedCode' || seen.has(node.from)) return
         seen.add(node.from)
         const data = readFencedCode(state, node.from, node.to)
-        if (data.language.toLowerCase() === 'mermaid') return false
+        if (!isCodeBlockPresentation(state, data)) return false
 
         const opening = state.doc.lineAt(data.from)
         hidden.push({
@@ -1432,6 +1481,10 @@ export function markdownCodeBlockPreview(options: CodeBlockPreviewOptions = {}):
       {
         rebuildOnSelection: false,
         rebuildOnSyntaxTree: true,
+        rebuildOnUpdate: (update) =>
+          update.transactions.some((transaction) =>
+            transaction.effects.some((effect) => effect.is(setMermaidSourceRange)),
+          ),
       },
     ),
     hiddenRangeSource.of(({ state, visibleRanges }) =>

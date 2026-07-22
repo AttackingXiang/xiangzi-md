@@ -64,6 +64,7 @@ export function viewportDecorationExtension(
   const observer = ViewPlugin.fromClass(
     class {
       private scheduled = false
+      private rerunScheduled = false
       private destroyed = false
       private dispatching = false
 
@@ -96,7 +97,15 @@ export function viewportDecorationExtension(
       }
 
       private schedule(): void {
-        if (this.scheduled || this.destroyed) return
+        if (this.destroyed) return
+        if (this.scheduled) {
+          // A state transition can change both the feature-owned field and the
+          // viewport geometry before this queued rebuild runs. One follow-up
+          // pass observes the post-decoration geometry instead of dropping the
+          // newer request (notably Mermaid source -> preview toggles).
+          this.rerunScheduled = true
+          return
+        }
         this.scheduled = true
         queueMicrotask(() => {
           this.scheduled = false
@@ -107,6 +116,10 @@ export function viewportDecorationExtension(
             this.view.dispatch({ effects: replaceDecorations.of(decorations) })
           } finally {
             this.dispatching = false
+          }
+          if (this.rerunScheduled) {
+            this.rerunScheduled = false
+            this.schedule()
           }
         })
       }
