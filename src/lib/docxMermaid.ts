@@ -1,5 +1,5 @@
 import { renderMermaidForExport } from './mermaidPreview'
-import { svgMarkupToPng } from './svgImage'
+import { svgMarkupToPng } from './richClipboard'
 
 type MermaidImageRenderer = (source: string) => Promise<string>
 
