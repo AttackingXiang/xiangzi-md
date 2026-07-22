@@ -22,6 +22,19 @@ use tempfile::NamedTempFile;
 const MAX_PNG_RAW_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 const MAX_JPEG_RAW_BYTES: u64 = 512 * 1024 * 1024;
 
+fn raster_chunk_payload(bytes: &[u8]) -> AppResult<(&str, &[u8])> {
+    let id_length = bytes.first().copied().unwrap_or_default() as usize;
+    if id_length == 0 || bytes.len() < id_length + 1 {
+        return Err(AppError::new(
+            "raster_chunk_invalid",
+            "导出图片分片缺少任务标识",
+        ));
+    }
+    let id = std::str::from_utf8(&bytes[1..=id_length])
+        .map_err(|_| AppError::new("raster_chunk_invalid", "导出图片分片的任务标识编码无效"))?;
+    Ok((id, &bytes[id_length + 1..]))
+}
+
 #[derive(Clone, Copy)]
 enum RasterFormat {
     Png,
@@ -256,18 +269,18 @@ pub async fn append_raster_export(
     store: State<'_, RasterExportStore>,
     request: tauri::ipc::Request<'_>,
 ) -> AppResult<()> {
-    let session_id = request
-        .headers()
-        .get("x-xmd-raster-session")
-        .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| AppError::new("导出任务缺失", "缺少导出任务标识"))?
-        .to_owned();
     let bytes = match request.body() {
         tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
         _ => return Err(AppError::new("导出数据无效", "导出像素必须使用二进制传输")),
     };
+    // WebView2 may strip application-defined headers from Tauri's custom IPC
+    // protocol. Carry the small session id in the raw body so Windows and
+    // WebKit use exactly the same transport.
+    let (session_id, pixels) = raster_chunk_payload(&bytes)?;
+    let session_id = session_id.to_owned();
+    let pixels = pixels.to_vec();
     let store = store.inner().clone();
-    blocking(move || store.append(&session_id, &bytes)).await
+    blocking(move || store.append(&session_id, &pixels)).await
 }
 
 #[tauri::command]
@@ -313,5 +326,15 @@ mod tests {
             .expect_err("one RGBA pixel is four bytes");
         assert_eq!(error.code, "raster_data_overflow");
         store.cancel(&id).expect("cancel");
+    }
+
+    #[test]
+    fn decodes_session_id_from_raw_chunk_body() {
+        let (id, pixels) = raster_chunk_payload(&[3, b'a', b'b', b'c', 1, 2, 3]).expect("chunk");
+        assert_eq!(id, "abc");
+        assert_eq!(pixels, &[1, 2, 3]);
+
+        let error = raster_chunk_payload(&[4, b'a']).expect_err("truncated id must fail");
+        assert_eq!(error.code, "raster_chunk_invalid");
     }
 }

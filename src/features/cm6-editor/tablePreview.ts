@@ -14,6 +14,7 @@ import {
 } from '../../lib/tableColumnSizing'
 import { tableZoomBridge } from '../../lib/tableZoomBridge'
 import { t } from '../../lib/i18n'
+import { shortcutHint } from '../../lib/shortcuts'
 import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import './tablePreview.css'
 
@@ -895,20 +896,20 @@ function openTableContextMenu(event: MouseEvent, ctx: TableMenuContext): void {
     {
       label: t('剪切'),
       icon: 'scissors',
-      shortcut: '⌘X',
+      shortcut: shortcutHint('Mod+X'),
       action: () => document.execCommand('cut'),
       disabled: readOnly,
     },
     {
       label: t('复制'),
       icon: 'copy',
-      shortcut: '⌘C',
+      shortcut: shortcutHint('Mod+C'),
       action: () => document.execCommand('copy'),
     },
     {
       label: t('粘贴'),
       icon: 'clipboardPaste',
-      shortcut: '⌘V',
+      shortcut: shortcutHint('Mod+V'),
       action: () => document.execCommand('paste'),
       disabled: readOnly,
     },
@@ -962,7 +963,7 @@ function openTableContextMenu(event: MouseEvent, ctx: TableMenuContext): void {
       label: t('删行'),
       icon: 'trash',
       title: t('删除当前行'),
-      shortcut: '⌘⌫',
+      shortcut: shortcutHint('Mod+Backspace'),
       action: () => applyTableEdit(view, table, (data) => deleteRowAt(data, bodyRowIndex ?? 0)),
       disabled: readOnly || bodyRowIndex === null,
       danger: true,
@@ -1083,7 +1084,7 @@ function openTableContextMenu(event: MouseEvent, ctx: TableMenuContext): void {
     {
       label: t('全选'),
       icon: 'selectAll',
-      shortcut: '⌘A',
+      shortcut: shortcutHint('Mod+A'),
       action: () => {
         cellElement.focus()
         const selection = window.getSelection()

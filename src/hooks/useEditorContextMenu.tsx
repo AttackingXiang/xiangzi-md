@@ -29,6 +29,7 @@ import { clipboardCmd, editorCmd, getSelectedHeadingLevel, hasWysiwyg } from '..
 import { t } from '../lib/i18n'
 import { copyImageElement } from '../lib/richClipboard'
 import { tablePickerBridge } from '../lib/tablePickerBridge'
+import { shortcutHint } from '../lib/shortcuts'
 
 export function useEditorContextMenu(
   setCtxMenu: Dispatch<SetStateAction<ContextMenuState>>,
@@ -46,12 +47,22 @@ export function useEditorContextMenu(
               },
             ]
           : []),
-        { label: t('剪切'), icon: <Scissors size={sz} />, hint: '⌘X', onClick: clipboardCmd.cut },
-        { label: t('复制'), icon: <Copy size={sz} />, hint: '⌘C', onClick: clipboardCmd.copy },
+        {
+          label: t('剪切'),
+          icon: <Scissors size={sz} />,
+          hint: shortcutHint('Mod+X'),
+          onClick: clipboardCmd.cut,
+        },
+        {
+          label: t('复制'),
+          icon: <Copy size={sz} />,
+          hint: shortcutHint('Mod+C'),
+          onClick: clipboardCmd.copy,
+        },
         {
           label: t('粘贴'),
           icon: <ClipboardPaste size={sz} />,
-          hint: '⌘V',
+          hint: shortcutHint('Mod+V'),
           onClick: clipboardCmd.paste,
         },
       ]
@@ -61,7 +72,7 @@ export function useEditorContextMenu(
           {
             label: t('加粗'),
             icon: <Bold size={sz} />,
-            hint: '⌘B',
+            hint: shortcutHint('Mod+B'),
             onClick: editorCmd.bold,
             separatorBefore: true,
             compactGroup: 'inline-format',
@@ -69,7 +80,7 @@ export function useEditorContextMenu(
           {
             label: t('斜体'),
             icon: <Italic size={sz} />,
-            hint: '⌘I',
+            hint: shortcutHint('Mod+I'),
             onClick: editorCmd.italic,
             compactGroup: 'inline-format',
           },
@@ -82,7 +93,7 @@ export function useEditorContextMenu(
           {
             label: t('行内代码'),
             icon: <Code size={sz} />,
-            hint: '⌘E',
+            hint: shortcutHint('Mod+E'),
             onClick: editorCmd.inlineCode,
             compactGroup: 'inline-format',
           },
@@ -188,7 +199,7 @@ export function useEditorContextMenu(
       items.push({
         label: t('全选'),
         icon: <TextSelect size={sz} />,
-        hint: '⌘A',
+        hint: shortcutHint('Mod+A'),
         onClick: clipboardCmd.selectAll,
         separatorBefore: true,
       })

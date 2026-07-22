@@ -52,6 +52,18 @@ function subscribe<T>(
   }
 }
 
+export function rasterChunkPayload(sessionId: string, chunk: Uint8Array): Uint8Array {
+  const encodedSessionId = new TextEncoder().encode(sessionId)
+  if (encodedSessionId.byteLength === 0 || encodedSessionId.byteLength > 255) {
+    throw new Error('导出任务标识无效')
+  }
+  const payload = new Uint8Array(1 + encodedSessionId.byteLength + chunk.byteLength)
+  payload[0] = encodedSessionId.byteLength
+  payload.set(encodedSessionId, 1)
+  payload.set(chunk, 1 + encodedSessionId.byteLength)
+  return payload
+}
+
 /** `@tauri-apps/plugin-updater` declares this shape but doesn't export it. */
 interface UpdateMetadata {
   rid: number
@@ -319,9 +331,7 @@ export const tauriDesktopAdapter: DesktopPort = {
       onProgress?.({ phase: 'rendering', percent: 0 })
       for await (const chunk of source.chunks()) {
         signal?.throwIfAborted()
-        await invoke('append_raster_export', chunk, {
-          headers: { 'x-xmd-raster-session': sessionId },
-        })
+        await invoke('append_raster_export', rasterChunkPayload(sessionId, chunk))
         signal?.throwIfAborted()
         writtenBytes += chunk.byteLength
         onProgress?.({

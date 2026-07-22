@@ -151,7 +151,9 @@ export function useExportActions(
       // 获取文档所在目录（用于嵌入相对路径图片）
       const docDir = tab.path ? dirName(tab.path) : null
 
-      const res = await desktop.exportDocx(tab.content, docDir, tab.name ?? 'document')
+      const { prepareMarkdownForDocx } = await import('../lib/docxMermaid')
+      const markdown = await prepareMarkdownForDocx(tab.content)
+      const res = await desktop.exportDocx(markdown, docDir, tab.name ?? 'document')
       if (res) setExportResultPath(res.path)
     } catch (error) {
       window.alert(t('Word 导出失败：\n') + (error as Error).message)

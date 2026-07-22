@@ -79,8 +79,8 @@ export default function ControlsSection({ settings, onChange, en }: SectionProps
           label={en ? 'Show settings button' : '显示设置按钮'}
           description={
             en
-              ? 'Hidden by default — settings stay reachable with ⌘, or the command palette.'
-              : '默认隐藏——仍可用 ⌘, 或命令面板打开设置。'
+              ? 'Hidden by default — settings stay reachable with Command/Ctrl+, or the command palette.'
+              : '默认隐藏——仍可用 Command/Ctrl+, 或命令面板打开设置。'
           }
           checked={settings.showSettingsButton}
           onChange={(showSettingsButton) => onChange({ showSettingsButton })}

@@ -385,3 +385,9 @@ export function displayShortcut(binding: string): string[] {
       }
   return binding.split('+').map((part) => display[part] || part)
 }
+
+/** Compact, platform-correct shortcut text for tooltips and context menus. */
+export function shortcutHint(binding: string): string {
+  const parts = displayShortcut(binding)
+  return /mac/i.test(navigator.platform) ? parts.join('') : parts.join('+')
+}

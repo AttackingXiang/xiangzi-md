@@ -288,9 +288,10 @@ describe('tauriDesktopAdapter', () => {
       height: 1,
       format: 'jpeg',
     })
-    expect(invokeMock).toHaveBeenCalledWith('append_raster_export', chunk, {
-      headers: { 'x-xmd-raster-session': 'raster-1' },
-    })
+    expect(invokeMock).toHaveBeenCalledWith(
+      'append_raster_export',
+      new Uint8Array([8, ...new TextEncoder().encode('raster-1'), ...chunk]),
+    )
     expect(invokeMock).toHaveBeenCalledWith('finish_raster_export', {
       sessionId: 'raster-1',
     })

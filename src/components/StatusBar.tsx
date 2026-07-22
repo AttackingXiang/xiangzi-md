@@ -3,6 +3,7 @@ import { BookOpen, Code2, Eye } from 'lucide-react'
 import type { Tab } from '../types'
 import type { TextCursorInfo } from './TextEditor'
 import { t } from '../lib/i18n'
+import { shortcutHint } from '../lib/shortcuts'
 
 /** 文本文件的状态栏信息（Markdown 文档为 null） */
 export interface TextStatus {
@@ -114,7 +115,7 @@ const StatusBar = memo(function StatusBar({
               <button
                 className={`status-action${sourceMode ? ' active' : ''}`}
                 type="button"
-                title={`${t('源码模式')}（${sourceMode ? t('已开启') : t('已关闭')}）⌘/`}
+                title={`${t('源码模式')}（${sourceMode ? t('已开启') : t('已关闭')}）${shortcutHint('Mod+/')}`}
                 aria-pressed={sourceMode}
                 onClick={onToggleSource}
               >

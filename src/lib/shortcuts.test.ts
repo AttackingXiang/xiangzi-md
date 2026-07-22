@@ -4,6 +4,7 @@ import {
   effectiveShortcut,
   effectiveShortcutMap,
   isSafeShortcut,
+  shortcutHint,
   shortcutFromKeyboardEvent,
 } from './shortcuts'
 
@@ -30,6 +31,8 @@ function keyEvent(fields: {
 }
 
 describe('keyboard shortcuts', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   it('uses defaults until a user override is present', () => {
     expect(effectiveShortcut({}, 'save')).toBe('Mod+S')
     expect(effectiveShortcut({ save: 'Mod+Alt+S' }, 'save')).toBe('Mod+Alt+S')
@@ -55,6 +58,13 @@ describe('keyboard shortcuts', () => {
     expect(effectiveShortcut({}, 'demote-heading')).toBe('Mod+Alt+ArrowDown')
     const bindings = SHORTCUT_DEFINITIONS.map((definition) => definition.defaultBinding)
     expect(new Set(bindings).size).toBe(bindings.length)
+  })
+
+  it('formats tooltip hints for macOS and Windows', () => {
+    vi.stubGlobal('navigator', { platform: 'MacIntel' })
+    expect(shortcutHint('Mod+Shift+K')).toBe('⌘⇧K')
+    vi.stubGlobal('navigator', { platform: 'Win32' })
+    expect(shortcutHint('Mod+Shift+K')).toBe('Ctrl+Shift+K')
   })
 })
 

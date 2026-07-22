@@ -3,6 +3,7 @@ import { ChevronDown, List, MapPin, PanelLeft, Pin, Plus, X } from 'lucide-react
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 import { stripExtension } from '../lib/path'
+import { shortcutHint } from '../lib/shortcuts'
 
 interface Props {
   tabs: Tab[]
@@ -193,7 +194,7 @@ const TabBar = memo(function TabBar({
     <div className="tabbar">
       <button
         className="icon-btn drag-none"
-        title={`${t('切换侧边栏')} (⌘\\)`}
+        title={`${t('切换侧边栏')} (${shortcutHint('Mod+\\')})`}
         onClick={onToggleSidebar}
       >
         <PanelLeft size={16} />
@@ -323,7 +324,7 @@ const TabBar = memo(function TabBar({
 
       <button
         className={`icon-btn drag-none${outlineVisible ? ' active' : ''}`}
-        title={`${t('大纲')}（${outlineVisible ? t('已显示') : t('已隐藏')}）⌘⇧K`}
+        title={`${t('大纲')}（${outlineVisible ? t('已显示') : t('已隐藏')}）${shortcutHint('Mod+Shift+K')}`}
         onClick={onToggleOutline}
       >
         <List size={16} />

@@ -57,7 +57,7 @@ pub fn find_pandoc(override_path: Option<&str>) -> Option<PathBuf> {
     }
 
     // 3. 尝试 PATH（执行 --version 探测是否存在）
-    let ok = std::process::Command::new("pandoc")
+    let ok = make_command(Path::new("pandoc"))
         .arg("--version")
         .output()
         .map(|o| o.status.success())
@@ -152,7 +152,7 @@ pub fn find_pandoc_full(override_path: Option<&str>) -> Option<PathBuf> {
     }
 
     // 最后：PATH
-    let ok = std::process::Command::new("pandoc")
+    let ok = make_command(Path::new("pandoc"))
         .arg("--version")
         .output()
         .map(|o| o.status.success())
