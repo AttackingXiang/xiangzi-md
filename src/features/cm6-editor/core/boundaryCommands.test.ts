@@ -49,30 +49,42 @@ function deleteAtQuoteBoundary(state: EditorState, forward: boolean): EditorStat
 }
 
 describe('block split/join commands', () => {
-  it('splits top-level paragraphs like ProseMirror instead of inserting a soft source line', () => {
+  it('inserts one adjacent line on the first Enter', () => {
     const middle = createState('AlphaBeta', 5)
     const splitMiddle = splitTopLevelMarkdownBlock(middle)
     expect(splitMiddle).not.toBeNull()
     const afterMiddle = middle.update(splitMiddle!).state
-    expect(afterMiddle.doc.toString()).toBe('Alpha\n\nBeta')
-    expect(afterMiddle.selection.main.head).toBe(7)
+    expect(afterMiddle.doc.toString()).toBe('Alpha\nBeta')
+    expect(afterMiddle.selection.main.head).toBe(6)
 
     const end = createState('Alpha', 5)
     const splitEnd = splitTopLevelMarkdownBlock(end)
     expect(splitEnd).not.toBeNull()
     const afterEnd = end.update(splitEnd!).state
-    expect(afterEnd.doc.toString()).toBe('Alpha\n\n')
+    expect(afterEnd.doc.toString()).toBe('Alpha\n')
     expect(afterEnd.selection.main.head).toBe(6)
 
+    const heading = createState('# AlphaBeta', 7)
+    const splitHeading = splitTopLevelMarkdownBlock(heading)
+    expect(splitHeading).not.toBeNull()
+    expect(heading.update(splitHeading!).state.doc.toString()).toBe('# Alpha\nBeta')
+  })
+
+  it('promotes an existing soft line boundary to a paragraph break on the second Enter', () => {
     const softLine = createState('Alpha\nBeta', 5)
     const splitSoftLine = splitTopLevelMarkdownBlock(softLine)
     expect(splitSoftLine).not.toBeNull()
     expect(softLine.update(splitSoftLine!).state.doc.toString()).toBe('Alpha\n\nBeta')
 
-    const heading = createState('# AlphaBeta', 7)
-    const splitHeading = splitTopLevelMarkdownBlock(heading)
-    expect(splitHeading).not.toBeNull()
-    expect(heading.update(splitHeading!).state.doc.toString()).toBe('# Alpha\n\nBeta')
+    const startOfSoftLine = createState('Alpha\nBeta', 6)
+    const splitAtStart = splitTopLevelMarkdownBlock(startOfSoftLine)
+    expect(splitAtStart).not.toBeNull()
+    expect(startOfSoftLine.update(splitAtStart!).state.doc.toString()).toBe('Alpha\n\nBeta')
+
+    const trailingSoftLine = createState('Alpha\n', 6)
+    const splitAtDocumentEnd = splitTopLevelMarkdownBlock(trailingSoftLine)
+    expect(splitAtDocumentEnd).not.toBeNull()
+    expect(trailingSoftLine.update(splitAtDocumentEnd!).state.doc.toString()).toBe('Alpha\n\n')
   })
 
   it('writes Shift+Enter as a portable hard break', () => {

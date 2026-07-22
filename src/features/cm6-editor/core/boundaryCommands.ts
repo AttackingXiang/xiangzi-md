@@ -47,13 +47,29 @@ function topLevelParagraphAt(
 }
 
 /**
- * ProseMirror-style Enter for a top-level text block: split the block,
- * rather than adding a source-only soft line. Markdown serializes the two
- * blocks with exactly one structural blank line (`\n\n`).
+ * Plain Enter inserts one source newline so consecutive visual lines stay
+ * adjacent. Pressing Enter again at that soft-line boundary promotes it to
+ * Markdown's structural paragraph separator (`\n\n`).
  */
 export function splitTopLevelMarkdownBlock(state: EditorState): TransactionSpec | null {
   if (state.readOnly) return null
   const selection = state.selection.main
+  // After the first Enter at document end, the caret sits on a trailing empty
+  // line that is outside the preceding Markdown AST block. A second Enter must
+  // still be handled here so it creates the structural blank line.
+  if (
+    selection.empty &&
+    selection.head === state.doc.length &&
+    selection.head > 0 &&
+    state.doc.sliceString(selection.head - 1, selection.head) === '\n'
+  ) {
+    return {
+      changes: { from: selection.head, insert: '\n' },
+      selection: { anchor: selection.head + 1 },
+      scrollIntoView: true,
+      userEvent: 'input',
+    }
+  }
   const start = topLevelBlockAt(state, selection.from, -1)
   const end = topLevelBlockAt(state, selection.to, -1)
   if (!start || start !== end) return null
@@ -62,9 +78,8 @@ export function splitTopLevelMarkdownBlock(state: EditorState): TransactionSpec 
   const line = state.doc.lineAt(head)
   let from = selection.from
   let to = selection.to
-  // At document end, the second newline creates a trailing editable paragraph
-  // whose source position is immediately after the first newline.
-  let anchor = selection.to === state.doc.length ? from + 1 : from + 2
+  let insert = '\n'
+  let anchor = from + 1
 
   // A soft source newline already inside one paragraph is replaced, not kept
   // as an additional explicit blank line when the user splits at its edge.
@@ -76,6 +91,7 @@ export function splitTopLevelMarkdownBlock(state: EditorState): TransactionSpec 
   ) {
     from = head
     to = head + 1
+    insert = '\n\n'
     anchor = head + 2
   } else if (
     selection.empty &&
@@ -85,11 +101,12 @@ export function splitTopLevelMarkdownBlock(state: EditorState): TransactionSpec 
   ) {
     from = head - 1
     to = head
+    insert = '\n\n'
     anchor = head + 1
   }
 
   return {
-    changes: { from, to, insert: '\n\n' },
+    changes: { from, to, insert },
     selection: { anchor },
     scrollIntoView: true,
     userEvent: 'input',

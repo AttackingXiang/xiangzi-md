@@ -25,6 +25,23 @@ Xiangzi MD desktop release.
     ).toEqual(['Open images with a double-click', 'Faster export'])
   })
 
+  it('collects bullets under nested release-note headings', () => {
+    expect(
+      extractUpdateHighlights(`
+## 本次更新
+
+### 改进
+- 普通回车只换一行
+
+### 修复
+- 更新弹窗重新显示更新内容
+
+## 下载说明
+- macOS Universal DMG
+`),
+    ).toEqual(['普通回车只换一行', '更新弹窗重新显示更新内容'])
+  })
+
   it('hides legacy technical release text without an update section', () => {
     expect(extractUpdateHighlights('- Signed package\n- Windows x64 installer')).toEqual([])
   })
