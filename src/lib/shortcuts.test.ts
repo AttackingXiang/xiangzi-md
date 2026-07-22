@@ -1,10 +1,33 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   SHORTCUT_DEFINITIONS,
   effectiveShortcut,
   effectiveShortcutMap,
   isSafeShortcut,
+  shortcutFromKeyboardEvent,
 } from './shortcuts'
+
+function stubMac(): void {
+  vi.stubGlobal('navigator', { platform: 'MacIntel' })
+}
+
+/** A minimal stand-in — `shortcutFromKeyboardEvent` only reads these fields. */
+function keyEvent(fields: {
+  code: string
+  key: string
+  metaKey?: boolean
+  ctrlKey?: boolean
+  altKey?: boolean
+  shiftKey?: boolean
+}): KeyboardEvent {
+  return {
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...fields,
+  } as KeyboardEvent
+}
 
 describe('keyboard shortcuts', () => {
   it('uses defaults until a user override is present', () => {
@@ -32,5 +55,59 @@ describe('keyboard shortcuts', () => {
     expect(effectiveShortcut({}, 'demote-heading')).toBe('Mod+Alt+ArrowDown')
     const bindings = SHORTCUT_DEFINITIONS.map((definition) => definition.defaultBinding)
     expect(new Set(bindings).size).toBe(bindings.length)
+  })
+})
+
+describe('shortcutFromKeyboardEvent', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('records the plain modifier+letter case', () => {
+    stubMac()
+    expect(shortcutFromKeyboardEvent(keyEvent({ code: 'KeyB', key: 'b', metaKey: true }))).toBe(
+      'Mod+B',
+    )
+  })
+
+  it('reads the unshifted physical key for Shift+punctuation instead of the OS-composed symbol', () => {
+    stubMac()
+    // A real Shift+/ keydown reports `key: "?"`; recording that literally
+    // would make `isSafeShortcut` reject it (its charset only covers the
+    // unshifted punctuation), silently blocking the whole combo.
+    expect(
+      shortcutFromKeyboardEvent(
+        keyEvent({ code: 'Slash', key: '?', metaKey: true, shiftKey: true }),
+      ),
+    ).toBe('Mod+Shift+/')
+  })
+
+  it('reads the unshifted digit for Shift+digit instead of the OS-composed symbol', () => {
+    stubMac()
+    expect(
+      shortcutFromKeyboardEvent(
+        keyEvent({ code: 'Digit1', key: '!', metaKey: true, shiftKey: true }),
+      ),
+    ).toBe('Mod+Shift+1')
+  })
+
+  it('reads the physical key for a Mac Option-only combo instead of the composed accent character', () => {
+    stubMac()
+    // Option+S alone reports `key: "ß"` on macOS (Cmd held would suppress
+    // this composition, but a bare Alt-only binding is allowed by
+    // isSafeShortcut, so it must still be recordable).
+    expect(shortcutFromKeyboardEvent(keyEvent({ code: 'KeyS', key: 'ß', altKey: true }))).toBe(
+      'Alt+S',
+    )
+  })
+
+  it('every combo it can produce for a letter/digit/punctuation key passes isSafeShortcut', () => {
+    stubMac()
+    const codes = ['KeyK', 'Digit5', 'Comma', 'Slash', 'BracketLeft']
+    for (const code of codes) {
+      const binding = shortcutFromKeyboardEvent(
+        keyEvent({ code, key: code, metaKey: true, shiftKey: true }),
+      )
+      expect(binding).not.toBeNull()
+      expect(isSafeShortcut(binding!)).toBe(true)
+    }
   })
 })

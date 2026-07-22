@@ -30,9 +30,12 @@ export type TableCellShortcutRoute =
 export function routeTableCellShortcut(
   action: ShortcutAction,
   target: EventTarget | null,
+  binding: string,
 ): TableCellShortcutRoute {
   if (!tableCellCommandBridge.ownsTarget(target)) return { kind: 'outer' }
-  if (action === 'select-all') return { kind: 'native' }
+  // Only the literal native combo defers — a customized select-all binding
+  // has no browser/OS handler to fall back to, so it must still dispatch.
+  if (action === 'select-all' && binding === 'Mod+A') return { kind: 'native' }
   if (!isTableCellFormattingShortcut(action)) return { kind: 'outer' }
   const format = TABLE_CELL_INLINE_ACTIONS[action]
   return format ? { kind: 'inline', format } : { kind: 'blocked' }
@@ -58,7 +61,7 @@ export function useAppShortcuts(
       if (!binding) return
       const action = activeBindings.get(binding)
       if (action) {
-        const tableRoute = routeTableCellShortcut(action, event.target)
+        const tableRoute = routeTableCellShortcut(action, event.target, binding)
         if (tableRoute.kind !== 'outer') {
           if (tableRoute.kind === 'native') return
           if (tableRoute.kind === 'inline' || tableRoute.kind === 'blocked') {
@@ -68,7 +71,14 @@ export function useAppShortcuts(
             return
           }
         }
-        if (action === 'select-all' && shouldDeferSelectAllToFocusedEditor(event.target)) return
+        // Same reasoning as routeTableCellShortcut's native branch: only the
+        // literal default combo has a browser/OS select-all to defer to.
+        if (
+          action === 'select-all' &&
+          binding === 'Mod+A' &&
+          shouldDeferSelectAllToFocusedEditor(event.target)
+        )
+          return
         event.preventDefault()
         event.stopPropagation()
         dispatch(action)

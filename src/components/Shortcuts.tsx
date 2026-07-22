@@ -115,7 +115,13 @@ export default function Shortcuts({ overrides, onChange }: Props): JSX.Element {
                     className={`shortcut-recorder${recording === definition.id ? ' recording' : ''}`}
                     data-shortcut-recorder
                     aria-label={`${en ? definition.labelEn : definition.labelZh}: ${binding}`}
-                    onClick={() => {
+                    onClick={(event) => {
+                      // WKWebView (macOS) does not move DOM focus to a
+                      // clicked <button> the way Chromium does, so the
+                      // recorder's own onKeyDown below would never fire
+                      // without this — the keydown would land on whatever
+                      // element was previously focused instead.
+                      event.currentTarget.focus()
                       setRecording(definition.id)
                       setError(null)
                     }}

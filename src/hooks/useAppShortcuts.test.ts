@@ -91,10 +91,37 @@ describe('application shortcut focus routing', () => {
       }),
     })
 
-    expect(routeTableCellShortcut('bold', element)).toEqual({ kind: 'inline', format: 'bold' })
-    expect(routeTableCellShortcut('heading-2', element)).toEqual({ kind: 'blocked' })
-    expect(routeTableCellShortcut('code-block', element)).toEqual({ kind: 'blocked' })
-    expect(routeTableCellShortcut('select-all', element)).toEqual({ kind: 'native' })
-    expect(routeTableCellShortcut('save', element)).toEqual({ kind: 'outer' })
+    expect(routeTableCellShortcut('bold', element, 'Mod+B')).toEqual({
+      kind: 'inline',
+      format: 'bold',
+    })
+    expect(routeTableCellShortcut('heading-2', element, 'Mod+2')).toEqual({ kind: 'blocked' })
+    expect(routeTableCellShortcut('code-block', element, 'Mod+Alt+C')).toEqual({ kind: 'blocked' })
+    expect(routeTableCellShortcut('select-all', element, 'Mod+A')).toEqual({ kind: 'native' })
+    expect(routeTableCellShortcut('save', element, 'Mod+S')).toEqual({ kind: 'outer' })
+  })
+
+  it('only defers select-all to the native handler for the literal Mod+A combo', () => {
+    class NodeStub {}
+    vi.stubGlobal('Node', NodeStub)
+    const element = Object.assign(new NodeStub(), {
+      contains: () => false,
+    }) as unknown as HTMLElement
+    tableCellCommandBridge.activate({
+      element,
+      runInline: vi.fn(() => true),
+      selectAll: vi.fn(),
+      readState: () => ({
+        hasSelection: true,
+        bold: false,
+        italic: false,
+        strike: false,
+        inlineCode: false,
+      }),
+    })
+
+    // A customized select-all binding has no browser/OS handler to fall
+    // back to inside a table cell, so it must still reach the app dispatch.
+    expect(routeTableCellShortcut('select-all', element, 'Mod+Shift+A')).toEqual({ kind: 'outer' })
   })
 })

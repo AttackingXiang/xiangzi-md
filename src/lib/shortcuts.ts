@@ -301,10 +301,40 @@ function normalizedKey(key: string): string | null {
   return aliases[key] || key
 }
 
+/** `event.code` values for the unshifted punctuation `isSafeShortcut` accepts. */
+const PUNCTUATION_CODES: Record<string, string> = {
+  Comma: ',',
+  Period: '.',
+  Slash: '/',
+  Semicolon: ';',
+  Equal: '=',
+  Quote: "'",
+  BracketLeft: '[',
+  BracketRight: ']',
+  Backslash: '\\',
+  Minus: '-',
+}
+
+/**
+ * The physical key (`event.code`), immune to OS/layout composition —
+ * `event.key` already reflects what Shift or (on macOS, with no Cmd held)
+ * Option turns a key into: Shift+/ reports key `"?"`, and Option+S alone
+ * reports `"ß"`. Recording the base key from the physical position instead
+ * means the same physical combo is always recorded and matched consistently
+ * regardless of what the layout composed, and keeps every Shift/Option
+ * combination within `isSafeShortcut`'s existing unshifted charset instead
+ * of silently rejecting about half of them.
+ */
+function baseKeyFromCode(code: string): string | null {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3)
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  return PUNCTUATION_CODES[code] ?? null
+}
+
 export function shortcutFromKeyboardEvent(
   event: KeyboardEvent | React.KeyboardEvent,
 ): string | null {
-  const key = normalizedKey(event.key)
+  const key = baseKeyFromCode(event.code) ?? normalizedKey(event.key)
   if (!key) return null
   const parts: string[] = []
   const isMac = /mac/i.test(navigator.platform)
