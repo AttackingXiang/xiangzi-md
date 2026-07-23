@@ -3,6 +3,7 @@ import type { SyntaxNode } from '@lezer/common'
 import type { EditorState } from '@codemirror/state'
 import { findClusterBreak, type Transaction, type TransactionSpec } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
+import { aggregateHiddenRanges } from './hiddenRanges'
 import { HEADING_NODE_NAMES } from './nodePolicy'
 import type { PreviewRange } from './types'
 
@@ -46,6 +47,37 @@ function topLevelParagraphAt(
   return node?.name === 'Paragraph' ? node : null
 }
 
+function positionTouchesHiddenRange(state: EditorState, position: number): boolean {
+  const to = Math.min(state.doc.length, position + 1)
+  if (to <= position) return false
+  let touches = false
+  aggregateHiddenRanges(state, [{ from: position, to }]).atomic.between(
+    position,
+    to,
+    (from, rangeTo) => {
+      if (from <= position && rangeTo > position) touches = true
+    },
+  )
+  return touches
+}
+
+/**
+ * A physical newline is a promotable soft line only when both sides still
+ * belong to the same Markdown text block and the right side does not begin
+ * hidden/atomic presentation source. Existing block boundaries must remain
+ * ordinary insertion points: treating one as a prior Enter would place the
+ * caret on (and then CM6 would move it through) the next rendered construct.
+ */
+function isSoftLineBoundary(state: EditorState, block: SyntaxNode, newlineFrom: number): boolean {
+  const right = newlineFrom + 1
+  return (
+    right < state.doc.length &&
+    topLevelBlockAt(state, newlineFrom, -1) === block &&
+    topLevelBlockAt(state, right, 1) === block &&
+    !positionTouchesHiddenRange(state, right)
+  )
+}
+
 /**
  * Plain Enter inserts one source newline so consecutive visual lines stay
  * adjacent. Pressing Enter again at that soft-line boundary promotes it to
@@ -87,7 +119,8 @@ export function splitTopLevelMarkdownBlock(state: EditorState): TransactionSpec 
     selection.empty &&
     head === line.to &&
     line.to < state.doc.length &&
-    state.doc.sliceString(head, head + 1) === '\n'
+    state.doc.sliceString(head, head + 1) === '\n' &&
+    isSoftLineBoundary(state, start, head)
   ) {
     from = head
     to = head + 1
@@ -97,7 +130,8 @@ export function splitTopLevelMarkdownBlock(state: EditorState): TransactionSpec 
     selection.empty &&
     head === line.from &&
     head > 0 &&
-    state.doc.sliceString(head - 1, head) === '\n'
+    state.doc.sliceString(head - 1, head) === '\n' &&
+    isSoftLineBoundary(state, start, head - 1)
   ) {
     from = head - 1
     to = head

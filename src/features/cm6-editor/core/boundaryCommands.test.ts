@@ -14,6 +14,7 @@ import {
   splitTopLevelMarkdownBlock,
   stripInlineMarkFillerOnType,
 } from './boundaryCommands'
+import { hiddenRangeSource } from './hiddenRanges'
 
 function createState(doc: string, cursor = doc.length): EditorState {
   return EditorState.create({
@@ -85,6 +86,42 @@ describe('block split/join commands', () => {
     const splitAtDocumentEnd = splitTopLevelMarkdownBlock(trailingSoftLine)
     expect(splitAtDocumentEnd).not.toBeNull()
     expect(trailingSoftLine.update(splitAtDocumentEnd!).state.doc.toString()).toBe('Alpha\n\n')
+  })
+
+  it.each([
+    ['fenced code', '```shell\nprintf ok\n```'],
+    ['heading', '# Heading'],
+    ['bullet list', '- item'],
+    ['quote', '> quoted'],
+    ['table', '| A |\n| - |\n| B |'],
+  ])('inserts an editable line instead of entering the following %s block', (_name, nextBlock) => {
+    const doc = `Alpha\n${nextBlock}`
+    const state = createState(doc, 5)
+    const split = splitTopLevelMarkdownBlock(state)
+    expect(split).not.toBeNull()
+    const after = state.update(split!).state
+
+    expect(after.doc.toString()).toBe(`Alpha\n\n${nextBlock}`)
+    expect(after.selection.main.head).toBe(6)
+  })
+
+  it('does not promote a boundary whose next line starts rendered hidden source', () => {
+    const doc = 'Alpha\n![preview](image.png)'
+    const imageFrom = doc.indexOf('![')
+    const state = EditorState.create({
+      doc,
+      selection: EditorSelection.cursor(5),
+      extensions: [
+        markdown({ base: markdownLanguage }),
+        hiddenRangeSource.of(() => [{ from: imageFrom, to: doc.length, presentation: 'external' }]),
+      ],
+    })
+    const split = splitTopLevelMarkdownBlock(state)
+    expect(split).not.toBeNull()
+    const after = state.update(split!).state
+
+    expect(after.doc.toString()).toBe('Alpha\n\n![preview](image.png)')
+    expect(after.selection.main.head).toBe(6)
   })
 
   it('writes Shift+Enter as a portable hard break', () => {
