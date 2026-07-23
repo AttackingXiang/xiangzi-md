@@ -757,7 +757,9 @@ describe('CM6 fenced code preview', () => {
         viewportMargin: 0,
       })
       const newOpeningFrom = state.doc.toString().indexOf('```')
-      expect(hidden.some(({ from, to }) => from <= newOpeningFrom && to > newOpeningFrom)).toBe(true)
+      expect(hidden.some(({ from, to }) => from <= newOpeningFrom && to > newOpeningFrom)).toBe(
+        true,
+      )
     })
   })
 

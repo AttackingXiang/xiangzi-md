@@ -234,7 +234,9 @@ export function restoreEmptyFencedCodeBody(transaction: Transaction): Transactio
  * landing zone `fencedCodeBoundaryDeletion`'s no-op guards from the keyboard
  * side above.
  */
-export function ensureLineAfterTerminalFencedCode(transaction: Transaction): TransactionSpec | null {
+export function ensureLineAfterTerminalFencedCode(
+  transaction: Transaction,
+): TransactionSpec | null {
   if (!transaction.docChanged) return null
   const state = transaction.state
   const data = fencedCodeAt(state, state.doc.length)
