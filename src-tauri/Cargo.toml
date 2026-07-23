@@ -1,6 +1,6 @@
 [package]
 name = "xiangzi-md"
-version = "2.0.8"
+version = "2.0.9"
 description = "Xiangzi MD — a local-first Markdown editor"
 authors = ["guoxiangzi"]
 license = "GPL-3.0-only"
