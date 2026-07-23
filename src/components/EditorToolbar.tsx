@@ -89,20 +89,8 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
 
   return (
     <div className="editor-toolbar">
-      {btn(
-        t('撤销', 'Undo'),
-        <Undo2 size={15} />,
-        false,
-        () => editorCmd.undo?.(),
-        cellState.focused || !ts.canUndo,
-      )}
-      {btn(
-        t('重做', 'Redo'),
-        <Redo2 size={15} />,
-        false,
-        () => editorCmd.redo?.(),
-        cellState.focused || !ts.canRedo,
-      )}
+      {btn(t('撤销', 'Undo'), <Undo2 size={15} />, false, () => editorCmd.undo?.(), !ts.canUndo)}
+      {btn(t('重做', 'Redo'), <Redo2 size={15} />, false, () => editorCmd.redo?.(), !ts.canRedo)}
 
       <span className="toolbar-sep" />
 

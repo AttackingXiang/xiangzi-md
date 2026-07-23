@@ -1,3 +1,4 @@
+import { redo as cm6Redo, undo as cm6Undo } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
 import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view'
@@ -1969,6 +1970,16 @@ class TableWidget extends WidgetType {
       }
       if (view.state.readOnly) return
       const withMod = event.metaKey || event.ctrlKey
+      if (withMod && event.key.toLowerCase() === 'z') {
+        // History belongs to the outer CM6 view, not this cell — and every
+        // other keystroke here stops before reaching CM6's own historyKeymap
+        // (see the stopPropagation above), so undo/redo must be dispatched
+        // against `view` directly instead of relying on that keymap.
+        event.preventDefault()
+        const handled = event.shiftKey ? cm6Redo(view) : cm6Undo(view)
+        if (handled) view.focus()
+        return
+      }
       if (withMod && event.key === 'Enter') {
         event.preventDefault()
         // Input is synchronized transaction-by-transaction. Mod+Enter explicitly

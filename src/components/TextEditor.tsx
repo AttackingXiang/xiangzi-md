@@ -237,9 +237,10 @@ export default function TextEditor({
     })
     viewRef.current = view
     // 让全局 ⌘F / 查找命令能打开这个编辑器的搜索面板（见 App 对 textEditorBridge 的接线）。
+    // openSearchPanel 自身负责把焦点落到搜索输入框（面板 mount() 里 select()
+    // 了 searchField）；这里如果再调用 view.focus() 会把焦点立刻抢回正文。
     textEditorBridge.set(() => {
       openSearchPanel(view)
-      view.focus()
     })
 
     // 恢复选区（越界时忽略）与滚动位置

@@ -1240,7 +1240,7 @@ export default function App(): JSX.Element {
                 <Suspense fallback={<div className="editor-loading" />}>
                   <MarkdownEditor
                     key={activeTab.id}
-                    content={activeFrontmatter.body}
+                    content={sourceMode ? activeTab.content : activeFrontmatter.body}
                     livePreview={!sourceMode}
                     showSelectionToolbar={settings.showSelectionToolbar ?? false}
                     lang={settings.language}
@@ -1274,35 +1274,46 @@ export default function App(): JSX.Element {
                     typewriterMode={typewriterMode}
                     previewThemeVersion={settings.theme}
                     tagBar={
-                      <>
-                        <DocumentPropertyPanel
-                          properties={activeProperties}
-                          inlineTags={inlineOnlyTags}
-                          activeTag={tagNavigation.selectedTag}
-                          disabled={readingMode}
-                          onSelectTag={openDocumentTag}
-                          onTagContext={openDocTagContext}
-                          onChange={changeDocumentProperties}
-                        />
-                        {!hasBodyHeading && activeFrontmatter.title && (
-                          <div className="document-title-fallback">{activeFrontmatter.title}</div>
-                        )}
-                      </>
+                      // Source mode shows frontmatter as literal `---` YAML text
+                      // inside the editor body (see the `content` prop above), so
+                      // the structured properties widget would otherwise duplicate
+                      // it as an editable overlay on top of its own source.
+                      !sourceMode && (
+                        <>
+                          <DocumentPropertyPanel
+                            properties={activeProperties}
+                            inlineTags={inlineOnlyTags}
+                            activeTag={tagNavigation.selectedTag}
+                            disabled={readingMode}
+                            onSelectTag={openDocumentTag}
+                            onTagContext={openDocTagContext}
+                            onChange={changeDocumentProperties}
+                          />
+                          {!hasBodyHeading && activeFrontmatter.title && (
+                            <div className="document-title-fallback">{activeFrontmatter.title}</div>
+                          )}
+                        </>
+                      )
                     }
                     readingMode={readingMode}
                     initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
                     onScrollTopChange={(scrollTop) =>
                       wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
                     }
-                    onChange={(body) => {
+                    onChange={(nextValue) => {
                       // Frontmatter/property edits and CM6 transactions can be
-                      // dispatched in the same tick. Merge the editor body into
+                      // dispatched in the same tick. Merge the editor value into
                       // the authoritative tab snapshot, not this render's closure,
                       // so neither side can overwrite a newer update.
                       const current = stateRef.current.tabs.find((tab) => tab.id === activeTab.id)
-                      if (current) {
-                        updateContent(current.id, replaceMarkdownBody(current.content, body))
-                      }
+                      if (!current) return
+                      // In source mode the editor holds (and edits) the full
+                      // document, frontmatter included — merging it through
+                      // replaceMarkdownBody would duplicate the `---` block.
+                      updateContent(
+                        current.id,
+                        sourceMode ? nextValue : replaceMarkdownBody(current.content, nextValue),
+                      )
                     }}
                   />
                 </Suspense>

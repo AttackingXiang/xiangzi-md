@@ -99,8 +99,12 @@ export const editorCmd = {
   insertTable: (rows = 3, columns = 3): void =>
     runBlockCommand(() => activeCm6Commands.insertTable(rows, columns)),
   insertLink: requestLink,
-  undo: (): void => runBlockCommand(activeCm6Commands.undo),
-  redo: (): void => runBlockCommand(activeCm6Commands.redo),
+  // Undo/redo operate on CM6's own history, which already contains table-cell
+  // edits as real transactions (bindCellEvents commits every keystroke via
+  // view.dispatch) — unlike block formatting, they must work regardless of
+  // whether a table cell currently owns DOM focus.
+  undo: (): void => void activeCm6Commands.undo(),
+  redo: (): void => void activeCm6Commands.redo(),
 }
 
 export const clipboardCmd = {
