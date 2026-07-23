@@ -74,15 +74,36 @@
 
 /* Keep hidden source at a visual line start as real text nodes so browser
    hit-testing can distinguish the line's document boundary under wrapping.
-   A tiny, positive font size is deliberate: exact zero collapses every source
-   offset onto the same coordinate in some WebKit builds, recreating the
-   ambiguity this mode removes. Common heading/quote prefix chains stay below
-   one CSS pixel at this size. */
+   Keep a tiny positive inline width: exact zero collapses every source offset
+   onto the same coordinate in some WebKit builds, recreating the ambiguity
+   this mode removes. The outer box keeps the row's normal baseline geometry;
+   nested syntax-token spans shrink the source glyphs themselves. The shared
+   boundary widget below supplies CM6 with a full-height coordinate at the
+   exact end of the collapsed source range. */
 .xmd-cm-editor .xmd-cm-preserved-hidden-source {
   color: transparent;
+  display: inline-block;
+  inline-size: 0.125px;
+  letter-spacing: 0;
+  line-height: inherit;
+  overflow: clip;
+  vertical-align: baseline;
+  white-space: nowrap;
+  -webkit-text-fill-color: transparent;
+}
+
+.xmd-cm-editor .xmd-cm-preserved-hidden-source > * {
   font-size: 0.125px;
   letter-spacing: 0;
   line-height: 0;
+  word-spacing: 0;
+}
+
+.xmd-cm-editor .xmd-cm-preserved-hidden-source-boundary {
+  color: transparent;
+  font: inherit;
+  line-height: inherit;
+  pointer-events: none;
   -webkit-text-fill-color: transparent;
 }
 

@@ -27,9 +27,17 @@ describe('CM6 live preview styles', () => {
     const css = readFileSync(new URL('./livePreview.css', import.meta.url), 'utf8')
     const hiddenSource = css.match(/\.xmd-cm-preserved-hidden-source\s*\{([^}]*)\}/)?.[1]
 
-    expect(hiddenSource).toContain('font-size: 0.125px')
+    expect(hiddenSource).toContain('display: inline-block')
+    expect(hiddenSource).toContain('inline-size: 0.125px')
     expect(hiddenSource).toContain('color: transparent')
-    expect(hiddenSource).toContain('line-height: 0')
+    expect(hiddenSource).toContain('line-height: inherit')
+    expect(hiddenSource).toContain('overflow: clip')
+    expect(hiddenSource).not.toContain('line-height: 0')
+    const hiddenSourceChildren = css.match(
+      /\.xmd-cm-preserved-hidden-source > \*\s*\{([^}]*)\}/,
+    )?.[1]
+    expect(hiddenSourceChildren).toContain('font-size: 0.125px')
+    expect(hiddenSourceChildren).toContain('line-height: 0')
     expect(hiddenSource).not.toContain('display: none')
     expect(hiddenSource).not.toContain('position: absolute')
     expect(hiddenSource).not.toContain('user-select: none')

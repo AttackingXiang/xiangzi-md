@@ -24,15 +24,21 @@ function collectSpecs(decorations: ReturnType<typeof aggregateHiddenRanges>['dec
     className?: string
     hiddenSource?: string
     ariaHidden?: string
+    widget?: boolean
   }> = []
   decorations.between(0, 1e9, (from, to, value) => {
-    const spec = value.spec as { class?: string; attributes?: Record<string, string> }
+    const spec = value.spec as {
+      class?: string
+      attributes?: Record<string, string>
+      widget?: unknown
+    }
     seen.push({
       from,
       to,
       className: spec.class,
       hiddenSource: spec.attributes?.['data-xmd-hidden-source'],
       ariaHidden: spec.attributes?.['aria-hidden'],
+      widget: spec.widget !== undefined || undefined,
     })
   })
   return seen
@@ -67,6 +73,7 @@ describe('aggregateHiddenRanges', () => {
     expect(collect(decorations)).toEqual([
       { from: 1, to: 2 },
       { from: 2, to: 4 },
+      { from: 4, to: 4 },
     ])
     expect(collectSpecs(decorations)).toEqual([
       {
@@ -75,6 +82,7 @@ describe('aggregateHiddenRanges', () => {
         className: undefined,
         hiddenSource: undefined,
         ariaHidden: undefined,
+        widget: undefined,
       },
       {
         from: 2,
@@ -82,6 +90,15 @@ describe('aggregateHiddenRanges', () => {
         className: PRESERVED_HIDDEN_SOURCE_CLASS,
         hiddenSource: 'true',
         ariaHidden: 'true',
+        widget: undefined,
+      },
+      {
+        from: 4,
+        to: 4,
+        className: undefined,
+        hiddenSource: undefined,
+        ariaHidden: undefined,
+        widget: true,
       },
     ])
   })

@@ -55,29 +55,6 @@ export function livePreviewEventHandlers(): Extension {
       event.preventDefault()
       return true
     },
-    pointerdown(event, view) {
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-        return false
-      const target = event.target
-      if (target instanceof Element) {
-        const emptyLine = target.closest<HTMLElement>('.cm-line')
-        // Fenced code owns the redirect for its own collapsed fence lines
-        // (see codeBlockPreview.ts) — clicking that area must land inside
-        // the block's first/last code row, not at the raw hidden position.
-        if (
-          emptyLine?.parentElement === view.contentDOM &&
-          !emptyLine.classList.contains('xmd-cm-code-fence-line') &&
-          (emptyLine.textContent ?? '').trim() === ''
-        ) {
-          const anchor = view.posAtDOM(emptyLine, 0)
-          event.preventDefault()
-          view.dispatch({ selection: { anchor }, scrollIntoView: true })
-          view.focus()
-          return true
-        }
-      }
-      return false
-    },
     click(event, view) {
       if (event.button !== 0) return false
       const link = linkAtEvent(event, view)
@@ -91,7 +68,24 @@ export function livePreviewEventHandlers(): Extension {
       if (!(target instanceof Element)) return false
       if (target.closest('button, input, select, textarea, [role="checkbox"]')) return false
       const line = target.closest<HTMLElement>('.cm-line')
-      if (!line || line.parentElement !== view.contentDOM || line.textContent === '') return false
+      if (!line || line.parentElement !== view.contentDOM) return false
+      // Correct a genuine click on an empty physical line only after the
+      // pointer gesture has completed. Handling this on pointerdown used to
+      // cancel the browser's default drag-selection gesture, so starting from
+      // the blank row immediately before/after a code block could never select
+      // prose further outward.
+      if (
+        !line.classList.contains('xmd-cm-code-fence-line') &&
+        (line.textContent ?? '').trim() === ''
+      ) {
+        const anchor = view.posAtDOM(line, 0)
+        if (view.state.selection.main.head === anchor) return false
+        event.preventDefault()
+        view.dispatch({ selection: { anchor }, scrollIntoView: true })
+        view.focus()
+        return true
+      }
+      if (line.textContent === '') return false
       // Fenced code is ordinary outer-CM6 content now. Native hit testing is
       // exact there; applying the legacy block-widget correction a second
       // time causes the caret to visibly jump before settling.

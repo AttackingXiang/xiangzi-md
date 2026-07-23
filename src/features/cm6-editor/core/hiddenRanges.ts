@@ -4,6 +4,7 @@ import {
   Decoration,
   EditorView,
   ViewPlugin,
+  WidgetType,
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
@@ -19,6 +20,28 @@ import { HIDDEN_SOURCE_ATTRIBUTE } from '../../../lib/hiddenSourceDom'
 export type HiddenRangePresentation = 'replace' | 'preserve-text' | 'external'
 
 export const PRESERVED_HIDDEN_SOURCE_CLASS = 'xmd-cm-preserved-hidden-source'
+export const PRESERVED_HIDDEN_SOURCE_BOUNDARY_CLASS = 'xmd-cm-preserved-hidden-source-boundary'
+
+class PreservedHiddenSourceBoundaryWidget extends WidgetType {
+  eq(): boolean {
+    return true
+  }
+
+  toDOM(): HTMLElement {
+    const element = document.createElement('span')
+    element.className = PRESERVED_HIDDEN_SOURCE_BOUNDARY_CLASS
+    element.setAttribute(HIDDEN_SOURCE_ATTRIBUTE, 'true')
+    element.setAttribute('aria-hidden', 'true')
+    element.textContent = '\u200b'
+    return element
+  }
+
+  ignoreEvent(): boolean {
+    return true
+  }
+}
+
+const preservedHiddenSourceBoundaryWidget = new PreservedHiddenSourceBoundaryWidget()
 
 export interface HiddenRange extends PreviewRange {
   /**
@@ -133,6 +156,18 @@ export function buildHiddenRangeSets(
               'aria-hidden': 'true',
             },
           }).range(range.from, range.to),
+        )
+        // CM6 asks for the coordinates on the preceding side of a cross-line
+        // range endpoint (`coordsAtPos(to, -2)`). The visually collapsed text
+        // itself has a near-zero-height Range, which makes CM6 extend its
+        // full-width "between lines" rectangle through the visible endpoint
+        // row. Give that exact document boundary an empty, full-line-height
+        // coordinate anchor without changing the source text or cursor model.
+        decorations.push(
+          Decoration.widget({
+            widget: preservedHiddenSourceBoundaryWidget,
+            side: -1,
+          }).range(range.to),
         )
         break
       case 'external':
