@@ -2,6 +2,7 @@ import { RotateCcw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import {
   SHORTCUT_DEFINITIONS,
+  defaultShortcutBinding,
   displayShortcut,
   effectiveShortcut,
   isSafeShortcut,
@@ -43,7 +44,7 @@ export default function Shortcuts({ overrides, onChange }: Props): JSX.Element {
       return
     }
     const next = { ...overrides }
-    if (binding === definition.defaultBinding) delete next[action]
+    if (binding === defaultShortcutBinding(definition)) delete next[action]
     else next[action] = binding
     onChange(next)
     setRecording(null)

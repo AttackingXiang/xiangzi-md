@@ -243,14 +243,23 @@ export function useAppCommands(options: AppCommandOptions): {
         case 'italic':
           editorCmd.italic()
           break
+        case 'strike':
+          editorCmd.strike()
+          break
         case 'inline-code':
           editorCmd.inlineCode()
+          break
+        case 'insert-link':
+          editorCmd.insertLink()
           break
         case 'quote':
           editorCmd.quote()
           break
         case 'code-block':
           editorCmd.codeBlock()
+          break
+        case 'insert-table':
+          editorCmd.insertTable()
           break
         case 'bullet-list':
           editorCmd.bulletList()

@@ -265,7 +265,7 @@ fn valid_shortcut_binding(binding: &str) -> bool {
         return false;
     }
     let parts = binding.split('+').collect::<Vec<_>>();
-    if parts.len() < 2 || parts.iter().any(|part| part.is_empty()) {
+    if parts.iter().any(|part| part.is_empty()) {
         return false;
     }
     let modifiers = &parts[..parts.len() - 1];
@@ -274,9 +274,10 @@ fn valid_shortcut_binding(binding: &str) -> bool {
     modifiers
         .iter()
         .all(|part| matches!(*part, "Mod" | "Control" | "Alt" | "Shift"))
-        && modifiers
-            .iter()
-            .any(|part| matches!(*part, "Mod" | "Control" | "Alt"))
+        && (key.starts_with('F')
+            || modifiers
+                .iter()
+                .any(|part| matches!(*part, "Mod" | "Control" | "Alt")))
         && unique_modifiers.len() == modifiers.len()
         && valid_shortcut_key(key)
 }
@@ -289,7 +290,7 @@ fn valid_shortcut_key(key: &str) -> bool {
             .is_some_and(|value| value.is_ascii_uppercase() || value.is_ascii_digit())
             || matches!(
                 key,
-                "," | "." | "/" | ";" | "=" | "'" | "[" | "]" | "\\" | "-"
+                "," | "." | "/" | ";" | "=" | "'" | "`" | "[" | "]" | "\\" | "-"
             );
     }
     matches!(

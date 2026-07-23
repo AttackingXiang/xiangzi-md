@@ -30,9 +30,12 @@ export type ShortcutAction =
   | 'demote-heading'
   | 'bold'
   | 'italic'
+  | 'strike'
   | 'inline-code'
+  | 'insert-link'
   | 'quote'
   | 'code-block'
+  | 'insert-table'
   | 'bullet-list'
   | 'ordered-list'
 
@@ -42,6 +45,7 @@ export interface ShortcutDefinition {
   labelZh: string
   labelEn: string
   defaultBinding: string
+  macDefaultBinding?: string
 }
 
 export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
@@ -101,21 +105,22 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     category: 'navigation',
     labelZh: '命令面板',
     labelEn: 'Command Palette',
-    defaultBinding: 'Mod+K',
+    defaultBinding: 'Mod+Shift+P',
   },
   {
     id: 'toggle-sidebar',
     category: 'navigation',
     labelZh: '切换侧边栏',
     labelEn: 'Toggle Sidebar',
-    defaultBinding: 'Mod+\\',
+    defaultBinding: 'Mod+Shift+L',
   },
   {
     id: 'toggle-outline',
     category: 'navigation',
     labelZh: '切换大纲',
     labelEn: 'Toggle Outline',
-    defaultBinding: 'Mod+Shift+K',
+    defaultBinding: 'Mod+Shift+1',
+    macDefaultBinding: 'Mod+Control+1',
   },
   {
     id: 'toggle-source',
@@ -129,21 +134,21 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     category: 'navigation',
     labelZh: '专注模式',
     labelEn: 'Focus Mode',
-    defaultBinding: 'Mod+Alt+F',
+    defaultBinding: 'F8',
   },
   {
     id: 'toggle-typewriter',
     category: 'navigation',
     labelZh: '打字机模式',
     labelEn: 'Typewriter Mode',
-    defaultBinding: 'Mod+Shift+T',
+    defaultBinding: 'F9',
   },
   {
     id: 'toggle-selection-toolbar',
     category: 'navigation',
     labelZh: '切换选中文本快捷工具栏',
     labelEn: 'Toggle Selection Toolbar',
-    defaultBinding: 'Mod+Alt+T',
+    defaultBinding: 'Mod+Alt+Shift+T',
   },
   {
     id: 'open-settings',
@@ -213,51 +218,78 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     category: 'format',
     labelZh: '升级标题',
     labelEn: 'Promote Heading',
-    defaultBinding: 'Mod+Alt+ArrowUp',
+    defaultBinding: 'Mod+=',
   },
   {
     id: 'demote-heading',
     category: 'format',
     labelZh: '降级标题',
     labelEn: 'Demote Heading',
-    defaultBinding: 'Mod+Alt+ArrowDown',
+    defaultBinding: 'Mod+-',
   },
   { id: 'bold', category: 'format', labelZh: '加粗', labelEn: 'Bold', defaultBinding: 'Mod+B' },
   { id: 'italic', category: 'format', labelZh: '斜体', labelEn: 'Italic', defaultBinding: 'Mod+I' },
+  {
+    id: 'strike',
+    category: 'format',
+    labelZh: '删除线',
+    labelEn: 'Strikethrough',
+    defaultBinding: 'Alt+Shift+5',
+    macDefaultBinding: 'Control+Shift+`',
+  },
   {
     id: 'inline-code',
     category: 'format',
     labelZh: '行内代码',
     labelEn: 'Inline Code',
-    defaultBinding: 'Mod+E',
+    defaultBinding: 'Mod+Shift+`',
+  },
+  {
+    id: 'insert-link',
+    category: 'format',
+    labelZh: '插入链接',
+    labelEn: 'Insert Link',
+    defaultBinding: 'Mod+K',
   },
   {
     id: 'quote',
     category: 'format',
     labelZh: '引用',
     labelEn: 'Quote',
-    defaultBinding: 'Mod+Shift+B',
+    defaultBinding: 'Mod+Shift+Q',
+    macDefaultBinding: 'Mod+Alt+Q',
   },
   {
     id: 'code-block',
     category: 'format',
     labelZh: '代码块',
     labelEn: 'Code Block',
-    defaultBinding: 'Mod+Alt+C',
+    defaultBinding: 'Mod+Shift+K',
+    macDefaultBinding: 'Mod+Alt+C',
   },
   {
     id: 'bullet-list',
     category: 'format',
     labelZh: '无序列表',
     labelEn: 'Bullet List',
-    defaultBinding: 'Mod+Alt+8',
+    defaultBinding: 'Mod+Shift+]',
+    macDefaultBinding: 'Mod+Alt+U',
+  },
+  {
+    id: 'insert-table',
+    category: 'format',
+    labelZh: '插入表格',
+    labelEn: 'Insert Table',
+    defaultBinding: 'Mod+T',
+    macDefaultBinding: 'Mod+Alt+T',
   },
   {
     id: 'ordered-list',
     category: 'format',
     labelZh: '有序列表',
     labelEn: 'Ordered List',
-    defaultBinding: 'Mod+Alt+7',
+    defaultBinding: 'Mod+Shift+[',
+    macDefaultBinding: 'Mod+Alt+O',
   },
 ] as const
 
@@ -273,7 +305,15 @@ export function effectiveShortcut(
   overrides: Record<string, string>,
   action: ShortcutAction,
 ): string {
-  return overrides[action] || definitionById.get(action)?.defaultBinding || ''
+  const definition = definitionById.get(action)
+  return overrides[action] || defaultShortcutBinding(definition)
+}
+
+export function defaultShortcutBinding(definition: ShortcutDefinition | undefined): string {
+  if (!definition) return ''
+  return /mac/i.test(navigator.platform) && definition.macDefaultBinding
+    ? definition.macDefaultBinding
+    : definition.defaultBinding
 }
 
 export function effectiveShortcutMap(
@@ -313,6 +353,7 @@ const PUNCTUATION_CODES: Record<string, string> = {
   BracketRight: ']',
   Backslash: '\\',
   Minus: '-',
+  Backquote: '`',
 }
 
 /**
@@ -349,13 +390,15 @@ export function shortcutFromKeyboardEvent(
 export function isSafeShortcut(binding: string): boolean {
   if (!binding || binding.length > 64) return false
   const parts = binding.split('+')
-  if (parts.length < 2 || parts.some((part) => !part)) return false
+  if (parts.some((part) => !part)) return false
   const key = parts.at(-1) ?? ''
   const modifiers = new Set(parts.slice(0, -1))
   if ([...modifiers].some((part) => !['Mod', 'Control', 'Alt', 'Shift'].includes(part)))
     return false
-  if (!modifiers.has('Mod') && !modifiers.has('Control') && !modifiers.has('Alt')) return false
-  return /^[A-Z0-9]$|^[,./;='\[\]\\-]$|^(Space|Enter|Escape|Tab|Backspace|Delete|Arrow(Up|Down|Left|Right)|F([1-9]|1[0-2]))$/.test(
+  const functionKey = /^F([1-9]|1[0-2])$/.test(key)
+  if (!functionKey && !modifiers.has('Mod') && !modifiers.has('Control') && !modifiers.has('Alt'))
+    return false
+  return /^[A-Z0-9]$|^[,./;='`\[\]\\-]$|^(Space|Enter|Escape|Tab|Backspace|Delete|Arrow(Up|Down|Left|Right)|F([1-9]|1[0-2]))$/.test(
     key,
   )
 }

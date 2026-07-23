@@ -47,6 +47,14 @@ fn accelerator(
     )
 }
 
+fn platform_default(mac: &'static str, other: &'static str) -> &'static str {
+    if cfg!(target_os = "macos") {
+        mac
+    } else {
+        other
+    }
+}
+
 fn app_menu(
     app: &AppHandle,
     language: &str,
@@ -216,27 +224,27 @@ fn view_menu(
             "toggle-sidebar",
             "切换侧边栏",
             "Toggle Sidebar",
-            "CmdOrCtrl+\\",
+            "CmdOrCtrl+Shift+L",
         ),
-        ("toggle-outline", "大纲", "Outline", "CmdOrCtrl+Shift+K"),
+        (
+            "toggle-outline",
+            "大纲",
+            "Outline",
+            platform_default("CmdOrCtrl+Ctrl+1", "CmdOrCtrl+Shift+1"),
+        ),
         (
             "toggle-source",
             "切换源码模式",
             "Toggle Source Mode",
             "CmdOrCtrl+/",
         ),
-        ("toggle-focus", "专注模式", "Focus Mode", "CmdOrCtrl+Alt+F"),
-        (
-            "toggle-typewriter",
-            "打字机模式",
-            "Typewriter Mode",
-            "CmdOrCtrl+Shift+T",
-        ),
+        ("toggle-focus", "专注模式", "Focus Mode", "F8"),
+        ("toggle-typewriter", "打字机模式", "Typewriter Mode", "F9"),
         (
             "command-palette",
             "命令面板",
             "Command Palette",
-            "CmdOrCtrl+K",
+            "CmdOrCtrl+Shift+P",
         ),
         ("show-shortcuts", "快捷键", "Shortcuts", "CmdOrCtrl+Shift+/"),
     ];

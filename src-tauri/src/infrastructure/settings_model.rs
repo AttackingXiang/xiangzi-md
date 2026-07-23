@@ -46,9 +46,12 @@ pub(crate) const SHORTCUT_ACTIONS: &[&str] = &[
     "demote-heading",
     "bold",
     "italic",
+    "strike",
     "inline-code",
+    "insert-link",
     "quote",
     "code-block",
+    "insert-table",
     "bullet-list",
     "ordered-list",
 ];

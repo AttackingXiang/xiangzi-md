@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import {
   SHORTCUT_DEFINITIONS,
+  defaultShortcutBinding,
   effectiveShortcut,
   effectiveShortcutMap,
   shortcutFromKeyboardEvent,
@@ -14,6 +15,7 @@ const TABLE_CELL_FORMAT_ACTIONS = new Set<ShortcutAction>(
 const TABLE_CELL_INLINE_ACTIONS: Partial<Record<ShortcutAction, TableCellInlineFormat>> = {
   bold: 'bold',
   italic: 'italic',
+  strike: 'strike',
   'inline-code': 'inlineCode',
 }
 
@@ -49,8 +51,9 @@ export function useAppShortcuts(
     const activeBindings = effectiveShortcutMap(overrides)
     const replacedDefaults = new Set(
       SHORTCUT_DEFINITIONS.filter(
-        (definition) => effectiveShortcut(overrides, definition.id) !== definition.defaultBinding,
-      ).map((definition) => definition.defaultBinding),
+        (definition) =>
+          effectiveShortcut(overrides, definition.id) !== defaultShortcutBinding(definition),
+      ).map(defaultShortcutBinding),
     )
 
     const onKeyDown = (event: KeyboardEvent): void => {

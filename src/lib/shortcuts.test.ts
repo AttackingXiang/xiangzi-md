@@ -3,6 +3,7 @@ import {
   SHORTCUT_DEFINITIONS,
   effectiveShortcut,
   effectiveShortcutMap,
+  defaultShortcutBinding,
   isSafeShortcut,
   shortcutHint,
   shortcutFromKeyboardEvent,
@@ -47,6 +48,7 @@ describe('keyboard shortcuts', () => {
   it('rejects bare keys and malformed combinations', () => {
     expect(isSafeShortcut('Mod+Shift+K')).toBe(true)
     expect(isSafeShortcut('Alt+F8')).toBe(true)
+    expect(isSafeShortcut('F8')).toBe(true)
     expect(isSafeShortcut('K')).toBe(false)
     expect(isSafeShortcut('Shift+K')).toBe(false)
     expect(isSafeShortcut('Mod+')).toBe(false)
@@ -54,10 +56,30 @@ describe('keyboard shortcuts', () => {
   })
 
   it('exposes distinct configurable heading-level shortcuts', () => {
-    expect(effectiveShortcut({}, 'promote-heading')).toBe('Mod+Alt+ArrowUp')
-    expect(effectiveShortcut({}, 'demote-heading')).toBe('Mod+Alt+ArrowDown')
-    const bindings = SHORTCUT_DEFINITIONS.map((definition) => definition.defaultBinding)
+    expect(effectiveShortcut({}, 'promote-heading')).toBe('Mod+=')
+    expect(effectiveShortcut({}, 'demote-heading')).toBe('Mod+-')
+    const bindings = SHORTCUT_DEFINITIONS.map(defaultShortcutBinding)
     expect(new Set(bindings).size).toBe(bindings.length)
+  })
+
+  it('uses Typora platform defaults where macOS and Windows differ', () => {
+    vi.stubGlobal('navigator', { platform: 'MacIntel' })
+    expect(effectiveShortcut({}, 'toggle-outline')).toBe('Mod+Control+1')
+    expect(effectiveShortcut({}, 'quote')).toBe('Mod+Alt+Q')
+    expect(effectiveShortcut({}, 'strike')).toBe('Control+Shift+`')
+    expect(effectiveShortcut({}, 'code-block')).toBe('Mod+Alt+C')
+    expect(effectiveShortcut({}, 'insert-table')).toBe('Mod+Alt+T')
+    expect(effectiveShortcut({}, 'bullet-list')).toBe('Mod+Alt+U')
+    expect(effectiveShortcut({}, 'ordered-list')).toBe('Mod+Alt+O')
+
+    vi.stubGlobal('navigator', { platform: 'Win32' })
+    expect(effectiveShortcut({}, 'toggle-outline')).toBe('Mod+Shift+1')
+    expect(effectiveShortcut({}, 'quote')).toBe('Mod+Shift+Q')
+    expect(effectiveShortcut({}, 'strike')).toBe('Alt+Shift+5')
+    expect(effectiveShortcut({}, 'code-block')).toBe('Mod+Shift+K')
+    expect(effectiveShortcut({}, 'insert-table')).toBe('Mod+T')
+    expect(effectiveShortcut({}, 'bullet-list')).toBe('Mod+Shift+]')
+    expect(effectiveShortcut({}, 'ordered-list')).toBe('Mod+Shift+[')
   })
 
   it('formats tooltip hints for macOS and Windows', () => {

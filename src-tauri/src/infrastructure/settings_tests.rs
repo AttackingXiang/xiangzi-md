@@ -227,6 +227,18 @@ fn accepts_the_select_all_shortcut_exposed_by_the_frontend() {
 }
 
 #[test]
+fn accepts_typora_style_bare_function_key_shortcuts() {
+    let mut settings = AppSettings::default();
+    settings
+        .shortcuts
+        .insert("toggle-focus".into(), "F8".into());
+    settings
+        .shortcuts
+        .insert("toggle-typewriter".into(), "F9".into());
+    assert!(validate_settings(&settings).is_ok());
+}
+
+#[test]
 fn accepts_heading_level_shortcuts_exposed_by_the_frontend() {
     let mut settings = AppSettings::default();
     settings
