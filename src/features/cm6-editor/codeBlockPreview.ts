@@ -134,9 +134,23 @@ export function fencedCodeBoundaryDeletion(
         },
       })
       if (followsClosingFence) {
+        // When the block ends the document, `position` here is just the
+        // implicit final empty line every doc has after a trailing newline —
+        // there is no *separate* blank row to collapse, only the fence's own
+        // sole trailing newline. Deleting it would leave the closing fence
+        // sharing its physical line with whatever gets typed next (no
+        // newline left to keep it alone on its line), which breaks it as a
+        // valid closer and lets the block swallow that text as code. Swallow
+        // the key instead, the same way Delete is swallowed at the blank last
+        // body row below.
+        if (position === state.doc.length) return {}
         return {
           changes: { from: position - 1, to: position },
-          selection: { anchor: position - 1 },
+          // The remaining newline becomes the closing fence's new trailing
+          // newline, so its atomic range ends at `position`. Rest the caret
+          // after that range (at the following text), not at `position - 1`
+          // inside it, where CM6 would push the caret back into the code body.
+          selection: { anchor: position },
           scrollIntoView: true,
           userEvent: 'delete.backward',
         }
@@ -208,6 +222,34 @@ export function restoreEmptyFencedCodeBody(transaction: Transaction): Transactio
 }
 
 /**
+ * A closing fence that ends the document has no line below it to click or
+ * type into — any input there lands directly on the fence's own physical
+ * line (there being no newline left to separate the two), which stops it
+ * parsing as a valid closer: the block goes "unclosed" and swallows the
+ * fence text plus everything typed after it as code (the reported bug —
+ * typing without an intervening Enter re-entered the block, with the fence
+ * markers themselves rendered as literal text). Whenever an edit leaves a
+ * closing fence as the document's last line, append a real trailing newline
+ * so a normal, addressable blank line always exists beyond it — the same
+ * landing zone `fencedCodeBoundaryDeletion`'s no-op guards from the keyboard
+ * side above.
+ */
+export function ensureLineAfterTerminalFencedCode(transaction: Transaction): TransactionSpec | null {
+  if (!transaction.docChanged) return null
+  const state = transaction.state
+  const data = fencedCodeAt(state, state.doc.length)
+  if (!data || data.closingFrom === null) return null
+  const closing = state.doc.lineAt(data.closingFrom)
+  if (closing.to !== state.doc.length) return null
+  // This position is computed from `transaction.state` (post-edit), not the
+  // transaction's start state. `sequential: true` tells CM6's transaction
+  // merge to treat it as such, rather than as another edit to the original
+  // pre-transaction document (core/boundaryCommands.ts's
+  // `stripInlineMarkFillerOnType` needs the same flag for the same reason).
+  return { changes: { from: state.doc.length, insert: '\n' }, sequential: true }
+}
+
+/**
  * A hidden closing fence must not be removed by a partial delete: without it,
  * the next fence can become this block's closing fence and two cards appear to
  * merge. Selecting the complete fenced source remains a valid block deletion.
@@ -244,6 +286,32 @@ export function partiallyDeletesFencedCodeFence(transaction: Transaction): boole
     },
   })
   return partial
+}
+
+/**
+ * The opening fence's own physical line must start with 0–3 spaces then the
+ * backtick/tilde run — nothing else. `ArrowLeft` from the first code line
+ * lands the caret at exactly that line's start (ArrowLeft crosses the
+ * opening fence's atomic hidden range in a single step). A plain character
+ * typed there lands in front of the marker, the same way typing directly on
+ * the closing fence's own line breaks it (see `ensureLineAfterTerminalFencedCode`
+ * above): the line stops parsing as a fence opener and the whole block goes
+ * unclosed, rendering its own marker text as literal content. Enter (or any
+ * insert containing a newline, e.g. a multi-line paste) is left alone —
+ * inserting a line break there only pushes the block down a line without
+ * touching the fence's own text, which `splitTopLevelMarkdownBlock` already
+ * does safely.
+ */
+export function typesBeforeOpeningFence(transaction: Transaction): boolean {
+  if (!transaction.docChanged || !transaction.isUserEvent('input')) return false
+  const state = transaction.startState
+  let blocked = false
+  transaction.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    if (blocked || fromA !== toA || inserted.toString().includes('\n')) return
+    const data = fencedCodeAt(state, fromA)
+    if (data && isCodeBlockPresentation(state, data) && fromA === data.from) blocked = true
+  })
+  return blocked
 }
 
 /**
@@ -474,8 +542,10 @@ export function markdownCodeBlockPreview(options: CodeBlockPreviewOptions = {}):
       collectFencedCodeHiddenRanges(state, visibleRanges, options),
     ),
     EditorState.transactionFilter.of((transaction) => {
-      if (partiallyDeletesFencedCodeFence(transaction)) return []
-      const repair = restoreEmptyFencedCodeBody(transaction)
+      if (partiallyDeletesFencedCodeFence(transaction) || typesBeforeOpeningFence(transaction))
+        return []
+      const repair =
+        restoreEmptyFencedCodeBody(transaction) ?? ensureLineAfterTerminalFencedCode(transaction)
       return repair ? [transaction, repair] : transaction
     }),
     Prec.high(

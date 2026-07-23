@@ -9,10 +9,12 @@ import {
   codeControlsFitInside,
   codeLanguageOptions,
   collectFencedCodeHiddenRanges,
+  ensureLineAfterTerminalFencedCode,
   fencedCodeBoundaryDeletion,
   fencedCodeFenceRedirectTarget,
   fencedCodeLineBoundary,
   fencedCodeSelectAll,
+  markdownCodeBlockPreview,
   matchingCodeLanguageOptions,
   needsCodeCaretRepaint,
   partiallyDeletesFencedCodeFence,
@@ -21,6 +23,7 @@ import {
   resolveCodeLanguageInput,
   restoreEmptyFencedCodeBody,
   selectionIntersectsFencedCode,
+  typesBeforeOpeningFence,
   type OverlayPinGeometry,
 } from './codeBlockPreview'
 
@@ -513,13 +516,47 @@ describe('CM6 fenced code preview', () => {
       const next = state.update(spec!).state
       expect(next.doc.toString()).toBe('before\n```js\ncode()\n```\nafter')
       expect(next.doc.toString()).toContain('```js\ncode()\n```')
-      expect(next.selection.main.head).toBe(blank - 1)
+      expect(next.selection.main.head).toBe(blank)
+      const hidden = collectFencedCodeHiddenRanges(next, [{ from: 0, to: next.doc.length }], {
+        viewportMargin: 0,
+      })
+      expect(hidden.some(({ from, to }) => from < blank && to > blank)).toBe(false)
     })
 
     it('does not intercept Backspace before ordinary text immediately after a code block', () => {
       const doc = '```js\ncode()\n```\nafter'
       const after = doc.indexOf('after')
       expect(fencedCodeBoundaryDeletion(stateAt(doc, after), false)).toBeNull()
+    })
+
+    it('swallows Backspace on the trailing blank line of a code block that ends the document', () => {
+      // Only one newline follows the closing fence here (the doc's own
+      // implicit final empty line), unlike the case above which has a
+      // genuine second blank row before "after". Deleting that sole newline
+      // would leave the closing fence sharing its line with whatever gets
+      // typed next — breaking it as a valid closer and letting the block
+      // swallow that text as code (the reported bug: typing without an
+      // intervening Enter re-entered the block and the fence markers
+      // rendered as literal text). Backspace here must be a no-op instead.
+      const doc = '```js\ncode()\n```\n'
+      const blank = doc.length
+      const state = stateAt(doc, blank)
+      const spec = fencedCodeBoundaryDeletion(state, false)
+
+      expect(spec).not.toBeNull()
+      const next = state.update(spec!).state
+      expect(next.doc.toString()).toBe(doc)
+      expect(next.selection.main.head).toBe(blank)
+
+      const typed = next.update({
+        changes: { from: next.selection.main.head, insert: 'X' },
+        selection: { anchor: next.selection.main.head + 1 },
+      }).state
+      expect(typed.doc.toString()).toBe('```js\ncode()\n```\nX')
+      const hidden = collectFencedCodeHiddenRanges(typed, [{ from: 0, to: typed.doc.length }], {
+        viewportMargin: 0,
+      })
+      expect(hidden.some(({ from, to }) => from < blank && to > blank)).toBe(false)
     })
 
     it('swallows Delete at the blank last row so it cannot reach the hidden closing fence', () => {
@@ -599,6 +636,128 @@ describe('CM6 fenced code preview', () => {
       const state = stateAt(doc, doc.length)
       expect(fencedCodeBoundaryDeletion(state, false)).toBeNull()
       expect(fencedCodeBoundaryDeletion(state, true)).toBeNull()
+    })
+  })
+
+  describe('ensureLineAfterTerminalFencedCode', () => {
+    it('appends a trailing line once a closing fence becomes the document end', () => {
+      // Typing the final backtick of the closing fence is the last keystroke
+      // in this transaction; nothing exists below it yet.
+      const doc = '```js\ncode()\n``'
+      const state = stateAt(doc, doc.length)
+      const transaction = state.update({ changes: { from: state.doc.length, insert: '`' } })
+      const repair = ensureLineAfterTerminalFencedCode(transaction)
+
+      expect(repair).not.toBeNull()
+      const next = transaction.state.update(repair!).state
+      expect(next.doc.toString()).toBe('```js\ncode()\n```\n')
+    })
+
+    it('does nothing once a line already exists after the closing fence', () => {
+      const state = stateAt('```js\ncode()\n```\n', 17)
+      const transaction = state.update({ changes: { from: 17, insert: 'X' } })
+      expect(ensureLineAfterTerminalFencedCode(transaction)).toBeNull()
+    })
+
+    it('does nothing while the fence is still unclosed', () => {
+      const state = stateAt('```js\ncode', 10)
+      const transaction = state.update({ changes: { from: 10, insert: '(' } })
+      expect(ensureLineAfterTerminalFencedCode(transaction)).toBeNull()
+    })
+
+    it('reproduces the reported bug end-to-end: click below a terminal block, then type', () => {
+      // Finishing the closing fence (no Enter pressed yet) used to leave the
+      // block with no real line below it. Clicking "below the card" and
+      // typing then landed directly on the fence's own line, breaking it as
+      // a valid closer — the block went unclosed and swallowed the fence
+      // markers and the typed text as code, exactly like the reported
+      // screenshot ("```asdasd..." rendered as literal code).
+      let state = EditorState.create({
+        doc: '```js\ncode()\n``',
+        selection: EditorSelection.cursor(15),
+        extensions: [markdown(), markdownCodeBlockPreview()],
+      })
+      // Type the final backtick that closes the fence.
+      state = state.update({ changes: { from: 15, insert: '`' } }).state
+      expect(state.doc.toString()).toBe('```js\ncode()\n```\n')
+      // A real blank line now exists below the block for a later click to land on.
+      const blank = state.doc.length
+      expect(state.doc.lineAt(blank).length).toBe(0)
+
+      // Simulate a later click landing on that blank line, then typing there
+      // without pressing Enter first — it must stay outside the block.
+      state = state.update({ selection: { anchor: blank } }).state
+      state = state.update({
+        changes: { from: blank, insert: 'hello' },
+        selection: { anchor: blank + 'hello'.length },
+      }).state
+      expect(state.doc.toString()).toBe('```js\ncode()\n```\nhello')
+      const hidden = collectFencedCodeHiddenRanges(state, [{ from: 0, to: state.doc.length }], {
+        viewportMargin: 0,
+      })
+      expect(hidden.some(({ from, to }) => from < blank + 5 && to > blank)).toBe(false)
+    })
+  })
+
+  describe('typesBeforeOpeningFence', () => {
+    it('blocks a plain character typed immediately before the opening fence', () => {
+      // ArrowLeft from the first code line lands exactly here, since the
+      // opening fence's atomic hidden range is crossed in a single step.
+      const doc = 'before\n```js\ncode()\n```\nafter'
+      const openingFrom = doc.indexOf('```')
+      const state = stateAt(doc, openingFrom)
+      const transaction = state.update({
+        changes: { from: openingFrom, insert: 'X' },
+        userEvent: 'input.type',
+      })
+      expect(typesBeforeOpeningFence(transaction)).toBe(true)
+    })
+
+    it('does not block Enter at the same position', () => {
+      const doc = 'before\n```js\ncode()\n```\nafter'
+      const openingFrom = doc.indexOf('```')
+      const state = stateAt(doc, openingFrom)
+      const transaction = state.update({
+        changes: { from: openingFrom, insert: '\n' },
+        userEvent: 'input.type',
+      })
+      expect(typesBeforeOpeningFence(transaction)).toBe(false)
+    })
+
+    it('does not block ordinary typing elsewhere', () => {
+      const doc = 'before\n```js\ncode()\n```\nafter'
+      const codeFrom = doc.indexOf('code()')
+      const state = stateAt(doc, codeFrom)
+      const transaction = state.update({
+        changes: { from: codeFrom, insert: 'X' },
+        userEvent: 'input.type',
+      })
+      expect(typesBeforeOpeningFence(transaction)).toBe(false)
+    })
+
+    it('reproduces the reported bug end-to-end: ArrowLeft out of the block, then type', () => {
+      const doc = 'before\n```js\ncode()\n```\nafter'
+      const openingFrom = doc.indexOf('```')
+      let state = EditorState.create({
+        doc,
+        selection: EditorSelection.cursor(openingFrom),
+        extensions: [markdown(), markdownCodeBlockPreview()],
+      })
+      // A plain character is swallowed — the fence stays intact.
+      state = state.update({
+        changes: { from: openingFrom, insert: 'X' },
+        userEvent: 'input.type',
+      }).state
+      expect(state.doc.toString()).toBe(doc)
+
+      // Enter still works, safely pushing the block down a line.
+      state = state.update({ changes: { from: openingFrom, insert: '\n' } }).state
+      expect(state.doc.toString()).toBe('before\n\n```js\ncode()\n```\nafter')
+      const hidden = collectFencedCodeHiddenRanges(state, [{ from: 0, to: state.doc.length }], {
+        viewportMargin: 0,
+      })
+      const newOpeningFrom = state.doc.toString().indexOf('```')
+      expect(hidden.some(({ from, to }) => from <= newOpeningFrom && to > newOpeningFrom)).toBe(true)
     })
   })
 
