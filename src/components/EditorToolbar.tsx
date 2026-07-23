@@ -78,7 +78,8 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
       type="button"
       key={label}
       className={`toolbar-btn${active ? ' is-active' : ''}`}
-      title={label}
+      aria-label={label}
+      data-tooltip={label}
       disabled={disabled}
       onMouseDown={preserveEditorSelection}
       onClick={() => runToolbarAction(action)}
@@ -177,8 +178,8 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
         <button
           type="button"
           className={`toolbar-btn${showColors ? ' is-active' : ''}`}
-          title={t('文字颜色', 'Text color')}
           aria-label={t('文字颜色', 'Text color')}
+          data-tooltip={t('文字颜色', 'Text color')}
           aria-expanded={showColors}
           disabled={cellState.focused}
           onMouseDown={preserveEditorSelection}
@@ -242,7 +243,8 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
       <button
         type="button"
         className="toolbar-btn"
-        title={t('插入表格', 'Insert table')}
+        aria-label={t('插入表格', 'Insert table')}
+        data-tooltip={t('插入表格', 'Insert table')}
         disabled={cellState.focused}
         onMouseDown={preserveEditorSelection}
         onClick={(e) => {
