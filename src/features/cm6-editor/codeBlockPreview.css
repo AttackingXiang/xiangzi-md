@@ -172,6 +172,12 @@
   z-index: 2;
 }
 
+.xmd-cm-code-preview-header.is-inside {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 5px;
+}
+
 .xmd-cm-code-preview-header > * {
   pointer-events: auto;
 }

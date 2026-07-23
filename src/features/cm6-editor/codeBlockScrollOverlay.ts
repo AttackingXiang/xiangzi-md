@@ -17,6 +17,7 @@ import {
 import {
   CODE_SCROLLBAR_HEIGHT,
   CODE_SCROLLBAR_MARGIN,
+  codeControlsFitInside,
   codeControlsTop,
   codeBlockOverlayHorizontalGeometry,
   codeContentCaretX,
@@ -315,6 +316,7 @@ interface ActiveBlockMeasure {
   /** Pinned overlay positions in scroller content space; `null` while the
    * block does not intersect the viewport (overlay hidden). */
   controlsTop: number | null
+  controlsInside: boolean
   /** Right-edge anchor for the controls (they render right-aligned on this
    * `left` via `translateX(-100%)`, so input-width changes between measure
    * passes keep the right edge fixed). */
@@ -340,6 +342,8 @@ class CodeBlockScrollPlugin {
   private frame = 0
   private repaintFrame = 0
   private revealPending = true
+  private controlsInside = false
+  private controlsBlockFrom = -1
   private drag: { scrollbar: HTMLElement; pointerId: number; offset: number } | null = null
   private readonly controls: CodeBlockControlsOverlay
   private readonly scrollbar: HTMLElement | null
@@ -726,7 +730,24 @@ class CodeBlockScrollPlugin {
       view.scaleX,
     )
     const { trackWidth } = horizontal
-    const controlsTop = codeControlsTop(geometry)
+    const firstContent = firstMountedLine.querySelector<HTMLElement>('.xmd-cm-code-line-content')
+    let firstContentEnd = firstContent?.getBoundingClientRect().left ?? 0
+    if (firstContent) {
+      const range = document.createRange()
+      range.selectNodeContents(firstContent)
+      const rangeRect = range.getBoundingClientRect()
+      if (rangeRect.width > 0) firstContentEnd = rangeRect.right
+      range.detach()
+    }
+    const firstContentRight = firstContent?.getBoundingClientRect().right ?? firstContentEnd
+    const controlsWidth = this.controls.dom.getBoundingClientRect().width / view.scaleX
+    const availableFirstRowWidth = Math.max(0, (firstContentRight - firstContentEnd) / view.scaleX)
+    const controlsInside = codeControlsFitInside(
+      availableFirstRowWidth,
+      controlsWidth,
+      this.controlsBlockFrom === data.from && this.controlsInside,
+    )
+    const controlsTop = codeControlsTop(geometry, controlsInside)
 
     const contents = block.contents
     const contentScrollLefts = contents.map((content) => content.scrollLeft)
@@ -771,6 +792,7 @@ class CodeBlockScrollPlugin {
         revealScrollLeft,
         overflow: rowContentWidth > trackWidth + 1,
         controlsTop,
+        controlsInside,
         controlsAnchorLeft: horizontal.controlsAnchorLeft,
         scrollbarTop: pinnedOverlayTop(
           'block-end',
@@ -791,6 +813,10 @@ class CodeBlockScrollPlugin {
     const active = measure.active
     const controlsDom = this.controls.dom
     if (!active || active.controlsTop === null) {
+      if (!active) {
+        this.controlsBlockFrom = -1
+        this.controlsInside = false
+      }
       controlsDom.classList.remove('is-active')
       // Keep the overlay in place while the user is interacting with it (the
       // CSS :focus-within rules keep it visible during e.g. a language edit
@@ -799,10 +825,17 @@ class CodeBlockScrollPlugin {
         controlsDom.style.top = '-9999px'
       }
     } else {
+      const blockChanged = this.controlsBlockFrom !== active.data.from
       this.controls.setBlock(active.data, active.readOnly)
+      this.controlsBlockFrom = active.data.from
+      this.controlsInside = active.controlsInside
       controlsDom.classList.add('is-active')
+      controlsDom.classList.toggle('is-inside', active.controlsInside)
       controlsDom.style.top = `${active.controlsTop}px`
       controlsDom.style.left = `${active.controlsAnchorLeft}px`
+      // setBlock may resize the language input (or reveal the Mermaid action).
+      // Re-measure once with the new block's actual controls width.
+      if (blockChanged) this.schedule()
     }
 
     const scrollbar = this.scrollbar

@@ -6,6 +6,7 @@ import {
   buildCodeBlockPreviewDecorations,
   codeBlockOverlayHorizontalGeometry,
   codeControlsTop,
+  codeControlsFitInside,
   codeLanguageOptions,
   collectFencedCodeHiddenRanges,
   fencedCodeBoundaryDeletion,
@@ -304,6 +305,7 @@ describe('CM6 fenced code preview', () => {
     it('matches the legacy fence-anchored placement while the whole block is visible', () => {
       const geometry = { blockTop: 100, blockBottom: 400, viewportTop: 0, viewportBottom: 800 }
       expect(codeControlsTop(geometry)).toBe(73)
+      expect(codeControlsTop(geometry, true)).toBe(110)
       expect(scrollbar(geometry)).toBe(392)
     })
 
@@ -348,6 +350,19 @@ describe('CM6 fenced code preview', () => {
       expect(scrollbar(tall(1000))).toBe(1792)
       expect(codeControlsTop(tall(3000))).toBe(3000)
       expect(scrollbar(tall(3000))).toBe(3792)
+    })
+  })
+
+  describe('codeControlsFitInside', () => {
+    it('uses the measured controls width plus a safety gap', () => {
+      expect(codeControlsFitInside(115, 100, false)).toBe(false)
+      expect(codeControlsFitInside(116, 100, false)).toBe(true)
+    })
+
+    it('keeps an inside placement through the hysteresis zone', () => {
+      expect(codeControlsFitInside(108, 100, true)).toBe(true)
+      expect(codeControlsFitInside(107, 100, true)).toBe(false)
+      expect(codeControlsFitInside(108, 100, false)).toBe(false)
     })
   })
 

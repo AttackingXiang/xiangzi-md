@@ -78,9 +78,25 @@ export function codeContentCaretX(content: HTMLElement, lineOffset: number): num
 }
 
 export const CODE_CONTROLS_HEIGHT = 28
+export const CODE_CONTROLS_INSIDE_TOP = 10
 export const CODE_SCROLLBAR_HEIGHT = 5
 export const CODE_SCROLLBAR_MARGIN = 3
 export const CODE_SCROLLBAR_INSET = 16
+
+const CODE_CONTROLS_INSIDE_ENTER_GAP = 16
+const CODE_CONTROLS_INSIDE_EXIT_GAP = 8
+
+/** Decide whether the first row has enough unused space for the controls.
+ * Re-entering the card requires a little more space than staying there, so
+ * typing around the threshold cannot make the controls jump on every key. */
+export function codeControlsFitInside(
+  availableWidth: number,
+  controlsWidth: number,
+  currentlyInside: boolean,
+): boolean {
+  const safetyGap = currentlyInside ? CODE_CONTROLS_INSIDE_EXIT_GAP : CODE_CONTROLS_INSIDE_ENTER_GAP
+  return availableWidth >= controlsWidth + safetyGap
+}
 
 interface HorizontalRect {
   left: number
@@ -143,15 +159,19 @@ export function pinnedOverlayTop(
   return Math.min(top, blockBottom - height)
 }
 
-/** Place the active code controls as a tab joined to the card's top-right
- * edge. When that edge has scrolled above the viewport, keep the controls
- * reachable inside the visible part of the card instead of clipping them. */
+/** Place the active code controls either in the card's first row or as a tab
+ * joined to its top-right edge. When the block top has scrolled away, both
+ * placements pin to the visible part of the card instead of disappearing. */
 export function codeControlsTop(
   geometry: OverlayPinGeometry,
+  inside = false,
   height = CODE_CONTROLS_HEIGHT,
 ): number | null {
   const { blockTop, blockBottom, viewportTop, viewportBottom } = geometry
   if (blockBottom <= viewportTop || blockTop >= viewportBottom) return null
+  if (inside) {
+    return pinnedOverlayTop('block-start', geometry, height, CODE_CONTROLS_INSIDE_TOP)
+  }
   const earTop = blockTop - height + 1
   if (earTop >= viewportTop) return earTop
   return Math.max(blockTop, Math.min(viewportTop, blockBottom - height))
