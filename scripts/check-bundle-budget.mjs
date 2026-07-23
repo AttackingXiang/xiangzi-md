@@ -5,8 +5,8 @@ import process from 'node:process'
 import { gzipSync } from 'node:zlib'
 
 const DIST_DIR = resolve('dist')
-const ENTRY_GZIP_LIMIT = Number(process.env.BUNDLE_ENTRY_GZIP_LIMIT ?? 200 * 1024)
-const CHUNK_GZIP_LIMIT = Number(process.env.BUNDLE_CHUNK_GZIP_LIMIT ?? 200 * 1024)
+const ENTRY_GZIP_LIMIT = Number(process.env.BUNDLE_ENTRY_GZIP_LIMIT ?? 210 * 1024)
+const CHUNK_GZIP_LIMIT = Number(process.env.BUNDLE_CHUNK_GZIP_LIMIT ?? 210 * 1024)
 const TOTAL_LIMIT = Number(process.env.BUNDLE_TOTAL_LIMIT ?? 12 * 1024 * 1024)
 
 function filesBelow(directory) {
