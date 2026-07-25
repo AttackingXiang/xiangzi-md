@@ -311,7 +311,6 @@ export function MarkdownEditor({
       if (!restoringScroll) onScrollTopChangeRef.current?.(scroller.scrollTop)
     }
     scroller.addEventListener('scroll', reportScroll, { passive: true })
-
     const reportSelectionToolbar = (): void => reportSelectionToolbarRef.current(controller.view)
     const beginPointerSelection = (event: PointerEvent): void => {
       if (

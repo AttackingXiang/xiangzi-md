@@ -507,7 +507,8 @@ export function markdownImagePreview(options: MarkdownImagePreviewOptions): Exte
           // every estimate. Comparing against the width the current widgets
           // were built with keeps this from rebuilding on unrelated geometry
           // updates (and from looping, since an unchanged width is a no-op).
-          (update.geometryChanged && this.view.contentDOM.clientWidth !== this.lastAvailableWidth) ||
+          (update.geometryChanged &&
+            this.view.contentDOM.clientWidth !== this.lastAvailableWidth) ||
           update.transactions.some((transaction) =>
             transaction.effects.some((effect) => effect.is(refreshImagePreviews)),
           )

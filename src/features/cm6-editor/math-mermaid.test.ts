@@ -89,7 +89,12 @@ describe('CM6 Mermaid preview boundary', () => {
     // aggregated one installed by hiddenRangesEngine() in markdownLivePreview.
     const withExtension = EditorState.create({
       doc,
-      extensions: [markdown(), markdownMermaidPreview(options)],
+      // Own cache: the default is module-level and shared with every other
+      // test in the run.
+      extensions: [
+        markdown(),
+        markdownMermaidPreview({ ...options, cache: new MermaidRenderCache() }),
+      ],
     })
     expect(withExtension.facet(EditorView.atomicRanges)).toHaveLength(0)
   })

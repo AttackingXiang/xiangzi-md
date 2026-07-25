@@ -494,7 +494,14 @@ export function collectMermaidHiddenRanges(
 const sharedMermaidRenderCache = new MermaidRenderCache()
 
 export function markdownMermaidPreview(options: MermaidPreviewOptions): Extension {
-  const cache = options.cache ?? sharedMermaidRenderCache
+  // Sharing is only the default. A caller that names a cache, or asks for a
+  // size the shared instance was not built with, gets its own — otherwise
+  // `cacheSize` would be silently ignored here.
+  const cache =
+    options.cache ??
+    (options.cacheSize === undefined
+      ? sharedMermaidRenderCache
+      : new MermaidRenderCache(options.cacheSize))
   return [
     mermaidSourceRange,
     mermaidModeVersion,

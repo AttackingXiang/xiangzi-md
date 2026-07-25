@@ -5,7 +5,7 @@ import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { afterEach, describe, expect, it } from 'vitest'
 import { markdownCodeBlockPreview } from './codeBlockPreview'
-import { markdownMermaidPreview, mermaidSourceRange } from './mermaidPreview'
+import { MermaidRenderCache, markdownMermaidPreview, mermaidSourceRange } from './mermaidPreview'
 
 describe('Mermaid preview controls', () => {
   let view: EditorView | undefined
@@ -22,6 +22,8 @@ describe('Mermaid preview controls', () => {
           markdownCodeBlockPreview(),
           markdownMermaidPreview({
             render: () => Promise.resolve('<svg viewBox="0 0 20 10" />'),
+            // The default cache is module-level and shared across the whole run.
+            cache: new MermaidRenderCache(),
           }),
         ],
       }),
