@@ -7,7 +7,6 @@ import { viewportDecorationExtension } from './viewportDecorations'
 import { copySvgMarkupAsImage } from '../../lib/richClipboard'
 import { checkIcon, codeIcon, copyIcon } from './widgetIcons'
 import { isExternalDocumentSync } from './sync'
-import { compensateScrollForHeightDelta, resizeWithScrollCompensation } from './scrollCompensation'
 
 export type MermaidRenderer = (source: string) => Promise<string>
 
@@ -326,10 +325,13 @@ export class MermaidWidget extends WidgetType {
     void this.cache.render(this.block.source, this.version, this.renderer).then(
       (svg) => {
         if (requestVersion !== this.renderVersion) return
-        resizeWithScrollCompensation(view, block, () => {
-          applyRenderedMermaidSvg(container, content, copy, svg)
-        })
+        applyRenderedMermaidSvg(container, content, copy, svg)
         this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
+        // Re-anchoring the viewport after a height change is CM6's job (its
+        // measure cycle corrects scrollTop against a stored anchor block);
+        // correcting scrollTop here as well doubled the adjustment and
+        // visibly jolted the page upward. Just report the new geometry.
+        view.requestMeasure()
         if (typeof ResizeObserver === 'function') {
           this.resizeObserver?.disconnect()
           let previousWidth = -1
@@ -337,10 +339,8 @@ export class MermaidWidget extends WidgetType {
           this.resizeObserver = new ResizeObserver((entries) => {
             const rect = entries[0]?.contentRect
             if (!rect || (rect.width === previousWidth && rect.height === previousHeight)) return
-            const heightDelta = previousHeight >= 0 ? rect.height - previousHeight : 0
             previousWidth = rect.width
             previousHeight = rect.height
-            compensateScrollForHeightDelta(view, block.getBoundingClientRect().top, heightDelta)
             this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
             view.requestMeasure()
           })
@@ -349,13 +349,12 @@ export class MermaidWidget extends WidgetType {
       },
       (error: unknown) => {
         if (requestVersion !== this.renderVersion) return
-        resizeWithScrollCompensation(view, block, () => {
-          container.classList.remove('is-loading')
-          container.classList.add('is-error')
-          copy.title = '图表语法有误，无法复制'
-          const message = error instanceof Error ? error.message : String(error)
-          content.textContent = `${this.errorLabel}: ${message}\n\n${this.block.source}`
-        })
+        container.classList.remove('is-loading')
+        container.classList.add('is-error')
+        copy.title = '图表语法有误，无法复制'
+        const message = error instanceof Error ? error.message : String(error)
+        content.textContent = `${this.errorLabel}: ${message}\n\n${this.block.source}`
+        view.requestMeasure()
       },
     )
     return block

@@ -12,7 +12,6 @@ import {
 import { copyImageElement } from '../../lib/richClipboard'
 import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import { decodeMarkdownReferenceText, resolveMarkdownReference } from './markdownReferences'
-import { resizeWithScrollCompensation } from './scrollCompensation'
 
 export interface MarkdownImageMatch {
   from: number
@@ -417,16 +416,16 @@ export class ImagePreviewWidget extends WidgetType {
       image.style.display = this.match.block ? 'block' : 'inline-block'
       element.classList.add('is-loading')
       const finishLoad = (): void => {
-        const applyLoadedState = (): void => {
-          if (this.match.block && image.naturalWidth > 0 && image.naturalHeight > 0) {
-            const dimensions = { width: image.naturalWidth, height: image.naturalHeight }
-            rememberImageDimensions(this.url!, dimensions)
-            applyBlockImageDimensions(element, dimensions)
-          }
-          element.classList.remove('is-loading')
+        if (this.match.block && image.naturalWidth > 0 && image.naturalHeight > 0) {
+          const dimensions = { width: image.naturalWidth, height: image.naturalHeight }
+          rememberImageDimensions(this.url!, dimensions)
+          applyBlockImageDimensions(element, dimensions)
         }
-        if (view) resizeWithScrollCompensation(view, element, applyLoadedState)
-        else applyLoadedState()
+        element.classList.remove('is-loading')
+        // Height changes above the viewport are re-anchored by CM6's own
+        // measure cycle; a second manual scrollTop correction here would
+        // double the adjustment and visibly shove the page.
+        view?.requestMeasure()
       }
       image.addEventListener('load', finishLoad)
       image.addEventListener('error', () => {
