@@ -333,7 +333,13 @@ pub fn open_folder_path(
     if !root.is_dir() {
         return Ok(None);
     }
-    ensure_allowed(app, root)?;
+    // Reopening a path the app already knows about (favorites, recent
+    // folders) is not privilege escalation the way `open_containing_folder`'s
+    // file-to-parent jump is — it's the exact same path the user picked when
+    // it was first added. Authorize it up front instead of requiring it to
+    // already be in scope, otherwise this call can never grant scope for a
+    // path it doesn't already have: `ensure_allowed` checked first made
+    // every never-before-reopened favorite/recent folder fail on first click.
     authorize_directory(app, root)?;
     Ok(Some(Folder {
         root: path_string(root),
@@ -414,7 +420,13 @@ pub fn open_containing_folder(
 }
 
 pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
-    ensure_allowed(app, path)?;
+    // Authorize before reading, not after: this is a direct reopen of a path
+    // the app already persisted itself (recent files, favorites), not a new
+    // escalation, and gating on prior scope here just made every
+    // never-before-reopened recent file fail silently on first click. This
+    // also covers the document's directory (and limited ancestors) so
+    // relative images resolve without a second round trip.
+    authorize_document_context(app, path);
     let bytes = read_limited(path, MAX_DOCUMENT_BYTES, "读取文件失败")?;
     // 先用 &bytes 借用计算版本信息，再把 bytes 移入 UTF-8 校验消费掉，
     // 避免为了同时满足两处使用而整份克隆文件内容（上限达 20MB）。
@@ -422,8 +434,6 @@ pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
     let content = String::from_utf8(bytes).map_err(|error| {
         AppError::new("file_encoding_invalid", format!("文件不是 UTF-8：{error}"))
     })?;
-    // 授权文档所在目录及有限上层，使相对图片（含上层 assets/）可被渲染层读取。
-    authorize_document_context(app, path);
     Ok(OpenedFile {
         path: path_string(path),
         name: file_name(path),

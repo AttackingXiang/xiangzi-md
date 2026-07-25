@@ -323,6 +323,7 @@ const EN: Record<string, string> = {
     'Reloading discards your edits; keeping your version overwrites the external changes.',
   '另存为失败。': 'Save As failed.',
   '文件夹不存在：\n': 'Folder not found:\n',
+  '无法打开文件夹：\n': 'Could not open folder:\n',
   '移动失败：\n': 'Move failed:\n',
   '这些设置来自更高版本，当前以只读模式运行。':
     'These settings were created by a newer app version and are read-only.',

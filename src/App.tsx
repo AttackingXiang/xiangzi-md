@@ -581,7 +581,14 @@ export default function App(): JSX.Element {
 
   const openFolderByPath = useCallback(
     async (root: string) => {
-      const result = await desktop.openFolderPath(root)
+      let result
+      try {
+        result = await desktop.openFolderPath(root)
+      } catch (error) {
+        console.error('Open folder by path failed', error)
+        void desktop.notify(t('无法打开文件夹：\n') + root)
+        return
+      }
       if (result) {
         setFolder(result)
         pushRecentFolder(result.root)
