@@ -68,6 +68,26 @@ const mermaidModeVersion = StateField.define<number>({
   },
 })
 
+/**
+ * How far beyond the visible range (in document characters) a Mermaid fence is
+ * still replaced by its diagram widget.
+ *
+ * This is not a rendering budget — CM6 only calls `toDOM` for what its own
+ * viewport covers, so widening this does not draw more diagrams. What it
+ * changes is the *height model*: an undecorated fence is measured as its raw
+ * source lines, while a decorated one reports `estimatedHeight`. A diagram
+ * whose source is a few hundred lines differs enormously between those two,
+ * so with the previous 256-character band the swap happened right at the edge
+ * of the viewport and visibly shoved the page every time a diagram crossed it.
+ * Pushing the boundary far outside the viewport keeps the block's contribution
+ * to the height map stable while it is anywhere near the screen, and leaves
+ * the remaining swap far enough away for CM6's scroll anchoring to absorb it.
+ *
+ * Diagram sources here run to a few thousand characters, so the band has to be
+ * comfortably larger than one diagram for it to never straddle the boundary.
+ */
+const DEFAULT_VIEWPORT_MARGIN = 20_000
+
 function mermaidCacheKey(source: string, version: string | number): string {
   return `${String(version)}\u0000${source}`
 }
@@ -384,7 +404,7 @@ export function buildMermaidPreviewDecorations(
   for (const block of findMermaidBlocks(
     state,
     visibleRanges,
-    Math.max(0, options.viewportMargin ?? 256),
+    Math.max(0, options.viewportMargin ?? DEFAULT_VIEWPORT_MARGIN),
   )) {
     if (isSourceBlock(state, block)) continue
     decorations.push(
@@ -428,7 +448,7 @@ export function collectMermaidHiddenRanges(
   for (const block of findMermaidBlocks(
     state,
     visibleRanges,
-    Math.max(0, options.viewportMargin ?? 256),
+    Math.max(0, options.viewportMargin ?? DEFAULT_VIEWPORT_MARGIN),
   )) {
     if (isSourceBlock(state, block)) continue
     hidden.push({ from: block.from, to: block.to, presentation: 'external' })
