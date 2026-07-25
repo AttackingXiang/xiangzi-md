@@ -85,8 +85,13 @@ const mermaidModeVersion = StateField.define<number>({
  *
  * Diagram sources here run to a few thousand characters, so the band has to be
  * comfortably larger than one diagram for it to never straddle the boundary.
+ * Counted in document positions, so roughly one per character — 30k spans a
+ * ~90KB UTF-8 Chinese document, i.e. typically the whole file in each
+ * direction. Scanning is a syntax-tree walk that no longer slices the body of
+ * blocks it rejects, so covering that much costs little; lower it first if a
+ * very large document ever feels sluggish to scroll.
  */
-const DEFAULT_VIEWPORT_MARGIN = 20_000
+const DEFAULT_VIEWPORT_MARGIN = 30_000
 
 function mermaidCacheKey(source: string, version: string | number): string {
   return `${String(version)}\u0000${source}`
