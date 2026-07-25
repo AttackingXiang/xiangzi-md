@@ -79,6 +79,15 @@ export class MermaidRenderCache {
   // source/version (scrolling back into view, tab switch) can report its
   // real size instead of the generic loading-shell estimate.
   private readonly heights = new Map<string, number>()
+  // The resolved SVG markup itself, readable synchronously. `entries` only
+  // ever hands back a Promise — even one already settled still defers its
+  // `.then()` to a microtask — so a widget built by `toDOM()` for a diagram
+  // this cache already rendered would otherwise always paint the loading
+  // shell for at least one tick before swapping in the real content, on
+  // every remount (scrolling it in and out of CM6's render margin, tab
+  // switches, ...). Checking this map lets `toDOM()` skip that placeholder
+  // step entirely when the diagram is already known.
+  private readonly resolvedSvg = new Map<string, string>()
 
   constructor(readonly maxEntries = 24) {}
 
@@ -87,19 +96,29 @@ export class MermaidRenderCache {
     const cached = this.entries.get(key)
     if (cached) return cached
 
-    const pending = renderer(source).catch((error: unknown) => {
-      // A temporary renderer failure should be retryable after the widget remounts.
-      this.entries.delete(key)
-      throw error
-    })
+    const pending = renderer(source)
+      .then((svg) => {
+        this.resolvedSvg.set(key, svg)
+        return svg
+      })
+      .catch((error: unknown) => {
+        // A temporary renderer failure should be retryable after the widget remounts.
+        this.entries.delete(key)
+        throw error
+      })
     this.entries.set(key, pending)
     while (this.entries.size > Math.max(1, this.maxEntries)) {
       const oldest = this.entries.keys().next().value
       if (oldest === undefined) break
       this.entries.delete(oldest)
       this.heights.delete(oldest)
+      this.resolvedSvg.delete(oldest)
     }
     return pending
+  }
+
+  getResolvedSvg(source: string, version: string | number): string | undefined {
+    return this.resolvedSvg.get(mermaidCacheKey(source, version))
   }
 
   getHeight(source: string, version: string | number): number | undefined {
@@ -167,6 +186,24 @@ function appendSanitizedSvg(container: HTMLElement, svg: string): void {
     }
   })
   container.replaceChildren(template.content.cloneNode(true))
+}
+
+function applyRenderedMermaidSvg(
+  container: HTMLElement,
+  content: HTMLElement,
+  copy: HTMLButtonElement,
+  svg: string,
+): void {
+  container.classList.remove('is-loading', 'is-error')
+  appendSanitizedSvg(content, svg)
+  const svgElement = content.querySelector('svg')
+  if (svgElement) {
+    svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+    svgElement.removeAttribute('height')
+    svgElement.style.removeProperty('height')
+  }
+  copy.disabled = false
+  copy.title = '复制图片'
 }
 
 export class MermaidWidget extends WidgetType {
@@ -277,21 +314,20 @@ export class MermaidWidget extends WidgetType {
     container.append(actions)
     block.append(container)
 
+    // A widget rebuilt for a diagram this cache already rendered (scrolled
+    // out of CM6's render margin and back in, tab switch, ...) would
+    // otherwise always paint the loading shell for one tick before the async
+    // path below swaps in the real content — the visible flash this whole
+    // cache exists to avoid. Apply it synchronously here instead.
+    const cachedSvg = this.cache.getResolvedSvg(this.block.source, this.version)
+    if (cachedSvg) applyRenderedMermaidSvg(container, content, copy, cachedSvg)
+
     const requestVersion = ++this.renderVersion
     void this.cache.render(this.block.source, this.version, this.renderer).then(
       (svg) => {
         if (requestVersion !== this.renderVersion) return
         resizeWithScrollCompensation(view, block, () => {
-          container.classList.remove('is-loading', 'is-error')
-          appendSanitizedSvg(content, svg)
-          const svgElement = content.querySelector('svg')
-          if (svgElement) {
-            svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet')
-            svgElement.removeAttribute('height')
-            svgElement.style.removeProperty('height')
-          }
-          copy.disabled = false
-          copy.title = '复制图片'
+          applyRenderedMermaidSvg(container, content, copy, svg)
         })
         this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
         if (typeof ResizeObserver === 'function') {
