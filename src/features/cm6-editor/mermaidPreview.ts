@@ -171,22 +171,28 @@ function findMermaidBlocks(
       enter(node) {
         if (node.name !== 'FencedCode') return
         let language = ''
-        const sourceParts: string[] = []
+        // Collect body positions rather than text: this runs for every fenced
+        // block in the (deliberately wide) scan band on each viewport rebuild,
+        // and slicing the body of blocks that turn out not to be Mermaid was
+        // pure waste. The info string is short enough to read eagerly.
+        const bodyRanges: { from: number; to: number }[] = []
         node.node.cursor().iterate((child) => {
           if (child.name === 'CodeInfo') language = state.doc.sliceString(child.from, child.to)
           // Blockquotes and list-indented fences split their body into multiple CodeText
           // nodes around QuoteMark/indentation tokens. Overwriting here silently kept only
           // the final line, producing a valid-looking but incomplete diagram.
-          if (child.name === 'CodeText') {
-            sourceParts.push(state.doc.sliceString(child.from, child.to))
-          }
+          if (child.name === 'CodeText') bodyRanges.push({ from: child.from, to: child.to })
         })
         const languageName = language.trim().split(/\s+/, 1)[0]?.toLowerCase()
         if (languageName !== 'mermaid') return false
         const key = `${node.from}:${node.to}`
         if (!seen.has(key)) {
           seen.add(key)
-          blocks.push({ from: node.from, to: node.to, source: sourceParts.join('') })
+          blocks.push({
+            from: node.from,
+            to: node.to,
+            source: bodyRanges.map((range) => state.doc.sliceString(range.from, range.to)).join(''),
+          })
         }
         return false
       },
