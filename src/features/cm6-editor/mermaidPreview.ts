@@ -7,6 +7,7 @@ import { viewportDecorationExtension } from './viewportDecorations'
 import { copySvgMarkupAsImage } from '../../lib/richClipboard'
 import { checkIcon, codeIcon, copyIcon } from './widgetIcons'
 import { isExternalDocumentSync } from './sync'
+import { compensateScrollForHeightDelta, resizeWithScrollCompensation } from './scrollCompensation'
 
 export type MermaidRenderer = (source: string) => Promise<string>
 
@@ -19,6 +20,12 @@ export interface MermaidPreviewOptions {
   cacheSize?: number
   /** Re-render without foreignObject for reliable PNG clipboard conversion. */
   renderForCopy?: MermaidRenderer
+  /**
+   * Overrides the module-level default cache `markdownMermaidPreview` reuses
+   * across editor remounts. Mainly for test isolation (multiple `it()` blocks
+   * in one file otherwise share that default's rendered SVGs/heights).
+   */
+  cache?: MermaidRenderCache
 }
 
 interface MermaidBlock {
@@ -274,18 +281,19 @@ export class MermaidWidget extends WidgetType {
     void this.cache.render(this.block.source, this.version, this.renderer).then(
       (svg) => {
         if (requestVersion !== this.renderVersion) return
-        container.classList.remove('is-loading', 'is-error')
-        appendSanitizedSvg(content, svg)
-        const svgElement = content.querySelector('svg')
-        if (svgElement) {
-          svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet')
-          svgElement.removeAttribute('height')
-          svgElement.style.removeProperty('height')
-        }
-        copy.disabled = false
-        copy.title = '复制图片'
+        resizeWithScrollCompensation(view, block, () => {
+          container.classList.remove('is-loading', 'is-error')
+          appendSanitizedSvg(content, svg)
+          const svgElement = content.querySelector('svg')
+          if (svgElement) {
+            svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+            svgElement.removeAttribute('height')
+            svgElement.style.removeProperty('height')
+          }
+          copy.disabled = false
+          copy.title = '复制图片'
+        })
         this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
-        view.requestMeasure()
         if (typeof ResizeObserver === 'function') {
           this.resizeObserver?.disconnect()
           let previousWidth = -1
@@ -293,8 +301,10 @@ export class MermaidWidget extends WidgetType {
           this.resizeObserver = new ResizeObserver((entries) => {
             const rect = entries[0]?.contentRect
             if (!rect || (rect.width === previousWidth && rect.height === previousHeight)) return
+            const heightDelta = previousHeight >= 0 ? rect.height - previousHeight : 0
             previousWidth = rect.width
             previousHeight = rect.height
+            compensateScrollForHeightDelta(view, block.getBoundingClientRect().top, heightDelta)
             this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
             view.requestMeasure()
           })
@@ -303,12 +313,13 @@ export class MermaidWidget extends WidgetType {
       },
       (error: unknown) => {
         if (requestVersion !== this.renderVersion) return
-        container.classList.remove('is-loading')
-        container.classList.add('is-error')
-        copy.title = '图表语法有误，无法复制'
-        const message = error instanceof Error ? error.message : String(error)
-        content.textContent = `${this.errorLabel}: ${message}\n\n${this.block.source}`
-        view.requestMeasure()
+        resizeWithScrollCompensation(view, block, () => {
+          container.classList.remove('is-loading')
+          container.classList.add('is-error')
+          copy.title = '图表语法有误，无法复制'
+          const message = error instanceof Error ? error.message : String(error)
+          content.textContent = `${this.errorLabel}: ${message}\n\n${this.block.source}`
+        })
       },
     )
     return block
@@ -390,8 +401,16 @@ export function collectMermaidHiddenRanges(
   return hidden
 }
 
+// Module-level so rendered SVGs and measured heights survive the editor
+// rebuilding its preview extensions — every settings change (theme, table
+// mode, ...) and every tab switch calls `markdownMermaidPreview` fresh (see
+// MarkdownEditor.tsx), and a per-call cache would otherwise force every
+// visible diagram back through the loading-placeholder-to-real-size jump on
+// each of those, not just on first render.
+const sharedMermaidRenderCache = new MermaidRenderCache()
+
 export function markdownMermaidPreview(options: MermaidPreviewOptions): Extension {
-  const cache = new MermaidRenderCache(options.cacheSize)
+  const cache = options.cache ?? sharedMermaidRenderCache
   return [
     mermaidSourceRange,
     mermaidModeVersion,
