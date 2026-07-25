@@ -312,37 +312,6 @@ export function MarkdownEditor({
     }
     scroller.addEventListener('scroll', reportScroll, { passive: true })
 
-    // WKWebView scrolls a contenteditable's DOM selection into view when it
-    // takes focus, and the native focus a mouse press performs as its default
-    // action offers no `preventScroll` to opt out of (CM6's own `view.focus()`
-    // is guarded internally, and this module's code scrollbar does the same
-    // dance by hand — see codeBlockScrollOverlay.ts). Pressing in an unfocused
-    // editor whose selection is parked far off-screen therefore yanks the
-    // document to that old selection and repaints it — a single click that
-    // appears to jump and select something.
-    //
-    // Undoing the scroll afterwards does not work reliably: the reveal can
-    // land a frame or more after the press. Instead collapse the selection
-    // onto the press position *before* the browser focuses, so what it
-    // reveals is already on screen and there is nothing to scroll to. CM6
-    // then applies its own (identical) selection on top as usual.
-    const alignSelectionBeforeFocus = (event: PointerEvent): void => {
-      const view = controller.view
-      // Shift-press extends the existing selection, so its far anchor must
-      // survive; other buttons never reposition the caret.
-      if (event.button !== 0 || event.shiftKey || view.hasFocus) return
-      const target = event.target
-      if (!(target instanceof Element) || !view.contentDOM.contains(target)) return
-      // Widget affordances (code copy, table controls, diagram toggles) own
-      // their presses and must not drag the caret onto themselves.
-      if (target.closest('button, input, select, textarea, [role="checkbox"]')) return
-      const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
-      if (position === null) return
-      const main = view.state.selection.main
-      if (main.empty && main.head === position) return
-      view.dispatch({ selection: { anchor: position } })
-    }
-    scroller.addEventListener('pointerdown', alignSelectionBeforeFocus, true)
     const reportSelectionToolbar = (): void => reportSelectionToolbarRef.current(controller.view)
     const beginPointerSelection = (event: PointerEvent): void => {
       if (
@@ -401,7 +370,6 @@ export function MarkdownEditor({
       cancelAnimationFrame(restoreFrame)
       if (selectionToolbarFrame) cancelAnimationFrame(selectionToolbarFrame)
       pointerSelectingRef.current = false
-      scroller.removeEventListener('pointerdown', alignSelectionBeforeFocus, true)
       scroller.removeEventListener('scroll', reportScroll)
       scroller.removeEventListener('scroll', reportSelectionToolbar)
       scroller.removeEventListener('pointerdown', beginPointerSelection, true)
