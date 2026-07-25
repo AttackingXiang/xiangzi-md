@@ -356,13 +356,25 @@ export class MermaidWidget extends WidgetType {
     void this.cache.render(this.block.source, this.version, this.renderer).then(
       (svg) => {
         if (requestVersion !== this.renderVersion) return
-        applyRenderedMermaidSvg(container, content, copy, svg)
-        this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
-        // Re-anchoring the viewport after a height change is CM6's job (its
-        // measure cycle corrects scrollTop against a stored anchor block);
-        // correcting scrollTop here as well doubled the adjustment and
-        // visibly jolted the page upward. Just report the new geometry.
-        view.requestMeasure()
+        // `toDOM` already painted this exact markup synchronously above, and
+        // re-applying it is not a no-op: `replaceChildren` tears the SVG out
+        // and rebuilds it a microtask later, which is a genuine layout change
+        // plus a forced measure. A diagram scrolling back into view went
+        // through that every single time. Only touch the DOM when the render
+        // actually produced something the widget is not already showing.
+        if (svg !== cachedSvg) {
+          applyRenderedMermaidSvg(container, content, copy, svg)
+          this.cache.rememberHeight(
+            this.block.source,
+            this.version,
+            block.getBoundingClientRect().height,
+          )
+          // Re-anchoring the viewport after a height change is CM6's job (its
+          // measure cycle corrects scrollTop against a stored anchor block);
+          // correcting scrollTop here as well doubled the adjustment and
+          // visibly jolted the page upward. Just report the new geometry.
+          view.requestMeasure()
+        }
         if (typeof ResizeObserver === 'function') {
           this.resizeObserver?.disconnect()
           let previousWidth = -1
@@ -372,8 +384,14 @@ export class MermaidWidget extends WidgetType {
             if (!rect || (rect.width === previousWidth && rect.height === previousHeight)) return
             previousWidth = rect.width
             previousHeight = rect.height
-            this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
-            view.requestMeasure()
+            const measured = block.getBoundingClientRect().height
+            const known = this.cache.getHeight(this.block.source, this.version)
+            this.cache.rememberHeight(this.block.source, this.version, measured)
+            // This observer fires once just for being attached, so a diagram
+            // re-mounted at a size CM6 already accounted for would otherwise
+            // request a measure pass purely for scrolling back into view.
+            // Only speak up when the recorded geometry is genuinely stale.
+            if (known === undefined || Math.abs(measured - known) > 0.5) view.requestMeasure()
           })
           this.resizeObserver.observe(content)
         }
