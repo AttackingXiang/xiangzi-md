@@ -153,6 +153,12 @@ function applyBlockImageDimensions(element: HTMLElement, dimensions: ImageDimens
   element.classList.remove('is-unmeasured')
 }
 
+/** Parses a CSS length produced by `imagePreviewMaxWidth`; `null` for unbounded values like `100%`. */
+function parsePixelMaxWidth(maxWidth: string): number | null {
+  const match = /^(\d+(?:\.\d+)?)px$/.exec(maxWidth)
+  return match ? Number(match[1]) : null
+}
+
 export function parseMarkdownImage(
   markdown: string,
 ): Pick<MarkdownImageMatch, 'alt' | 'src' | 'title'> | null {
@@ -333,7 +339,15 @@ export class ImagePreviewWidget extends WidgetType {
   }
 
   get estimatedHeight(): number {
-    return this.match.block ? this.placeholderHeight : -1
+    if (!this.match.block) return -1
+    const dimensions = this.url ? cachedImageDimensions(this.url) : null
+    if (!dimensions) return this.placeholderHeight
+    // A previously measured image never grows on redisplay (CSS only shrinks
+    // it to fit), so the natural width capped by the configured max-width is
+    // the displayed width; scale the cached aspect ratio to match.
+    const cap = parsePixelMaxWidth(this.maxWidth)
+    const width = cap ? Math.min(dimensions.width, cap) : dimensions.width
+    return Math.round((width * dimensions.height) / dimensions.width)
   }
 
   toDOM(view?: EditorView): HTMLElement {

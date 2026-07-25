@@ -62,13 +62,21 @@ const mermaidModeVersion = StateField.define<number>({
   },
 })
 
+function mermaidCacheKey(source: string, version: string | number): string {
+  return `${String(version)}\u0000${source}`
+}
+
 export class MermaidRenderCache {
   private readonly entries = new Map<string, Promise<string>>()
+  // Last rendered SVG height per key, so a widget re-mounted for the same
+  // source/version (scrolling back into view, tab switch) can report its
+  // real size instead of the generic loading-shell estimate.
+  private readonly heights = new Map<string, number>()
 
   constructor(readonly maxEntries = 24) {}
 
   render(source: string, version: string | number, renderer: MermaidRenderer): Promise<string> {
-    const key = `${String(version)}\u0000${source}`
+    const key = mermaidCacheKey(source, version)
     const cached = this.entries.get(key)
     if (cached) return cached
 
@@ -82,8 +90,18 @@ export class MermaidRenderCache {
       const oldest = this.entries.keys().next().value
       if (oldest === undefined) break
       this.entries.delete(oldest)
+      this.heights.delete(oldest)
     }
     return pending
+  }
+
+  getHeight(source: string, version: string | number): number | undefined {
+    return this.heights.get(mermaidCacheKey(source, version))
+  }
+
+  rememberHeight(source: string, version: string | number, height: number): void {
+    if (!Number.isFinite(height) || height <= 0) return
+    this.heights.set(mermaidCacheKey(source, version), height)
   }
 }
 
@@ -175,9 +193,11 @@ export class MermaidWidget extends WidgetType {
   }
 
   get estimatedHeight(): number {
-    // Match the loading shell instead of reserving the legacy 220px card.
-    // CM6 replaces this estimate with the measured SVG height after rendering.
-    return 112
+    // Falls back to the loading-shell height until the SVG is measured once;
+    // afterwards this reflects the real rendered size instead of a guess,
+    // so a widget re-mounted off-screen (scrolling, tab switch) doesn't shove
+    // the rest of the document around when it comes into view.
+    return this.cache.getHeight(this.block.source, this.version) ?? 112
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -264,6 +284,7 @@ export class MermaidWidget extends WidgetType {
         }
         copy.disabled = false
         copy.title = '复制图片'
+        this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
         view.requestMeasure()
         if (typeof ResizeObserver === 'function') {
           this.resizeObserver?.disconnect()
@@ -274,6 +295,7 @@ export class MermaidWidget extends WidgetType {
             if (!rect || (rect.width === previousWidth && rect.height === previousHeight)) return
             previousWidth = rect.width
             previousHeight = rect.height
+            this.cache.rememberHeight(this.block.source, this.version, block.getBoundingClientRect().height)
             view.requestMeasure()
           })
           this.resizeObserver.observe(content)
