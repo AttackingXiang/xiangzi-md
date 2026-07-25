@@ -319,6 +319,8 @@ export class ImagePreviewWidget extends WidgetType {
     readonly placeholderHeight: number,
     readonly onLoadError?: (url: string) => void,
     readonly owner?: object,
+    /** Editor content width, the `100%` term of the CSS `max-width` below. */
+    readonly availableWidth = 0,
   ) {
     super()
   }
@@ -334,6 +336,9 @@ export class ImagePreviewWidget extends WidgetType {
       this.url === other.url &&
       this.maxWidth === other.maxWidth &&
       this.placeholderHeight === other.placeholderHeight &&
+      // A width change rescales every block image, so the estimate below (and
+      // the height CM6 has recorded from it) has to be rebuilt with it.
+      this.availableWidth === other.availableWidth &&
       this.owner === other.owner
     )
   }
@@ -342,11 +347,16 @@ export class ImagePreviewWidget extends WidgetType {
     if (!this.match.block) return -1
     const dimensions = this.url ? cachedImageDimensions(this.url) : null
     if (!dimensions) return this.placeholderHeight
-    // A previously measured image never grows on redisplay (CSS only shrinks
-    // it to fit), so the natural width capped by the configured max-width is
-    // the displayed width; scale the cached aspect ratio to match.
+    // Mirror `max-width: min(100%, var(--xmd-image-max-width))` from
+    // imagePreview.css: the rendered width is the natural width bounded by
+    // *both* the configured cap and the editor's content width. Leaving the
+    // `100%` term out overestimated every image wider than the editor, and
+    // CM6 then had to shrink the document once the real height was measured
+    // — dragging the viewport upward mid-scroll.
     const cap = parsePixelMaxWidth(this.maxWidth)
-    const width = cap ? Math.min(dimensions.width, cap) : dimensions.width
+    let width = dimensions.width
+    if (cap) width = Math.min(width, cap)
+    if (this.availableWidth > 0) width = Math.min(width, this.availableWidth)
     return Math.round((width * dimensions.height) / dimensions.width)
   }
 
@@ -481,6 +491,7 @@ export function markdownImagePreview(options: MarkdownImagePreviewOptions): Exte
       private readonly cache = new Map<string, CacheEntry>()
       private requestToken = 0
       private destroyed = false
+      private lastAvailableWidth = -1
 
       constructor(readonly view: EditorView) {
         this.decorations = this.buildDecorations()
@@ -492,6 +503,11 @@ export function markdownImagePreview(options: MarkdownImagePreviewOptions): Exte
           update.docChanged ||
           update.viewportChanged ||
           syntaxTreeChanged ||
+          // Block images are scaled to the editor width, so a resize changes
+          // every estimate. Comparing against the width the current widgets
+          // were built with keeps this from rebuilding on unrelated geometry
+          // updates (and from looping, since an unchanged width is a no-op).
+          (update.geometryChanged && this.view.contentDOM.clientWidth !== this.lastAvailableWidth) ||
           update.transactions.some((transaction) =>
             transaction.effects.some((effect) => effect.is(refreshImagePreviews)),
           )
@@ -557,6 +573,8 @@ export function markdownImagePreview(options: MarkdownImagePreviewOptions): Exte
 
       private buildDecorations(): DecorationSet {
         const ranges = []
+        const availableWidth = this.view.contentDOM.clientWidth
+        this.lastAvailableWidth = availableWidth
         const matches = findVisibleMarkdownImages(
           this.view.state,
           this.view.visibleRanges,
@@ -574,6 +592,7 @@ export function markdownImagePreview(options: MarkdownImagePreviewOptions): Exte
             placeholderHeight,
             entry.status === 'ready' ? (url) => this.failResolvedImage(match.src, url) : undefined,
             this,
+            availableWidth,
           )
           ranges.push(Decoration.replace({ widget }).range(match.from, match.to))
         }

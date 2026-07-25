@@ -189,3 +189,46 @@ describe('image preview interaction', () => {
     expect(first.eq(moved)).toBe(false)
   })
 })
+
+describe('block image height estimation', () => {
+  const url = 'estimate://wide.png'
+  const match = { from: 0, to: 15, alt: 'sample', src: 'wide.png', block: true } as const
+  // 1200x600 (2:1): every estimate below is half the width it resolves to.
+  const widgetFor = (maxWidth: string, availableWidth: number): ImagePreviewWidget => {
+    rememberImageDimensions(url, { width: 1200, height: 600 })
+    return new ImagePreviewWidget(match, url, maxWidth, 120, undefined, undefined, availableWidth)
+  }
+
+  it('scales an image down to the editor width, not just the configured cap', () => {
+    // CSS is `max-width: min(100%, var(--xmd-image-max-width))`, so a 700px
+    // editor wins over an 800px cap. Estimating from the cap alone reported a
+    // taller block than CM6 would measure, and the correction shifted the
+    // viewport mid-scroll.
+    expect(widgetFor('800px', 700).estimatedHeight).toBe(350)
+  })
+
+  it('applies the configured cap when it is the smaller bound', () => {
+    expect(widgetFor('800px', 2000).estimatedHeight).toBe(400)
+  })
+
+  it('never scales an image above its natural size', () => {
+    expect(widgetFor('4000px', 3000).estimatedHeight).toBe(600)
+  })
+
+  it('falls back to the placeholder height for an unmeasured image', () => {
+    const widget = new ImagePreviewWidget(
+      { from: 0, to: 15, alt: 'sample', src: 'unseen.png', block: true },
+      'estimate://never-loaded.png',
+      '800px',
+      120,
+      undefined,
+      undefined,
+      700,
+    )
+    expect(widget.estimatedHeight).toBe(120)
+  })
+
+  it('rebuilds when the editor width changes so the estimate is recomputed', () => {
+    expect(widgetFor('800px', 700).eq(widgetFor('800px', 500))).toBe(false)
+  })
+})
