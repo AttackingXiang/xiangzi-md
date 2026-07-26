@@ -83,6 +83,9 @@ export const editorCmd = {
   textColor: (color: string | null): void => {
     if (!tableCellCommandBridge.isFocused()) activeCm6Commands.textColor(color)
   },
+  textHighlight: (color: string | null): void => {
+    if (!tableCellCommandBridge.isFocused()) activeCm6Commands.textHighlight(color)
+  },
   heading: (level: number): void => {
     if (level >= 1 && level <= 6) {
       runBlockCommand(() => activeCm6Commands.heading(level as HeadingLevel))

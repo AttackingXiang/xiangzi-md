@@ -143,6 +143,24 @@ fn patch_only_changes_explicit_fields() {
 }
 
 #[test]
+fn validates_color_presets_and_defaults() {
+    let mut settings = AppSettings::default();
+    settings.text_color_presets = vec!["#123abc".into()];
+    settings.default_text_color = "#123abc".into();
+    assert!(validate_settings(&settings).is_ok());
+
+    settings.default_text_color = "#ffffff".into();
+    assert!(validate_settings(&settings).is_err());
+    settings.default_text_color = "#123abc".into();
+    settings.highlight_color_presets = vec!["red".into()];
+    assert!(validate_settings(&settings).is_err());
+
+    settings.highlight_color_presets = vec!["#fde047".into(), "#fde047".into()];
+    settings.default_highlight_color = "#fde047".into();
+    assert!(validate_settings(&settings).is_err());
+}
+
+#[test]
 fn accepts_supported_clipboard_formats_and_rejects_unknown_ones() {
     let mut settings = AppSettings::default();
     for format in ["rich", "plain"] {

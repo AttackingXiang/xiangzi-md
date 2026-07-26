@@ -1,6 +1,6 @@
 import { RotateCcw } from 'lucide-react'
 import CustomColorSwatch from './CustomColorSwatch'
-import { DEFAULT_TEXT_COLOR_PRESETS } from '../lib/colorPresets'
+import { DEFAULT_HIGHLIGHT_COLOR_PRESETS } from '../lib/colorPresets'
 
 interface Props {
   lang: 'zh' | 'en'
@@ -9,32 +9,37 @@ interface Props {
   onSelect: (color: string | null) => void
 }
 
-export default function TextColorPalette({
+export default function HighlightColorPalette({
   lang,
-  colors = DEFAULT_TEXT_COLOR_PRESETS,
-  defaultColor = colors[0] ?? '#dc2626',
+  colors = DEFAULT_HIGHLIGHT_COLOR_PRESETS,
+  defaultColor = colors[0] ?? '#fde047',
   onSelect,
 }: Props): JSX.Element {
-  const resetLabel = lang === 'en' ? 'Remove text color' : '移除文字颜色'
+  const resetLabel = lang === 'en' ? 'Remove highlight' : '移除高亮'
   return (
     <div
-      className="text-color-palette"
+      className="text-color-palette highlight-color-palette"
       role="group"
-      aria-label={lang === 'en' ? 'Text colors' : '文字颜色'}
+      aria-label={lang === 'en' ? 'Highlight colors' : '荧光笔颜色'}
     >
       {colors.map((color) => (
         <button
           type="button"
           key={color}
-          className="text-color-swatch"
-          style={{ '--xmd-text-color': color } as React.CSSProperties}
+          className="text-color-swatch highlight-color-swatch"
+          style={{ '--xmd-highlight-color': color } as React.CSSProperties}
           title={color}
-          aria-label={`${lang === 'en' ? 'Text color' : '文字颜色'} ${color}`}
+          aria-label={`${lang === 'en' ? 'Highlight color' : '荧光笔颜色'} ${color}`}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(color)}
         />
       ))}
-      <CustomColorSwatch lang={lang} kind="text" initialColor={defaultColor} onSelect={onSelect} />
+      <CustomColorSwatch
+        lang={lang}
+        kind="highlight"
+        initialColor={defaultColor}
+        onSelect={onSelect}
+      />
       <button
         type="button"
         className="text-color-reset"

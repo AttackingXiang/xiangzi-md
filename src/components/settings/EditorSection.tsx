@@ -3,6 +3,7 @@ import type { AppSettings } from '../../types'
 import { t } from '../../lib/i18n'
 import { SettingsPage, SettingsCard, SettingRow, ToggleRow } from './primitives'
 import type { SectionProps } from './types'
+import ColorPresetSettings from './ColorPresetSettings'
 
 export default function EditorSection({ settings, onChange, en }: SectionProps): JSX.Element {
   return (
@@ -117,6 +118,9 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
           checked={settings.showSelectionToolbar}
           onChange={(showSelectionToolbar) => onChange({ showSelectionToolbar })}
         />
+      </SettingsCard>
+      <SettingsCard title={en ? 'Color palettes' : '颜色预设'}>
+        <ColorPresetSettings settings={settings} onChange={onChange} en={en} />
       </SettingsCard>
       <SettingsCard title={en ? 'Copy control' : '复制控制'}>
         <SettingRow label={en ? 'Default copy format' : '默认复制格式'}>

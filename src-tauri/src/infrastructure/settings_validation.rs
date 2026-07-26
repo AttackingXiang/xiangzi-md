@@ -1,8 +1,8 @@
 use super::settings_model::{
-    AppSettings, RecentDoc, MAX_ASSET_SEARCH_PATHS, MAX_FAVORITES, MAX_FAVORITE_LABEL_CHARS,
-    MAX_HIDDEN_WORKSPACE_PATHS, MAX_PANDOC_ARGS_LENGTH, MAX_PATH_LENGTH, MAX_PINNED_FOLDERS,
-    MAX_RECENT_DOCS, MAX_RECENT_ITEMS, MAX_SESSION_FILES, MAX_SHORTCUT_OVERRIDES,
-    MAX_TAG_COLLAPSED_KEYS, SETTINGS_SCHEMA_VERSION, SHORTCUT_ACTIONS,
+    AppSettings, RecentDoc, MAX_ASSET_SEARCH_PATHS, MAX_COLOR_PRESETS, MAX_FAVORITES,
+    MAX_FAVORITE_LABEL_CHARS, MAX_HIDDEN_WORKSPACE_PATHS, MAX_PANDOC_ARGS_LENGTH, MAX_PATH_LENGTH,
+    MAX_PINNED_FOLDERS, MAX_RECENT_DOCS, MAX_RECENT_ITEMS, MAX_SESSION_FILES,
+    MAX_SHORTCUT_OVERRIDES, MAX_TAG_COLLAPSED_KEYS, SETTINGS_SCHEMA_VERSION, SHORTCUT_ACTIONS,
 };
 
 const FILE_TREE_SORT_MODES: &[&str] = &["default", "nameDesc", "modified", "opened", "smart"];
@@ -148,7 +148,46 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     settings.background_opacity = settings.background_opacity.min(100);
     settings.code_block_opacity = settings.code_block_opacity.min(100);
     settings.theme_shade = settings.theme_shade.clamp(-50, 50);
+    normalize_color_presets(
+        &mut settings.text_color_presets,
+        &mut settings.default_text_color,
+        "#dc2626",
+    );
+    normalize_color_presets(
+        &mut settings.highlight_color_presets,
+        &mut settings.default_highlight_color,
+        "#fde047",
+    );
     limit_collections(settings);
+}
+
+fn valid_hex_color(value: &str) -> bool {
+    value.len() == 7 && value.starts_with('#') && value[1..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn normalize_color_presets(colors: &mut Vec<String>, default: &mut String, fallback: &str) {
+    for color in colors.iter_mut() {
+        *color = color.to_ascii_lowercase();
+    }
+    let mut seen = BTreeSet::new();
+    colors.retain(|color| valid_hex_color(color) && seen.insert(color.clone()));
+    colors.truncate(MAX_COLOR_PRESETS);
+    if colors.is_empty() {
+        colors.push(fallback.into());
+    }
+    *default = default.to_ascii_lowercase();
+    if !colors.contains(default) {
+        *default = colors[0].clone();
+    }
+}
+
+fn color_presets_are_valid(colors: &[String], default: &str) -> bool {
+    let unique = colors.iter().collect::<BTreeSet<_>>();
+    !colors.is_empty()
+        && colors.len() <= MAX_COLOR_PRESETS
+        && unique.len() == colors.len()
+        && colors.iter().all(|color| valid_hex_color(color))
+        && colors.iter().any(|color| color == default)
 }
 
 fn valid_background_image_path(settings: &AppSettings) -> bool {
@@ -189,6 +228,14 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
     }
     if !valid_folder_name(&settings.attachment_folder) {
         return Err(AppError::new("settings_invalid", "附件目录名称无效"));
+    }
+    if !color_presets_are_valid(&settings.text_color_presets, &settings.default_text_color)
+        || !color_presets_are_valid(
+            &settings.highlight_color_presets,
+            &settings.default_highlight_color,
+        )
+    {
+        return Err(AppError::new("settings_invalid", "颜色预设无效"));
     }
     if !valid_folder_name(&settings.pandoc_media_folder) {
         return Err(AppError::new("settings_invalid", "Word 媒体目录名称无效"));

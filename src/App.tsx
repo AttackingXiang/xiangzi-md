@@ -1182,7 +1182,13 @@ export default function App(): JSX.Element {
 
           {settings.showToolbar && !isTextKind && !sourceMode && !readingMode && activeTab && (
             <Suspense fallback={null}>
-              <EditorToolbar lang={settings.language} />
+              <EditorToolbar
+                lang={settings.language}
+                textColors={settings.textColorPresets}
+                defaultTextColor={settings.defaultTextColor}
+                highlightColors={settings.highlightColorPresets}
+                defaultHighlightColor={settings.defaultHighlightColor}
+              />
             </Suspense>
           )}
 
@@ -1251,6 +1257,10 @@ export default function App(): JSX.Element {
                     livePreview={!sourceMode}
                     showSelectionToolbar={settings.showSelectionToolbar ?? false}
                     lang={settings.language}
+                    textColors={settings.textColorPresets}
+                    defaultTextColor={settings.defaultTextColor}
+                    highlightColors={settings.highlightColorPresets}
+                    defaultHighlightColor={settings.defaultHighlightColor}
                     resolveImageSrc={resolveEditorImageSrc}
                     allowRemoteImages={settings.allowRemoteImages ?? false}
                     codeBlockLineWrapping={settings.codeBlockLineWrapping ?? false}

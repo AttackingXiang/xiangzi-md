@@ -17,9 +17,10 @@ import {
   insertTable,
   planRemoveLink,
   removeLink,
-  setTextColor,
   setHeading,
   setParagraph,
+  setTextColor,
+  setTextHighlight,
   toggleBlockquote,
   toggleBold,
   toggleBulletList,
@@ -129,6 +130,38 @@ describe('CM6 Markdown commands', () => {
     expect(run('第一行\n第二行', EditorSelection.range(0, 7), setTextColor('#16a34a')).doc).toBe(
       `${open}第一行</font>\n${open}第二行</font>`,
     )
+  })
+
+  it('applies, changes, and removes colored mark highlights', () => {
+    const yellowOpen = '<mark style="background-color:#fde047">'
+    const blueOpen = '<mark style="background-color:#93c5fd">'
+    const highlighted = run('重点', EditorSelection.range(0, 2), setTextHighlight('#fde047'))
+    expect(highlighted).toEqual({
+      doc: `${yellowOpen}重点</mark>`,
+      from: yellowOpen.length,
+      to: yellowOpen.length + 2,
+    })
+
+    const changed = run(
+      highlighted.doc,
+      EditorSelection.range(highlighted.from, highlighted.to),
+      setTextHighlight('#93c5fd'),
+    )
+    expect(changed).toEqual({
+      doc: `${blueOpen}重点</mark>`,
+      from: blueOpen.length,
+      to: blueOpen.length + 2,
+    })
+    expect(
+      run(changed.doc, EditorSelection.range(changed.from, changed.to), setTextHighlight(null)),
+    ).toEqual({ doc: '重点', from: 0, to: 2 })
+  })
+
+  it('applies highlights as independent mark spans across selected lines', () => {
+    const open = '<mark style="background-color:#6ee7b7">'
+    expect(
+      run('第一行\n第二行', EditorSelection.range(0, 7), setTextHighlight('#6ee7b7')).doc,
+    ).toBe(`${open}第一行</mark>\n${open}第二行</mark>`)
   })
 
   it('removes the active inline mark at a caret instead of nesting empty markers', () => {

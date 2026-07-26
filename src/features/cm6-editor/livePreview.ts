@@ -98,8 +98,9 @@ function headingNumbers(state: EditorState): ReadonlyMap<number, string> {
 interface InlineHtmlOpeningTag {
   from: number
   to: number
-  name: 'font' | 'b' | 'strong'
+  name: 'font' | 'mark' | 'b' | 'strong'
   color?: string
+  backgroundColor?: string
 }
 
 interface InlineHtmlSpan extends InlineHtmlOpeningTag {
@@ -115,10 +116,13 @@ function safeInlineHtmlColor(value: string): string | null {
   return null
 }
 
-function parseInlineHtmlTag(
-  source: string,
-): { closing: boolean; name: InlineHtmlOpeningTag['name']; color?: string } | null {
-  const closing = /^<\s*\/\s*(font|b|strong)\s*>$/i.exec(source)
+function parseInlineHtmlTag(source: string): {
+  closing: boolean
+  name: InlineHtmlOpeningTag['name']
+  color?: string
+  backgroundColor?: string
+} | null {
+  const closing = /^<\s*\/\s*(font|mark|b|strong)\s*>$/i.exec(source)
   if (closing) {
     return {
       closing: true,
@@ -126,9 +130,17 @@ function parseInlineHtmlTag(
     }
   }
 
-  const opening = /^<\s*(font|b|strong)\b([^>]*)>$/i.exec(source)
+  const opening = /^<\s*(font|mark|b|strong)\b([^>]*)>$/i.exec(source)
   if (!opening || /\/\s*>$/.test(source)) return null
   const name = opening[1].toLowerCase() as InlineHtmlOpeningTag['name']
+  if (name === 'mark') {
+    if (!opening[2].trim()) return { closing: false, name }
+    const styleAttribute = /^\s+style\s*=\s*(?:"([^"]*)"|'([^']*)')\s*$/i.exec(opening[2])
+    const style = styleAttribute?.[1] ?? styleAttribute?.[2] ?? ''
+    const background = /^background-color\s*:\s*([^;]+)\s*;?$/i.exec(style)
+    const backgroundColor = safeInlineHtmlColor(background?.[1] ?? '')
+    return backgroundColor ? { closing: false, name, backgroundColor } : null
+  }
   if (name !== 'font') return { closing: false, name }
 
   const colorAttribute = /\bcolor\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(opening[2])
@@ -179,7 +191,13 @@ function inlineHtmlSpans(state: EditorState, visible: PreviewRange): InlineHtmlS
       const tag = parseInlineHtmlTag(raw)
       if (!tag) return
       if (!tag.closing) {
-        stack.push({ from: node.from, to: node.to, name: tag.name, color: tag.color })
+        stack.push({
+          from: node.from,
+          to: node.to,
+          name: tag.name,
+          color: tag.color,
+          backgroundColor: tag.backgroundColor,
+        })
         return
       }
 
@@ -400,7 +418,14 @@ export function buildLivePreviewDecorations(
                 class: 'xmd-cm-inline-color',
                 attributes: { style: `color:${span.color ?? ''}` },
               }
-            : { class: 'xmd-cm-strong' },
+            : span.name === 'mark'
+              ? {
+                  class: 'xmd-cm-inline-highlight',
+                  attributes: span.backgroundColor
+                    ? { style: `background-color:${span.backgroundColor}` }
+                    : undefined,
+                }
+              : { class: 'xmd-cm-strong' },
         ).range(span.to, span.closeFrom),
       )
     }

@@ -882,3 +882,79 @@
 .settings-number-with-unit input {
   width: 84px;
 }
+
+.color-preset-settings,
+.color-preset-editor {
+  display: grid;
+  gap: 12px;
+}
+.color-preset-settings {
+  gap: 20px;
+}
+.color-preset-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.color-preset-title small {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.color-preset-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.color-preset-item {
+  position: relative;
+}
+.color-preset-swatch {
+  width: 30px;
+  height: 30px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.color-preset-item.is-default .color-preset-swatch {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.color-preset-remove {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-elevated, var(--bg));
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.color-preset-remove:disabled {
+  display: none;
+}
+.color-preset-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.color-preset-add input[type='color'] {
+  width: 34px;
+  height: 30px;
+  padding: 2px;
+}
+.color-preset-add input:not([type='color']) {
+  width: 92px;
+  font-family: var(--font-mono, monospace);
+}
+.color-preset-add button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}

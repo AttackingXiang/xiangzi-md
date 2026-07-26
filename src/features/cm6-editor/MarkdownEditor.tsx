@@ -14,6 +14,8 @@ import { markdownEditorExportBridge } from './exportBridge'
 import { selectionTouchesCodeBlock } from './toolbarState'
 import { setPointerSelectionActive } from './core/revealState'
 import SelectionToolbar, { type SelectionToolbarAnchor } from '../../components/SelectionToolbar'
+import { highlighterModeBridge } from '../../lib/highlighterModeBridge'
+import { setTextHighlight } from './commands'
 import './livePreview.css'
 import './codeBlockPreview.css'
 import './imagePreview.css'
@@ -28,6 +30,10 @@ export interface MarkdownEditorProps {
   readingMode: boolean
   showSelectionToolbar?: boolean
   lang?: 'zh' | 'en'
+  textColors?: readonly string[]
+  defaultTextColor?: string
+  highlightColors?: readonly string[]
+  defaultHighlightColor?: string
   /** Keep one EditorState while switching between live preview and plain source. */
   livePreview?: boolean
   resolveImageSrc?: (src: string) => Promise<string | null> | string | null
@@ -93,6 +99,10 @@ export function MarkdownEditor({
   readingMode,
   showSelectionToolbar = false,
   lang = 'zh',
+  textColors,
+  defaultTextColor,
+  highlightColors,
+  defaultHighlightColor,
   livePreview = true,
   resolveImageSrc = identityImageSource,
   allowRemoteImages = false,
@@ -150,6 +160,11 @@ export function MarkdownEditor({
   const selectionToolbarEnabledRef = useRef(showSelectionToolbar)
   const readingModeRef = useRef(readingMode)
   const pointerSelectingRef = useRef(false)
+  const initialHighlighterMode = highlighterModeBridge.getState()
+  const highlighterColorRef = useRef<string | null>(
+    initialHighlighterMode.active ? initialHighlighterMode.color : null,
+  )
+  const [highlighterActive, setHighlighterActive] = useState(initialHighlighterMode.active)
   const [selectionToolbarAnchor, setSelectionToolbarAnchor] =
     useState<SelectionToolbarAnchor | null>(null)
   const reportSelectionToolbarRef = useRef<(view: EditorView) => void>(() => undefined)
@@ -334,6 +349,16 @@ export function MarkdownEditor({
         selectionToolbarFrame = 0
         pointerSelectingRef.current = false
         controller.view.dispatch({ effects: setPointerSelectionActive.of(false) })
+        const color = highlighterColorRef.current
+        if (
+          color &&
+          !controller.view.state.selection.main.empty &&
+          !selectionTouchesCodeBlock(controller.view.state)
+        ) {
+          setTextHighlight(color)(controller.view)
+          setSelectionToolbarAnchor(null)
+          return
+        }
         reportSelectionToolbar()
       })
     }
@@ -386,6 +411,16 @@ export function MarkdownEditor({
     // The controller owns its state for this component lifetime. Subsequent
     // prop changes are applied by the focused effects below.
   }, [])
+
+  useLayoutEffect(
+    () =>
+      highlighterModeBridge.subscribe((mode) => {
+        highlighterColorRef.current = mode.active ? mode.color : null
+        setHighlighterActive(mode.active)
+        if (mode.active) setSelectionToolbarAnchor(null)
+      }),
+    [],
+  )
 
   useLayoutEffect(() => {
     controllerRef.current?.setValue(content)
@@ -443,6 +478,7 @@ export function MarkdownEditor({
     readingMode ? 'is-reading' : '',
     livePreview ? 'is-live-preview' : 'is-source',
     focusMode ? 'focus-mode' : '',
+    highlighterActive ? 'is-highlighter-mode' : '',
     className ?? '',
   ]
     .filter(Boolean)
@@ -462,6 +498,10 @@ export function MarkdownEditor({
       ref={rootRef}
       className={rootClassName}
       onKeyDownCapture={(event) => {
+        if (event.key === 'Escape' && highlighterColorRef.current) {
+          highlighterModeBridge.deactivate()
+          return
+        }
         if (!readingMode || event.metaKey || event.ctrlKey || event.altKey) return
         if (event.key.length === 1 || ['Enter', 'Backspace', 'Delete', 'Tab'].includes(event.key)) {
           showReadingHint(event.currentTarget)
@@ -477,7 +517,14 @@ export function MarkdownEditor({
       <div ref={mountRef} className="xmd-cm-mount" />
       {tagPortalHost && tagBar ? createPortal(tagBar, tagPortalHost) : null}
       {selectionToolbarAnchor && !readingMode ? (
-        <SelectionToolbar anchor={selectionToolbarAnchor} lang={lang} />
+        <SelectionToolbar
+          anchor={selectionToolbarAnchor}
+          lang={lang}
+          textColors={textColors}
+          defaultTextColor={defaultTextColor}
+          highlightColors={highlightColors}
+          defaultHighlightColor={defaultHighlightColor}
+        />
       ) : null}
     </div>
   )

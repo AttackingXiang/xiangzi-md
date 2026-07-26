@@ -15,6 +15,7 @@ pub(crate) const MAX_SHORTCUT_OVERRIDES: usize = 64;
 pub(crate) const MAX_PATH_LENGTH: usize = 4096;
 pub(crate) const MAX_FAVORITE_LABEL_CHARS: usize = 80;
 pub(crate) const MAX_PANDOC_ARGS_LENGTH: usize = 8_192;
+pub(crate) const MAX_COLOR_PRESETS: usize = 24;
 
 pub(crate) const SHORTCUT_ACTIONS: &[&str] = &[
     "new-file",
@@ -142,6 +143,10 @@ pub struct AppSettings {
     pub allow_remote_images: bool,
     pub show_toolbar: bool,
     pub show_selection_toolbar: bool,
+    pub text_color_presets: Vec<String>,
+    pub default_text_color: String,
+    pub highlight_color_presets: Vec<String>,
+    pub default_highlight_color: String,
     /// 表格列宽策略：distribute（智能占满）、fit（内容适配）、equal（等宽）或 none。
     pub table_auto_width: String,
     pub table_auto_resize: bool,
@@ -262,6 +267,22 @@ impl Default for AppSettings {
             allow_remote_images: false,
             show_toolbar: false,
             show_selection_toolbar: false,
+            text_color_presets: [
+                "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#2563eb", "#4f46e5",
+                "#9333ea", "#db2777", "#64748b",
+            ]
+            .iter()
+            .map(|v| (*v).into())
+            .collect(),
+            default_text_color: "#dc2626".into(),
+            highlight_color_presets: [
+                "#fde047", "#fdba74", "#fda4af", "#f0abfc", "#c4b5fd", "#93c5fd", "#67e8f9",
+                "#6ee7b7", "#bef264", "#d1d5db",
+            ]
+            .iter()
+            .map(|v| (*v).into())
+            .collect(),
+            default_highlight_color: "#fde047".into(),
             table_auto_width: "distribute".into(),
             table_auto_resize: true,
             show_status_bar: true,
@@ -331,6 +352,10 @@ pub struct SettingsPatch {
     pub allow_remote_images: Option<bool>,
     pub show_toolbar: Option<bool>,
     pub show_selection_toolbar: Option<bool>,
+    pub text_color_presets: Option<Vec<String>>,
+    pub default_text_color: Option<String>,
+    pub highlight_color_presets: Option<Vec<String>>,
+    pub default_highlight_color: Option<String>,
     pub table_auto_width: Option<String>,
     pub table_auto_resize: Option<bool>,
     pub show_status_bar: Option<bool>,

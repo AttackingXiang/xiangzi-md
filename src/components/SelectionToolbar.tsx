@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Bold, Code, Italic, Link, Palette, Strikethrough } from 'lucide-react'
+import { Bold, Code, Highlighter, Italic, Link, Palette, Strikethrough } from 'lucide-react'
 import { editorCmd } from '../lib/editorCommands'
+import { highlighterModeBridge } from '../lib/highlighterModeBridge'
 import TextColorPalette from './TextColorPalette'
+import HighlightColorPalette from './HighlightColorPalette'
 
 export interface SelectionToolbarAnchor {
   left: number
@@ -12,10 +14,22 @@ export interface SelectionToolbarAnchor {
 interface Props {
   anchor: SelectionToolbarAnchor
   lang: 'zh' | 'en'
+  textColors?: readonly string[]
+  defaultTextColor?: string
+  highlightColors?: readonly string[]
+  defaultHighlightColor?: string
 }
 
-export default function SelectionToolbar({ anchor, lang }: Props): JSX.Element {
+export default function SelectionToolbar({
+  anchor,
+  lang,
+  textColors,
+  defaultTextColor,
+  highlightColors,
+  defaultHighlightColor,
+}: Props): JSX.Element {
   const [showColors, setShowColors] = useState(false)
+  const [showHighlightColors, setShowHighlightColors] = useState(false)
   const label = (zh: string, en: string): string => (lang === 'en' ? en : zh)
   const actions = [
     { label: label('加粗', 'Bold'), icon: <Bold size={14} />, run: editorCmd.bold },
@@ -60,7 +74,10 @@ export default function SelectionToolbar({ anchor, lang }: Props): JSX.Element {
         title={label('文字颜色', 'Text color')}
         aria-label={label('文字颜色', 'Text color')}
         aria-expanded={showColors}
-        onClick={() => setShowColors((visible) => !visible)}
+        onClick={() => {
+          setShowHighlightColors(false)
+          setShowColors((visible) => !visible)
+        }}
       >
         <Palette size={14} />
       </button>
@@ -68,9 +85,42 @@ export default function SelectionToolbar({ anchor, lang }: Props): JSX.Element {
         <div className="selection-color-popover">
           <TextColorPalette
             lang={lang}
+            colors={textColors}
+            defaultColor={defaultTextColor}
             onSelect={(color) => {
               editorCmd.textColor(color)
               setShowColors(false)
+            }}
+          />
+        </div>
+      )}
+      <button
+        type="button"
+        className={`selection-toolbar-btn${showHighlightColors ? ' is-active' : ''}`}
+        title={label('荧光笔', 'Highlighter')}
+        aria-label={label('荧光笔', 'Highlighter')}
+        aria-expanded={showHighlightColors}
+        onClick={() => {
+          setShowColors(false)
+          setShowHighlightColors((visible) => !visible)
+        }}
+      >
+        <Highlighter size={14} />
+      </button>
+      {showHighlightColors && (
+        <div className="selection-color-popover">
+          <HighlightColorPalette
+            lang={lang}
+            colors={highlightColors}
+            defaultColor={defaultHighlightColor}
+            onSelect={(color) => {
+              editorCmd.textHighlight(color)
+              if (color) {
+                highlighterModeBridge.selectColor(color, false)
+              } else {
+                highlighterModeBridge.deactivate()
+              }
+              setShowHighlightColors(false)
             }}
           />
         </div>

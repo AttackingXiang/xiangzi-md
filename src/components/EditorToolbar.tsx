@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Bold,
   Italic,
@@ -23,6 +23,7 @@ import {
   Redo2,
   Pilcrow,
   Palette,
+  Highlighter,
 } from 'lucide-react'
 import {
   DEFAULT_TOOLBAR_ACTIVE_STATE,
@@ -37,17 +38,36 @@ import {
   type TableCellCommandState,
 } from '../lib/tableCellCommandBridge'
 import TextColorPalette from './TextColorPalette'
+import HighlightColorPalette from './HighlightColorPalette'
+import { highlighterModeBridge } from '../lib/highlighterModeBridge'
+import type { HighlighterModeState } from '../lib/highlighterModeBridge'
 
 interface Props {
   lang: 'zh' | 'en'
+  textColors: readonly string[]
+  defaultTextColor: string
+  highlightColors: readonly string[]
+  defaultHighlightColor: string
 }
 
-export default function EditorToolbar({ lang }: Props): JSX.Element {
+export default function EditorToolbar({
+  lang,
+  textColors,
+  defaultTextColor,
+  highlightColors,
+  defaultHighlightColor,
+}: Props): JSX.Element {
   const [ts, setTs] = useState<ToolbarActiveState>(DEFAULT_TOOLBAR_ACTIVE_STATE)
   const [cellState, setCellState] = useState<TableCellCommandState>(
     DEFAULT_TABLE_CELL_COMMAND_STATE,
   )
   const [showColors, setShowColors] = useState(false)
+  const [showHighlightColors, setShowHighlightColors] = useState(false)
+  const textColorControlRef = useRef<HTMLDivElement>(null)
+  const highlightColorControlRef = useRef<HTMLDivElement>(null)
+  const [highlighterMode, setHighlighterMode] = useState<HighlighterModeState>(
+    highlighterModeBridge.getState(),
+  )
 
   useEffect(() => {
     toolbarStateBridge.setListener(setTs)
@@ -55,6 +75,30 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
   }, [])
 
   useEffect(() => tableCellCommandBridge.subscribe(setCellState), [])
+
+  useEffect(() => highlighterModeBridge.subscribe(setHighlighterMode), [])
+
+  useEffect(
+    () => highlighterModeBridge.syncDefaultColor(defaultHighlightColor),
+    [defaultHighlightColor],
+  )
+
+  useEffect(() => {
+    if (!showColors && !showHighlightColors) return
+    const closeColorPopovers = (event: PointerEvent): void => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (
+        textColorControlRef.current?.contains(target) ||
+        highlightColorControlRef.current?.contains(target)
+      )
+        return
+      setShowColors(false)
+      setShowHighlightColors(false)
+    }
+    document.addEventListener('pointerdown', closeColorPopovers, true)
+    return () => document.removeEventListener('pointerdown', closeColorPopovers, true)
+  }, [showColors, showHighlightColors])
 
   const t = (zh: string, en: string): string => (lang === 'en' ? en : zh)
 
@@ -174,7 +218,7 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
         () => editorCmd.inlineCode(),
         cellState.focused && !cellState.hasSelection,
       )}
-      <div className="toolbar-color-control">
+      <div ref={textColorControlRef} className="toolbar-color-control">
         <button
           type="button"
           className={`toolbar-btn${showColors ? ' is-active' : ''}`}
@@ -183,7 +227,10 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
           aria-expanded={showColors}
           disabled={cellState.focused}
           onMouseDown={preserveEditorSelection}
-          onClick={() => setShowColors((visible) => !visible)}
+          onClick={() => {
+            setShowHighlightColors(false)
+            setShowColors((visible) => !visible)
+          }}
         >
           <Palette size={15} />
         </button>
@@ -191,9 +238,57 @@ export default function EditorToolbar({ lang }: Props): JSX.Element {
           <div className="toolbar-color-popover">
             <TextColorPalette
               lang={lang}
+              colors={textColors}
+              defaultColor={defaultTextColor}
               onSelect={(color) => {
                 editorCmd.textColor(color)
                 setShowColors(false)
+              }}
+            />
+          </div>
+        )}
+      </div>
+      <div ref={highlightColorControlRef} className="toolbar-color-control">
+        <button
+          type="button"
+          className={`toolbar-btn toolbar-highlighter-btn${highlighterMode.active ? ' is-active' : ''}`}
+          style={
+            {
+              '--xmd-active-highlight-color': highlighterMode.active
+                ? highlighterMode.color
+                : 'transparent',
+            } as React.CSSProperties
+          }
+          aria-label={t('荧光笔', 'Highlighter')}
+          data-tooltip={t('荧光笔', 'Highlighter')}
+          aria-expanded={showHighlightColors}
+          disabled={cellState.focused}
+          onMouseDown={preserveEditorSelection}
+          onClick={() => {
+            setShowColors(false)
+            setShowHighlightColors((visible) => !visible)
+          }}
+        >
+          <Highlighter
+            size={15}
+            color={highlighterMode.active ? highlighterMode.color : undefined}
+          />
+        </button>
+        {showHighlightColors && !cellState.focused && (
+          <div className="toolbar-color-popover">
+            <HighlightColorPalette
+              lang={lang}
+              colors={highlightColors}
+              defaultColor={defaultHighlightColor}
+              onSelect={(color) => {
+                if (color) {
+                  editorCmd.textHighlight(color)
+                  highlighterModeBridge.selectColor(color)
+                } else {
+                  editorCmd.textHighlight(null)
+                  highlighterModeBridge.deactivate()
+                }
+                setShowHighlightColors(false)
               }}
             />
           </div>

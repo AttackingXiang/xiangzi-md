@@ -159,6 +159,15 @@
   padding: 0.08em 0.28em;
 }
 
+.xmd-cm-editor .xmd-cm-inline-highlight {
+  background-color: #fde047;
+  border-radius: 0.12em;
+  box-decoration-break: clone;
+  color: inherit;
+  padding-inline: 0.04em;
+  -webkit-box-decoration-break: clone;
+}
+
 .xmd-cm-editor .xmd-cm-link {
   color: var(--accent);
   text-decoration: underline;

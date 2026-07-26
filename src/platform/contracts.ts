@@ -99,6 +99,10 @@ export interface AppSettings {
   allowRemoteImages: boolean
   showToolbar: boolean
   showSelectionToolbar: boolean
+  textColorPresets: string[]
+  defaultTextColor: string
+  highlightColorPresets: string[]
+  defaultHighlightColor: string
   /** 启用虚拟化大文档编辑器的文件大小阈值，单位 KiB。 */
   /** 表格单元格输入停顿后采用的自动列宽策略。 */
   tableAutoWidth: 'distribute' | 'fit' | 'equal'

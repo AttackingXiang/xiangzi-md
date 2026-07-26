@@ -336,6 +336,46 @@ describe('CM6 Markdown live preview: safe inline HTML formatting', () => {
     expect(hidden).toContainEqual({ from: closingStart, to: closingStart + 7 })
   })
 
+  it('renders standard and colored mark highlights while hiding their source tags', () => {
+    const doc = '<mark>default</mark> and <mark style="background-color:#93c5fd">blue</mark> plain'
+    const state = createState(doc, doc.indexOf('plain'))
+    const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
+    const defaultFrom = doc.indexOf('default')
+    const blueFrom = doc.indexOf('blue')
+
+    expect(seen).toContainEqual(
+      expect.objectContaining({
+        from: defaultFrom,
+        to: defaultFrom + 'default'.length,
+        className: 'xmd-cm-inline-highlight',
+      }),
+    )
+    expect(seen).toContainEqual(
+      expect.objectContaining({
+        from: blueFrom,
+        to: blueFrom + 'blue'.length,
+        className: 'xmd-cm-inline-highlight',
+        style: 'background-color:#93c5fd',
+      }),
+    )
+    expect(hidden).toContainEqual({ from: 0, to: '<mark>'.length })
+    expect(hidden).toContainEqual({
+      from: doc.indexOf('</mark>'),
+      to: doc.indexOf('</mark>') + '</mark>'.length,
+    })
+  })
+
+  it('leaves unsafe mark styles visible instead of applying arbitrary CSS', () => {
+    const doc = '<mark style="background-color:red;display:none">unsafe</mark> plain'
+    const state = createState(doc, doc.indexOf('plain'))
+    const seen = decorations(state, 0, doc.length)
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    expect(seen.some(({ className }) => className === 'xmd-cm-inline-highlight')).toBe(false)
+    expect(hidden.some(({ from }) => doc.slice(from).startsWith('<mark'))).toBe(false)
+  })
+
   it('reveals both tags together when the caret sits inside the colored text (Obsidian semantics)', () => {
     // Matches how `**bold**` behaves via `isRevealed`: entering the
     // construct must surface its source markers so they stay editable, and
