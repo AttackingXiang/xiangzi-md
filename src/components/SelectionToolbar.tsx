@@ -114,9 +114,8 @@ export default function SelectionToolbar({
             colors={highlightColors}
             defaultColor={defaultHighlightColor}
             onSelect={(color) => {
-              editorCmd.textHighlight(color)
               if (color) {
-                highlighterModeBridge.selectColor(color, false)
+                highlighterModeBridge.selectColor(color)
               } else {
                 highlighterModeBridge.deactivate()
               }

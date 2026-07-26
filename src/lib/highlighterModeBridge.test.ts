@@ -29,4 +29,10 @@ describe('highlighterModeBridge', () => {
     expect(listener).toHaveBeenLastCalledWith({ active: false, color: '#6ee7b7' })
     unsubscribe()
   })
+
+  it('remembers a selected color without leaving pointer mode active', () => {
+    highlighterModeBridge.selectColor('#fde047')
+    highlighterModeBridge.selectColor('#fda4af', false)
+    expect(highlighterModeBridge.getState()).toEqual({ active: false, color: '#fda4af' })
+  })
 })

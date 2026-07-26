@@ -1,4 +1,4 @@
-import { RotateCcw } from 'lucide-react'
+import { X } from 'lucide-react'
 import CustomColorSwatch from './CustomColorSwatch'
 import { DEFAULT_TEXT_COLOR_PRESETS } from '../lib/colorPresets'
 
@@ -15,7 +15,7 @@ export default function TextColorPalette({
   defaultColor = colors[0] ?? '#dc2626',
   onSelect,
 }: Props): JSX.Element {
-  const resetLabel = lang === 'en' ? 'Remove text color' : '移除文字颜色'
+  const cancelLabel = lang === 'en' ? 'Cancel text color' : '取消文字颜色'
   return (
     <div
       className="text-color-palette"
@@ -38,12 +38,12 @@ export default function TextColorPalette({
       <button
         type="button"
         className="text-color-reset"
-        title={resetLabel}
-        aria-label={resetLabel}
+        title={cancelLabel}
+        aria-label={cancelLabel}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => onSelect(null)}
       >
-        <RotateCcw size={13} />
+        <X size={14} />
       </button>
     </div>
   )

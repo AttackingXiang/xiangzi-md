@@ -84,6 +84,13 @@ export default function EditorToolbar({
   )
 
   useEffect(() => {
+    if (!ts.codeBlock) return
+    setShowColors(false)
+    setShowHighlightColors(false)
+    highlighterModeBridge.deactivate()
+  }, [ts.codeBlock])
+
+  useEffect(() => {
     if (!showColors && !showHighlightColors) return
     const closeColorPopovers = (event: PointerEvent): void => {
       const target = event.target
@@ -225,7 +232,7 @@ export default function EditorToolbar({
           aria-label={t('文字颜色', 'Text color')}
           data-tooltip={t('文字颜色', 'Text color')}
           aria-expanded={showColors}
-          disabled={cellState.focused}
+          disabled={cellState.focused || ts.codeBlock}
           onMouseDown={preserveEditorSelection}
           onClick={() => {
             setShowHighlightColors(false)
@@ -234,7 +241,7 @@ export default function EditorToolbar({
         >
           <Palette size={15} />
         </button>
-        {showColors && !cellState.focused && (
+        {showColors && !cellState.focused && !ts.codeBlock && (
           <div className="toolbar-color-popover">
             <TextColorPalette
               lang={lang}
@@ -262,7 +269,7 @@ export default function EditorToolbar({
           aria-label={t('荧光笔', 'Highlighter')}
           data-tooltip={t('荧光笔', 'Highlighter')}
           aria-expanded={showHighlightColors}
-          disabled={cellState.focused}
+          disabled={cellState.focused || ts.codeBlock}
           onMouseDown={preserveEditorSelection}
           onClick={() => {
             setShowColors(false)
@@ -274,7 +281,7 @@ export default function EditorToolbar({
             color={highlighterMode.active ? highlighterMode.color : undefined}
           />
         </button>
-        {showHighlightColors && !cellState.focused && (
+        {showHighlightColors && !cellState.focused && !ts.codeBlock && (
           <div className="toolbar-color-popover">
             <HighlightColorPalette
               lang={lang}
@@ -282,10 +289,8 @@ export default function EditorToolbar({
               defaultColor={defaultHighlightColor}
               onSelect={(color) => {
                 if (color) {
-                  editorCmd.textHighlight(color)
                   highlighterModeBridge.selectColor(color)
                 } else {
-                  editorCmd.textHighlight(null)
                   highlighterModeBridge.deactivate()
                 }
                 setShowHighlightColors(false)

@@ -96,7 +96,7 @@ export function computeCm6ToolbarState(state: EditorState): ToolbarActiveState {
     link: hasAny(names, LINK_NODES),
     headingLevel: headingFromNodes(names) ?? (headingPrefix ? headingPrefix[1].length : null),
     blockquote: names.has('Blockquote') || /^\s{0,3}>/.test(line),
-    codeBlock: hasAny(names, CODE_BLOCK_NODES),
+    codeBlock: hasAny(names, CODE_BLOCK_NODES) || selectionTouchesCodeBlock(state),
     bulletList: !inTaskList && (names.has('BulletList') || bulletList),
     orderedList: names.has('OrderedList') || orderedList,
     taskList: inTaskList,

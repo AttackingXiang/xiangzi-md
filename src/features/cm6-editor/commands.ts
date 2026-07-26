@@ -4,6 +4,7 @@ import { syntaxTree } from '@codemirror/language'
 import type { Command, EditorView } from '@codemirror/view'
 import { cm6ActiveViewBridge } from './activeViewBridge'
 import { INLINE_MARK_FILLER } from './core/boundaryCommands'
+import { selectionTouchesCodeBlock } from './toolbarState'
 
 export interface MarkdownEditPlan {
   changes: ChangeSpec | readonly ChangeSpec[]
@@ -214,6 +215,7 @@ const DIRECT_HIGHLIGHT_OPENING =
 const DIRECT_HIGHLIGHT_CLOSING = /^<\/mark\s*>/i
 
 function textColorPlan(state: EditorState, color: string | null): MarkdownEditPlan | null {
+  if (selectionTouchesCodeBlock(state)) return null
   const range = state.selection.main
   const normalized = color?.trim() ?? null
   if (normalized && !/^#[\da-f]{6}$/i.test(normalized)) return null
@@ -262,6 +264,7 @@ function textColorPlan(state: EditorState, color: string | null): MarkdownEditPl
 }
 
 function textHighlightPlan(state: EditorState, color: string | null): MarkdownEditPlan | null {
+  if (selectionTouchesCodeBlock(state)) return null
   const range = state.selection.main
   const normalized = color?.trim() ?? null
   if (normalized && !/^#[\da-f]{6}$/i.test(normalized)) return null

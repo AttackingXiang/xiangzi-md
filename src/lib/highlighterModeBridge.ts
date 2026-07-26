@@ -34,7 +34,7 @@ export const highlighterModeBridge = {
   },
 
   selectColor(color: string, activate = true): void {
-    publish({ active: activate ? true : state.active, color })
+    publish({ active: activate, color })
   },
 
   /**

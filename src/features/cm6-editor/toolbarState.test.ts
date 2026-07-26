@@ -64,6 +64,7 @@ describe('CM6 toolbar state', () => {
       extensions: [markdown()],
     })
     expect(selectionTouchesCodeBlock(spanningState)).toBe(true)
+    expect(computeCm6ToolbarState(spanningState).codeBlock).toBe(true)
 
     const inline = 'plain `inline code` text'
     const inlineFrom = inline.indexOf('inline')

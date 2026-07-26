@@ -58,6 +58,18 @@ function execute(
   return { doc: state.doc.toString(), from: state.selection.main.from, to: state.selection.main.to }
 }
 
+function expectNotHandled(doc: string, selection: SelectionRange, command: Command): void {
+  const state = EditorState.create({
+    doc,
+    selection: EditorSelection.create([selection]),
+    extensions: [markdownExtension],
+  })
+  const dispatch = vi.fn()
+  const target = { state, dispatch } as unknown as EditorView
+  expect(command(target)).toBe(false)
+  expect(dispatch).not.toHaveBeenCalled()
+}
+
 describe('CM6 Markdown commands', () => {
   it('inserts an inline pair at an empty cursor and places the cursor inside', () => {
     expect(run('中文', EditorSelection.cursor(2), toggleInlineCode)).toEqual({
@@ -132,6 +144,21 @@ describe('CM6 Markdown commands', () => {
     )
   })
 
+  it('never writes text-color HTML into or across a code block', () => {
+    const doc = 'before\n\n```ts\nconst value = 1\n```\n\nafter'
+    const codeFrom = doc.indexOf('const')
+    expectNotHandled(
+      doc,
+      EditorSelection.range(codeFrom, codeFrom + 'const value'.length),
+      setTextColor('#dc2626'),
+    )
+    expectNotHandled(
+      doc,
+      EditorSelection.range(doc.indexOf('before'), doc.indexOf('after') + 5),
+      setTextColor('#dc2626'),
+    )
+  })
+
   it('applies, changes, and removes colored mark highlights', () => {
     const yellowOpen = '<mark style="background-color:#fde047">'
     const blueOpen = '<mark style="background-color:#93c5fd">'
@@ -162,6 +189,21 @@ describe('CM6 Markdown commands', () => {
     expect(
       run('第一行\n第二行', EditorSelection.range(0, 7), setTextHighlight('#6ee7b7')).doc,
     ).toBe(`${open}第一行</mark>\n${open}第二行</mark>`)
+  })
+
+  it('never writes highlight HTML into or across a code block', () => {
+    const doc = 'before\n\n```ts\nconst value = 1\n```\n\nafter'
+    const codeFrom = doc.indexOf('const')
+    expectNotHandled(
+      doc,
+      EditorSelection.range(codeFrom, codeFrom + 'const value'.length),
+      setTextHighlight('#fde047'),
+    )
+    expectNotHandled(
+      doc,
+      EditorSelection.range(doc.indexOf('before'), doc.indexOf('after') + 5),
+      setTextHighlight('#fde047'),
+    )
   })
 
   it('removes the active inline mark at a caret instead of nesting empty markers', () => {

@@ -1,4 +1,4 @@
-import { RotateCcw } from 'lucide-react'
+import { X } from 'lucide-react'
 import CustomColorSwatch from './CustomColorSwatch'
 import { DEFAULT_HIGHLIGHT_COLOR_PRESETS } from '../lib/colorPresets'
 
@@ -15,7 +15,7 @@ export default function HighlightColorPalette({
   defaultColor = colors[0] ?? '#fde047',
   onSelect,
 }: Props): JSX.Element {
-  const resetLabel = lang === 'en' ? 'Remove highlight' : '移除高亮'
+  const cancelLabel = lang === 'en' ? 'Cancel highlighter' : '取消荧光笔'
   return (
     <div
       className="text-color-palette highlight-color-palette"
@@ -43,12 +43,12 @@ export default function HighlightColorPalette({
       <button
         type="button"
         className="text-color-reset"
-        title={resetLabel}
-        aria-label={resetLabel}
+        title={cancelLabel}
+        aria-label={cancelLabel}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => onSelect(null)}
       >
-        <RotateCcw size={13} />
+        <X size={14} />
       </button>
     </div>
   )
