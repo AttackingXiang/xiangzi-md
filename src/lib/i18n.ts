@@ -275,6 +275,7 @@ const EN: Record<string, string> = {
   '是否在系统浏览器中打开此链接？': 'Open this link in your browser?',
   '域名：': 'Domain: ',
   重命名: 'Rename',
+  复制路径: 'Copy path',
   在访达中显示: 'Reveal in Finder',
   在文件资源管理器中显示: 'Show in File Explorer',
   在文件管理器中显示: 'Show in File Manager',

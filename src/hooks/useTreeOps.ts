@@ -297,6 +297,10 @@ export function useTreeOps({
         separatorBefore: true,
       })
       items.push({ label: t('重命名'), onClick: () => renameNode(node), separatorBefore: true })
+      items.push({
+        label: t('复制路径'),
+        onClick: () => void desktop.writeClipboardText(node.path),
+      })
       items.push({ label: t(revealLocationKey()), onClick: () => desktop.reveal(node.path) })
       items.push({
         label: t('删除'),

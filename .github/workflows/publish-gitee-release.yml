@@ -337,8 +337,20 @@ jobs:
           fi
           chmod 600 ~/.ssh/known_hosts
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes"
-          retry git clone --depth 1 --branch updater \
-            git@gitee.com:tlqgyx/xiangzi-md.git /tmp/xiangzi-updater-manifest
+          install -d /tmp/xiangzi-updater-manifest
+          git -C /tmp/xiangzi-updater-manifest init
+          git -C /tmp/xiangzi-updater-manifest remote add origin \
+            git@gitee.com:tlqgyx/xiangzi-md.git
+          UPDATER_REF=$(retry git -C /tmp/xiangzi-updater-manifest ls-remote \
+            --heads origin refs/heads/updater)
+          if [ -n "${UPDATER_REF}" ]; then
+            retry git -C /tmp/xiangzi-updater-manifest fetch --depth 1 \
+              origin refs/heads/updater
+            git -C /tmp/xiangzi-updater-manifest checkout -B updater FETCH_HEAD
+          else
+            echo "Gitee updater branch does not exist; creating it."
+            git -C /tmp/xiangzi-updater-manifest checkout --orphan updater
+          fi
           cd /tmp/xiangzi-updater-manifest
           CURRENT_VERSION=$(jq -r '.version // "0.0.0"' latest.json 2>/dev/null || echo 0.0.0)
           NEW_VERSION=${TAG#v}
