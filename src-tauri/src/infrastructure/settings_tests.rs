@@ -144,9 +144,11 @@ fn patch_only_changes_explicit_fields() {
 
 #[test]
 fn validates_color_presets_and_defaults() {
-    let mut settings = AppSettings::default();
-    settings.text_color_presets = vec!["#123abc".into()];
-    settings.default_text_color = "#123abc".into();
+    let mut settings = AppSettings {
+        text_color_presets: vec!["#123abc".into()],
+        default_text_color: "#123abc".into(),
+        ..AppSettings::default()
+    };
     assert!(validate_settings(&settings).is_ok());
 
     settings.default_text_color = "#ffffff".into();
