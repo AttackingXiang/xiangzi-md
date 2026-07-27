@@ -409,9 +409,9 @@ jobs:
           cp "SHA256SUMS-${{ matrix.artifact }}.txt" \
             "sbom-${{ matrix.artifact }}.spdx.json" release-assets/
           if [ "${RUNNER_OS}" = "macOS" ]; then
-            mapfile -t APP_ARCHIVES < <(find release-assets -maxdepth 1 -name '*.app.tar.gz' | sort)
-            test "${#APP_ARCHIVES[@]}" -eq 1
-            APP_ARCHIVE="${APP_ARCHIVES[0]}"
+            APP_ARCHIVE_COUNT="$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')"
+            test "${APP_ARCHIVE_COUNT}" -eq 1
+            APP_ARCHIVE="$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | sort | sed -n '1p')"
             APP_ARCHIVE_TARGET="release-assets/Xiangzi-MD-${{ matrix.artifact }}.app.tar.gz"
             mv "${APP_ARCHIVE}" "${APP_ARCHIVE_TARGET}"
             mv "${APP_ARCHIVE}.sig" "${APP_ARCHIVE_TARGET}.sig"
@@ -494,9 +494,9 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=${VERSION#v}
-          mapfile -t MAC_ARCHIVES < <(find release-assets -maxdepth 1 -name '*universal*.app.tar.gz' -exec basename {} \; | sort)
-          test "${#MAC_ARCHIVES[@]}" -eq 1
-          MAC_ARCHIVE="${MAC_ARCHIVES[0]}"
+          MAC_ARCHIVE_COUNT="$(find release-assets -maxdepth 1 -name '*universal*.app.tar.gz' | wc -l | tr -d ' ')"
+          test "${MAC_ARCHIVE_COUNT}" -eq 1
+          MAC_ARCHIVE="$(find release-assets -maxdepth 1 -name '*universal*.app.tar.gz' -exec basename {} \; | sort | sed -n '1p')"
           MAC_SIGNATURE=$(tr -d '\r\n' < "release-assets/${MAC_ARCHIVE}.sig")
           WINDOWS_INSTALLER=$(find release-assets -maxdepth 1 -name '*-setup.exe' -exec basename {} \;)
           WINDOWS_SIGNATURE=$(tr -d '\r\n' < "release-assets/${WINDOWS_INSTALLER}.sig")
