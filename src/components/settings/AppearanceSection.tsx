@@ -1,6 +1,10 @@
+import { ExternalLink } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { desktop } from '../../platform'
+import type { InstalledTheme } from '../../platform/contracts'
 import type { AppSettings } from '../../types'
 import { t } from '../../lib/i18n'
+import { THEME_GALLERY_URL } from '../../lib/themeMarketplace'
 import { SettingsPage, SettingsCard, SettingRow } from './primitives'
 
 interface Props {
@@ -18,6 +22,30 @@ export default function AppearanceSection({
   customCssError,
   backgroundImageError,
 }: Props): JSX.Element {
+  const [installedThemes, setInstalledThemes] = useState<InstalledTheme[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    void desktop
+      .listInstalledThemes()
+      .then((themes) => {
+        if (!cancelled) setInstalledThemes(themes)
+      })
+      .catch(() => {
+        if (!cancelled) setInstalledThemes([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [settings.customCssPath])
+
+  const installedTheme = installedThemes.find((theme) => theme.cssPath === settings.customCssPath)
+  const themeValue = installedTheme
+    ? `installed:${installedTheme.id}`
+    : settings.customCssPath
+      ? 'local'
+      : `builtin:${settings.theme}`
+
   return (
     <SettingsPage
       title={en ? 'Appearance' : '外观'}
@@ -36,19 +64,60 @@ export default function AppearanceSection({
           </select>
         </SettingRow>
         <SettingRow label={t('主题')}>
-          <select
-            value={settings.theme}
-            onChange={(event) => onChange({ theme: event.target.value as AppSettings['theme'] })}
-          >
-            <option value="system">{t('跟随系统')}</option>
-            <option value="light">{t('浅色')}</option>
-            <option value="dark">{t('深色')}</option>
-            <option value="warm">{t('暖色')}</option>
-            <option value="mint">{t('浅绿')}</option>
-            <option value="blue">{t('蓝调')}</option>
-            <option value="summer">{t('夏日')}</option>
-            <option value="sakura">{t('樱粉')}</option>
-          </select>
+          <span className="settings-inline settings-theme-picker">
+            <button
+              type="button"
+              className="secondary-btn settings-more-themes"
+              onClick={() => void desktop.openExternal(THEME_GALLERY_URL)}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              {en ? 'More themes' : '更多主题'}
+            </button>
+            <select
+              value={themeValue}
+              onChange={(event) => {
+                const value = event.target.value
+                if (value.startsWith('builtin:')) {
+                  onChange({
+                    theme: value.slice('builtin:'.length) as AppSettings['theme'],
+                    customCssPath: '',
+                  })
+                  return
+                }
+                if (value.startsWith('installed:')) {
+                  const selected = installedThemes.find(
+                    (theme) => theme.id === value.slice('installed:'.length),
+                  )
+                  if (selected) {
+                    onChange({ theme: selected.colorScheme, customCssPath: selected.cssPath })
+                  }
+                }
+              }}
+            >
+              <optgroup label={en ? 'Built-in themes' : '内置主题'}>
+                <option value="builtin:system">{t('跟随系统')}</option>
+                <option value="builtin:light">{t('浅色')}</option>
+                <option value="builtin:dark">{t('深色')}</option>
+                <option value="builtin:warm">{t('暖色')}</option>
+                <option value="builtin:mint">{t('浅绿')}</option>
+                <option value="builtin:blue">{t('蓝调')}</option>
+                <option value="builtin:summer">{t('夏日')}</option>
+                <option value="builtin:sakura">{t('樱粉')}</option>
+              </optgroup>
+              {installedThemes.length > 0 && (
+                <optgroup label={en ? 'Installed themes' : '已安装主题'}>
+                  {installedThemes.map((theme) => (
+                    <option key={theme.id} value={`installed:${theme.id}`}>
+                      {theme.name} · {theme.version}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {settings.customCssPath && !installedTheme && (
+                <option value="local">{en ? 'Local custom CSS' : '本地自定义 CSS'}</option>
+              )}
+            </select>
+          </span>
         </SettingRow>
         <SettingRow label={t('编辑区宽度')}>
           <select
@@ -151,10 +220,14 @@ export default function AppearanceSection({
           </p>
         )}
       </SettingsCard>
-      <SettingsCard title={t('自定义主题 CSS')}>
+      <SettingsCard title={en ? 'Local theme CSS' : '本地主题 CSS'}>
         <div className="settings-file-picker">
           <div>
-            <p>{settings.customCssPath || (en ? 'Use the built-in theme' : '使用内置主题')}</p>
+            <p>
+              {installedTheme
+                ? `${installedTheme.name} · ${installedTheme.author}`
+                : settings.customCssPath || (en ? 'No local CSS selected' : '未选择本地 CSS')}
+            </p>
           </div>
           <span className="settings-inline">
             {settings.customCssPath && (

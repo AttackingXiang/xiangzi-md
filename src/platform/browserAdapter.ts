@@ -406,6 +406,11 @@ export const browserDesktopAdapter: DesktopPort = {
   pickWordTemplate: async () => null,
   savePandocDefaultTemplate: async () => null,
   pickCss: async () => null,
+  listInstalledThemes: async () => [],
+  installThemeFromUrl: async () => {
+    throw new Error('浏览器预览不支持安装主题')
+  },
+  removeInstalledTheme: async () => undefined,
   pickImage: async () => null,
   allowBackgroundImage: async () => undefined,
   notify: async (message) => {
@@ -415,6 +420,7 @@ export const browserDesktopAdapter: DesktopPort = {
   onMenuAction: () => () => undefined,
   triggerMenuAction: () => undefined,
   onOpenPath: () => () => undefined,
+  onThemeInstallRequest: () => () => undefined,
   notifyQuitOk: () => undefined,
 }
 

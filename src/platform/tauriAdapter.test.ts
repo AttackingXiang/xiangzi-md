@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
+import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { watch } from '@tauri-apps/plugin-fs'
 import { check } from '@tauri-apps/plugin-updater'
@@ -17,6 +18,7 @@ vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
   writeHtml: vi.fn(),
   writeImage: vi.fn(),
 }))
+vi.mock('@tauri-apps/plugin-deep-link', () => ({ getCurrent: vi.fn(), onOpenUrl: vi.fn() }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ ask: vi.fn(), open: vi.fn(), save: vi.fn() }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ watch: vi.fn() }))
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(), revealItemInDir: vi.fn() }))
@@ -30,6 +32,8 @@ const invokeMock = vi.mocked(invoke)
 const listenMock = vi.mocked(listen)
 const writeHtmlMock = vi.mocked(writeHtml)
 const writeImageMock = vi.mocked(writeImage)
+const getCurrentMock = vi.mocked(getCurrent)
+const onOpenUrlMock = vi.mocked(onOpenUrl)
 const openMock = vi.mocked(open)
 const saveMock = vi.mocked(save)
 const watchMock = vi.mocked(watch)
@@ -43,6 +47,10 @@ describe('tauriDesktopAdapter', () => {
     imageFromBytesMock.mockReset()
     writeHtmlMock.mockReset()
     writeImageMock.mockReset()
+    getCurrentMock.mockReset()
+    onOpenUrlMock.mockReset()
+    getCurrentMock.mockResolvedValue(null)
+    onOpenUrlMock.mockResolvedValue(vi.fn())
     openMock.mockReset()
     saveMock.mockReset()
     watchMock.mockReset()
@@ -174,6 +182,33 @@ describe('tauriDesktopAdapter', () => {
 
     dispose()
     expect(unlisten).toHaveBeenCalledOnce()
+  })
+
+  it('accepts current and newly opened theme-install deep links once', async () => {
+    const currentUrl =
+      'xiangzi-md://theme/install?id=morandi&name=Morandi&version=1.0.0&author=Xiangzi&colorScheme=light&url=https%3A%2F%2Fxz.xzfast.top%2Fthemes%2Fmorandi.css'
+    const liveUrl = currentUrl
+      .replace('morandi&', 'morandi-dark&')
+      .replace('colorScheme=light', 'colorScheme=dark')
+    const stop = vi.fn()
+    let handleUrls: ((urls: string[]) => void) | undefined
+    getCurrentMock.mockResolvedValueOnce([currentUrl])
+    onOpenUrlMock.mockImplementationOnce((callback) => {
+      handleUrls = callback
+      return Promise.resolve(stop)
+    })
+    const callback = vi.fn()
+
+    const dispose = tauriDesktopAdapter.onThemeInstallRequest(callback)
+    await vi.waitFor(() => expect(callback).toHaveBeenCalledTimes(1))
+    handleUrls?.([currentUrl, liveUrl])
+
+    expect(callback).toHaveBeenCalledTimes(2)
+    expect(callback).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'morandi-dark', colorScheme: 'dark' }),
+    )
+    dispose()
+    expect(stop).toHaveBeenCalledOnce()
   })
 
   it('sends attachment bytes as a raw IPC body with metadata in a header', async () => {

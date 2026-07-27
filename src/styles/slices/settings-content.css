@@ -41,6 +41,17 @@
   flex: 0 0 auto;
 }
 
+.settings-theme-picker select {
+  width: 220px;
+}
+
+.settings-more-themes {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
 .update-settings-row p,
 .about-description {
   margin: 0;

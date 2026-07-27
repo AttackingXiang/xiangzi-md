@@ -55,6 +55,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["xiangzi-md"]
+      }
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRFMTlCNTZENTU3QUEwMzAKUldRd29IcFZiYlVaVGhkUFZTSURCaXJrTExzdEp5c0VuM3VpNFBscFM3eTN0ZGFWSEVTY3RwYWIK",
       "endpoints": [

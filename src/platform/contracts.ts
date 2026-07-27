@@ -6,6 +6,24 @@ export interface AppInfo {
   migrationStatus: string
 }
 
+export interface ThemeInstallRequest {
+  id: string
+  name: string
+  version: string
+  author: string
+  colorScheme: 'light' | 'dark'
+  sourceUrl: string
+}
+
+export interface InstalledTheme {
+  id: string
+  name: string
+  version: string
+  author: string
+  colorScheme: 'light' | 'dark'
+  cssPath: string
+}
+
 export interface FileNode {
   name: string
   path: string
@@ -317,6 +335,9 @@ export interface DesktopPort {
   pickWordTemplate(): Promise<{ path: string } | null>
   savePandocDefaultTemplate(): Promise<{ path: string } | null>
   pickCss(): Promise<{ path: string } | null>
+  listInstalledThemes(): Promise<InstalledTheme[]>
+  installThemeFromUrl(request: ThemeInstallRequest): Promise<InstalledTheme>
+  removeInstalledTheme(id: string): Promise<void>
   pickImage(): Promise<{ path: string } | null>
   allowBackgroundImage(path: string): Promise<void>
   notify(message: string, title?: string): Promise<void>
@@ -324,5 +345,6 @@ export interface DesktopPort {
   onMenuAction(callback: (action: string) => void): () => void
   triggerMenuAction(id: string): void
   onOpenPath(callback: (path: string) => void): () => void
+  onThemeInstallRequest(callback: (request: ThemeInstallRequest) => void): () => void
   notifyQuitOk(): void
 }

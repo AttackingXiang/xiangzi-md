@@ -14,6 +14,7 @@ pub fn run() {
             infrastructure::lifecycle::queue_supported_arguments(app, args);
             infrastructure::lifecycle::reveal_main_window(app);
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -75,6 +76,9 @@ pub fn run() {
             commands::drafts::delete_draft,
             commands::settings::get_settings,
             commands::settings::set_settings,
+            commands::themes::install_theme_from_url,
+            commands::themes::list_installed_themes,
+            commands::themes::remove_installed_theme,
             commands::search::search_in_folder,
             commands::search::cancel_search,
             commands::attachment::save_attachment,

@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Image } from '@tauri-apps/api/image'
 import { writeHtml, writeImage, writeText } from '@tauri-apps/plugin-clipboard-manager'
+import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link'
 import { ask, message, open, save } from '@tauri-apps/plugin-dialog'
 import { watch } from '@tauri-apps/plugin-fs'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
@@ -15,13 +16,16 @@ import type {
   FileNode,
   FileVersion,
   Folder,
+  InstalledTheme,
   OpenedFile,
   ReleaseSummary,
   SearchResponse,
+  ThemeInstallRequest,
   UpdaterPort,
 } from './contracts'
 import { exportFileStem, imageFormatForPath } from '../lib/exportFormat'
 import { dirName } from '../lib/path'
+import { themeInstallRequestFromUrl } from '../lib/themeMarketplace'
 
 const MAX_BINARY_READ_BYTES = 64 * 1024 * 1024
 
@@ -399,6 +403,10 @@ export const tauriDesktopAdapter: DesktopPort = {
     })
     return path ? { path } : null
   },
+  listInstalledThemes: () => invoke<InstalledTheme[]>('list_installed_themes'),
+  installThemeFromUrl: (request: ThemeInstallRequest) =>
+    invoke<InstalledTheme>('install_theme_from_url', { request }),
+  removeInstalledTheme: (id) => invoke('remove_installed_theme', { id }),
   pickImage: async () => {
     const path = await open({
       multiple: false,
@@ -421,5 +429,30 @@ export const tauriDesktopAdapter: DesktopPort = {
     subscribe('open-path', callback, () => {
       void invoke('frontend_ready')
     }),
+  onThemeInstallRequest: (callback) => {
+    let disposed = false
+    let unlisten: UnlistenFn | undefined
+    const handled = new Set<string>()
+    const accept = (urls: string[]): void => {
+      for (const raw of urls) {
+        if (disposed || handled.has(raw)) continue
+        const request = themeInstallRequestFromUrl(raw)
+        if (!request) continue
+        handled.add(raw)
+        callback(request)
+      }
+    }
+    void getCurrent().then((urls) => {
+      if (urls) accept(urls)
+    })
+    void onOpenUrl(accept).then((stop) => {
+      if (disposed) stop()
+      else unlisten = stop
+    })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  },
   notifyQuitOk: () => void invoke('quit_confirmed'),
 }

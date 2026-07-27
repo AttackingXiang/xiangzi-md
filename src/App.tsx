@@ -830,6 +830,30 @@ export default function App(): JSX.Element {
     return desktop.onOpenPath((p) => openPath(p, baseName(p)))
   }, [openPath])
 
+  // ── Theme marketplace deep links ─────────────────────────────────────────
+  useEffect(
+    () =>
+      desktop.onThemeInstallRequest((request) => {
+        void desktop
+          .installThemeFromUrl(request)
+          .then(async (theme) => {
+            await saveSettings({ theme: theme.colorScheme, customCssPath: theme.cssPath })
+            await desktop.notify(
+              `${theme.name} ${theme.version} ${lang === 'en' ? 'is now active.' : '已安装并应用。'}`,
+              lang === 'en' ? 'Theme installed' : '主题安装完成',
+            )
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error)
+            void desktop.notify(
+              lang === 'en' ? `Theme installation failed: ${message}` : `主题安装失败：${message}`,
+              lang === 'en' ? 'Theme installation' : '主题安装',
+            )
+          })
+      }),
+    [lang, saveSettings],
+  )
+
   // ── Tab context menu ───────────────────────────────────────────────────────
   const openTabContext = useCallback(
     (id: string, x: number, y: number) => {
