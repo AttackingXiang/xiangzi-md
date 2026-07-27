@@ -218,6 +218,12 @@ jobs:
           - platform: macos-14
             artifact: macos-universal
             args: --target universal-apple-darwin --bundles app,dmg
+          - platform: macos-14
+            artifact: macos-aarch64
+            args: --target aarch64-apple-darwin --bundles app,dmg
+          - platform: macos-14
+            artifact: macos-x86_64
+            args: --target x86_64-apple-darwin --bundles app,dmg
           - platform: windows-latest
             artifact: windows-x64
             args: --bundles nsis
@@ -403,6 +409,12 @@ jobs:
           cp "SHA256SUMS-${{ matrix.artifact }}.txt" \
             "sbom-${{ matrix.artifact }}.spdx.json" release-assets/
           if [ "${RUNNER_OS}" = "macOS" ]; then
+            mapfile -t APP_ARCHIVES < <(find release-assets -maxdepth 1 -name '*.app.tar.gz' | sort)
+            test "${#APP_ARCHIVES[@]}" -eq 1
+            APP_ARCHIVE="${APP_ARCHIVES[0]}"
+            APP_ARCHIVE_TARGET="release-assets/Xiangzi-MD-${{ matrix.artifact }}.app.tar.gz"
+            mv "${APP_ARCHIVE}" "${APP_ARCHIVE_TARGET}"
+            mv "${APP_ARCHIVE}.sig" "${APP_ARCHIVE_TARGET}.sig"
             test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
             test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
             test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 1
@@ -410,6 +422,19 @@ jobs:
             test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
             test "$(find release-assets -maxdepth 1 -name '*-setup.exe.sig' | wc -l | tr -d ' ')" -eq 1
           fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            HASH_CMD=(sha256sum)
+          else
+            HASH_CMD=(shasum -a 256)
+          fi
+          (
+            cd release-assets
+            find . -maxdepth 1 -type f \
+              ! -name 'SHA256SUMS-*.txt' \
+              ! -name 'sbom-*.spdx.json' \
+              -print0 | sort -z | xargs -0 "${HASH_CMD[@]}" \
+                > "SHA256SUMS-${{ matrix.artifact }}.txt"
+          )
 
       - name: Upload temporary ${{ matrix.artifact }} artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -452,13 +477,13 @@ jobs:
             echo '::error::Release asset names must not contain spaces.'
             exit 1
           fi
-          test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 3
           test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
-          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
-          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 3
+          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 3
           test "$(find release-assets -maxdepth 1 -name '*-setup.exe.sig' | wc -l | tr -d ' ')" -eq 1
-          test "$(find release-assets -maxdepth 1 -name 'SHA256SUMS-*.txt' | wc -l | tr -d ' ')" -eq 2
-          test "$(find release-assets -maxdepth 1 -name 'sbom-*.spdx.json' | wc -l | tr -d ' ')" -eq 2
+          test "$(find release-assets -maxdepth 1 -name 'SHA256SUMS-*.txt' | wc -l | tr -d ' ')" -eq 4
+          test "$(find release-assets -maxdepth 1 -name 'sbom-*.spdx.json' | wc -l | tr -d ' ')" -eq 4
 
       - name: Generate the single cross-platform updater manifest
         env:
@@ -469,7 +494,9 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=${VERSION#v}
-          MAC_ARCHIVE=$(find release-assets -maxdepth 1 -name '*.app.tar.gz' -exec basename {} \;)
+          mapfile -t MAC_ARCHIVES < <(find release-assets -maxdepth 1 -name '*universal*.app.tar.gz' -exec basename {} \; | sort)
+          test "${#MAC_ARCHIVES[@]}" -eq 1
+          MAC_ARCHIVE="${MAC_ARCHIVES[0]}"
           MAC_SIGNATURE=$(tr -d '\r\n' < "release-assets/${MAC_ARCHIVE}.sig")
           WINDOWS_INSTALLER=$(find release-assets -maxdepth 1 -name '*-setup.exe' -exec basename {} \;)
           WINDOWS_SIGNATURE=$(tr -d '\r\n' < "release-assets/${WINDOWS_INSTALLER}.sig")

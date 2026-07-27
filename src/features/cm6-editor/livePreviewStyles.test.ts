@@ -53,7 +53,7 @@ describe('CM6 live preview styles', () => {
     )?.[1]
 
     expect(hidesLayer).toContain('display: none')
-    expect(nativeSelection).toContain('var(--accent)')
+    expect(nativeSelection).toContain('var(--xmd-document-selection-bg)')
     expect(nativeSelection).toContain('!important')
   })
 

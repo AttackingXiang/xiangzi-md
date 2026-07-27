@@ -6,9 +6,9 @@
 
 .xmd-cm-mermaid-preview {
   align-items: center;
-  background: color-mix(in srgb, var(--code-card-bg) 30%, transparent);
-  border: 1px solid var(--code-card-border);
-  border-radius: 8px;
+  background: var(--xmd-mermaid-bg);
+  border: 1px solid var(--xmd-mermaid-border);
+  border-radius: var(--xmd-mermaid-radius, 8px);
   box-sizing: border-box;
   display: flex;
   justify-content: center;
@@ -46,10 +46,10 @@
 .xmd-cm-mermaid-preview-toggle {
   align-items: center;
   appearance: none;
-  background: transparent;
+  background: var(--xmd-render-control-bg, transparent);
   border: 0;
   border-radius: 5px;
-  color: var(--text-muted);
+  color: var(--xmd-render-control-text, var(--text-muted));
   cursor: pointer;
   display: inline-flex;
   height: 24px;
@@ -61,16 +61,16 @@
 .xmd-cm-mermaid-actions .xmd-cm-preview-copy:hover,
 .xmd-cm-mermaid-source-toggle:hover,
 .xmd-cm-mermaid-preview-toggle:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
+  background: var(--xmd-render-control-hover-bg);
+  color: var(--xmd-render-control-hover-text);
 }
 
 .xmd-cm-mermaid-actions .xmd-cm-preview-copy[data-copy-state='success'] {
-  color: var(--success, #2e9e5b);
+  color: var(--xmd-status-success);
 }
 
 .xmd-cm-mermaid-actions .xmd-cm-preview-copy[data-copy-state='error'] {
-  color: var(--danger, #c43d4d);
+  color: var(--xmd-status-danger);
 }
 
 .xmd-cm-mermaid-content svg {
@@ -96,7 +96,7 @@
 
 .xmd-cm-mermaid-preview.is-error {
   align-items: flex-start;
-  color: var(--danger, #c43d4d);
+  color: var(--xmd-status-danger);
   font-family: var(--crepe-font-code, ui-monospace, monospace);
   font-size: 13px;
   justify-content: flex-start;

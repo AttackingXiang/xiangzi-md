@@ -1,7 +1,10 @@
 .xmd-cm-editor .cm-content {
-  font-family: var(--crepe-font-default, ui-sans-serif, system-ui, sans-serif);
+  font-family: var(
+    --xmd-font-body,
+    var(--crepe-font-default, ui-sans-serif, system-ui, sans-serif)
+  );
   font-size: 16px;
-  line-height: 1.75;
+  line-height: var(--xmd-document-line-height, 1.75);
 }
 
 /* Every Markdown line — including a blank one — is a real, addressable
@@ -10,7 +13,7 @@
    document-level Paragraph AST nodes receive these classes, so list, quote,
    table and literal-block layout stays untouched. */
 .xmd-cm-editor .cm-line.xmd-cm-paragraph-first {
-  padding-top: 0.38em;
+  padding-top: var(--xmd-paragraph-spacing, 0.38em);
 }
 
 /* A real blank line above already supplies a full row of breathing room
@@ -18,15 +21,15 @@
    single Enter's gap read as large as a double Enter's; shrink to a small
    rhythm nudge whenever a genuine blank separator line is present. */
 .xmd-cm-editor .cm-line.xmd-cm-paragraph-first.xmd-cm-paragraph-gap-before {
-  padding-top: 0.12em;
+  padding-top: var(--xmd-paragraph-separated-spacing, 0.12em);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-paragraph-last {
-  padding-bottom: 0.38em;
+  padding-bottom: var(--xmd-paragraph-spacing, 0.38em);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-paragraph-last.xmd-cm-paragraph-gap-after {
-  padding-bottom: 0.12em;
+  padding-bottom: var(--xmd-paragraph-separated-spacing, 0.12em);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-horizontal-rule {
@@ -36,7 +39,8 @@
 }
 
 .xmd-cm-editor .xmd-cm-horizontal-rule-widget {
-  border-top: 1px solid var(--border-strong);
+  border-top: var(--xmd-horizontal-rule-width, 1px) solid
+    var(--xmd-horizontal-rule-color, var(--border-strong));
   box-sizing: border-box;
   display: block;
   height: 0;
@@ -44,11 +48,11 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-heading {
-  color: var(--text);
-  font-family: var(--crepe-font-title, var(--crepe-font-default, sans-serif));
-  font-weight: 700;
-  line-height: 1.28;
-  padding-block: 0.18em;
+  color: var(--xmd-heading-color, var(--text));
+  font-family: var(--xmd-heading-font, var(--crepe-font-title, sans-serif));
+  font-weight: var(--xmd-heading-weight, 700);
+  line-height: var(--xmd-heading-line-height, 1.28);
+  padding-block: var(--xmd-heading-padding-block, 0.18em);
 }
 
 /* CM6's default Markdown highlight underlines heading tokens. Live Preview
@@ -63,7 +67,7 @@
    Labels are calculated from the complete source because CM6 only mounts the
    visible part of a document, which makes ordinary CSS counters unreliable. */
 [data-heading-number='on'] .xmd-cm-editor .cm-line.xmd-cm-heading[data-xmd-heading-number]::before {
-  color: var(--text-muted);
+  color: var(--xmd-heading-number-color, var(--text-muted));
   content: attr(data-xmd-heading-number);
   display: inline-block;
   font: inherit;
@@ -119,58 +123,76 @@
 
 .xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-line::selection,
 .xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-line *::selection {
-  background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+  background: var(--xmd-document-selection-bg) !important;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-heading-1 {
-  font-size: 2em;
+  border-bottom: var(--xmd-heading-1-border-bottom, 0 solid transparent);
+  color: var(--xmd-heading-1-color, var(--xmd-heading-color));
+  font-style: var(--xmd-heading-1-style, normal);
+  font-weight: var(--xmd-heading-1-weight, var(--xmd-heading-weight));
+  padding-bottom: var(--xmd-heading-1-padding-bottom, var(--xmd-heading-padding-block));
 }
 .xmd-cm-editor .cm-line.xmd-cm-heading-2 {
-  font-size: 1.62em;
+  border-left: var(--xmd-heading-2-border-left, 0 solid transparent);
+  color: var(--xmd-heading-2-color, var(--xmd-heading-color));
+  font-style: var(--xmd-heading-2-style, normal);
+  font-weight: var(--xmd-heading-2-weight, var(--xmd-heading-weight));
+  padding-left: var(--xmd-heading-2-padding-left, 0);
 }
 .xmd-cm-editor .cm-line.xmd-cm-heading-3 {
-  font-size: 1.32em;
+  color: var(--xmd-heading-3-color, var(--xmd-heading-color));
+  font-style: var(--xmd-heading-3-style, normal);
+  font-weight: var(--xmd-heading-3-weight, var(--xmd-heading-weight));
 }
 .xmd-cm-editor .cm-line.xmd-cm-heading-4 {
-  font-size: 1.14em;
+  color: var(--xmd-heading-4-color, var(--xmd-heading-color));
+  font-style: var(--xmd-heading-4-style, normal);
+  font-weight: var(--xmd-heading-4-weight, var(--xmd-heading-weight));
 }
 .xmd-cm-editor .cm-line.xmd-cm-heading-5 {
-  font-size: 1em;
+  color: var(--xmd-heading-5-color, var(--xmd-heading-color));
+  font-style: var(--xmd-heading-5-style, normal);
+  font-weight: var(--xmd-heading-5-weight, var(--xmd-heading-weight));
 }
 .xmd-cm-editor .cm-line.xmd-cm-heading-6 {
-  font-size: 0.92em;
+  color: var(--xmd-heading-6-color, var(--xmd-heading-color));
+  font-style: var(--xmd-heading-6-style, normal);
+  font-weight: var(--xmd-heading-6-weight, var(--xmd-heading-weight));
 }
 
 .xmd-cm-editor .xmd-cm-strong {
-  font-weight: 700;
+  font-weight: var(--xmd-strong-weight, 700);
 }
 .xmd-cm-editor .xmd-cm-emphasis {
-  font-style: italic;
+  font-style: var(--xmd-emphasis-style, italic);
 }
 .xmd-cm-editor .xmd-cm-strikethrough {
   text-decoration: line-through;
+  text-decoration-color: var(--xmd-strikethrough-color, currentColor);
 }
 
 .xmd-cm-editor .xmd-cm-inline-code {
-  background: var(--code-inline-bg, rgba(127, 127, 127, 0.12));
-  border-radius: 4px;
-  color: var(--code-inline-text, var(--accent));
-  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  background: var(--xmd-inline-code-bg);
+  border: var(--xmd-inline-code-border, 0 solid transparent);
+  border-radius: var(--xmd-inline-code-radius, 4px);
+  color: var(--xmd-inline-code-text);
+  font-family: var(--xmd-font-code, var(--crepe-font-code, ui-monospace, monospace));
   padding: 0.08em 0.28em;
 }
 
 .xmd-cm-editor .xmd-cm-inline-highlight {
-  background-color: #fde047;
-  border-radius: 0.12em;
+  background-color: var(--xmd-highlight-bg, #fde047);
+  border-radius: var(--xmd-highlight-radius, 0.12em);
   box-decoration-break: clone;
-  color: inherit;
+  color: var(--xmd-highlight-text, inherit);
   padding-inline: 0.04em;
   -webkit-box-decoration-break: clone;
 }
 
 .xmd-cm-editor .xmd-cm-link {
-  color: var(--accent);
-  text-decoration: underline;
+  color: var(--xmd-link-color, var(--accent));
+  text-decoration: var(--xmd-link-decoration, underline);
   text-underline-offset: 0.16em;
 }
 
@@ -191,26 +213,27 @@
 .xmd-cm-editor .cm-line.xmd-cm-blockquote {
   background-image: repeating-linear-gradient(
     to right,
-    var(--border-strong) 0 3px,
+    var(--xmd-quote-border, var(--border-strong)) 0 3px,
     transparent 3px 1em
   );
   background-repeat: no-repeat;
   background-size: calc(var(--xmd-quote-depth, 1) * 1em) 100%;
-  color: var(--text-2);
+  background-color: var(--xmd-quote-bg, transparent);
+  color: var(--xmd-quote-text, var(--text-2));
   padding-left: calc(var(--xmd-quote-depth, 1) * 1em);
 }
 
 /* GitHub/Obsidian alert blocks. The source stays a normal blockquote, while
    the alert header becomes a compact, non-source label in live preview. */
 .xmd-cm-editor .cm-line.xmd-cm-callout {
-  background-color: color-mix(in srgb, var(--accent) 5%, transparent);
+  background-color: var(--xmd-callout-bg);
   border-radius: 0 4px 4px 0;
-  color: var(--text);
+  color: var(--xmd-callout-text);
   font-weight: 500;
 }
 
 .xmd-cm-editor .xmd-cm-callout-label {
-  color: var(--accent);
+  color: var(--xmd-callout-accent);
   font-size: 0.76em;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -220,18 +243,18 @@
 
 .xmd-cm-editor .cm-line.xmd-cm-callout-warning,
 .xmd-cm-editor .cm-line.xmd-cm-callout-caution {
-  background-color: color-mix(in srgb, #d97706 9%, transparent);
+  background-color: var(--xmd-callout-warning-bg);
 }
 .xmd-cm-editor .xmd-cm-callout-warning,
 .xmd-cm-editor .xmd-cm-callout-caution {
-  color: #b45309;
+  color: var(--xmd-callout-warning);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-callout-important {
-  background-color: color-mix(in srgb, #dc2626 8%, transparent);
+  background-color: var(--xmd-callout-important-bg);
 }
 .xmd-cm-editor .xmd-cm-callout-important {
-  color: #b91c1c;
+  color: var(--xmd-callout-important);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-list-line {
@@ -242,7 +265,7 @@
 }
 
 .xmd-cm-list-marker {
-  color: var(--text-muted);
+  color: var(--xmd-list-marker-color, var(--text-muted));
   display: inline-block;
   font-variant-numeric: tabular-nums;
   margin-inline: calc(var(--xmd-list-depth, 0) * 1.35em) 0.45em;
@@ -261,7 +284,7 @@
 }
 
 .xmd-cm-task-checkbox {
-  border: 1.5px solid var(--text-muted);
+  border: 1.5px solid var(--xmd-task-border, var(--text-muted));
   border-radius: 3px;
   box-sizing: border-box;
   display: inline-block;
@@ -274,12 +297,12 @@
 }
 
 .xmd-cm-task-checkbox.is-checked {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--xmd-task-checked-bg, var(--accent));
+  border-color: var(--xmd-task-checked-bg, var(--accent));
 }
 
 .xmd-cm-task-checkbox.is-checked::after {
-  border: solid white;
+  border: solid var(--xmd-task-check-color, white);
   border-width: 0 1.5px 1.5px 0;
   content: '';
   height: 0.42em;

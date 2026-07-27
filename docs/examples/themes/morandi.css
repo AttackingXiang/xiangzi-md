@@ -1,0 +1,143 @@
+/* Xiangzi MD theme contract: 1
+   Morandi: complete light theme for application chrome and Markdown rendering. */
+:root {
+  /* Application palette */
+  --bg: #f7f6f3;
+  --bg-sidebar: #efefeb;
+  --bg-elevated: #fbfaf8;
+  --bg-hover: #e8ebe7;
+  --bg-active: #dfe7e1;
+  --border: #deddd8;
+  --border-strong: #cacbc5;
+  --text: #383735;
+  --text-2: #66615c;
+  --text-muted: #96908a;
+  --accent: #718579;
+  --accent-text: #52685b;
+  --hover: #e8ebe7;
+  --success: #647d69;
+  --danger: #9a6466;
+  --radius: 6px;
+  --shadow: 0 10px 30px rgba(75, 68, 62, 0.12);
+  --shadow-sm: 0 3px 12px rgba(75, 68, 62, 0.08);
+  --workspace-divider: rgba(80, 78, 73, 0.12);
+  --workspace-divider-strong: rgba(80, 78, 73, 0.22);
+  --font-mono: 'SFMono-Regular', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Legacy component aliases keep application controls aligned with v1 rendering. */
+  --code-card-bg: #f1eeea;
+  --code-card-border: #d9d1ca;
+  --code-header-bg: #ebe7e2;
+  --code-lang-color: #8c867f;
+  --code-lang-hover-color: #5f655f;
+  --code-btn-color: #9b958e;
+  --code-btn-hover-color: #59665e;
+  --code-btn-hover-bg: #e0e4df;
+  --code-text: #3f4541;
+  --code-selection-bg: rgba(112, 132, 119, 0.22);
+  --code-inline-bg: #f3eae6;
+  --code-inline-text: #8b5f55;
+  --diagram-node-bg: #dfe7e1;
+  --diagram-node-border: #718579;
+
+  color-scheme: light;
+
+  /* Markdown document */
+  --xmd-font-body: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --xmd-font-heading: var(--xmd-font-body);
+  --xmd-document-text: #383735;
+  --xmd-document-secondary: #66615c;
+  --xmd-document-muted: #96908a;
+  --xmd-document-accent: #657a6a;
+  --xmd-document-selection-bg: rgba(112, 132, 119, 0.22);
+  --xmd-document-line-height: 1.8;
+
+  --xmd-heading-1-color: #826b5e;
+  --xmd-heading-2-color: #52705f;
+  --xmd-heading-3-color: #756e87;
+  --xmd-heading-4-color: #687b83;
+  --xmd-heading-5-color: #927c6f;
+  --xmd-heading-6-color: #949184;
+  --xmd-heading-1-border-bottom: 2px solid #d8e1dc;
+  --xmd-heading-1-padding-bottom: 12px;
+  --xmd-heading-2-border-left: 4px solid #52705f;
+  --xmd-heading-2-padding-left: 14px;
+  --xmd-heading-5-style: italic;
+  --xmd-heading-6-weight: 500;
+
+  --xmd-link-color: #73839b;
+  --xmd-highlight-bg: #e9dfad;
+  --xmd-highlight-text: #47433c;
+  --xmd-inline-code-bg: #f3eae6;
+  --xmd-inline-code-text: #8b5f55;
+  --xmd-inline-code-border: 1px solid #e4d7d0;
+  --xmd-quote-text: #5f6b63;
+  --xmd-quote-border: #80988a;
+  --xmd-quote-bg: rgba(128, 152, 138, 0.07);
+  --xmd-list-marker-color: #7c756e;
+  --xmd-task-checked-bg: #718b79;
+  --xmd-horizontal-rule-color: #cfd7d2;
+
+  --xmd-callout-bg: #edf1ee;
+  --xmd-callout-accent: #637a69;
+  --xmd-callout-warning: #987548;
+  --xmd-callout-warning-bg: #f4eee2;
+  --xmd-callout-important: #986365;
+  --xmd-callout-important-bg: #f4e9e9;
+
+  --xmd-code-bg: #f1eeea;
+  --xmd-code-border: #d9d1ca;
+  --xmd-code-text: #3f4541;
+  --xmd-code-radius: 6px;
+  --xmd-code-keyword: #8b6671;
+  --xmd-code-string: #607b69;
+  --xmd-code-comment: #99928a;
+  --xmd-code-number: #94745f;
+  --xmd-code-function: #66798b;
+  --xmd-code-type: #8c7457;
+  --xmd-code-property: #58776d;
+  --xmd-code-variable: #494745;
+  --xmd-code-tag: #657a6a;
+  --xmd-code-operator: #77716b;
+  --xmd-code-meta: #8f8982;
+  --xmd-code-link: #657b91;
+  --xmd-code-invalid: #a35f62;
+  --xmd-code-diff-added: #5f7c68;
+  --xmd-code-diff-removed: #a35f62;
+
+  --xmd-table-border: #c8d1cc;
+  --xmd-table-header-bg: #e8eeea;
+  --xmd-table-stripe-bg: rgba(106, 125, 113, 0.035);
+  --xmd-table-hover-bg: #edf2ef;
+  --xmd-table-active-bg: #e2ebe6;
+  --xmd-table-active-border: #718b79;
+
+  --xmd-image-radius: 4px;
+  --xmd-image-border: #ddd8d2;
+  --xmd-image-shadow: 0 5px 18px rgba(75, 68, 62, 0.08);
+
+  --xmd-math-text: #5f5968;
+  --xmd-math-display-bg: rgba(117, 110, 135, 0.04);
+  --xmd-math-display-border: 1px solid #e4e0e7;
+  --xmd-math-display-radius: 5px;
+
+  --xmd-mermaid-bg: #f6f5f2;
+  --xmd-mermaid-border: #d8d4ce;
+  --xmd-mermaid-radius: 6px;
+  --xmd-diagram-node-bg: #dfe7e1;
+  --xmd-diagram-node-border: #718579;
+  --xmd-diagram-text: #3d403d;
+  --xmd-diagram-line: #777d78;
+  --xmd-diagram-label-bg: #f6f5f2;
+}
+
+/* Application-level variables are locally declared by the shell. */
+.app {
+  --workspace-surface: #f7f6f3;
+  --editor-chrome-bg: rgba(247, 246, 243, 0.96);
+  --editor-chrome-border: var(--workspace-divider);
+}
+
+body {
+  font-family: var(--xmd-font-body);
+}

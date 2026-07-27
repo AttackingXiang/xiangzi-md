@@ -1,6 +1,6 @@
 .xmd-cm-image-preview {
   box-sizing: border-box;
-  color: var(--text-muted);
+  color: var(--xmd-image-caption-color, var(--text-muted));
   max-width: min(100%, var(--xmd-image-max-width, 100%));
 }
 
@@ -60,7 +60,9 @@
 }
 
 .xmd-cm-image-preview img {
-  border-radius: 6px;
+  border: 1px solid var(--xmd-image-border, transparent);
+  border-radius: var(--xmd-image-radius, 6px);
+  box-shadow: var(--xmd-image-shadow, none);
   height: auto;
   object-fit: contain;
   opacity: 1;
@@ -72,14 +74,9 @@
 }
 
 .xmd-cm-image-preview.is-loading {
-  background: linear-gradient(
-    110deg,
-    color-mix(in srgb, var(--text) 3%, transparent),
-    color-mix(in srgb, var(--text) 7%, transparent),
-    color-mix(in srgb, var(--text) 3%, transparent)
-  );
+  background: var(--xmd-image-loading-bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--xmd-image-radius, 6px);
 }
 
 @media (prefers-reduced-motion: reduce) {

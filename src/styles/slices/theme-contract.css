@@ -1,0 +1,154 @@
+/* Xiangzi MD theme contract v1.
+   Theme authors may override these --xmd-* properties from a custom CSS file.
+   Defaults delegate to the existing application palette so built-in themes
+   retain their current appearance. Internal layout variables are not public. */
+:root {
+  /* Document */
+  --xmd-font-body: var(--crepe-font-default);
+  --xmd-font-heading: var(--crepe-font-title);
+  --xmd-font-code: var(--crepe-font-code);
+  --xmd-document-text: var(--text);
+  --xmd-document-muted: var(--text-muted);
+  --xmd-document-secondary: var(--text-2);
+  --xmd-document-accent: var(--accent);
+  --xmd-document-selection-bg: color-mix(in srgb, var(--accent) 18%, transparent);
+  --xmd-document-line-height: 1.75;
+  --xmd-paragraph-spacing: 0.38em;
+  --xmd-paragraph-separated-spacing: 0.12em;
+
+  /* Headings */
+  --xmd-heading-color: var(--text);
+  --xmd-heading-font: var(--xmd-font-heading);
+  --xmd-heading-weight: 700;
+  --xmd-heading-line-height: 1.28;
+  --xmd-heading-padding-block: 0.18em;
+  --xmd-heading-1-color: var(--xmd-heading-color);
+  --xmd-heading-2-color: var(--xmd-heading-color);
+  --xmd-heading-3-color: var(--xmd-heading-color);
+  --xmd-heading-4-color: var(--xmd-heading-color);
+  --xmd-heading-5-color: var(--xmd-heading-color);
+  --xmd-heading-6-color: var(--xmd-heading-color);
+  --xmd-heading-1-size: 36px;
+  --xmd-heading-2-size: 28px;
+  --xmd-heading-3-size: 23px;
+  --xmd-heading-4-size: 19px;
+  --xmd-heading-5-size: 16px;
+  --xmd-heading-6-size: 16px;
+  --xmd-heading-1-size-mobile: 31px;
+  --xmd-heading-2-size-mobile: 25px;
+  --xmd-heading-1-weight: var(--xmd-heading-weight);
+  --xmd-heading-2-weight: var(--xmd-heading-weight);
+  --xmd-heading-3-weight: var(--xmd-heading-weight);
+  --xmd-heading-4-weight: var(--xmd-heading-weight);
+  --xmd-heading-5-weight: var(--xmd-heading-weight);
+  --xmd-heading-6-weight: var(--xmd-heading-weight);
+  --xmd-heading-1-style: normal;
+  --xmd-heading-2-style: normal;
+  --xmd-heading-3-style: normal;
+  --xmd-heading-4-style: normal;
+  --xmd-heading-5-style: normal;
+  --xmd-heading-6-style: normal;
+  --xmd-heading-1-border-bottom: 0 solid transparent;
+  --xmd-heading-2-border-left: 0 solid transparent;
+  --xmd-heading-1-padding-bottom: var(--xmd-heading-padding-block);
+  --xmd-heading-2-padding-left: 0;
+  --xmd-heading-number-color: var(--xmd-document-muted);
+
+  /* Inline Markdown and block structure */
+  --xmd-strong-weight: 700;
+  --xmd-emphasis-style: italic;
+  --xmd-strikethrough-color: currentColor;
+  --xmd-highlight-bg: #fde047;
+  --xmd-highlight-text: inherit;
+  --xmd-highlight-radius: 0.12em;
+  --xmd-link-color: var(--xmd-document-accent);
+  --xmd-link-decoration: underline;
+  --xmd-inline-code-bg: var(--code-inline-bg, rgba(127, 127, 127, 0.12));
+  --xmd-inline-code-text: var(--code-inline-text, var(--xmd-document-accent));
+  --xmd-inline-code-border: 0 solid transparent;
+  --xmd-inline-code-radius: 4px;
+  --xmd-horizontal-rule-color: var(--border-strong);
+  --xmd-horizontal-rule-width: 1px;
+  --xmd-quote-text: var(--xmd-document-secondary);
+  --xmd-quote-border: var(--border-strong);
+  --xmd-quote-bg: transparent;
+  --xmd-list-marker-color: var(--xmd-document-muted);
+  --xmd-task-border: var(--xmd-document-muted);
+  --xmd-task-checked-bg: var(--xmd-document-accent);
+  --xmd-task-check-color: white;
+  --xmd-status-success: var(--success, #2e9e5b);
+  --xmd-status-danger: var(--danger, #c43d4d);
+  --xmd-render-control-bg: transparent;
+  --xmd-render-control-text: var(--xmd-document-muted);
+  --xmd-render-control-hover-bg: color-mix(in srgb, var(--text) 8%, transparent);
+  --xmd-render-control-hover-text: var(--xmd-document-text);
+
+  /* Callouts */
+  --xmd-callout-text: var(--xmd-document-text);
+  --xmd-callout-accent: var(--xmd-document-accent);
+  --xmd-callout-bg: color-mix(in srgb, var(--accent) 5%, transparent);
+  --xmd-callout-warning: #b45309;
+  --xmd-callout-warning-bg: color-mix(in srgb, #d97706 9%, transparent);
+  --xmd-callout-important: #b91c1c;
+  --xmd-callout-important-bg: color-mix(in srgb, #dc2626 8%, transparent);
+
+  /* Code blocks and syntax */
+  --xmd-code-bg: var(--code-card-bg);
+  --xmd-code-border: var(--code-card-border);
+  --xmd-code-text: var(--code-text, var(--text));
+  --xmd-code-radius: 8px;
+  --xmd-code-selection-bg: var(--code-selection-bg);
+  --xmd-code-keyword: var(--code-keyword);
+  --xmd-code-string: var(--code-string);
+  --xmd-code-comment: var(--code-comment);
+  --xmd-code-number: var(--code-number);
+  --xmd-code-function: var(--code-function);
+  --xmd-code-type: var(--code-type);
+  --xmd-code-property: var(--code-property);
+  --xmd-code-variable: var(--code-variable);
+  --xmd-code-tag: var(--code-tag);
+  --xmd-code-operator: var(--code-operator);
+  --xmd-code-meta: var(--code-meta);
+  --xmd-code-link: var(--code-link);
+  --xmd-code-invalid: var(--code-invalid);
+  --xmd-code-diff-added: var(--code-diff-added);
+  --xmd-code-diff-removed: var(--code-diff-removed);
+
+  /* Tables */
+  --xmd-table-text: var(--xmd-document-text);
+  --xmd-table-border: var(--border);
+  --xmd-table-header-bg: color-mix(in srgb, var(--text) 5%, transparent);
+  --xmd-table-header-weight: 600;
+  --xmd-table-stripe-bg: color-mix(in srgb, var(--text) 2%, transparent);
+  --xmd-table-hover-bg: color-mix(in srgb, var(--accent) 12%, transparent);
+  --xmd-table-active-bg: color-mix(in srgb, var(--accent) 8%, transparent);
+  --xmd-table-active-border: var(--accent);
+  --xmd-table-radius: 6px;
+  --xmd-table-cell-padding: 0.45rem 0.75rem;
+
+  /* Images */
+  --xmd-image-radius: 6px;
+  --xmd-image-border: transparent;
+  --xmd-image-shadow: none;
+  --xmd-image-caption-color: var(--xmd-document-muted);
+  --xmd-image-loading-bg: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--text) 3%, transparent),
+    color-mix(in srgb, var(--text) 7%, transparent),
+    color-mix(in srgb, var(--text) 3%, transparent)
+  );
+
+  /* Math and Mermaid */
+  --xmd-math-text: var(--xmd-document-text);
+  --xmd-math-display-bg: transparent;
+  --xmd-math-display-border: 0 solid transparent;
+  --xmd-math-display-radius: 0;
+  --xmd-mermaid-bg: color-mix(in srgb, var(--code-card-bg) 30%, transparent);
+  --xmd-mermaid-border: var(--code-card-border);
+  --xmd-mermaid-radius: 8px;
+  --xmd-diagram-node-bg: var(--diagram-node-bg);
+  --xmd-diagram-node-border: var(--diagram-node-border);
+  --xmd-diagram-text: var(--text);
+  --xmd-diagram-line: var(--text-2);
+  --xmd-diagram-label-bg: var(--bg);
+}

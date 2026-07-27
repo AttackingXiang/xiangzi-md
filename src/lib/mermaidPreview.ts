@@ -83,12 +83,12 @@ function readCssVar(name: string, fallback: string): string {
  * 变成一片灰白、彼此不再区分。
  */
 function mermaidThemeVariables(): Record<string, string> {
-  const nodeBg = readCssVar('--diagram-node-bg', '#ececff')
-  const nodeBorder = readCssVar('--diagram-node-border', '#9370db')
-  const text = readCssVar('--text', '#1f2328')
-  const lineColor = readCssVar('--text-2', '#57606a')
-  const bg = readCssVar('--bg', '#ffffff')
-  const invalid = readCssVar('--code-invalid', '#cf222e')
+  const nodeBg = readCssVar('--xmd-diagram-node-bg', '#ececff')
+  const nodeBorder = readCssVar('--xmd-diagram-node-border', '#9370db')
+  const text = readCssVar('--xmd-diagram-text', '#1f2328')
+  const lineColor = readCssVar('--xmd-diagram-line', '#57606a')
+  const bg = readCssVar('--xmd-diagram-label-bg', '#ffffff')
+  const invalid = readCssVar('--xmd-code-invalid', '#cf222e')
   return {
     background: 'transparent',
     primaryColor: nodeBg,

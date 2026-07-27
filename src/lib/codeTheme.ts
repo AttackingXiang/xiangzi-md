@@ -14,46 +14,46 @@ import { tags as t } from '@lezer/highlight'
 const highlight = HighlightStyle.define([
   {
     tag: [t.keyword, t.modifier, t.operatorKeyword, t.controlKeyword],
-    color: 'var(--code-keyword)',
+    color: 'var(--xmd-code-keyword)',
   },
-  { tag: [t.string, t.special(t.string), t.regexp], color: 'var(--code-string)' },
+  { tag: [t.string, t.special(t.string), t.regexp], color: 'var(--xmd-code-string)' },
   {
     tag: [t.comment, t.lineComment, t.blockComment],
-    color: 'var(--code-comment)',
+    color: 'var(--xmd-code-comment)',
     fontStyle: 'italic',
   },
-  { tag: [t.number, t.bool, t.null, t.atom], color: 'var(--code-number)' },
+  { tag: [t.number, t.bool, t.null, t.atom], color: 'var(--xmd-code-number)' },
   {
     tag: [t.function(t.variableName), t.function(t.propertyName)],
-    color: 'var(--code-function)',
+    color: 'var(--xmd-code-function)',
   },
   {
     tag: [t.typeName, t.className, t.namespace, t.definition(t.typeName)],
-    color: 'var(--code-type)',
+    color: 'var(--xmd-code-type)',
   },
-  { tag: [t.propertyName, t.attributeName], color: 'var(--code-property)' },
-  { tag: [t.variableName, t.definition(t.variableName)], color: 'var(--code-variable)' },
-  { tag: [t.tagName, t.angleBracket], color: 'var(--code-tag)' },
-  { tag: [t.operator, t.punctuation, t.separator, t.bracket], color: 'var(--code-operator)' },
-  { tag: [t.meta, t.documentMeta], color: 'var(--code-meta)' },
+  { tag: [t.propertyName, t.attributeName], color: 'var(--xmd-code-property)' },
+  { tag: [t.variableName, t.definition(t.variableName)], color: 'var(--xmd-code-variable)' },
+  { tag: [t.tagName, t.angleBracket], color: 'var(--xmd-code-tag)' },
+  { tag: [t.operator, t.punctuation, t.separator, t.bracket], color: 'var(--xmd-code-operator)' },
+  { tag: [t.meta, t.documentMeta], color: 'var(--xmd-code-meta)' },
   { tag: [t.heading], fontWeight: '600' },
-  { tag: [t.link, t.url], color: 'var(--code-link)', textDecoration: 'underline' },
-  { tag: [t.invalid], color: 'var(--code-invalid)' },
+  { tag: [t.link, t.url], color: 'var(--xmd-code-link)', textDecoration: 'underline' },
+  { tag: [t.invalid], color: 'var(--xmd-code-invalid)' },
 ])
 
 const theme = EditorView.theme({
-  '&': { backgroundColor: 'transparent', color: 'var(--code-text)' },
+  '&': { backgroundColor: 'transparent', color: 'var(--xmd-code-text)' },
   '.cm-scroller': { backgroundColor: 'transparent' },
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--code-btn-color)' },
   '.cm-activeLine': { backgroundColor: 'color-mix(in srgb, var(--text) 4%, transparent)' },
   '.cm-activeLineGutter': { backgroundColor: 'transparent' },
   '.cm-cursor': { borderLeftColor: 'var(--accent)' },
-  '.cm-selectionLayer .cm-selectionBackground': { backgroundColor: 'var(--code-selection-bg)' },
+  '.cm-selectionLayer .cm-selectionBackground': { backgroundColor: 'var(--xmd-code-selection-bg)' },
   '&.cm-focused .cm-selectionLayer .cm-selectionBackground': {
-    backgroundColor: 'var(--code-selection-bg)',
+    backgroundColor: 'var(--xmd-code-selection-bg)',
   },
-  '.cm-selectionBackground': { backgroundColor: 'var(--code-selection-bg)' },
-  '&.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--code-selection-bg)' },
+  '.cm-selectionBackground': { backgroundColor: 'var(--xmd-code-selection-bg)' },
+  '&.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--xmd-code-selection-bg)' },
 })
 
 export function codeMirrorTheme(): Extension {

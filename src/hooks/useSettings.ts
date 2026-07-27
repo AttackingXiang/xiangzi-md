@@ -39,6 +39,7 @@ export function useSettings() {
   const [settingsReady, setSettingsReady] = useState(false)
   const [customCssError, setCustomCssError] = useState(false)
   const [backgroundImageError, setBackgroundImageError] = useState(false)
+  const [themeRenderVersion, setThemeRenderVersion] = useState(0)
   const backgroundImageUrlRef = useRef<string | null>(null)
   const languageSaveRevisionRef = useRef(0)
 
@@ -67,6 +68,7 @@ export function useSettings() {
             : 'light'
           : settings.theme
       document.documentElement.dataset.theme = resolved
+      setThemeRenderVersion((version) => version + 1)
     }
     apply()
     if (settings.theme === 'system') {
@@ -109,6 +111,7 @@ export function useSettings() {
     el?.remove()
     el = null
     setCustomCssError(false)
+    setThemeRenderVersion((version) => version + 1)
     if (!settings.customCssPath) {
       return undefined
     }
@@ -123,6 +126,7 @@ export function useSettings() {
           document.head.appendChild(el)
         }
         el.textContent = res.content
+        setThemeRenderVersion((version) => version + 1)
       })
       .catch(() => {
         if (!cancelled) setCustomCssError(true)
@@ -188,6 +192,7 @@ export function useSettings() {
   useEffect(() => {
     if (!settings) return
     applyThemeShade(settings.themeShade ?? 0)
+    setThemeRenderVersion((version) => version + 1)
   }, [settings?.themeShade, settings?.theme])
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -420,6 +425,7 @@ export function useSettings() {
   return {
     settings,
     settingsReady,
+    themeRenderVersion,
     customCssError,
     backgroundImageError,
     saveSettings,

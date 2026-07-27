@@ -1,11 +1,30 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 
 const host = process.env.TAURI_DEV_HOST
 
+function katexWoff2Only(): Plugin {
+  return {
+    name: 'katex-woff2-only',
+    enforce: 'pre',
+    transform(css, id) {
+      if (!/node_modules\/katex\/dist\/katex(?:\.min)?\.css$/.test(id)) return undefined
+
+      return css.replace(/src:([^;}]+)/g, (declaration) => {
+        const woff2Source = declaration
+          .slice(4)
+          .split(',')
+          .find((source) => /format\(\s*["']?woff2["']?\s*\)/i.test(source))
+
+        return woff2Source ? `src:${woff2Source}` : declaration
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: [react()],
+  plugins: [katexWoff2Only(), react()],
 
   build: {
     // Mermaid's optional architecture parser is a lazy 663 KiB chunk but only

@@ -12,8 +12,8 @@
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line {
   box-sizing: border-box;
-  color: var(--code-block-text, var(--text));
-  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  color: var(--xmd-code-text, var(--code-block-text, var(--text)));
+  font-family: var(--xmd-font-code, var(--crepe-font-code, ui-monospace, monospace));
   font-size: inherit;
   line-height: inherit;
   max-width: 100%;
@@ -55,9 +55,9 @@
 .xmd-cm-editor .cm-line.xmd-cm-code-line::before {
   /* The appearance setting is a real surface opacity: the page/background
      remains visible beneath the code card at lower values. */
-  background: color-mix(in srgb, var(--code-card-bg) var(--code-block-opacity, 30%), transparent);
-  border-left: 1px solid var(--code-card-border);
-  border-right: 1px solid var(--code-card-border);
+  background: color-mix(in srgb, var(--xmd-code-bg) var(--code-block-opacity, 30%), transparent);
+  border-left: 1px solid var(--xmd-code-border);
+  border-right: 1px solid var(--xmd-code-border);
   content: '';
   inset: 0;
   pointer-events: none;
@@ -74,17 +74,17 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line-first::before {
-  border-radius: 8px 8px 0 0;
-  border-top: 1px solid var(--code-card-border);
+  border-radius: var(--xmd-code-radius) var(--xmd-code-radius) 0 0;
+  border-top: 1px solid var(--xmd-code-border);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line-last::before {
-  border-bottom: 1px solid var(--code-card-border);
-  border-radius: 0 0 8px 8px;
+  border-bottom: 1px solid var(--xmd-code-border);
+  border-radius: 0 0 var(--xmd-code-radius) var(--xmd-code-radius);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-line-last::before {
-  border-radius: 8px;
+  border-radius: var(--xmd-code-radius);
 }
 
 /* Both overlays (this scrollbar and .xmd-cm-code-preview-header below) are
@@ -148,10 +148,10 @@
 
 .xmd-cm-code-preview-header {
   align-items: center;
-  background: color-mix(in srgb, var(--code-card-bg) var(--code-block-opacity, 30%), var(--bg));
-  border: 1px solid var(--code-card-border);
+  background: color-mix(in srgb, var(--xmd-code-bg) var(--code-block-opacity, 30%), var(--bg));
+  border: 1px solid var(--xmd-code-border);
   border-bottom: 0;
-  border-radius: 8px 8px 0 0;
+  border-radius: var(--xmd-code-radius) var(--xmd-code-radius) 0 0;
   box-sizing: border-box;
   display: inline-flex;
   gap: 4px;
@@ -183,7 +183,7 @@
 }
 
 .xmd-cm-code-preview-header .xmd-cm-mermaid-preview-toggle {
-  border-right: 1px solid var(--code-card-border);
+  border-right: 1px solid var(--xmd-code-border);
   border-radius: 5px 0 0 5px;
   margin-right: 2px;
   padding-right: 6px;
@@ -202,7 +202,7 @@
   box-sizing: border-box;
   color: var(--text-muted);
   cursor: text;
-  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  font-family: var(--xmd-font-code, var(--crepe-font-code, ui-monospace, monospace));
   font-size: 12px;
   height: 22px;
   line-height: 20px;
@@ -264,7 +264,7 @@
   color: var(--text);
   cursor: pointer;
   display: block;
-  font-family: var(--crepe-font-code, ui-monospace, monospace);
+  font-family: var(--xmd-font-code, var(--crepe-font-code, ui-monospace, monospace));
   font-size: 12px;
   overflow: hidden;
   padding: 3px 7px;
@@ -327,5 +327,5 @@
 
 .xmd-cm-editor .cm-editor.xmd-cm-native-code-selection .cm-line::selection,
 .xmd-cm-editor .cm-editor.xmd-cm-native-code-selection .cm-line *::selection {
-  background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+  background: var(--xmd-document-selection-bg) !important;
 }

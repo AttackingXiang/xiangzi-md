@@ -7,7 +7,8 @@
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
-  border-radius: 6px;
+  border-radius: var(--xmd-table-radius, 6px);
+  color: var(--xmd-table-text, var(--text));
 }
 .xmd-cm-table-preview table {
   width: max-content;
@@ -24,8 +25,8 @@
 .xmd-cm-table-preview td {
   min-width: 6rem;
   max-width: min(32rem, 70vw);
-  padding: 0.45rem 0.75rem;
-  border: 1px solid var(--border);
+  padding: var(--xmd-table-cell-padding, 0.45rem 0.75rem);
+  border: 1px solid var(--xmd-table-border, var(--border));
   line-height: inherit;
   overflow-wrap: anywhere;
   vertical-align: top;
@@ -33,31 +34,31 @@
   cursor: text;
 }
 .xmd-cm-table-preview th {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  font-weight: 600;
+  background: var(--xmd-table-header-bg);
+  font-weight: var(--xmd-table-header-weight, 600);
 }
 .xmd-cm-table-preview tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--text) 2%, transparent);
+  background: var(--xmd-table-stripe-bg);
 }
 .xmd-cm-table-preview td:hover,
 .xmd-cm-table-preview th:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--xmd-table-hover-bg);
 }
 .xmd-cm-table-preview .xmd-cm-table-cell-active {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  outline: 1px solid var(--accent);
+  background: var(--xmd-table-active-bg);
+  outline: 1px solid var(--xmd-table-active-border, var(--accent));
   outline-offset: -1px;
 }
 .xmd-cm-table-preview .xmd-cm-table-inline-code {
   padding: 0.08em 0.28em;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  color: var(--code-inline-text, #d14);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  background: var(--xmd-inline-code-bg);
+  color: var(--xmd-inline-code-text);
+  font-family: var(--xmd-font-code, var(--font-mono, ui-monospace, monospace));
   font-size: 0.9em;
 }
 .xmd-cm-table-preview .xmd-cm-table-inline-link {
-  color: var(--accent);
+  color: var(--xmd-link-color, var(--accent));
   text-decoration: underline;
   text-underline-offset: 0.12em;
 }
@@ -235,7 +236,7 @@
 
 .xmd-table-zoom-table th,
 .xmd-table-zoom-table td {
-  border: 1px solid var(--border-strong, var(--border));
+  border: 1px solid var(--xmd-table-border, var(--border-strong, var(--border)));
   padding: 8px 12px;
   vertical-align: top;
   white-space: pre-wrap;
@@ -243,6 +244,6 @@
 }
 
 .xmd-table-zoom-table th {
-  background: var(--bg-hover);
-  font-weight: 600;
+  background: var(--xmd-table-header-bg, var(--bg-hover));
+  font-weight: var(--xmd-table-header-weight, 600);
 }

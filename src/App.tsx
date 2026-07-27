@@ -95,6 +95,7 @@ export default function App(): JSX.Element {
   const {
     settings,
     settingsReady,
+    themeRenderVersion,
     customCssError,
     backgroundImageError,
     saveSettings,
@@ -1337,7 +1338,7 @@ export default function App(): JSX.Element {
                     }}
                     focusMode={focusMode}
                     typewriterMode={typewriterMode}
-                    previewThemeVersion={settings.theme}
+                    previewThemeVersion={`${settings.theme}:${themeRenderVersion}`}
                     tagBar={
                       // Source mode shows frontmatter as literal `---` YAML text
                       // inside the editor body (see the `content` prop above), so

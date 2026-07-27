@@ -1,4 +1,5 @@
 import ReactDOM from 'react-dom/client'
+import perfContent from '../e2e/fixtures/perf-test-1mb.md?raw'
 import { MarkdownEditor } from './features/cm6-editor/MarkdownEditor'
 import { cm6ActiveViewBridge } from './features/cm6-editor/activeViewBridge'
 import './styles/index.css'
@@ -11,12 +12,8 @@ function log(msg: string): void {
 
 async function main(): Promise<void> {
   const readingMode = new URLSearchParams(window.location.search).has('readonly')
-  performance.mark('fetch-start')
-  const res = await fetch('/perf-test-1mb.md')
-  const content = await res.text()
-  performance.mark('fetch-end')
-  performance.measure('fetch', 'fetch-start', 'fetch-end')
-  log(`fetched ${(content.length / 1024).toFixed(0)} KB (${content.length} chars)`)
+  const content = perfContent
+  log(`loaded ${(content.length / 1024).toFixed(0)} KB (${content.length} chars)`)
 
   performance.mark('mount-start')
   const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
