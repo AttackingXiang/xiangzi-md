@@ -1464,7 +1464,11 @@ export default function App(): JSX.Element {
             )}
 
             {themeInstallLabel && (
-              <ExportProgressToast label={themeInstallLabel} cancellable={false} onCancel={() => {}} />
+              <ExportProgressToast
+                label={themeInstallLabel}
+                cancellable={false}
+                onCancel={() => {}}
+              />
             )}
 
             {externalReloadNotice && (
