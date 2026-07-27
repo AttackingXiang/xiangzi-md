@@ -526,6 +526,7 @@ export default function App(): JSX.Element {
   }, [])
   const [exportResultPath, setExportResultPath] = useState<string | null>(null)
   const [exportActivity, setExportActivity] = useState<ExportActivity | null>(null)
+  const [themeInstallLabel, setThemeInstallLabel] = useState<string | null>(null)
 
   const updater = useUpdater(settings?.checkUpdatesOnStartup ?? false)
 
@@ -834,6 +835,9 @@ export default function App(): JSX.Element {
   useEffect(
     () =>
       desktop.onThemeInstallRequest((request) => {
+        setThemeInstallLabel(
+          lang === 'en' ? `Installing "${request.name}"…` : `正在安装「${request.name}」…`,
+        )
         void desktop
           .installThemeFromUrl(request)
           .then(async (theme) => {
@@ -850,6 +854,7 @@ export default function App(): JSX.Element {
               lang === 'en' ? 'Theme installation' : '主题安装',
             )
           })
+          .finally(() => setThemeInstallLabel(null))
       }),
     [lang, saveSettings],
   )
@@ -1456,6 +1461,10 @@ export default function App(): JSX.Element {
                 cancellable={exportActivity.cancellable}
                 onCancel={cancelExport}
               />
+            )}
+
+            {themeInstallLabel && (
+              <ExportProgressToast label={themeInstallLabel} cancellable={false} onCancel={() => {}} />
             )}
 
             {externalReloadNotice && (
