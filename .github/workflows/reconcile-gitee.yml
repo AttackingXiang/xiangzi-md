@@ -17,6 +17,9 @@ concurrency:
   group: reconcile-gitee
   cancel-in-progress: false
 
+env:
+  RELEASE_REPOSITORY: AttackingXiang/xiangzi-md
+
 jobs:
   reconcile:
     runs-on: ubuntu-latest
@@ -30,7 +33,7 @@ jobs:
           set -euo pipefail
 
           # 1) 对账目标 = 最新的 GitHub 已发布 release（自动排除草稿与预发布）。
-          TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+          TAG=$(gh api "repos/${RELEASE_REPOSITORY}/releases/latest" \
             --jq '.tag_name' 2>/dev/null || true)
           if [ -z "${TAG}" ]; then
             echo "No published GitHub release yet; nothing to reconcile."

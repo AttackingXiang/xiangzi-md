@@ -20,6 +20,9 @@ concurrency:
   group: publish-gitee-release
   cancel-in-progress: false
 
+env:
+  RELEASE_REPOSITORY: AttackingXiang/xiangzi-md
+
 jobs:
   prepare:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
@@ -55,7 +58,7 @@ jobs:
             --connect-timeout 20 --max-time 120 \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            "https://api.github.com/repos/${RELEASE_REPOSITORY}/releases/tags/${TAG}" \
             >/tmp/github-release.json
           jq -e '[.assets[].name | select(test("\\.(dmg|exe|sig|tar\\.gz)$") or . == "latest.json")] | length >= 6' \
             /tmp/github-release.json >/dev/null
@@ -156,7 +159,7 @@ jobs:
             --connect-timeout 20 --max-time 120 \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+            "https://api.github.com/repos/${RELEASE_REPOSITORY}/releases/tags/${TAG}")
           mapfile -t ASSETS < <(printf '%s' "${RELEASE}" | jq -r \
             '.assets[] | [.browser_download_url,.name] | @tsv' \
             | while IFS=$'\t' read -r url name; do
@@ -290,7 +293,7 @@ jobs:
 
           curl --fail --silent --show-error --retry 4 --retry-all-errors \
             -H "Authorization: Bearer ${GH_TOKEN}" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            "https://api.github.com/repos/${RELEASE_REPOSITORY}/releases/tags/${TAG}" \
             >/tmp/github-release.json
           curl --fail --location --silent --show-error --retry 4 --retry-all-errors \
             -H "Authorization: Bearer ${GH_TOKEN}" \

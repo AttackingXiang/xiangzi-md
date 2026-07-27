@@ -90,13 +90,15 @@ tag 必须满足 `vX.Y.Z` 格式，版本必须与五处应用版本一致，且
 
 推送 tag 后会触发以下流程。
 
+GitHub 制品发布到公开仓库 `AttackingXiang/xiangzi-md`，源码仓库为 `AttackingXiang/xiangzi-md-source` 并可以保持私有。`Release Desktop` 需要在源码仓库配置 `RELEASE_REPO_TOKEN` secret；该 token 必须能对 `AttackingXiang/xiangzi-md` 创建/编辑 Release 并上传附件。
+
 ### Release Desktop
 
 1. `Resolve release version`：校验 tag、五处版本和 main 祖先关系，生成发布说明。
 2. `Release security and browser gate`：执行 npm/RustSec 审计、覆盖率门禁和 Playwright Chromium 回归。
 3. `Release gate`：macOS 和 Windows 并行执行前端与 Rust 门禁。
 4. `Build`：macOS Universal 和 Windows x64 并行构建、签名，生成校验和、SBOM、attestation，并上传 7 天保留的临时 Actions Artifact。
-5. `Publish unified GitHub Release`：等待两个平台完成，验证完整产物集，将附件文件名中的空格统一规范化为点号，再根据最终文件名生成唯一的跨平台 `latest.json`，创建 GitHub Release 并统一上传所有附件。
+5. `Publish unified GitHub Release`：等待两个平台完成，验证完整产物集，将附件文件名中的空格统一规范化为点号，再根据最终文件名生成唯一的跨平台 `latest.json`，在公开制品仓库创建 GitHub Release 并统一上传所有附件。
 6. `Verify every published asset and updater URL`：从 GitHub 的公开下载地址逐个完整下载所有 Release 附件，要求 HTTP 成功且下载字节数与 GitHub API 记录一致；随后校验 `latest.json` 六个平台中的 URL 必须精确对应已发布附件。任何 404、超时、大小不符或名称漂移都会让发布失败。
 
 最终 `latest.json` 必须包含：

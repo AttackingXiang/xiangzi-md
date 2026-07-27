@@ -58,7 +58,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRFMTlCNTZENTU3QUEwMzAKUldRd29IcFZiYlVaVGhkUFZTSURCaXJrTExzdEp5c0VuM3VpNFBscFM3eTN0ZGFWSEVTY3RwYWIK",
       "endpoints": [
-        "https://github.com/AttackingXiang/xiangzi-md-releases/releases/latest/download/latest.json",
+        "https://github.com/AttackingXiang/xiangzi-md/releases/latest/download/latest.json",
         "https://gitee.com/tlqgyx/xiangzi-md/raw/updater/latest.json"
       ],
       "windows": {

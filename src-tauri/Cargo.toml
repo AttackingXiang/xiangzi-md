@@ -4,7 +4,7 @@ version = "2.0.18"
 description = "Xiangzi MD — a local-first Markdown editor"
 authors = ["guoxiangzi"]
 license = "GPL-3.0-only"
-repository = "https://github.com/AttackingXiang/xiangzi-md"
+repository = "https://github.com/AttackingXiang/xiangzi-md-source"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
