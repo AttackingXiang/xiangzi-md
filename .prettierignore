@@ -6,3 +6,7 @@ package-lock.json
 RENDERING_SHOWCASE.html
 markdown_all_formats_test.md
 public/perf-test-1mb.md
+
+# Markdown and PNG files are not part of the code-formatting gate.
+*.md
+*.png

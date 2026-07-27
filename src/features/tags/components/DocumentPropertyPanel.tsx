@@ -38,6 +38,9 @@ interface Props {
   onTagContext?: (tag: string, x: number, y: number) => void
   /** 用整份新属性列表覆盖 frontmatter，返回是否写入成功。 */
   onChange: (next: DocumentProperty[]) => Promise<boolean>
+  /** 外部入口每次递增该值，即可让空面板进入新增属性状态。 */
+  addRequest?: number
+  onAddRequestConsumed?: () => void
 }
 
 function isTagsKey(key: string): boolean {
@@ -476,6 +479,8 @@ export default function DocumentPropertyPanel({
   onSelectTag,
   onTagContext,
   onChange,
+  addRequest = 0,
+  onAddRequestConsumed,
 }: Props): JSX.Element {
   const [menuIndex, setMenuIndex] = useState<number | null>(null)
   const [addingKey, setAddingKey] = useState('')
@@ -490,6 +495,13 @@ export default function DocumentPropertyPanel({
   useEffect(() => {
     if (adding) addRef.current?.focus()
   }, [adding])
+
+  useEffect(() => {
+    if (addRequest > 0 && !disabled) {
+      setAdding(true)
+      onAddRequestConsumed?.()
+    }
+  }, [addRequest, disabled, onAddRequestConsumed])
 
   // 新属性一旦出现在列表里，对应行已消费过 autoEdit，清掉标记避免后续误触发。
   useEffect(() => {
@@ -543,9 +555,8 @@ export default function DocumentPropertyPanel({
       (!filter || s.key.includes(filter) || suggestionLabel(s.key).toLowerCase().includes(filter)),
   )
 
-  // 阅读模式（disabled）下只做只读展示：没有任何属性时整块不渲染，避免出现一张
-  // 空卡片；有属性时照常展示，但不给"添加属性"入口。
-  if (disabled && properties.length === 0) return <></>
+  // 无属性时只有外部「文件 → 添加属性…」命令能唤起编辑器；平时不占正文空间。
+  if (properties.length === 0 && !adding) return <></>
 
   return (
     <div
@@ -628,9 +639,14 @@ export default function DocumentPropertyPanel({
           )}
         </div>
       ) : (
-        <button type="button" className="prop-add-button" onClick={() => setAdding(true)}>
+        <button
+          type="button"
+          className="prop-add-button is-icon-only"
+          aria-label={t('添加属性')}
+          title={t('添加属性')}
+          onClick={() => setAdding(true)}
+        >
           <Plus size={13} />
-          {t('添加属性')}
         </button>
       )}
     </div>

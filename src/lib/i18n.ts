@@ -43,6 +43,7 @@ const EN: Record<string, string> = {
   // Document properties panel
   文档属性: 'Document properties',
   添加属性: 'Add property',
+  '添加属性…': 'Add Property…',
   删除属性: 'Delete property',
   属性名称: 'Property name',
   属性类型: 'Property type',
@@ -173,6 +174,10 @@ const EN: Record<string, string> = {
   快捷键: 'Shortcuts',
   // Outline
   关闭大纲: 'Close outline',
+  全部展开: 'Expand all',
+  全部收起: 'Collapse all',
+  展开子标题: 'Expand subheadings',
+  收起子标题: 'Collapse subheadings',
   暂无标题: 'No headings',
   '（空标题）': '(empty heading)',
   // Search

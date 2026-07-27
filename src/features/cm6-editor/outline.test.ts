@@ -64,22 +64,28 @@ describe('CM6 source outline', () => {
     expect(focus).not.toHaveBeenCalled()
   })
 
-  it('reveals a clamped offset through a CM6 scroll effect', () => {
+  it('reveals a clamped offset by scrolling scrollDOM directly', () => {
     const state = EditorState.create({ doc: '# 标题\n正文' })
     const dispatch = vi.fn<(spec: { selection?: { anchor: number } }) => void>()
     const focus = vi.fn()
-    const view = { state, dispatch, focus }
+    const scrollDOM = { scrollTop: 500 }
+    const lineBlockAt = vi.fn(() => ({ top: 120 }))
+    const view = { state, dispatch, focus, scrollDOM, lineBlockAt }
     expect(revealHeading(view as never, 10_000)).toBe(true)
     expect(dispatch).toHaveBeenCalledOnce()
     expect(dispatch.mock.calls[0][0].selection).toEqual({ anchor: state.doc.length })
+    expect(scrollDOM.scrollTop).toBe(96)
     expect(focus).toHaveBeenCalledOnce()
+    expect(dispatch.mock.invocationCallOrder[0]).toBeLessThan(focus.mock.invocationCallOrder[0])
   })
 
   it('places the caret after a hidden ATX marker while scrolling the source line', () => {
     const state = EditorState.create({ doc: 'before\n   ## **Heading**\nafter' })
     const dispatch = vi.fn<(spec: { selection?: { anchor: number } }) => void>()
     const focus = vi.fn()
-    const view = { state, dispatch, focus }
+    const scrollDOM = { scrollTop: 0 }
+    const lineBlockAt = vi.fn(() => ({ top: 0 }))
+    const view = { state, dispatch, focus, scrollDOM, lineBlockAt }
 
     expect(revealHeading(view as never, 'before\n'.length)).toBe(true)
     expect(dispatch.mock.calls[0][0].selection).toEqual({ anchor: 'before\n   ## **'.length })

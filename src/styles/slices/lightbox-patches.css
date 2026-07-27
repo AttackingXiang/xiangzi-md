@@ -154,7 +154,7 @@
 /* Absolutely positioned so the handle never pushes the text right */
 .outline-drag-handle {
   position: absolute;
-  left: 3px;
+  right: 5px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);

@@ -429,6 +429,10 @@ export default function App(): JSX.Element {
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [outlineVisible, setOutlineVisible] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
+  const [propertyAddRequest, setPropertyAddRequest] = useState<{
+    tabId: string
+    nonce: number
+  } | null>(null)
   // 非 Markdown 文件走 CodeMirror TextEditor：按当前标签名判定内核。
   const activeKind = activeTab ? classifyFile(activeTab.name) : 'markdown'
   const isTextKind = activeKind === 'text'
@@ -475,6 +479,15 @@ export default function App(): JSX.Element {
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
   const [readingMode, setReadingMode] = useState(false)
+  const requestAddProperty = useCallback((): void => {
+    const tab = stateRef.current.tabs.find((item) => item.id === stateRef.current.activeId)
+    if (!tab || classifyFile(tab.name) === 'text' || readingMode) return
+    setSourceMode(false)
+    setPropertyAddRequest((current) => ({
+      tabId: tab.id,
+      nonce: (current?.nonce ?? 0) + 1,
+    }))
+  }, [readingMode])
   // 同样提为 useCallback：TabBar / Outline 用 memo() 包裹后，稳定的回调引用才能让 memo 生效
   const toggleSourceMode = useCallback(() => setSourceMode((v) => !v), [])
   const toggleSidebarVisible = useCallback(() => setSidebarVisible((v) => !v), [setSidebarVisible])
@@ -717,13 +730,45 @@ export default function App(): JSX.Element {
     setCtxMenu,
   })
 
+  // 必须和传给 MarkdownEditor 的 content 用同一份文本（见下方 sourceMode 三元），
+  // 否则大纲的标题 offset 是按去 frontmatter 的正文算的，源码模式下编辑器用的是
+  // 带 frontmatter 的原文，offset 会整体偏移 frontmatter 的长度，点击大纲跳到错误位置。
   const deferredOutlineContent = useDeferredValue(
-    outlineVisible && activeTab ? activeFrontmatter.body : '',
+    outlineVisible && activeTab ? (sourceMode ? activeTab.content : activeFrontmatter.body) : '',
   )
   const outline = useMemo(
     () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
     [deferredOutlineContent, outlineVisible],
   )
+  const [activeOutlineIndex, setActiveOutlineIndex] = useState<number | null>(null)
+  const updateActiveOutline = useCallback(
+    (scrollTop: number): void => {
+      const view = cm6ActiveViewBridge.get()
+      if (!view || outline.length === 0) {
+        setActiveOutlineIndex(null)
+        return
+      }
+      const probe = scrollTop + Math.min(96, view.scrollDOM.clientHeight * 0.16)
+      let next: number | null = null
+      for (const item of outline) {
+        if (view.lineBlockAt(item.offset).top > probe) break
+        next = item.index
+      }
+      setActiveOutlineIndex((current) => (current === next ? current : next))
+    },
+    [outline],
+  )
+  useEffect(() => {
+    if (!outlineVisible) {
+      setActiveOutlineIndex(null)
+      return
+    }
+    const frame = requestAnimationFrame(() => {
+      const view = cm6ActiveViewBridge.get()
+      if (view) updateActiveOutline(view.scrollDOM.scrollTop)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [activeId, outlineVisible, updateActiveOutline])
   // frecency 衰减用的“现在”，周期刷新；避免在 render 里直接调 Date.now()。
   const now = useNow()
   // 文件树排序上下文：排序方式 + 置顶集合 + frecency 排名。集中在此计算，
@@ -1025,6 +1070,7 @@ export default function App(): JSX.Element {
     deleteDrafts,
     requestCloseDecision,
     saveTab,
+    onAddProperty: requestAddProperty,
   })
   // Don't render until settings are loaded (avoids flash of wrong theme/width)
   if (!settings) {
@@ -1042,6 +1088,8 @@ export default function App(): JSX.Element {
         dirty={activeTab?.dirty}
         shortcuts={settings.shortcuts}
         onOpenAbout={() => setSettingsSection('about')}
+        onAddProperty={requestAddProperty}
+        canAddProperty={!!activeTab && !isTextKind && !readingMode}
       />
       <div className="workspace-shell">
         {sidebarVisible && (
@@ -1305,6 +1353,12 @@ export default function App(): JSX.Element {
                             onSelectTag={openDocumentTag}
                             onTagContext={openDocTagContext}
                             onChange={changeDocumentProperties}
+                            addRequest={
+                              propertyAddRequest?.tabId === activeTab.id
+                                ? propertyAddRequest.nonce
+                                : 0
+                            }
+                            onAddRequestConsumed={() => setPropertyAddRequest(null)}
                           />
                           {!hasBodyHeading && activeFrontmatter.title && (
                             <div className="document-title-fallback">{activeFrontmatter.title}</div>
@@ -1314,9 +1368,10 @@ export default function App(): JSX.Element {
                     }
                     readingMode={readingMode}
                     initialScrollTop={wysiwygScrollPositions.current.get(activeTab.id) ?? 0}
-                    onScrollTopChange={(scrollTop) =>
+                    onScrollTopChange={(scrollTop) => {
                       wysiwygScrollPositions.current.set(activeTab.id, scrollTop)
-                    }
+                      if (outlineVisible) updateActiveOutline(scrollTop)
+                    }}
                     onChange={(nextValue) => {
                       // Frontmatter/property edits and CM6 transactions can be
                       // dispatched in the same tick. Merge the editor value into
@@ -1356,7 +1411,9 @@ export default function App(): JSX.Element {
               <>
                 <div className="resize-handle" onMouseDown={startOutlineResize} />
                 <Outline
+                  documentId={activeTab.id}
                   items={outline}
+                  activeIndex={activeOutlineIndex}
                   onSelect={scrollToHeading}
                   onReorder={reorderSection}
                   onClose={closeOutline}

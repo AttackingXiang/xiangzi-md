@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { parseOutline } from './outline'
+import {
+  outlineDescendantEnd,
+  outlineHasChildren,
+  parseOutline,
+  visibleOutlineIndices,
+} from './outline'
 
 describe('parseOutline', () => {
   it('parses ATX headings at all levels', () => {
@@ -53,5 +58,17 @@ describe('parseOutline', () => {
 
   it('returns empty array for content with no headings', () => {
     expect(parseOutline('Just plain text\nNo headings here')).toEqual([])
+  })
+
+  it('treats skipped heading levels as descendants of the nearest lower-level heading', () => {
+    const items = parseOutline('# A\n### A.1\n#### A.1.1\n## B\n### B.1\n# C')
+    expect(outlineHasChildren(items, 0)).toBe(true)
+    expect(outlineDescendantEnd(items, 0)).toBe(5)
+    expect(visibleOutlineIndices(items, new Set([0]))).toEqual([0, 5])
+  })
+
+  it('keeps siblings visible when only a nested section is collapsed', () => {
+    const items = parseOutline('# A\n## A.1\n### A.1.1\n## A.2\n# B')
+    expect(visibleOutlineIndices(items, new Set([1]))).toEqual([0, 1, 3, 4])
   })
 })

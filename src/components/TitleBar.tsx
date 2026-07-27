@@ -12,6 +12,8 @@ interface Props {
   dirty?: boolean
   shortcuts?: Record<string, string>
   onOpenAbout?: () => void
+  onAddProperty?: () => void
+  canAddProperty?: boolean
 }
 
 export default function TitleBar({
@@ -19,6 +21,8 @@ export default function TitleBar({
   dirty = false,
   shortcuts = EMPTY_SHORTCUTS,
   onOpenAbout,
+  onAddProperty,
+  canAddProperty = false,
 }: Props): JSX.Element {
   const platform = currentDesktopPlatform()
   const isMac = platform === 'macos'
@@ -52,7 +56,14 @@ export default function TitleBar({
         )
       }}
     >
-      {!isMac && <TitleBarMenu shortcuts={shortcuts} onOpenAbout={onOpenAbout ?? (() => {})} />}
+      {!isMac && (
+        <TitleBarMenu
+          shortcuts={shortcuts}
+          onOpenAbout={onOpenAbout ?? (() => {})}
+          onAddProperty={onAddProperty}
+          canAddProperty={canAddProperty}
+        />
+      )}
 
       {!isMac && (
         <div className="titlebar-controls" data-titlebar-interactive aria-label={t('窗口控制')}>

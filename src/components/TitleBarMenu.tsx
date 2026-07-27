@@ -9,6 +9,8 @@ import { desktop } from '../platform'
 interface Props {
   shortcuts: Record<string, string>
   onOpenAbout: () => void
+  onAddProperty?: () => void
+  canAddProperty?: boolean
 }
 
 type MenuId = 'app' | 'file' | 'edit' | 'view'
@@ -28,7 +30,12 @@ function toggleFullscreen(): void {
   )
 }
 
-export default function TitleBarMenu({ shortcuts, onOpenAbout }: Props): JSX.Element {
+export default function TitleBarMenu({
+  shortcuts,
+  onOpenAbout,
+  onAddProperty,
+  canAddProperty = false,
+}: Props): JSX.Element {
   const [open, setOpen] = useState<MenuId | null>(null)
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
   const buttonRefs = useRef<Partial<Record<MenuId, HTMLButtonElement>>>({})
@@ -77,6 +84,12 @@ export default function TitleBarMenu({ shortcuts, onOpenAbout }: Props): JSX.Ele
           separatorBefore: true,
         },
         { label: t('另存为…'), hint: hint(shortcuts, 'save-as'), onClick: trigger('save-as') },
+        {
+          label: t('添加属性…'),
+          onClick: onAddProperty ?? (() => undefined),
+          disabled: !canAddProperty,
+          separatorBefore: true,
+        },
         { label: t('导出 HTML'), onClick: trigger('export-html'), separatorBefore: true },
         { label: t('导出 PDF'), onClick: trigger('export-pdf') },
         { label: t('导出图片'), onClick: trigger('export-image') },

@@ -466,10 +466,21 @@
   letter-spacing: 0.02em;
 }
 
+.outline-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.outline-header-actions .icon-btn:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+
 .outline-body {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 6px 16px 2px;
+  padding: 4px 6px 16px;
 }
 
 .outline-empty {
@@ -481,17 +492,94 @@
 
 .outline-item {
   position: relative;
-  font-size: 13px;
   color: var(--text-2);
-  padding: 5px 8px;
+  min-height: 30px;
+  padding-top: 0;
+  padding-right: 26px;
+  padding-bottom: 0;
   border-radius: 6px;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
 }
 
 .outline-item:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+.outline-item.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.outline-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.outline-toggle,
+.outline-toggle-placeholder {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 24px;
+}
+
+.outline-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.outline-toggle:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+}
+
+.outline-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-level-1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.outline-level-2 {
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--text);
+}
+
+.outline-level-3 {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.outline-level-4 {
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.outline-level-5,
+.outline-level-6 {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
 }

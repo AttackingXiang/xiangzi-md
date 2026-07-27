@@ -79,25 +79,55 @@ export function reorderHeading(view: EditorView, fromIndex: number, toIndex: num
   return true
 }
 
-function stabilizeRevealScroll(view: EditorView, anchor: number, scrollPosition: number): void {
-  if (typeof requestAnimationFrame !== 'function') return
+const REVEAL_MARGIN = 24
+const REVEAL_SETTLE_FRAMES = 4
+
+/**
+ * Scroll `scrollDOM` directly instead of dispatching `EditorView.scrollIntoView`.
+ * That effect only updates CM6's internal viewport/height-map bookkeeping in some
+ * WKWebView builds without ever moving the real `scrollTop` (verified by instrumenting
+ * viewport/lineBlockAt/scrollTop across every stage of the effect-based reveal — the
+ * viewport re-centered on the target every time, but scrollTop never left its starting
+ * value). Reading the target's pixel offset via `lineBlockAt` and assigning `scrollTop`
+ * ourselves mirrors the mount-time restore in MarkdownEditor.tsx, which already relies
+ * on the same direct assignment successfully.
+ */
+function applyRevealScroll(view: EditorView, targetLine: number): void {
+  const top = Math.max(0, view.lineBlockAt(targetLine).top - REVEAL_MARGIN)
+  view.scrollDOM.scrollTop = top
+}
+
+function stabilizeRevealScroll(
+  view: EditorView,
+  anchor: number,
+  targetLine: number,
+  onSettled: () => void,
+): void {
+  if (typeof requestAnimationFrame !== 'function') {
+    onSettled()
+    return
+  }
   const document = view.state.doc
-  let frames = 4
+  let frames = REVEAL_SETTLE_FRAMES
   const afterLayout = (): void => {
     frames -= 1
-    if (frames > 0) {
-      requestAnimationFrame(afterLayout)
-      return
-    }
     if (
       cm6ActiveViewBridge.get() !== view ||
       view.state.doc !== document ||
       view.state.selection.main.head !== anchor
-    )
+    ) {
+      onSettled()
       return
-    view.dispatch({
-      effects: EditorView.scrollIntoView(scrollPosition, { y: 'start', yMargin: 24 }),
-    })
+    }
+    // Live-preview widgets (tables/code blocks/images) only report their real
+    // height once mounted, so the target line's pixel offset keeps shifting for
+    // a few frames after the jump; reapply until it settles.
+    applyRevealScroll(view, targetLine)
+    if (frames > 0) {
+      requestAnimationFrame(afterLayout)
+      return
+    }
+    onSettled()
   }
   requestAnimationFrame(afterLayout)
 }
@@ -113,11 +143,8 @@ export function revealHeading(view: EditorView, offset: number): boolean {
     atxPrefix || position === line.from
       ? line.from + (visibleOffset ?? atxPrefix?.[0].length ?? 0)
       : position
-  view.dispatch({
-    selection: { anchor },
-    effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 24 }),
-  })
-  stabilizeRevealScroll(view, anchor, line.from)
-  view.focus()
+  view.dispatch({ selection: { anchor } })
+  applyRevealScroll(view, line.from)
+  stabilizeRevealScroll(view, anchor, line.from, () => view.focus())
   return true
 }

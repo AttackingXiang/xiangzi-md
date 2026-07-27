@@ -20,6 +20,7 @@ interface NativeIntegrationOptions {
   deleteDrafts: (ids: string[]) => Promise<void>
   requestCloseDecision: (tabs: Tab[], reason?: CloseReason) => Promise<CloseDecision>
   saveTab: (id: string) => Promise<boolean>
+  onAddProperty: () => void
 }
 
 export function useNativeIntegration(options: NativeIntegrationOptions): void {
@@ -36,6 +37,7 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
     deleteDrafts,
     requestCloseDecision,
     saveTab,
+    onAddProperty,
   } = options
   const quitPromptOpenRef = useRef(false)
 
@@ -46,7 +48,8 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
           dispatchShortcut(action)
           return
         }
-        if (action === 'export-html') void exportHTML()
+        if (action === 'add-property') onAddProperty()
+        else if (action === 'export-html') void exportHTML()
         else if (action === 'export-pdf') void exportPDF()
         else if (action === 'export-image') void exportImage()
         else if (action === 'export-docx') void exportDocx()
@@ -90,6 +93,7 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
       exportImage,
       exportPDF,
       importDocx,
+      onAddProperty,
       requestCloseDecision,
       saveTab,
       stateRef,

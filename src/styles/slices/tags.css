@@ -57,8 +57,8 @@
   user-select: none;
 }
 
-/* 没有 frontmatter 时只保留一个贴近正文的轻入口，不让空面板和分隔线
-   抢走标题的视觉层级；真正出现属性后仍使用上面的完整面板样式。 */
+/* 没有 frontmatter 时仅在用户从「文件 → 添加属性…」主动唤起后短暂显示编辑器；
+   默认直接返回空节点，因此不会占据正文高度。 */
 .document-properties.is-empty {
   padding: 4px 40px 0;
   border-bottom: 0;
@@ -405,6 +405,14 @@
 .prop-add-button:disabled {
   opacity: 0.46;
   cursor: default;
+}
+
+.prop-add-button.is-icon-only {
+  width: 28px;
+  height: 28px;
+  margin: 3px 0 0 196px;
+  padding: 0;
+  justify-content: center;
 }
 
 .prop-add-editor {

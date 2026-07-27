@@ -132,6 +132,12 @@ fn file_menu(
         tr(language, "另存为…", "Save As…"),
         accelerator(shortcuts, "save-as", "Mod+Shift+S"),
     )?;
+    let add_property = action(
+        app,
+        "add-property",
+        tr(language, "添加属性…", "Add Property…"),
+        None,
+    )?;
     let export_html = action(app, "export-html", "HTML…", None)?;
     let export_pdf = action(app, "export-pdf", "PDF…", None)?;
     let export_image = action(app, "export-image", tr(language, "图片…", "Image…"), None)?;
@@ -168,6 +174,8 @@ fn file_menu(
         .separator()
         .item(&save)
         .item(&save_as)
+        .separator()
+        .item(&add_property)
         .separator()
         .item(&export)
         .item(&import_docx)
