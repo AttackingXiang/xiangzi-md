@@ -21,9 +21,6 @@ permissions:
   id-token: write
   attestations: write
 
-env:
-  RELEASE_REPOSITORY: AttackingXiang/xiangzi-md
-
 concurrency:
   # Manual repairs for different tags must not cancel each other merely because
   # workflow_dispatch runs from the same default branch.
@@ -64,7 +61,7 @@ jobs:
             echo "publish=true" >> "${GITHUB_OUTPUT}"
           elif curl -sf -o /dev/null \
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            "https://api.github.com/repos/${RELEASE_REPOSITORY}/releases/tags/${TAG}"; then
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"; then
             # 以 GitHub Release 是否存在为准。之前检查的是 tag 是否存在于远端，
             # 而 tag push 触发的 run 里 tag 必然已存在，导致推 tag 永远不发布。
             echo "Version ${TAG} is already released; CI will still validate this commit."
@@ -476,7 +473,7 @@ jobs:
           MAC_SIGNATURE=$(tr -d '\r\n' < "release-assets/${MAC_ARCHIVE}.sig")
           WINDOWS_INSTALLER=$(find release-assets -maxdepth 1 -name '*-setup.exe' -exec basename {} \;)
           WINDOWS_SIGNATURE=$(tr -d '\r\n' < "release-assets/${WINDOWS_INSTALLER}.sig")
-          BASE_URL="https://github.com/${RELEASE_REPOSITORY}/releases/download/${TAG}"
+          BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
           # Encode the final, normalized asset names as URL path segments.
           MAC_ARCHIVE_URL=$(jq -rn --arg value "${MAC_ARCHIVE}" '$value | @uri')
           WINDOWS_INSTALLER_URL=$(jq -rn --arg value "${WINDOWS_INSTALLER}" '$value | @uri')
@@ -506,10 +503,10 @@ jobs:
 
       - name: Create or repair the GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The publish job only downloads build artifacts and has no checkout,
           # so gh cannot infer the repository from a local .git directory.
-          GH_REPO: ${{ env.RELEASE_REPOSITORY }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
           NOTES: ${{ needs.prepare.outputs.notes }}
         shell: bash
@@ -528,13 +525,13 @@ jobs:
 
       - name: Verify every published asset and updater URL
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
-          GH_REPO: ${{ env.RELEASE_REPOSITORY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          API="https://api.github.com/repos/${RELEASE_REPOSITORY}/releases/tags/${TAG}"
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}"
           RELEASE_JSON=$(mktemp)
           DOWNLOADED=$(mktemp)
 
