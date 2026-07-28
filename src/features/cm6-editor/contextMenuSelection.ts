@@ -1,5 +1,6 @@
 import { Annotation, EditorSelection, EditorState, type Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { selectionIntent } from './selection/selectionIntent'
 
 /** Marks the selection this module writes, so its own filter lets it through. */
 const ownSelection = Annotation.define<boolean>()
@@ -87,7 +88,7 @@ export function contextMenuSelection(): Extension {
         view.dispatch({
           selection,
           userEvent: 'select.pointer',
-          annotations: ownSelection.of(true),
+          annotations: [ownSelection.of(true), selectionIntent.of('contextmenu')],
         })
         // The menu itself is opened by the app's own `contextmenu` handler.
         return false
@@ -102,7 +103,10 @@ export function contextMenuSelection(): Extension {
       // Only selection-only syncs are suspect. A real edit is never WebKit
       // reasserting a context-menu selection, and must not be rewritten.
       if (tr.docChanged || !tr.selection || !tr.isUserEvent('select')) return tr
-      return { selection: guard.selection, annotations: ownSelection.of(true) }
+      return {
+        selection: guard.selection,
+        annotations: [ownSelection.of(true), selectionIntent.of('contextmenu')],
+      }
     }),
   ]
 }

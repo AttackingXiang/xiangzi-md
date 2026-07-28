@@ -1,10 +1,11 @@
 import { syntaxTree } from '@codemirror/language'
 import type { EditorState } from '@codemirror/state'
-import { StateEffect, StateField } from '@codemirror/state'
+import { StateField } from '@codemirror/state'
 import type { SyntaxNode } from '@lezer/common'
 import { cm6ExportMode } from './exportMode'
 import { policyFor } from './nodePolicy'
 import { mergeRanges, rangesTouch, type PreviewRange } from './types'
+import { isPointerSelectionActive } from '../selection/selectionCoordinator'
 
 /**
  * The set of `reveal-on-selection` construct ranges that the current
@@ -19,19 +20,6 @@ export interface RevealedRanges {
 
 const EMPTY_REVEALED: RevealedRanges = { ranges: [] }
 
-/** Freezes rendered inline geometry for the duration of a pointer selection. */
-export const setPointerSelectionActive = StateEffect.define<boolean>()
-
-export const pointerSelectionActiveState = StateField.define<boolean>({
-  create: () => false,
-  update(value, transaction) {
-    for (const effect of transaction.effects) {
-      if (effect.is(setPointerSelectionActive)) value = effect.value
-    }
-    return value
-  },
-})
-
 function collectAncestors(node: SyntaxNode | null, into: PreviewRange[]): void {
   for (let current = node; current; current = current.parent) {
     if (policyFor(current.name)?.kind === 'reveal-on-selection') {
@@ -42,7 +30,7 @@ function collectAncestors(node: SyntaxNode | null, into: PreviewRange[]): void {
 
 /** Pure function: computes revealed construct ranges for `state.selection`. */
 export function computeRevealedRanges(state: EditorState): RevealedRanges {
-  if (state.facet(cm6ExportMode) || state.field(pointerSelectionActiveState, false)) {
+  if (state.facet(cm6ExportMode) || isPointerSelectionActive(state)) {
     return EMPTY_REVEALED
   }
   const tree = syntaxTree(state)
@@ -72,9 +60,9 @@ export function isRevealed(revealed: RevealedRanges, from: number, to: number): 
 export const revealState = StateField.define<RevealedRanges>({
   create: (state) => computeRevealedRanges(state),
   update(value, transaction) {
-    const pointerSelectionChanged = transaction.effects.some((effect) =>
-      effect.is(setPointerSelectionActive),
-    )
+    const pointerSelectionChanged =
+      isPointerSelectionActive(transaction.startState) !==
+      isPointerSelectionActive(transaction.state)
     if (
       !transaction.docChanged &&
       transaction.selection === undefined &&

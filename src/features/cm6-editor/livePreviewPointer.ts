@@ -1,4 +1,5 @@
 import type { EditorView } from '@codemirror/view'
+import { documentPositionAtPoint } from './selection/selectionGeometry'
 
 /**
  * Map a click inside a rendered heading line back to the exact source
@@ -21,22 +22,6 @@ export function linePositionAtPointer(
   // DOM caret APIs preserve the character under the pointer even when CM6 has
   // replacement decorations before it. posAtCoords alone may otherwise snap
   // to the following block widget boundary.
-  const documentWithCaret = document as Document & {
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
-    caretRangeFromPoint?: (x: number, y: number) => Range | null
-  }
-  const caret = documentWithCaret.caretPositionFromPoint?.(event.clientX, event.clientY)
-  const range = caret ? null : documentWithCaret.caretRangeFromPoint?.(event.clientX, event.clientY)
-  const node = caret?.offsetNode ?? range?.startContainer
-  const offset = caret?.offset ?? range?.startOffset
-  let position = view.posAtCoords({ x: event.clientX, y: event.clientY }, false)
-  if (node && offset !== undefined && lineElement.contains(node)) {
-    try {
-      position = view.posAtDOM(node, offset)
-    } catch {
-      // A stale DOM text node can disappear during a decoration refresh; the
-      // coordinate fallback below remains safe and is clamped to this heading.
-    }
-  }
+  const position = documentPositionAtPoint(view, event.clientX, event.clientY, lineElement)
   return Math.max(contentFrom, Math.min(sourceLine.to, position ?? contentFrom))
 }

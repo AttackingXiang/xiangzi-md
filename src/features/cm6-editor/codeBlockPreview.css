@@ -324,8 +324,3 @@
 .xmd-cm-editor .cm-editor.xmd-cm-native-code-selection .cm-selectionLayer {
   display: none;
 }
-
-.xmd-cm-editor .cm-editor.xmd-cm-native-code-selection .cm-content::selection,
-.xmd-cm-editor .cm-editor.xmd-cm-native-code-selection .cm-content *::selection {
-  background-color: var(--xmd-document-selection-bg) !important;
-}

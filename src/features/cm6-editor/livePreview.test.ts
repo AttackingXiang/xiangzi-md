@@ -8,7 +8,10 @@ import {
   safeMarkdownLinkHref,
   shouldUseNativeSelectionPainting,
 } from './livePreview'
-import { pointerSelectionActiveState, setPointerSelectionActive } from './core/revealState'
+import {
+  selectionCoordinatorState,
+  setPointerSelectionActive,
+} from './selection/selectionCoordinator'
 
 interface SeenDecoration {
   from: number
@@ -447,7 +450,7 @@ describe('CM6 Markdown live preview: safe inline HTML formatting', () => {
     const initial = EditorState.create({
       doc,
       selection: EditorSelection.cursor(cursor),
-      extensions: [markdown({ base: markdownLanguage }), pointerSelectionActiveState],
+      extensions: [markdown({ base: markdownLanguage }), selectionCoordinatorState],
     })
     const state = initial.update({ effects: setPointerSelectionActive.of(true) }).state
     const hidden = hiddenRanges(state, 0, doc.length)

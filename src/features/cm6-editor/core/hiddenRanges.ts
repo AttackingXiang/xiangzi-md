@@ -8,12 +8,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
-import {
-  computeRevealedRanges,
-  pointerSelectionActiveState,
-  revealState,
-  type RevealedRanges,
-} from './revealState'
+import { computeRevealedRanges, revealState, type RevealedRanges } from './revealState'
 import type { PreviewRange } from './types'
 import { HIDDEN_SOURCE_ATTRIBUTE } from '../../../lib/hiddenSourceDom'
 
@@ -275,5 +270,5 @@ export function hiddenRangesEngine(): Extension {
         EditorView.atomicRanges.of((view) => view.plugin(instance)?.atomic ?? Decoration.none),
     },
   )
-  return [pointerSelectionActiveState, revealState, plugin]
+  return [revealState, plugin]
 }

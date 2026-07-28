@@ -17,6 +17,10 @@ import { tableZoomBridge } from '../../lib/tableZoomBridge'
 import { t } from '../../lib/i18n'
 import { shortcutHint } from '../../lib/shortcuts'
 import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
+import {
+  enterTableSelectionSurface,
+  leaveTableSelectionSurface,
+} from './selection/selectionCoordinator'
 import './tablePreview.css'
 
 export type TableAlignment = 'left' | 'center' | 'right' | null
@@ -1886,9 +1890,7 @@ class TableWidget extends WidgetType {
       // events are ignored), so a non-empty outer-document selection made
       // beforehand would stay painted by drawSelection next to the cell's
       // native selection. Collapse it.
-      if (!view.state.selection.main.empty) {
-        view.dispatch({ selection: { anchor: view.state.selection.main.head } })
-      }
+      enterTableSelectionSurface(view)
       element
         .closest('table')
         ?.querySelectorAll('.xmd-cm-table-cell-active')
@@ -1915,6 +1917,7 @@ class TableWidget extends WidgetType {
       })
     })
     element.addEventListener('blur', () => {
+      leaveTableSelectionSurface(view)
       tableCellCommandBridge.deactivate(element)
       element.classList.remove('xmd-cm-table-cell-active')
       const cell = controller.cellByElement.get(element)

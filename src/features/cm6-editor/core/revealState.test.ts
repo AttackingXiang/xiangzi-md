@@ -1,12 +1,11 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
+import { computeRevealedRanges, isRevealed } from './revealState'
 import {
-  computeRevealedRanges,
-  isRevealed,
-  pointerSelectionActiveState,
+  selectionCoordinatorState,
   setPointerSelectionActive,
-} from './revealState'
+} from '../selection/selectionCoordinator'
 
 function createState(doc: string, ...cursors: number[]): EditorState {
   return EditorState.create({
@@ -62,7 +61,7 @@ describe('computeRevealedRanges', () => {
     const initial = EditorState.create({
       doc,
       selection: EditorSelection.cursor(cursor),
-      extensions: [markdown({ base: markdownLanguage }), pointerSelectionActiveState],
+      extensions: [markdown({ base: markdownLanguage }), selectionCoordinatorState],
     })
     const selecting = initial.update({ effects: setPointerSelectionActive.of(true) }).state
     const finished = selecting.update({ effects: setPointerSelectionActive.of(false) }).state

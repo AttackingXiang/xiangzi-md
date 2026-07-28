@@ -12,10 +12,11 @@ import { createMarkdownPreviewExtensions } from './previewExtensions'
 import type { TableColumnWidthMode } from './tablePreview'
 import { markdownEditorExportBridge } from './exportBridge'
 import { selectionTouchesCodeBlock } from './toolbarState'
-import { setPointerSelectionActive } from './core/revealState'
 import SelectionToolbar, { type SelectionToolbarAnchor } from '../../components/SelectionToolbar'
 import { highlighterModeBridge } from '../../lib/highlighterModeBridge'
 import { setTextHighlight } from './commands'
+import { selectionCoordinatorObserver, selectionSnapshot } from './selection/selectionCoordinator'
+import { selectionEndpointRect } from './selection/selectionGeometry'
 import './livePreview.css'
 import './codeBlockPreview.css'
 import './imagePreview.css'
@@ -159,7 +160,6 @@ export function MarkdownEditor({
   })
   const selectionToolbarEnabledRef = useRef(showSelectionToolbar)
   const readingModeRef = useRef(readingMode)
-  const pointerSelectingRef = useRef(false)
   const initialHighlighterMode = highlighterModeBridge.getState()
   const highlighterColorRef = useRef<string | null>(
     initialHighlighterMode.active ? initialHighlighterMode.color : null,
@@ -170,17 +170,35 @@ export function MarkdownEditor({
   const reportSelectionToolbarRef = useRef<(view: EditorView) => void>(() => undefined)
   const selectionToolbarExtensionRef = useRef<Extension | null>(null)
   if (!selectionToolbarExtensionRef.current) {
-    selectionToolbarExtensionRef.current = EditorView.updateListener.of((update) => {
-      if (
-        update.selectionSet ||
-        update.docChanged ||
-        update.focusChanged ||
-        update.viewportChanged ||
-        update.geometryChanged
-      ) {
-        reportSelectionToolbarRef.current(update.view)
-      }
-    })
+    selectionToolbarExtensionRef.current = [
+      EditorView.updateListener.of((update) => {
+        if (
+          update.selectionSet ||
+          update.docChanged ||
+          update.focusChanged ||
+          update.viewportChanged ||
+          update.geometryChanged ||
+          selectionSnapshot(update.startState) !== selectionSnapshot(update.state)
+        ) {
+          reportSelectionToolbarRef.current(update.view)
+        }
+      }),
+      selectionCoordinatorObserver.of({
+        onPointerSelectionEnd(view, canceled) {
+          if (canceled) {
+            setSelectionToolbarAnchor(null)
+            return
+          }
+          const color = highlighterColorRef.current
+          if (color && !view.state.selection.main.empty && !selectionTouchesCodeBlock(view.state)) {
+            setTextHighlight(color)(view)
+            setSelectionToolbarAnchor(null)
+            return
+          }
+          reportSelectionToolbarRef.current(view)
+        },
+      }),
+    ]
   }
   const [tagPortalHost, setTagPortalHost] = useState<HTMLElement | null>(null)
   const tagPortalHostRef = useRef<HTMLElement | null>(null)
@@ -209,7 +227,8 @@ export function MarkdownEditor({
       !root ||
       !selectionToolbarEnabledRef.current ||
       readingModeRef.current ||
-      pointerSelectingRef.current ||
+      selectionSnapshot(view.state).pointerActive ||
+      highlighterColorRef.current !== null ||
       !view.hasFocus ||
       range.empty ||
       selectionTouchesCodeBlock(view.state)
@@ -217,8 +236,8 @@ export function MarkdownEditor({
       setSelectionToolbarAnchor(null)
       return
     }
-    const head = view.coordsAtPos(range.head)
-    const tail = view.coordsAtPos(range.anchor)
+    const head = selectionEndpointRect(view, range.head)
+    const tail = selectionEndpointRect(view, range.anchor)
     if (!head || !tail) {
       setSelectionToolbarAnchor(null)
       return
@@ -321,58 +340,12 @@ export function MarkdownEditor({
 
     const scroller = controller.view.scrollDOM
     const disposeRichClipboard = setupRichClipboard(mount, stableImageResolverRef.current)
-    let selectionToolbarFrame = 0
     const reportScroll = (): void => {
       if (!restoringScroll) onScrollTopChangeRef.current?.(scroller.scrollTop)
     }
     scroller.addEventListener('scroll', reportScroll, { passive: true })
     const reportSelectionToolbar = (): void => reportSelectionToolbarRef.current(controller.view)
-    const beginPointerSelection = (event: PointerEvent): void => {
-      if (
-        event.button !== 0 ||
-        !(event.target instanceof Node) ||
-        !controller.view.contentDOM.contains(event.target)
-      )
-        return
-      pointerSelectingRef.current = true
-      controller.view.dispatch({ effects: setPointerSelectionActive.of(true) })
-      if (selectionToolbarFrame) cancelAnimationFrame(selectionToolbarFrame)
-      selectionToolbarFrame = 0
-      setSelectionToolbarAnchor(null)
-    }
-    const finishPointerSelection = (): void => {
-      if (!pointerSelectingRef.current) return
-      if (selectionToolbarFrame) cancelAnimationFrame(selectionToolbarFrame)
-      // CM6 may commit the final DOM selection at the end of the pointerup
-      // turn. Wait one layout frame, then measure the stable selection once.
-      selectionToolbarFrame = requestAnimationFrame(() => {
-        selectionToolbarFrame = 0
-        pointerSelectingRef.current = false
-        controller.view.dispatch({ effects: setPointerSelectionActive.of(false) })
-        const color = highlighterColorRef.current
-        if (
-          color &&
-          !controller.view.state.selection.main.empty &&
-          !selectionTouchesCodeBlock(controller.view.state)
-        ) {
-          setTextHighlight(color)(controller.view)
-          setSelectionToolbarAnchor(null)
-          return
-        }
-        reportSelectionToolbar()
-      })
-    }
-    const cancelPointerSelection = (): void => {
-      if (selectionToolbarFrame) cancelAnimationFrame(selectionToolbarFrame)
-      selectionToolbarFrame = 0
-      pointerSelectingRef.current = false
-      controller.view.dispatch({ effects: setPointerSelectionActive.of(false) })
-      setSelectionToolbarAnchor(null)
-    }
     scroller.addEventListener('scroll', reportSelectionToolbar, { passive: true })
-    scroller.addEventListener('pointerdown', beginPointerSelection, true)
-    window.addEventListener('pointerup', finishPointerSelection)
-    window.addEventListener('pointercancel', cancelPointerSelection)
     window.addEventListener('resize', reportSelectionToolbar)
     reportSelectionToolbar()
 
@@ -392,13 +365,8 @@ export function MarkdownEditor({
 
     return () => {
       cancelAnimationFrame(restoreFrame)
-      if (selectionToolbarFrame) cancelAnimationFrame(selectionToolbarFrame)
-      pointerSelectingRef.current = false
       scroller.removeEventListener('scroll', reportScroll)
       scroller.removeEventListener('scroll', reportSelectionToolbar)
-      scroller.removeEventListener('pointerdown', beginPointerSelection, true)
-      window.removeEventListener('pointerup', finishPointerSelection)
-      window.removeEventListener('pointercancel', cancelPointerSelection)
       window.removeEventListener('resize', reportSelectionToolbar)
       disposeRichClipboard()
       // Persist the actual position even when the component unmounts during restore.

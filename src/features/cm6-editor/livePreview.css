@@ -123,11 +123,6 @@
   display: none;
 }
 
-.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-content::selection,
-.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-content *::selection {
-  background-color: var(--xmd-document-selection-bg) !important;
-}
-
 .xmd-cm-editor .cm-line.xmd-cm-heading-1 {
   border-bottom: var(--xmd-heading-1-border-bottom, 0 solid transparent);
   color: var(--xmd-heading-1-color, var(--xmd-heading-color));

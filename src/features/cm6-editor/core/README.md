@@ -17,6 +17,12 @@
   Enter/Shift-Enter、"删空即清除"。
 - `types.ts` — `PreviewRange`/`mergeRanges`/`rangesTouch`/`expandedVisibleRanges` 等与
   Markdown 无关的纯几何工具。
+- `../selection/selectionCoordinator.ts` — 编辑器唯一的选区交互状态机：记录鼠标拖选阶段和
+  当前选区表面，并统一决定正文/代码块使用 CM6 还是浏览器原生选区绘制。
+- `../selection/selectionIntent.ts` — 选择事务的共享意图标记，供代码块滚动、右键保护等消费者
+  区分鼠标、键盘、程序化定位和纯几何重绘。
+- `../selection/selectionGeometry.ts` — 对 CM6 坐标与浏览器 caret 命中 API 的受控封装；调用方
+  不再各自直接信任可能失效或返回异常值的端点坐标。
 
 ## 策略语义（`RevealPolicyKind`）
 
@@ -81,11 +87,16 @@
 Setext 下划线、链接引用定义和 atomic block 不会被误改成文本呈现。
 
 保留行首文本解决了 replacement 边界不稳定，但引用行等带动态行级 padding 的布局仍可能让
-CM6 `wrappedLine` 的左右探测结果不一致。`livePreview.ts` 因此还提供一层正交的选区呈现策略：
+CM6 `wrappedLine` 的左右探测结果不一致。`selection/selectionCoordinator.ts` 因此还提供一层
+正交的选区呈现策略：
 编辑器聚焦时，单一、非空、完全位于同一物理行的选区使用浏览器原生 Range 绘制；跨物理行、
 多选区和失焦状态继续使用 CM6 selection layer，以保留虚拟化、跨块选区和次级光标能力。代码块
-已有的“块内原生选区”策略范围更宽（允许跨代码行并负责嵌套横向滚动裁剪），两者可以同时存在，
-互不替代。
+的“块内原生选区”策略范围更宽（允许跨代码行并负责嵌套横向滚动裁剪），现在也由同一个呈现
+策略选择，不再由代码块插件独立切换 CSS class。表格单元格仍保留自己的 DOM Range，但聚焦时
+通过 `table-cell` surface 暂时取得选区所有权，并由协调器一次性折叠外层 CM6 选区。
+
+选区协调器只拥有“意图、表面、绘制策略和共享坐标入口”。隐藏范围生成、表格内部编辑、代码块
+滚动条布局及文档编辑命令仍由各 feature 自己负责，避免把所有交互收进一个难以维护的大类。
 
 `preserve-text` 节点带 `data-xmd-hidden-source`，只属于编辑器几何，不属于渲染文档语义。
 HTML 导出和便携剪贴板必须通过 `lib/hiddenSourceDom.ts` 的共享清理函数删除这些节点后，才能

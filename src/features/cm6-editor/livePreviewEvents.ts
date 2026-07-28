@@ -2,6 +2,7 @@ import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { linePositionAtPointer } from './livePreviewPointer'
 import { safeMarkdownLinkHref } from './markdownLinks'
+import { selectionIntent } from './selection/selectionIntent'
 
 function linkAtEvent(event: Event, view: EditorView): HTMLElement | null {
   const target = event.target
@@ -81,7 +82,11 @@ export function livePreviewEventHandlers(): Extension {
         const anchor = view.posAtDOM(line, 0)
         if (view.state.selection.main.head === anchor) return false
         event.preventDefault()
-        view.dispatch({ selection: { anchor }, scrollIntoView: true })
+        view.dispatch({
+          selection: { anchor },
+          scrollIntoView: true,
+          annotations: selectionIntent.of('programmatic'),
+        })
         view.focus()
         return true
       }
@@ -96,7 +101,11 @@ export function livePreviewEventHandlers(): Extension {
       const anchor = linePositionAtPointer(event, view, line)
       if (view.state.selection.main.head === anchor) return false
       event.preventDefault()
-      view.dispatch({ selection: { anchor }, scrollIntoView: true })
+      view.dispatch({
+        selection: { anchor },
+        scrollIntoView: true,
+        annotations: selectionIntent.of('programmatic'),
+      })
       view.focus()
       return true
     },

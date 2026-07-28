@@ -1,11 +1,10 @@
-import { Annotation, type EditorState, type Extension } from '@codemirror/state'
+import type { EditorState, Extension } from '@codemirror/state'
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view'
 import {
   activeEditableFencedCode,
   findFencedCodeAt,
   isEditableMermaidSource,
   needsCodeCaretRepaint,
-  selectionIntersectsFencedCode,
   type FencedCodeData,
 } from './codeBlockDetection'
 import {
@@ -29,6 +28,7 @@ import {
 } from './codeBlockGeometry'
 import { mermaidSourceRange, setMermaidSourceRange } from './mermaidPreview'
 import { checkIcon, copyIcon, eyeIcon } from './widgetIcons'
+import { selectionIntent, transactionHasSelectionIntent } from './selection/selectionIntent'
 
 export interface CodeBlockPreviewOptions {
   viewportMargin?: number
@@ -38,10 +38,6 @@ export interface CodeBlockPreviewOptions {
   /** Wrap long code lines. Disabled by default so source layout is preserved. */
   lineWrapping?: boolean
 }
-
-/** Marks a selection re-dispatch whose only purpose is to make CM6 measure
- * its cursor layer after a nested code-row scroller moved. */
-const codeCaretRepaint = Annotation.define<boolean>()
 
 let codeLanguageMenuSequence = 0
 
@@ -378,12 +374,6 @@ class CodeBlockScrollPlugin {
     // when the viewport (plus margin) is unchanged and CM6 therefore
     // dispatches no view update.
     view.scrollDOM.addEventListener('scroll', this.onScroll, true)
-    // A search bridge (FindBar) dispatches match selections while its own
-    // input keeps DOM focus, so a focus/blur transition can flip which
-    // presentation is correct without any accompanying selection change.
-    view.contentDOM.addEventListener('focus', this.onFocusChange)
-    view.contentDOM.addEventListener('blur', this.onFocusChange)
-    this.updateSelectionPresentation(view.state)
     this.syncMermaidSourceControl(view.state)
     this.schedule()
     this.frame = requestAnimationFrame(() => this.schedule())
@@ -391,7 +381,6 @@ class CodeBlockScrollPlugin {
 
   update(update: ViewUpdate): void {
     this.syncMermaidSourceControl(update.state)
-    if (update.docChanged || update.selectionSet) this.updateSelectionPresentation(update.state)
     // Reveal-scrolling (keeping the caret visible inside the nested
     // scrollers) follows edits, keyboard/programmatic caret movement and
     // geometry changes — but not a plain pointer selection. The clicked DOM
@@ -399,8 +388,11 @@ class CodeBlockScrollPlugin {
     // controls-gutter margin makes a long code row jump horizontally after
     // the browser has placed the caret.
     const pointerSelection =
-      update.selectionSet && update.transactions.some((tr) => tr.isUserEvent('select.pointer'))
-    const repaintOnly = update.transactions.some((tr) => tr.annotation(codeCaretRepaint))
+      update.selectionSet &&
+      update.transactions.some((tr) => transactionHasSelectionIntent(tr, 'pointer'))
+    const repaintOnly = update.transactions.some((tr) =>
+      transactionHasSelectionIntent(tr, 'geometry-repaint'),
+    )
     if (
       update.docChanged ||
       (update.selectionSet && !pointerSelection && !repaintOnly) ||
@@ -423,9 +415,6 @@ class CodeBlockScrollPlugin {
     cancelAnimationFrame(this.frame)
     cancelAnimationFrame(this.repaintFrame)
     this.view.scrollDOM.removeEventListener('scroll', this.onScroll, true)
-    this.view.contentDOM.removeEventListener('focus', this.onFocusChange)
-    this.view.contentDOM.removeEventListener('blur', this.onFocusChange)
-    this.view.dom.classList.remove('xmd-cm-native-code-selection')
     this.stopDragging()
     this.controls.destroy()
     this.scrollbar?.remove()
@@ -449,23 +438,6 @@ class CodeBlockScrollPlugin {
     const source = event.target
     if (!source.classList.contains('xmd-cm-code-line-content')) return
     this.syncFrom(source)
-  }
-
-  private readonly onFocusChange = (): void => this.updateSelectionPresentation(this.view.state)
-
-  private updateSelectionPresentation(state: EditorState): void {
-    // The native browser selection highlight this presentation relies on (see
-    // the rationale on `selectionIntersectsFencedCode`)
-    // only renders while the editor actually holds DOM focus. A search bridge
-    // (FindBar) selects matches by dispatching to the view while its own
-    // input keeps focus; without this gate that leaves a match inside a code
-    // block with no visible presentation at all, since it also hides CM6's
-    // own decorative selection layer that would otherwise show it.
-    const nativePresentation = this.view.hasFocus
-    this.view.dom.classList.toggle(
-      'xmd-cm-native-code-selection',
-      nativePresentation && selectionIntersectsFencedCode(state),
-    )
   }
 
   private syncFrom(source: HTMLElement): void {
@@ -535,7 +507,7 @@ class CodeBlockScrollPlugin {
       if (!needsCodeCaretRepaint(this.view.state)) return
       this.view.dispatch({
         selection: this.view.state.selection,
-        annotations: codeCaretRepaint.of(true),
+        annotations: selectionIntent.of('geometry-repaint'),
       })
     })
   }

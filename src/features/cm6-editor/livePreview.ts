@@ -4,8 +4,6 @@ import { keymap } from '@codemirror/view'
 import type { EditorView } from '@codemirror/view'
 import { Decoration, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { markdownHeadings } from '../../lib/linkNavigation'
-import { currentDesktopPlatform } from '../../lib/platform'
-import { isTauriRuntime } from '../../platform'
 import {
   cleanupEmptyMarkdownFormatting,
   deleteAtHiddenBoundary,
@@ -27,12 +25,7 @@ import {
   type HiddenRangeSets,
 } from './core/hiddenRanges'
 import { HEADING_NODE_NAMES } from './core/nodePolicy'
-import {
-  computeRevealedRanges,
-  isRevealed,
-  pointerSelectionActiveState,
-  type RevealedRanges,
-} from './core/revealState'
+import { computeRevealedRanges, isRevealed, type RevealedRanges } from './core/revealState'
 import { expandedVisibleRanges, rangesTouch, type PreviewRange } from './core/types'
 import { markdownLinkData } from './markdownLinks'
 import {
@@ -43,6 +36,16 @@ import {
   calloutStartAtLine,
 } from './livePreviewWidgets'
 import { livePreviewEventHandlers } from './livePreviewEvents'
+import {
+  isPointerSelectionActive,
+  nativeSelectionPresentationEnabled,
+} from './selection/selectionCoordinator'
+
+export {
+  isSinglePhysicalLineSelection,
+  NATIVE_LINE_SELECTION_CLASS,
+  shouldUseNativeSelectionPainting,
+} from './selection/selectionCoordinator'
 
 export type { PreviewRange } from './core/types'
 export { safeMarkdownLinkHref } from './markdownLinks'
@@ -51,8 +54,6 @@ export interface LivePreviewOptions {
   /** Extra source characters parsed around each viewport boundary. */
   viewportMargin?: number
 }
-
-export const NATIVE_LINE_SELECTION_CLASS = 'xmd-cm-native-line-selection'
 
 const MARKER_NAMES = new Set([
   'HeaderMark',
@@ -444,81 +445,11 @@ export function buildLivePreviewDecorations(
  * they need this parallel caret check.
  */
 function caretTouchesRange(state: EditorState, range: PreviewRange): boolean {
-  if (state.field(pointerSelectionActiveState, false)) return false
+  if (isPointerSelectionActive(state)) return false
   return state.selection.ranges.some(
     (selectionRange) =>
       selectionRange.empty &&
       rangesTouch({ from: selectionRange.from, to: selectionRange.to }, range),
-  )
-}
-
-/**
- * CM6's wrapped-line rectangle probing can disagree at decorated line starts.
- * A single selection contained by one physical line needs neither multi-range
- * painting nor cross-viewport virtualization, so the browser's native Range
- * is both simpler and more accurate there.
- */
-export function isSinglePhysicalLineSelection(state: EditorState): boolean {
-  if (state.selection.ranges.length !== 1) return false
-  const range = state.selection.main
-  if (range.empty) return false
-  return state.doc.lineAt(range.from).number === state.doc.lineAt(range.to).number
-}
-
-/**
- * WKWebView can return a wrong vertical coordinate for a cross-line endpoint
- * beside collapsed Markdown source. CM6 then paints the full document below
- * the real range even though its state selection and the DOM Range are both
- * correct. When the complete primary range is already mounted, native Range
- * painting avoids that WebKit-only geometry path without giving up CM6's
- * virtualized painting for selections that extend beyond the viewport.
- */
-export function shouldUseNativeSelectionPainting(
-  state: EditorState,
-  visibleRanges: readonly PreviewRange[],
-  preferViewportNativeSelection = false,
-): boolean {
-  if (state.selection.ranges.length !== 1) return false
-  const range = state.selection.main
-  if (range.empty) return false
-  if (state.doc.lineAt(range.from).number === state.doc.lineAt(range.to).number) return true
-  if (!preferViewportNativeSelection) return false
-  const firstVisible = visibleRanges[0]
-  const lastVisible = visibleRanges[visibleRanges.length - 1]
-  return Boolean(
-    firstVisible && lastVisible && firstVisible.from <= range.from && lastVisible.to >= range.to,
-  )
-}
-
-function nativeLineSelectionPresentation(): Extension {
-  const preferViewportNativeSelection = isTauriRuntime() && currentDesktopPlatform() === 'macos'
-
-  return ViewPlugin.fromClass(
-    class {
-      constructor(readonly view: EditorView) {
-        this.sync()
-      }
-
-      update(): void {
-        this.sync()
-      }
-
-      destroy(): void {
-        this.view.dom.classList.remove(NATIVE_LINE_SELECTION_CLASS)
-      }
-
-      private sync(): void {
-        this.view.dom.classList.toggle(
-          NATIVE_LINE_SELECTION_CLASS,
-          this.view.hasFocus &&
-            shouldUseNativeSelectionPainting(
-              this.view.state,
-              this.view.visibleRanges,
-              preferViewportNativeSelection,
-            ),
-        )
-      }
-    },
   )
 }
 
@@ -717,7 +648,7 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
       return fillerCleanup ? [transaction, fillerCleanup] : transaction
     }),
     paint,
-    nativeLineSelectionPresentation(),
+    nativeSelectionPresentationEnabled.of(true),
     Prec.high(
       keymap.of([
         {

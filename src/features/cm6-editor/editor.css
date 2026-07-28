@@ -105,6 +105,14 @@
   background: var(--xmd-document-selection-bg);
 }
 
+/* Every native Range presentation (document line, code card or table cell)
+   uses the same theme token. The coordinator owns this class, so nested
+   contenteditable surfaces cannot fall back to WebKit's system-blue color. */
+.xmd-cm-editor .cm-editor.xmd-cm-native-selection .cm-content::selection,
+.xmd-cm-editor .cm-editor.xmd-cm-native-selection .cm-content *::selection {
+  background-color: var(--xmd-document-selection-bg) !important;
+}
+
 .xmd-cm-editor .cm-activeLine {
   background: transparent;
 }
