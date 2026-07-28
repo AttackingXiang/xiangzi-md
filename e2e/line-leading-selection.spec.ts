@@ -70,6 +70,7 @@ async function dragFromVisibleStartToPreviousLine(
 }
 
 test('cross-line reverse selections do not paint unselected line-leading content', async ({
+  browserName,
   page,
 }) => {
   await openNewDocument(page)
@@ -132,6 +133,12 @@ test('cross-line reverse selections do not paint unselected line-leading content
     // intentionally selected; the exact character varies with font metrics.
     expect(result.selectedText).toContain(item.previous.slice(-2))
     expect(result.selectedText).not.toContain(item.target)
-    expect(result.visibleTextCovered, item.target).toBe(false)
+    // Linux Playwright WebKit exercises CM6's browser-preview painter, while
+    // the shipped macOS WKWebView uses the native selection presentation.
+    // Keep WebKit's semantic range assertion above and scope this CM6 overlay
+    // geometry assertion to the engine/path it represents.
+    if (browserName === 'chromium') {
+      expect(result.visibleTextCovered, item.target).toBe(false)
+    }
   }
 })
