@@ -8,6 +8,7 @@ import { InFlightCache } from './inFlightCache'
 import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
 import { materializePortableClipboard, portableClipboardText } from './portableClipboard'
 import { markdownToPortableHtml } from './markdownClipboard'
+import { embedMarkdownSourceInClipboardHtml } from './markdownPaste'
 
 interface CachedClipboardImage {
   dataUrl: string
@@ -390,6 +391,7 @@ function prepareSnapshot(
   text: string,
   singleImage: boolean,
   resolveImageSource?: ClipboardImageResolver,
+  markdownSource?: string,
 ): ClipboardSnapshot {
   cleanClipboardFragment(wrapper)
   materializePortableClipboard(wrapper)
@@ -461,7 +463,10 @@ function prepareSnapshot(
   })
 
   return {
-    htmlTemplate: wrapper.innerHTML,
+    htmlTemplate:
+      markdownSource === undefined
+        ? wrapper.innerHTML
+        : embedMarkdownSourceInClipboardHtml(wrapper.innerHTML, markdownSource),
     text: text.trim() || originals[0]?.alt || '',
     images,
     singleImage,
@@ -526,9 +531,19 @@ function wholeMarkdownWrapper(): HTMLElement | null {
 function snapshotFromWholeMarkdown(
   resolveImageSource?: ClipboardImageResolver,
 ): ClipboardSnapshot | null {
-  const wrapper = wholeMarkdownWrapper()
-  if (!wrapper) return null
-  return prepareSnapshot(wrapper, [], portableClipboardText(wrapper), false, resolveImageSource)
+  const view = cm6ActiveViewBridge.get()
+  if (!view) return null
+  const markdown = view.state.doc.toString()
+  const wrapper = document.createElement('div')
+  wrapper.innerHTML = markdownToPortableHtml(markdown)
+  return prepareSnapshot(
+    wrapper,
+    [],
+    portableClipboardText(wrapper),
+    false,
+    resolveImageSource,
+    markdown,
+  )
 }
 
 function textFromWholeMarkdown(): string | null {

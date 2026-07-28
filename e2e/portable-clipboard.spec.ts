@@ -139,6 +139,89 @@ test('plain mode writes only text/plain while rich mode includes HTML', async ({
   expect(plain.text).toBe('portable')
 })
 
+test('select-all copy and paste into a new document preserves exact Markdown formatting', async ({
+  page,
+}) => {
+  await openNewDocument(page)
+  await enableSourceMode(page)
+  const markdown = `---
+title: Clipboard round-trip
+---
+
+# Heading **bold**
+
+- first
+- [x] done
+
+> quote
+
+\`\`\`ts
+const value = 1
+\`\`\``
+  await page.keyboard.insertText(markdown)
+  await page.keyboard.press('ControlOrMeta+a')
+  const payload = await copySelectedContent(page)
+  expect(payload.html).toContain('data-xmd-markdown-source')
+
+  await page.keyboard.press('ControlOrMeta+n')
+  const editor = page.getByRole('textbox', { name: 'Markdown editor' })
+  await expect(editor).toBeVisible()
+  await editor.click()
+  // The OS clipboard is process-global and the Chromium/WebKit projects run in
+  // parallel. Replay this test's captured payload so another worker cannot
+  // replace it between copy and paste.
+  await page.evaluate(({ html, text }) => {
+    const clipboard = new DataTransfer()
+    clipboard.setData('text/html', html)
+    clipboard.setData('text/plain', text)
+    document
+      .querySelector('.cm-content')
+      ?.dispatchEvent(
+        new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: clipboard }),
+      )
+  }, payload)
+
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const modulePath = '/src/features/cm6-editor/activeViewBridge.ts'
+        const { cm6ActiveViewBridge } = (await import(modulePath)) as {
+          cm6ActiveViewBridge: { get(): { state: { doc: { toString(): string } } } | null }
+        }
+        return cm6ActiveViewBridge.get()?.state.doc.toString() ?? ''
+      }),
+    )
+    .toBe(markdown)
+})
+
+test('pasting formatted HTML converts headings and inline styles to Markdown', async ({ page }) => {
+  await openNewDocument(page)
+  await page.evaluate(() => {
+    const clipboard = new DataTransfer()
+    clipboard.setData(
+      'text/html',
+      '<h2>Rich title</h2><p><strong>bold</strong> and <em>italic</em></p><ul><li>one</li><li>two</li></ul>',
+    )
+    clipboard.setData('text/plain', 'Rich title\nbold and italic\none\ntwo')
+    const editor = document.querySelector('.cm-content')
+    editor?.dispatchEvent(
+      new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: clipboard }),
+    )
+  })
+
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const modulePath = '/src/features/cm6-editor/activeViewBridge.ts'
+        const { cm6ActiveViewBridge } = (await import(modulePath)) as {
+          cm6ActiveViewBridge: { get(): { state: { doc: { toString(): string } } } | null }
+        }
+        return cm6ActiveViewBridge.get()?.state.doc.toString() ?? ''
+      }),
+    )
+    .toBe('## Rich title\n\n**bold** and *italic*\n\n- one\n- two')
+})
+
 test('select-all synchronously includes formatted content outside the CM6 viewport', async ({
   page,
 }) => {

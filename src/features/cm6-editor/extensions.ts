@@ -13,6 +13,7 @@ import {
   keymap,
 } from '@codemirror/view'
 import { contextMenuSelection } from './contextMenuSelection'
+import { richMarkdownPaste } from './richPaste'
 import { selectionCoordinator } from './selection/selectionCoordinator'
 import { cm6ToolbarState } from './toolbarState'
 
@@ -61,6 +62,7 @@ export function createBaseExtensions(): Extension[] {
     highlightActiveLine(),
     selectionCoordinator(),
     contextMenuSelection(),
+    richMarkdownPaste(),
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
     EditorState.allowMultipleSelections.of(true),
