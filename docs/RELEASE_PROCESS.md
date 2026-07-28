@@ -117,7 +117,7 @@ tag 必须满足 `vX.Y.Z` 格式，版本必须与五处应用版本一致，且
 Release Desktop 成功后自动触发：
 
 1. 确保 Gitee tag 和 Release 存在。
-2. Windows 与 macOS 两个 job 并行上传附件。
+2. 每个 Release 附件由独立 job 上传，最多四个文件并行；所有文件完成后会生成 Gitee 附件汇总表。
 3. 已存在的同名附件自动跳过。
 4. 单次大文件上传最长 30 分钟，失败后再尝试一次。
 5. 两个平台成功后统一更新 Gitee `updater/latest.json`。

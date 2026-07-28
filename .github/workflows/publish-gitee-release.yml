@@ -28,6 +28,7 @@ jobs:
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       release-id: ${{ steps.gitee.outputs.release-id }}
+      assets: ${{ steps.release.outputs.assets }}
     steps:
       - name: Checkout release commit
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -60,13 +61,15 @@ jobs:
           # workflow_run always evaluates the workflow from the current default
           # branch. Accept the old 12-file layout while repairing releases made
           # before the streamlined 8-file layout was introduced.
-          ASSET_COUNT=$(jq '[.assets[].name | select(test("\\.(dmg|exe|sig|tar\\.gz)$") or . == "latest.json")] | length' \
+          ASSETS_JSON=$(jq -c '[.assets[] | select(.name | test("\\.(dmg|exe|sig|tar\\.gz)$") or . == "latest.json") | {name, url: .browser_download_url}]' \
             /tmp/github-release.json)
+          ASSET_COUNT=$(printf '%s' "${ASSETS_JSON}" | jq 'length')
           if [ "${ASSET_COUNT}" -ne 8 ] && [ "${ASSET_COUNT}" -ne 12 ]; then
             echo "::error::Expected 8 streamlined or 12 legacy release assets, found ${ASSET_COUNT}."
             exit 1
           fi
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "assets=${ASSETS_JSON}" >> "${GITHUB_OUTPUT}"
 
       - name: Ensure Gitee tag and release exist
         id: gitee
@@ -137,56 +140,39 @@ jobs:
           echo "release-id=${RELEASE_ID}" >> "${GITHUB_OUTPUT}"
 
   upload:
-    name: Upload ${{ matrix.target }} assets
+    name: Upload ${{ matrix.asset.name }}
     needs: prepare
     strategy:
       fail-fast: false
-      max-parallel: 2
+      # 每个附件各自上传；限制为四路，避免把 Gitee attach_files 接口打满。
+      max-parallel: 4
       matrix:
-        target: [windows, macos]
+        asset: ${{ fromJSON(needs.prepare.outputs.assets) }}
     runs-on: ubuntu-latest
     # 单文件最坏 2 次 × 40 分钟 = 80 分钟,加上确认与重试间隔约 82.5 分钟,
     # 留出余量,避免第二次尝试的尾部被 job 超时拦腰砍断。
     timeout-minutes: 100
     steps:
-      - name: Download ${{ matrix.target }} assets from GitHub Release
+      - name: Download asset from GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare.outputs.tag }}
-          TARGET: ${{ matrix.target }}
+          ASSET_NAME: ${{ matrix.asset.name }}
+          ASSET_URL: ${{ matrix.asset.url }}
         shell: bash
         run: |
           set -euo pipefail
           install -d artifacts
-          RELEASE=$(curl --fail --silent --show-error \
+          curl --fail --location --silent --show-error \
             --retry 4 --retry-delay 5 --retry-all-errors \
-            --connect-timeout 20 --max-time 120 \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
-          mapfile -t ASSETS < <(printf '%s' "${RELEASE}" | jq -r \
-            '.assets[] | [.browser_download_url,.name] | @tsv' \
-            | while IFS=$'\t' read -r url name; do
-                if { [ "${TARGET}" = windows ] && [[ "${name}" =~ \.exe(\.sig)?$|^latest\.json$ ]]; } || \
-                   { [ "${TARGET}" = macos ] && [[ "${name}" =~ \.dmg$|\.app\.tar\.gz(\.sig)?$ ]]; }; then
-                  printf '%s\t%s\n' "${url}" "${name}"
-                fi
-              done)
-          test "${#ASSETS[@]}" -ge 2
-          for ASSET in "${ASSETS[@]}"; do
-            IFS=$'\t' read -r URL NAME <<< "${ASSET}"
-            curl --fail --location --silent --show-error \
-              --retry 4 --retry-delay 5 --retry-all-errors \
-              --connect-timeout 20 --max-time 600 \
-              -H "Authorization: Bearer ${GH_TOKEN}" -o "artifacts/${NAME}" "${URL}"
-          done
+            --connect-timeout 20 --max-time 600 \
+            -H "Authorization: Bearer ${GH_TOKEN}" -o "artifacts/${ASSET_NAME}" "${ASSET_URL}"
 
-      - name: Upload ${{ matrix.target }} assets to Gitee
+      - name: Upload asset to Gitee
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           RELEASE_ID: ${{ needs.prepare.outputs.release-id }}
           TAG: ${{ needs.prepare.outputs.tag }}
-          TARGET: ${{ matrix.target }}
+          ASSET_NAME: ${{ matrix.asset.name }}
         shell: bash
         run: |
           set -euo pipefail
@@ -199,78 +185,79 @@ jobs:
               | jq -e --arg name "$1" '.[] | select(.name == $name)' >/dev/null
           }
 
-          for FILE in artifacts/*; do
-            NAME=$(basename "${FILE}")
-            if attachment_exists "${NAME}"; then
-              echo "Already uploaded: ${NAME}"
-              continue
-            fi
-            echo "Uploading ${NAME} (${TARGET})"
-            UPLOADED=""
-            for ATTEMPT in 1 2; do
-              RESPONSE_FILE=$(mktemp)
-              STATS_FILE=$(mktemp)
+          FILE="artifacts/${ASSET_NAME}"
+          NAME="${ASSET_NAME}"
+          if attachment_exists "${NAME}"; then
+            echo "Already uploaded: ${NAME}"
+            echo "| ${NAME} | already present |" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          echo "Uploading ${NAME}"
+          UPLOADED=""
+          for ATTEMPT in 1 2; do
+            RESPONSE_FILE=$(mktemp)
+            STATS_FILE=$(mktemp)
               # --fail-with-body(而非 --fail):4xx 仍返回失败退出码,但保留
               # Gitee 的响应体,好在日志里看到 400 的具体原因。
-              gitee_curl --http1.1 -H 'Expect:' --fail-with-body --silent --show-error -X POST \
-                --connect-timeout 30 --max-time 2400 \
-                --write-out $'%{stderr}http=%{http_code} connect=%{time_connect}s tls=%{time_appconnect}s total=%{time_total}s uploaded=%{size_upload} speed=%{speed_upload}B/s\n' \
-                "${API}/releases/${RELEASE_ID}/attach_files" \
-                -F "file=@${FILE}" >"${RESPONSE_FILE}" 2>"${STATS_FILE}" &
-              UPLOAD_PID=$!
-              echo "Watching Gitee while ${NAME} uploads (attempt ${ATTEMPT}, timeout 40m)"
-              for POLL in $(seq 1 240); do
-                if attachment_exists "${NAME}"; then
+            gitee_curl --http1.1 -H 'Expect:' --fail-with-body --silent --show-error -X POST \
+              --connect-timeout 30 --max-time 2400 \
+              --write-out $'%{stderr}http=%{http_code} connect=%{time_connect}s tls=%{time_appconnect}s total=%{time_total}s uploaded=%{size_upload} speed=%{speed_upload}B/s\n' \
+              "${API}/releases/${RELEASE_ID}/attach_files" \
+              -F "file=@${FILE}" >"${RESPONSE_FILE}" 2>"${STATS_FILE}" &
+            UPLOAD_PID=$!
+            echo "Watching Gitee while ${NAME} uploads (attempt ${ATTEMPT}, timeout 40m)"
+            for POLL in $(seq 1 240); do
+              if attachment_exists "${NAME}"; then
+                UPLOADED=1
+                break
+              fi
+              if ! kill -0 "${UPLOAD_PID}" 2>/dev/null; then
+                set +e
+                wait "${UPLOAD_PID}"
+                CURL_STATUS=$?
+                set -e
+                if [ "${CURL_STATUS}" -eq 0 ] && \
+                  [ "$(jq -r '.name // empty' "${RESPONSE_FILE}")" = "${NAME}" ]; then
                   UPLOADED=1
-                  break
-                fi
-                if ! kill -0 "${UPLOAD_PID}" 2>/dev/null; then
-                  set +e
-                  wait "${UPLOAD_PID}"
-                  CURL_STATUS=$?
-                  set -e
-                  if [ "${CURL_STATUS}" -eq 0 ] && \
-                    [ "$(jq -r '.name // empty' "${RESPONSE_FILE}")" = "${NAME}" ]; then
-                    UPLOADED=1
-                  else
+                else
                     # Gitee frequently returns HTTP 400 *after* the whole file
                     # was uploaded over the slow cross-border link, and its
                     # attach_files listing is eventually consistent, so the
                     # attachment may still have landed. Confirm before burning
                     # another ~40-minute attempt on a file that is already there.
-                    echo "Upload of ${NAME} reported curl status ${CURL_STATUS}; confirming whether it landed on Gitee anyway"
-                    for CONFIRM in 1 2 3 4 5 6; do
-                      if attachment_exists "${NAME}"; then
-                        echo "${NAME} is present on Gitee despite the reported error; treating as uploaded"
-                        UPLOADED=1
-                        break
-                      fi
-                      sleep 10
-                    done
-                  fi
-                  break
+                  echo "Upload of ${NAME} reported curl status ${CURL_STATUS}; confirming whether it landed on Gitee anyway"
+                  for CONFIRM in 1 2 3 4 5 6; do
+                    if attachment_exists "${NAME}"; then
+                      echo "${NAME} is present on Gitee despite the reported error; treating as uploaded"
+                      UPLOADED=1
+                      break
+                    fi
+                    sleep 10
+                  done
                 fi
-                sleep 10
-              done
-              kill "${UPLOAD_PID}" 2>/dev/null || true
-              wait "${UPLOAD_PID}" 2>/dev/null || true
-              cat "${STATS_FILE}" >&2
-              # 打印 Gitee 的响应体(成功时是附件 JSON,失败时是错误说明),
-              # 便于诊断 400 到底是什么原因;截断以防意外的超长响应。
-              if [ -s "${RESPONSE_FILE}" ]; then
-                echo "Gitee response body for ${NAME} (attempt ${ATTEMPT}):" >&2
-                head -c 2000 "${RESPONSE_FILE}" >&2
-                echo >&2
+                break
               fi
-              rm -f "${RESPONSE_FILE}" "${STATS_FILE}"
-              [ -z "${UPLOADED}" ] || break
-              sleep $((ATTEMPT * 20))
+              sleep 10
             done
-            if [ -z "${UPLOADED}" ]; then
-              echo "::error::Failed to upload ${NAME} after two 40-minute attempts. Re-run this workflow for ${TAG}; completed files will be skipped."
-              exit 1
+            kill "${UPLOAD_PID}" 2>/dev/null || true
+            wait "${UPLOAD_PID}" 2>/dev/null || true
+            cat "${STATS_FILE}" >&2
+            # 打印 Gitee 的响应体(成功时是附件 JSON,失败时是错误说明),
+            # 便于诊断 400 到底是什么原因;截断以防意外的超长响应。
+            if [ -s "${RESPONSE_FILE}" ]; then
+              echo "Gitee response body for ${NAME} (attempt ${ATTEMPT}):" >&2
+              head -c 2000 "${RESPONSE_FILE}" >&2
+              echo >&2
             fi
+            rm -f "${RESPONSE_FILE}" "${STATS_FILE}"
+            [ -z "${UPLOADED}" ] || break
+            sleep $((ATTEMPT * 20))
           done
+          if [ -z "${UPLOADED}" ]; then
+            echo "::error::Failed to upload ${NAME} after two 40-minute attempts. Re-run this workflow for ${TAG}; completed files will be skipped."
+            exit 1
+          fi
+          echo "| ${NAME} | uploaded |" >> "${GITHUB_STEP_SUMMARY}"
 
   finalize:
     name: Publish updater manifest
@@ -382,3 +369,50 @@ jobs:
           DRY_RUN: 'false'
         shell: bash
         run: bash scripts/prune-gitee-attachments.sh || echo "::warning::修剪旧附件失败（非致命），可手动运行 Cleanup Gitee Attachments 工作流。"
+
+  summary:
+    name: Summarize Gitee publication
+    needs: [prepare, upload, finalize]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify every expected attachment and summarize
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release-id }}
+          ASSETS_JSON: ${{ needs.prepare.outputs.assets }}
+          UPLOAD_RESULT: ${{ needs.upload.result }}
+          FINALIZE_RESULT: ${{ needs.finalize.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://gitee.com/api/v5/repos/tlqgyx/xiangzi-md"
+          ATTACHMENTS=$(curl --fail --silent --show-error --retry 4 --retry-all-errors \
+            --connect-timeout 20 --max-time 60 \
+            -H "Authorization: Bearer ${GITEE_TOKEN}" \
+            "${API}/releases/${RELEASE_ID}/attach_files?per_page=100&_=$(date +%s)")
+          {
+            echo "## Gitee 发布汇总"
+            echo
+            echo "- 附件上传矩阵：${UPLOAD_RESULT}"
+            echo "- Updater manifest：${FINALIZE_RESULT}"
+            echo
+            echo "| 附件 | Gitee 状态 |"
+            echo "| --- | --- |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          MISSING=0
+          while IFS= read -r NAME; do
+            NORMALIZED_NAME="${NAME// /.}"
+            if printf '%s' "${ATTACHMENTS}" | jq -e --arg name "${NAME}" --arg normalized "${NORMALIZED_NAME}" \
+              '.[] | select(.name == $name or .name == $normalized)' >/dev/null; then
+              echo "| ${NAME} | uploaded |" >> "${GITHUB_STEP_SUMMARY}"
+            else
+              echo "| ${NAME} | missing |" >> "${GITHUB_STEP_SUMMARY}"
+              MISSING=1
+            fi
+          done < <(printf '%s' "${ASSETS_JSON}" | jq -r '.[].name')
+          if [ "${UPLOAD_RESULT}" != success ] || [ "${FINALIZE_RESULT}" != success ] || [ "${MISSING}" -ne 0 ]; then
+            echo "::error::Gitee publication is incomplete; see the job summary for every attachment."
+            exit 1
+          fi
