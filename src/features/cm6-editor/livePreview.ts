@@ -4,6 +4,8 @@ import { keymap } from '@codemirror/view'
 import type { EditorView } from '@codemirror/view'
 import { Decoration, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { markdownHeadings } from '../../lib/linkNavigation'
+import { currentDesktopPlatform } from '../../lib/platform'
+import { isTauriRuntime } from '../../platform'
 import {
   cleanupEmptyMarkdownFormatting,
   deleteAtHiddenBoundary,
@@ -463,7 +465,34 @@ export function isSinglePhysicalLineSelection(state: EditorState): boolean {
   return state.doc.lineAt(range.from).number === state.doc.lineAt(range.to).number
 }
 
+/**
+ * WKWebView can return a wrong vertical coordinate for a cross-line endpoint
+ * beside collapsed Markdown source. CM6 then paints the full document below
+ * the real range even though its state selection and the DOM Range are both
+ * correct. When the complete primary range is already mounted, native Range
+ * painting avoids that WebKit-only geometry path without giving up CM6's
+ * virtualized painting for selections that extend beyond the viewport.
+ */
+export function shouldUseNativeSelectionPainting(
+  state: EditorState,
+  visibleRanges: readonly PreviewRange[],
+  preferViewportNativeSelection = false,
+): boolean {
+  if (state.selection.ranges.length !== 1) return false
+  const range = state.selection.main
+  if (range.empty) return false
+  if (state.doc.lineAt(range.from).number === state.doc.lineAt(range.to).number) return true
+  if (!preferViewportNativeSelection) return false
+  const firstVisible = visibleRanges[0]
+  const lastVisible = visibleRanges[visibleRanges.length - 1]
+  return Boolean(
+    firstVisible && lastVisible && firstVisible.from <= range.from && lastVisible.to >= range.to,
+  )
+}
+
 function nativeLineSelectionPresentation(): Extension {
+  const preferViewportNativeSelection = isTauriRuntime() && currentDesktopPlatform() === 'macos'
+
   return ViewPlugin.fromClass(
     class {
       constructor(readonly view: EditorView) {
@@ -481,7 +510,12 @@ function nativeLineSelectionPresentation(): Extension {
       private sync(): void {
         this.view.dom.classList.toggle(
           NATIVE_LINE_SELECTION_CLASS,
-          this.view.hasFocus && isSinglePhysicalLineSelection(this.view.state),
+          this.view.hasFocus &&
+            shouldUseNativeSelectionPainting(
+              this.view.state,
+              this.view.visibleRanges,
+              preferViewportNativeSelection,
+            ),
         )
       }
     },

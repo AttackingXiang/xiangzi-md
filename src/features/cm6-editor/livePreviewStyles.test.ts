@@ -43,16 +43,17 @@ describe('CM6 live preview styles', () => {
     expect(hiddenSource).not.toContain('user-select: none')
   })
 
-  it('uses native painting only while the single-line selection class is active', () => {
+  it('uses native painting only while the native selection class is active', () => {
     const css = readFileSync(new URL('./livePreview.css', import.meta.url), 'utf8')
     const hidesLayer = css.match(
       /\.xmd-cm-native-line-selection \.cm-selectionLayer\s*\{([^}]*)\}/,
     )?.[1]
     const nativeSelection = css.match(
-      /\.xmd-cm-native-line-selection \.cm-line \*::selection\s*\{([^}]*)\}/,
+      /\.xmd-cm-native-line-selection \.cm-content \*::selection\s*\{([^}]*)\}/,
     )?.[1]
 
     expect(hidesLayer).toContain('display: none')
+    expect(nativeSelection).toContain('background-color:')
     expect(nativeSelection).toContain('var(--xmd-document-selection-bg)')
     expect(nativeSelection).toContain('!important')
   })
@@ -63,5 +64,16 @@ describe('CM6 live preview styles', () => {
 
     expect(card).toContain('var(--code-block-opacity, 30%)')
     expect(card).toContain('transparent')
+  })
+
+  it('uses the theme selection color for native code-block selections', () => {
+    const css = readFileSync(new URL('./codeBlockPreview.css', import.meta.url), 'utf8')
+    const nativeSelection = css.match(
+      /\.xmd-cm-native-code-selection \.cm-content \*::selection\s*\{([^}]*)\}/,
+    )?.[1]
+
+    expect(nativeSelection).toContain('background-color:')
+    expect(nativeSelection).toContain('var(--xmd-document-selection-bg)')
+    expect(nativeSelection).toContain('!important')
   })
 })

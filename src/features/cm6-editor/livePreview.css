@@ -115,15 +115,17 @@
    posAtCoords. Decorated line starts (especially quote padding) can make those
    probes disagree and create a full-width bridge rectangle. A focused,
    single-range selection contained by one physical line uses the browser's
-   already-synchronized DOM Range instead. Cross-line and multi-range
-   selections keep CM6 painting for virtualization and secondary cursors. */
+   already-synchronized DOM Range instead. In macOS Tauri, WKWebView can also
+   return a document-bottom coordinate for a mounted cross-line endpoint; that
+   fully visible range uses the same native painting. Off-viewport selections
+   and multiple ranges keep CM6 painting for virtualization/secondary cursors. */
 .xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-selectionLayer {
   display: none;
 }
 
-.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-line::selection,
-.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-line *::selection {
-  background: var(--xmd-document-selection-bg) !important;
+.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-content::selection,
+.xmd-cm-editor .cm-editor.xmd-cm-native-line-selection .cm-content *::selection {
+  background-color: var(--xmd-document-selection-bg) !important;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-heading-1 {

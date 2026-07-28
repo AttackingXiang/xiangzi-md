@@ -6,6 +6,7 @@ import {
   buildHiddenMarkdownMarkerSets,
   isSinglePhysicalLineSelection,
   safeMarkdownLinkHref,
+  shouldUseNativeSelectionPainting,
 } from './livePreview'
 import { pointerSelectionActiveState, setPointerSelectionActive } from './core/revealState'
 
@@ -109,6 +110,31 @@ describe('CM6 Markdown live preview: selection presentation', () => {
     expect(isSinglePhysicalLineSelection(crossLine)).toBe(false)
     expect(isSinglePhysicalLineSelection(createState(doc))).toBe(false)
     expect(isSinglePhysicalLineSelection(multiple)).toBe(false)
+  })
+
+  it('uses native painting for a fully mounted cross-line Tauri selection', () => {
+    const doc = 'before\n\n---\n\n## heading\nafter'
+    const headingEnd = doc.indexOf('\nafter')
+    const crossLine = createState(doc).update({
+      selection: EditorSelection.range('before'.length, headingEnd),
+    }).state
+
+    expect(
+      shouldUseNativeSelectionPainting(
+        crossLine,
+        [
+          { from: 0, to: doc.indexOf('---') },
+          { from: doc.indexOf('##'), to: doc.length },
+        ],
+        true,
+      ),
+    ).toBe(true)
+    expect(
+      shouldUseNativeSelectionPainting(crossLine, [{ from: headingEnd, to: doc.length }], true),
+    ).toBe(false)
+    expect(shouldUseNativeSelectionPainting(crossLine, [{ from: 0, to: doc.length }], false)).toBe(
+      false,
+    )
   })
 })
 
