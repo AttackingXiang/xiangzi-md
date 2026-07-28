@@ -47,3 +47,7 @@ vitest.config.d.ts
 
 # Local doc assets that are not meant to be versioned.
 /docs/assets/
+
+# Internal engineering notes (migration plans, QA logs, size baselines) — kept
+# locally for reference but not meant for the public repo alongside user docs.
+/docs/internal/
