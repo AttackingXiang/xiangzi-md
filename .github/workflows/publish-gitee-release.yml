@@ -57,8 +57,15 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
             >/tmp/github-release.json
-          jq -e '[.assets[].name | select(test("\\.(dmg|exe|sig|tar\\.gz)$") or . == "latest.json")] | length == 8' \
-            /tmp/github-release.json >/dev/null
+          # workflow_run always evaluates the workflow from the current default
+          # branch. Accept the old 12-file layout while repairing releases made
+          # before the streamlined 8-file layout was introduced.
+          ASSET_COUNT=$(jq '[.assets[].name | select(test("\\.(dmg|exe|sig|tar\\.gz)$") or . == "latest.json")] | length' \
+            /tmp/github-release.json)
+          if [ "${ASSET_COUNT}" -ne 8 ] && [ "${ASSET_COUNT}" -ne 12 ]; then
+            echo "::error::Expected 8 streamlined or 12 legacy release assets, found ${ASSET_COUNT}."
+            exit 1
+          fi
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
       - name: Ensure Gitee tag and release exist
