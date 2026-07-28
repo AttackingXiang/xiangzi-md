@@ -31,6 +31,10 @@ export default defineConfig({
         channel: process.env.PLAYWRIGHT_CHANNEL,
       },
     },
+    {
+      name: 'webkit',
+      use: devices['Desktop Safari'],
+    },
   ],
   webServer: {
     command: 'npm run dev',

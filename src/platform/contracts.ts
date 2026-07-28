@@ -187,6 +187,11 @@ export interface SearchResponse {
   cancelled: boolean
 }
 
+export interface ListedFilesResponse {
+  items: Array<{ path: string; name: string; modifiedNanos: number }>
+  truncated: boolean
+}
+
 export interface DraftSummary {
   id: string
   path: string | null
@@ -287,7 +292,7 @@ export interface DesktopPort {
   readDir(path: string): Promise<FileNode[]>
   // modifiedNanos 供 useTagIndex 做增量扫描：mtime 没变的文件直接复用缓存的
   // meta，不再逐个 readFile 把全文内容搬过 IPC。
-  listFiles(root: string): Promise<Array<{ path: string; name: string; modifiedNanos: number }>>
+  listFiles(root: string): Promise<ListedFilesResponse>
   createFile(dirPath: string, fileName: string): Promise<{ path: string; name: string }>
   createDir(dirPath: string, name: string): Promise<{ path: string; name: string }>
   rename(oldPath: string, newName: string): Promise<{ path: string; name: string }>
@@ -317,7 +322,11 @@ export interface DesktopPort {
   findInPage(text: string, forward?: boolean, findNext?: boolean): Promise<void>
   stopFind(): Promise<void>
   exportHTML(html: string, suggestedName: string): Promise<{ path: string } | null>
-  exportPDF(html: string, suggestedName: string): Promise<{ path: string } | null>
+  exportPDF(
+    html: string,
+    suggestedName: string,
+    signal?: AbortSignal,
+  ): Promise<{ path: string } | null>
   exportImage(
     suggestedName: string,
     render: (format: ExportImageFormat, signal?: AbortSignal) => Promise<RasterImageSource>,

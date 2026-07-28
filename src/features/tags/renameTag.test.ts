@@ -6,7 +6,7 @@ import {
   renameTagInFiles,
   renameTagInMarkdown,
 } from './renameTag'
-import { documentMetaFromMarkdown } from './frontmatter'
+import { documentMetaFromMarkdown, tagKey } from './frontmatter'
 
 describe('renamedTag', () => {
   it('renames an exact match', () => {
@@ -48,6 +48,22 @@ describe('renameTagInMarkdown', () => {
     expect(content).toContain('`#test`') // 行内代码不改
   })
 
+  it('preserves indented and unfinished fenced code', () => {
+    const md = `before #test\n\n    #test in indented code\n\n\`\`\`ts\n#test in unfinished fence`
+    const { content } = renameTagInMarkdown(md, 'test', 'exam')
+    expect(content).toContain('before #exam')
+    expect(content).toContain('    #test in indented code')
+    expect(content).toContain('#test in unfinished fence')
+  })
+
+  it('preserves variable-length fences and inline code spans', () => {
+    const md = `outside #test\n\n\`\`\`\`md\n#test in fence\n\`\`\`\`\n\n\`\`#test in code\`\``
+    const { content } = renameTagInMarkdown(md, 'test', 'exam')
+    expect(content).toContain('outside #exam')
+    expect(content).toContain('#test in fence')
+    expect(content).toContain('``#test in code``')
+  })
+
   it('leaves untouched docs unchanged', () => {
     const md = `---\ntags:\n  - other\n---\nno tags here`
     const { changed, content } = renameTagInMarkdown(md, 'test', 'exam')
@@ -58,6 +74,12 @@ describe('renameTagInMarkdown', () => {
   it('does not touch a sibling-prefixed tag', () => {
     const md = `---\ntags:\n  - testx\n---\nbody`
     expect(renameTagInMarkdown(md, 'test', 'exam').changed).toBe(false)
+  })
+})
+
+describe('tagKey', () => {
+  it('is stable across host locales', () => {
+    expect(tagKey('I/İ')).toBe('i/i̇')
   })
 })
 

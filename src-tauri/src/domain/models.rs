@@ -96,3 +96,10 @@ pub struct SearchResponse {
     pub reason: Option<String>,
     pub cancelled: bool,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedFilesResponse {
+    pub items: Vec<ListedFile>,
+    pub truncated: bool,
+}

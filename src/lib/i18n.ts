@@ -68,6 +68,11 @@ const EN: Record<string, string> = {
   '搜索该标签下的文档…': 'Search documents with this tag…',
   正在加载标签索引: 'Loading tag index…',
   标签索引加载失败: 'Could not load the tag index',
+  标签索引已达到文件上限: 'The tag index reached its file limit; results are incomplete',
+  '标签索引不完整，已停止批量改名；请缩小工作区后重试。':
+    'The tag index is incomplete, so bulk rename was stopped. Narrow the workspace and try again.',
+  '正在导出 PDF…': 'Exporting PDF…',
+  '正在导出 Word…': 'Exporting Word…',
   没有匹配的文档: 'No matching documents',
   当前工作区还没有标签: 'No tags in this workspace yet',
   // TabBar

@@ -261,10 +261,22 @@ describe('tauriDesktopAdapter', () => {
     await expect(tauriDesktopAdapter.exportPDF('<h1>A</h1>', 'a.md')).resolves.toEqual({
       path: '/notes/a.pdf',
     })
-    expect(renderDocumentPdfMock).toHaveBeenCalledWith('<h1>A</h1>')
+    expect(renderDocumentPdfMock).toHaveBeenCalledWith('<h1>A</h1>', undefined)
     expect(invokeMock).toHaveBeenCalledWith('write_binary_file', bytes, {
       headers: { 'x-xmd-output-path': encodeURIComponent('/notes/a.pdf') },
     })
+  })
+
+  it('stops PDF export before rendering when it is cancelled', async () => {
+    saveMock.mockResolvedValueOnce('/notes/a.pdf')
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      tauriDesktopAdapter.exportPDF('<h1>A</h1>', 'a.md', controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(renderDocumentPdfMock).not.toHaveBeenCalled()
+    expect(invokeMock).not.toHaveBeenCalledWith('write_binary_file', expect.anything())
   })
 
   it('writes self-contained HTML as binary so image-heavy exports are not limited to 20 MiB', async () => {

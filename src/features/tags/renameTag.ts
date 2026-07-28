@@ -1,8 +1,8 @@
 import {
-  CODE_SPAN_RE,
   INLINE_TAG_RE,
   normalizeTag,
   parseMarkdownFrontmatter,
+  rewriteOutsideMarkdownCode,
   setFrontmatterTags,
   tagKey,
 } from './frontmatter'
@@ -32,16 +32,7 @@ function rewriteInlineTagsOutsideCode(body: string, fromKey: string, toTag: stri
       return next ? `${prefix}#${next}` : match
     })
 
-  let result = ''
-  let last = 0
-  for (const code of body.matchAll(CODE_SPAN_RE)) {
-    const index = code.index ?? 0
-    result += rewriteText(body.slice(last, index))
-    result += code[0] // 代码段原样保留
-    last = index + code[0].length
-  }
-  result += rewriteText(body.slice(last))
-  return result
+  return rewriteOutsideMarkdownCode(body, rewriteText)
 }
 
 /**

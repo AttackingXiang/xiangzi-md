@@ -33,10 +33,10 @@ export function useExportActions(
   setExportActivity: Dispatch<SetStateAction<ExportActivity | null>>,
 ) {
   const exportInProgressRef = useRef(false)
-  const imageExportAbortRef = useRef<AbortController | null>(null)
+  const exportAbortRef = useRef<AbortController | null>(null)
 
   const cancelExport = useCallback(() => {
-    imageExportAbortRef.current?.abort()
+    exportAbortRef.current?.abort()
     setExportActivity((activity) =>
       activity
         ? { ...activity, label: t('正在取消导出…'), detail: undefined, cancellable: false }
@@ -64,25 +64,32 @@ export function useExportActions(
   const exportPDF = useCallback(async () => {
     if (exportInProgressRef.current) return
     exportInProgressRef.current = true
+    const abortController = new AbortController()
+    exportAbortRef.current = abortController
     try {
       const { activeId: id } = stateRef.current
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
+      setExportActivity({ label: t('正在导出 PDF…'), cancellable: true })
       const html = await generateExportHTML(tab?.name ?? 'document')
-      const res = await desktop.exportPDF(html, tab?.name ?? 'document')
+      const res = await desktop.exportPDF(html, tab?.name ?? 'document', abortController.signal)
       if (res) setExportResultPath(res.path)
     } catch (error) {
-      window.alert(t('PDF 导出失败：\n') + (error as Error).message)
+      if (!abortController.signal.aborted) {
+        window.alert(t('PDF 导出失败：\n') + (error as Error).message)
+      }
     } finally {
+      if (exportAbortRef.current === abortController) exportAbortRef.current = null
+      setExportActivity(null)
       exportInProgressRef.current = false
     }
-  }, [setExportResultPath, stateRef])
+  }, [setExportActivity, setExportResultPath, stateRef])
 
   const exportImage = useCallback(async () => {
     if (exportInProgressRef.current) return
     exportInProgressRef.current = true
     const abortController = new AbortController()
-    imageExportAbortRef.current = abortController
+    exportAbortRef.current = abortController
     let renderingStartedAt = 0
     try {
       const { activeId: id } = stateRef.current
@@ -118,7 +125,7 @@ export function useExportActions(
         window.alert(t('图片导出失败：\n') + (error as Error).message)
       }
     } finally {
-      if (imageExportAbortRef.current === abortController) imageExportAbortRef.current = null
+      if (exportAbortRef.current === abortController) exportAbortRef.current = null
       setExportActivity(null)
       exportInProgressRef.current = false
     }
@@ -132,6 +139,7 @@ export function useExportActions(
       if (!id) return
       const tab = stateRef.current.tabs.find((t) => t.id === id)
       if (!tab) return
+      setExportActivity({ label: t('正在导出 Word…'), cancellable: false })
 
       // 导出前先确认 pandoc 可用
       const status = await desktop.pandocStatus()
@@ -158,9 +166,10 @@ export function useExportActions(
     } catch (error) {
       window.alert(t('Word 导出失败：\n') + (error as Error).message)
     } finally {
+      setExportActivity(null)
       exportInProgressRef.current = false
     }
-  }, [stateRef, setExportResultPath])
+  }, [setExportActivity, stateRef, setExportResultPath])
 
   return { exportHTML, exportPDF, exportImage, exportDocx, cancelExport }
 }

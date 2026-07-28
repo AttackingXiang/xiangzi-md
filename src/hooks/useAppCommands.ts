@@ -94,8 +94,8 @@ export function useAppCommands(options: AppCommandOptions): {
     let cancelled = false
     void desktop
       .listFiles(folder.root)
-      .then((list) => {
-        if (!cancelled) setPaletteFiles(list)
+      .then((response) => {
+        if (!cancelled) setPaletteFiles(response.items)
       })
       .catch((error: unknown) => console.error('File indexing failed', error))
     return () => {

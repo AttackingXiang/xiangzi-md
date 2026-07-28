@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { measuredExportHeight, planPdfLinkAnnotations, planPdfPages } from './exportDocument'
+import {
+  measuredExportHeight,
+  planPdfLinkAnnotations,
+  planPdfPages,
+  renderDocumentPdf,
+} from './exportDocument'
 import { exportFileStem, imageFormatForPath } from './exportFormat'
 
 describe('exportDocument', () => {
@@ -69,5 +74,14 @@ describe('exportDocument', () => {
 
   it('does not truncate documents taller than the former 20,000px limit', () => {
     expect(measuredExportHeight(42_345.2)).toBe(42_366)
+  })
+
+  it('stops PDF generation before allocating a render surface when already cancelled', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(renderDocumentPdf('<p>cancelled</p>', controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    })
   })
 })

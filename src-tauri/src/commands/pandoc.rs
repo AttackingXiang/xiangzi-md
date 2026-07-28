@@ -6,11 +6,14 @@
 /// - normalize_docx_fonts 对 pandoc 生成的 docx 后处理，把 word/styles.xml
 ///   和 word/theme/theme1.xml 里的字体归一化为指定规范，不依赖 pandoc 版本。
 use crate::domain::error::{AppError, AppResult};
-use crate::infrastructure::settings::SettingsStore;
+use crate::infrastructure::{settings::SettingsStore, workspace};
 use serde::Serialize;
 use std::{
     io::{Cursor, Read, Write},
     path::{Path, PathBuf},
+    process::{Child, Command, Output, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_fs::FsExt;
@@ -23,6 +26,78 @@ const FONT_BODY_LATIN: &str = "Calibri";
 const FONT_HEADING_EA: &str = "黑体";
 /// 代码系列：宋体(东亚) + Consolas(ASCII/HAnsi/CS)
 const FONT_CODE_LATIN: &str = "Consolas";
+const PANDOC_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+const PANDOC_JOB_TIMEOUT: Duration = Duration::from_secs(120);
+
+fn join_pipe(
+    handle: Option<thread::JoinHandle<std::io::Result<Vec<u8>>>>,
+    context: &str,
+) -> AppResult<Vec<u8>> {
+    match handle {
+        Some(handle) => handle
+            .join()
+            .map_err(|_| AppError::new("pandoc_pipe_failed", format!("{context}线程异常退出")))?
+            .map_err(|error| AppError::io(context, error)),
+        None => Ok(Vec::new()),
+    }
+}
+
+fn wait_for_output(mut child: Child, timeout: Duration, context: &str) -> AppResult<Output> {
+    let stdout = child.stdout.take().map(|mut pipe| {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            pipe.read_to_end(&mut bytes)?;
+            Ok(bytes)
+        })
+    });
+    let stderr = child.stderr.take().map(|mut pipe| {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            pipe.read_to_end(&mut bytes)?;
+            Ok(bytes)
+        })
+    });
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| AppError::new("pandoc_wait_failed", format!("{context}：{error}")))?
+        {
+            return Ok(Output {
+                status,
+                stdout: join_pipe(stdout, "读取 Pandoc 标准输出失败")?,
+                stderr: join_pipe(stderr, "读取 Pandoc 错误输出失败")?,
+            });
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let status = child.wait().map_err(|error| {
+                AppError::new(
+                    "pandoc_wait_failed",
+                    format!("终止超时的 {context} 失败：{error}"),
+                )
+            })?;
+            let _ = join_pipe(stdout, "读取 Pandoc 标准输出失败");
+            let _ = join_pipe(stderr, "读取 Pandoc 错误输出失败");
+            return Err(AppError::new(
+                "pandoc_timeout",
+                format!(
+                    "{context}超过 {} 秒，已终止进程（{status}）",
+                    timeout.as_secs()
+                ),
+            ));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn command_output(mut command: Command, timeout: Duration, context: &str) -> AppResult<Output> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let child = command
+        .spawn()
+        .map_err(|error| AppError::new("pandoc_spawn_failed", format!("{context}：{error}")))?;
+    wait_for_output(child, timeout, context)
+}
 
 // ── pandoc 路径探测 ──────────────────────────────────────────────────────────
 
@@ -57,9 +132,9 @@ pub fn find_pandoc(override_path: Option<&str>) -> Option<PathBuf> {
     }
 
     // 3. 尝试 PATH（执行 --version 探测是否存在）
-    let ok = make_command(Path::new("pandoc"))
-        .arg("--version")
-        .output()
+    let mut command = make_command(Path::new("pandoc"));
+    command.arg("--version");
+    let ok = command_output(command, PANDOC_STATUS_TIMEOUT, "检测 Pandoc")
         .map(|o| o.status.success())
         .unwrap_or(false);
     if ok {
@@ -152,9 +227,9 @@ pub fn find_pandoc_full(override_path: Option<&str>) -> Option<PathBuf> {
     }
 
     // 最后：PATH
-    let ok = make_command(Path::new("pandoc"))
-        .arg("--version")
-        .output()
+    let mut command = make_command(Path::new("pandoc"));
+    command.arg("--version");
+    let ok = command_output(command, PANDOC_STATUS_TIMEOUT, "检测 Pandoc")
         .map(|o| o.status.success())
         .unwrap_or(false);
     if ok {
@@ -271,10 +346,9 @@ pub fn pandoc_status(
         return Ok(None);
     };
 
-    let output = make_command(&pandoc_path)
-        .arg("--version")
-        .output()
-        .map_err(|e| AppError::new("pandoc_exec_failed", format!("执行 pandoc 失败：{e}")))?;
+    let mut command = make_command(&pandoc_path);
+    command.arg("--version");
+    let output = command_output(command, PANDOC_STATUS_TIMEOUT, "执行 Pandoc")?;
 
     if !output.status.success() {
         return Ok(None);
@@ -342,15 +416,9 @@ pub async fn export_pandoc_default_template(
 }
 
 fn run_export_default_template(pandoc_path: &Path, output_path: &Path) -> AppResult<()> {
-    let result = make_command(pandoc_path)
-        .args(["--print-default-data-file", "reference.docx"])
-        .output()
-        .map_err(|error| {
-            AppError::new(
-                "pandoc_exec_failed",
-                format!("读取 Pandoc 默认模板失败：{error}"),
-            )
-        })?;
+    let mut command = make_command(pandoc_path);
+    command.args(["--print-default-data-file", "reference.docx"]);
+    let result = command_output(command, PANDOC_JOB_TIMEOUT, "读取 Pandoc 默认模板")?;
     if !result.status.success() {
         return Err(AppError::new(
             "pandoc_template_export_failed",
@@ -377,6 +445,10 @@ pub async fn export_docx(
     doc_dir: Option<String>,
     output_path: String,
 ) -> AppResult<ExportDocxResult> {
+    workspace::ensure_write_allowed(&app, Path::new(&output_path))?;
+    if let Some(dir) = doc_dir.as_deref() {
+        workspace::ensure_allowed(&app, Path::new(dir))?;
+    }
     let settings = settings_store.get(&app)?;
     let override_path = settings.pandoc_path.clone();
     let pandoc_path = find_pandoc_full(if override_path.is_empty() {
@@ -395,6 +467,7 @@ pub async fn export_docx(
         None
     } else {
         let path = PathBuf::from(settings.pandoc_reference_doc.trim());
+        workspace::ensure_allowed(&app, &path)?;
         if !path.is_file()
             || !path
                 .extension()
@@ -516,9 +589,7 @@ fn run_export_docx(
         // stdin 关闭后 pandoc 才开始处理
     }
 
-    let result = child
-        .wait_with_output()
-        .map_err(|e| AppError::new("pandoc_wait_failed", format!("等待 pandoc 完成失败：{e}")))?;
+    let result = wait_for_output(child, PANDOC_JOB_TIMEOUT, "Pandoc Word 导出")?;
 
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
@@ -548,6 +619,15 @@ pub async fn import_docx(
     docx_path: String,
     media_subdir: String,
 ) -> AppResult<ImportDocxResult> {
+    crate::domain::safe_name::validate_item_name(&media_subdir)?;
+    let source_path = PathBuf::from(&docx_path);
+    workspace::ensure_allowed(&app, &source_path)?;
+    let source_dir = source_path
+        .parent()
+        .ok_or_else(|| AppError::new("invalid_path", "无法确定 docx 文件所在目录"))?;
+    // 导入会在源 docx 同级创建 Markdown 和媒体目录。只有已经由系统选择器授权的
+    // 源文件才能触发，并且授权严格停在它的直接父目录。
+    workspace::authorize_directory(&app, source_dir)?;
     let settings = settings_store.get(&app)?;
     let override_path = settings.pandoc_path.clone();
     let pandoc_path = find_pandoc_full(if override_path.is_empty() {
@@ -565,7 +645,6 @@ pub async fn import_docx(
 
     // 文件选择器只会授权用户选中的 docx。Pandoc 随后创建的 Markdown
     // 和媒体目录是新路径，需要显式加入 Tauri scope，前端才能立即打开。
-    let source_path = PathBuf::from(&docx_path);
     let media_dir = source_path
         .parent()
         .map(|parent| parent.join(&media_subdir));
@@ -640,9 +719,10 @@ fn run_import_docx(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    let result = cmd
-        .output()
+    let child = cmd
+        .spawn()
         .map_err(|e| AppError::new("pandoc_spawn_failed", format!("启动 pandoc 失败：{e}")))?;
+    let result = wait_for_output(child, PANDOC_JOB_TIMEOUT, "Pandoc Word 导入")?;
 
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
@@ -1019,6 +1099,16 @@ fn replace_typeface_attr(tag: &str, value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn terminates_a_command_that_exceeds_its_deadline() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 2"]);
+        let error = command_output(command, Duration::from_millis(20), "超时测试")
+            .expect_err("command must time out");
+        assert_eq!(error.code, "pandoc_timeout");
+    }
 
     // ── 纯字符串 fixture 测试（不依赖 pandoc）─────────────────────────────────
 

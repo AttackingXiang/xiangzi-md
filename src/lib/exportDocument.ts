@@ -302,9 +302,11 @@ function collectPdfLinks(doc: Document): PdfLinkBoundary[] {
   })
 }
 
-export async function renderDocumentPdf(html: string): Promise<Uint8Array> {
+export async function renderDocumentPdf(html: string, signal?: AbortSignal): Promise<Uint8Array> {
+  signal?.throwIfAborted()
   const exportFrame = await createExportFrame(html)
   try {
+    signal?.throwIfAborted()
     const [{ jsPDF }] = await Promise.all([import('jspdf')])
     const cssPageHeight = (exportFrame.width * PDF_PAGE_HEIGHT_PT) / PDF_PAGE_WIDTH_PT
     const pages = planPdfPages(
@@ -325,9 +327,11 @@ export async function renderDocumentPdf(html: string): Promise<Uint8Array> {
     })
 
     for (let index = 0; index < pages.length; index += 1) {
+      signal?.throwIfAborted()
       const page = pages[index]
       if (index > 0) pdf.addPage('a4', 'portrait')
       const canvas = await renderSection(exportFrame, page.top, page.height, PDF_RENDER_SCALE)
+      signal?.throwIfAborted()
       const renderedHeight = (page.height / exportFrame.width) * PDF_PAGE_WIDTH_PT
       pdf.addImage(canvas, 'JPEG', 0, 0, PDF_PAGE_WIDTH_PT, renderedHeight, undefined, 'FAST')
       for (const link of linkAnnotations.filter((annotation) => annotation.pageIndex === index)) {
@@ -338,6 +342,7 @@ export async function renderDocumentPdf(html: string): Promise<Uint8Array> {
       await nextPaint()
     }
 
+    signal?.throwIfAborted()
     return new Uint8Array(pdf.output('arraybuffer'))
   } finally {
     exportFrame.frame.remove()

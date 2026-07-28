@@ -272,8 +272,8 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
         const result = await desktop.writeFile(
           tab.path,
           applyLineEnding(content, tab.eol ?? 'lf'),
-          null,
-          true,
+          tab.version,
+          false,
         )
         markTabPersisted(tab.id, tab.content, content, result.version)
         tagIndex.upsertDocument(
@@ -286,6 +286,11 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
       if (scope === 'active') {
         const tab = stateRef.current.tabs.find((t) => t.id === stateRef.current.activeId)
         if (tab) await applyToOpenTab(tab)
+        return
+      }
+
+      if (tagIndex.truncated) {
+        await desktop.notify(t('标签索引不完整，已停止批量改名；请缩小工作区后重试。'))
         return
       }
 
@@ -312,7 +317,8 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
           if (tab) {
             if (await applyToOpenTab(tab)) changed += 1
           } else {
-            // 未打开的文件：读 → 改 → 强制写盘（跳过版本冲突检查——写的正是刚读的内容）。
+            // 未打开的文件：读 → 改 → 按刚读到的版本 CAS 写盘。读写之间若发生外部
+            // 修改，Rust 会返回冲突而不是覆盖别人的内容。
             // 这份文件没有对应的 Tab，拿不到已经跟着文档走的 eol，只能就地按读到的
             // 原始内容现测一次；renameTagInMarkdown 的改动本身不引入换行风格分歧
             // （只替换标签文本），落盘前按测到的风格统一还原即可。
@@ -326,8 +332,8 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
               const written = await desktop.writeFile(
                 path,
                 applyLineEnding(result.content, eol),
-                null,
-                true,
+                file.version,
+                false,
               )
               tagIndex.upsertDocument(
                 documentMetaFromMarkdown(

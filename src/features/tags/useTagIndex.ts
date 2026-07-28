@@ -63,6 +63,7 @@ export function useTagIndex(root: string | null, reloadKey: number) {
   const [documents, setDocuments] = useState<DocumentMeta[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [truncated, setTruncated] = useState(false)
   const [refreshVersion, setRefreshVersion] = useState(0)
   const scanIdRef = useRef(0)
   const previousRootRef = useRef<string | null>(null)
@@ -86,6 +87,7 @@ export function useTagIndex(root: string | null, reloadKey: number) {
       setDocuments([])
       setLoading(false)
       setError(null)
+      setTruncated(false)
       return
     }
     if (rootChanged) {
@@ -96,9 +98,13 @@ export function useTagIndex(root: string | null, reloadKey: number) {
     }
     setLoading(true)
     setError(null)
+    setTruncated(false)
     void desktop
       .listFiles(root)
-      .then((files) => files.filter((file) => MARKDOWN_EXTENSION_RE.test(file.name)))
+      .then((response) => {
+        if (scanId === scanIdRef.current) setTruncated(response.truncated)
+        return response.items.filter((file) => MARKDOWN_EXTENSION_RE.test(file.name))
+      })
       .then(async (files) => {
         const { cached, toRead, stalePaths } = planScan(files, cacheRef.current)
         const read = await mapWithConcurrencyLimit(toRead, SCAN_CONCURRENCY, async (file) => {
@@ -192,5 +198,5 @@ export function useTagIndex(root: string | null, reloadKey: number) {
     return { tagIndex: index, tagLabels: labels }
   }, [documents])
 
-  return { documents, tagIndex, tagLabels, loading, error, refresh, upsertDocument }
+  return { documents, tagIndex, tagLabels, loading, error, truncated, refresh, upsertDocument }
 }

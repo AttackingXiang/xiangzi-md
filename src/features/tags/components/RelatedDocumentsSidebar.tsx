@@ -11,6 +11,7 @@ interface Props {
   folderName: string | null
   loading: boolean
   error: string | null
+  truncated: boolean
   /** 左侧「全部标签」树是否已展开——已展开就不再显示“全部标签”按钮（避免重复） */
   overviewOpen: boolean
   /** 展开左侧「全部标签」树 */
@@ -27,6 +28,7 @@ export default function RelatedDocumentsSidebar({
   folderName,
   loading,
   error,
+  truncated,
   overviewOpen,
   onShowAllTags,
   onClose,
@@ -91,6 +93,9 @@ export default function RelatedDocumentsSidebar({
         />
       </label>
       <div className="tag-related-list">
+        {truncated && !error && (
+          <div className="tag-sidebar-state tag-sidebar-error">{t('标签索引已达到文件上限')}</div>
+        )}
         {error ? (
           <div className="tag-sidebar-state tag-sidebar-error">{t('标签索引加载失败')}</div>
         ) : loading && documents.length === 0 ? (

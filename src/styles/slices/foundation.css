@@ -455,6 +455,32 @@ button {
   font-family: inherit;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  button,
+  input,
+  select,
+  textarea,
+  [role='button'],
+  [role='menuitem'] {
+    forced-color-adjust: auto;
+  }
+
+  :focus-visible {
+    outline: 2px solid CanvasText !important;
+  }
+}
+
 /* ---------- 通用图标按钮 ---------- */
 .icon-btn {
   border: none;

@@ -205,6 +205,11 @@
   color: var(--text-2);
   overflow: hidden;
   transition: background 0.12s ease;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
 }
 
 .recent-item:hover {

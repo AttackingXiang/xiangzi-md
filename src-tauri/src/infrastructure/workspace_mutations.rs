@@ -4,8 +4,39 @@ use crate::domain::{
     models::{NamedPath, PathResult},
     safe_name::validate_item_name,
 };
+#[cfg(target_os = "macos")]
+use std::{ffi::CString, os::unix::ffi::OsStrExt};
 use std::{fs, fs::OpenOptions, io::ErrorKind, path::Path};
 use tauri::AppHandle;
+
+#[cfg(target_os = "macos")]
+fn rename_without_replace(source: &Path, target: &Path) -> std::io::Result<()> {
+    const RENAME_EXCL: u32 = 0x0000_0004;
+    unsafe extern "C" {
+        fn renamex_np(
+            from: *const std::ffi::c_char,
+            to: *const std::ffi::c_char,
+            flags: u32,
+        ) -> i32;
+    }
+    let source = CString::new(source.as_os_str().as_bytes())
+        .map_err(|_| std::io::Error::new(ErrorKind::InvalidInput, "源路径包含 NUL"))?;
+    let target = CString::new(target.as_os_str().as_bytes())
+        .map_err(|_| std::io::Error::new(ErrorKind::InvalidInput, "目标路径包含 NUL"))?;
+    let result = unsafe { renamex_np(source.as_ptr(), target.as_ptr(), RENAME_EXCL) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn rename_without_replace(source: &Path, target: &Path) -> std::io::Result<()> {
+    // Windows MoveFileEx without REPLACE_EXISTING (std::fs::rename) 不覆盖目标。
+    // 非发布目标保留系统 rename 语义；macOS 发布路径使用上面的 RENAME_EXCL。
+    fs::rename(source, target)
+}
 
 pub fn create_file(app: &AppHandle, directory: &Path, name: &str) -> AppResult<NamedPath> {
     validate_item_name(name)?;
@@ -46,7 +77,7 @@ pub fn rename_item(app: &AppHandle, old_path: &Path, new_name: &str) -> AppResul
     if target.exists() {
         return Err(AppError::new("already_exists", "目标名称已存在"));
     }
-    fs::rename(old_path, &target).map_err(|error| {
+    rename_without_replace(old_path, &target).map_err(|error| {
         if error.kind() == ErrorKind::AlreadyExists {
             AppError::new("already_exists", "目标名称已存在")
         } else {
@@ -63,7 +94,13 @@ pub fn move_item(app: &AppHandle, source: &Path, target_dir: &Path) -> AppResult
     ensure_allowed(app, source)?;
     ensure_allowed(app, target_dir)?;
     let name = file_name(source);
-    if source.is_dir() && target_dir.starts_with(source) {
+    let canonical_source = source
+        .canonicalize()
+        .map_err(|error| AppError::io("解析源路径失败", error))?;
+    let canonical_target_dir = target_dir
+        .canonicalize()
+        .map_err(|error| AppError::io("解析目标目录失败", error))?;
+    if source.is_dir() && canonical_target_dir.starts_with(&canonical_source) {
         return Err(AppError::new(
             "invalid_move",
             "不能把文件夹移动到它自己的子目录中",
@@ -76,7 +113,7 @@ pub fn move_item(app: &AppHandle, source: &Path, target_dir: &Path) -> AppResult
             format!("已存在同名项目：{name}"),
         ));
     }
-    fs::rename(source, &target).map_err(|error| {
+    rename_without_replace(source, &target).map_err(|error| {
         if error.kind() == ErrorKind::AlreadyExists {
             AppError::new("already_exists", format!("已存在同名项目：{name}"))
         } else {
@@ -95,4 +132,28 @@ pub fn trash_item(app: &AppHandle, target: &Path) -> AppResult<PathResult> {
     Ok(PathResult {
         path: path_string(target),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rename_without_replace;
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn rename_never_replaces_an_existing_target() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let source = directory.path().join("source.txt");
+        let target = directory.path().join("target.txt");
+        std::fs::write(&source, "source").expect("write source");
+        std::fs::write(&target, "target").expect("write target");
+        assert!(rename_without_replace(&source, &target).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&source).expect("source remains"),
+            "source"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&target).expect("target remains"),
+            "target"
+        );
+    }
 }

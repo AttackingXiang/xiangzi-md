@@ -1,6 +1,5 @@
 use crate::domain::error::{AppError, AppResult};
-use crate::infrastructure::lifecycle::LifecycleState;
-use crate::infrastructure::menu;
+use crate::infrastructure::{lifecycle::LifecycleState, menu, workspace};
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -44,8 +43,9 @@ pub fn trigger_menu_action(app: AppHandle, id: String) {
 /// Open a file using the OS default application.
 /// Implemented via platform shell commands so no Tauri plugin scope is needed.
 #[tauri::command]
-pub fn open_with_default(path: String) -> AppResult<()> {
+pub fn open_with_default(app: AppHandle, path: String) -> AppResult<()> {
     let path = PathBuf::from(&path);
+    workspace::ensure_allowed(&app, &path)?;
     if !path.exists() {
         return Err(AppError::new("file_not_found", "文件不存在"));
     }

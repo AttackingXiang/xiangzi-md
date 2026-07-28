@@ -3,7 +3,7 @@ use crate::{
     domain::{
         error::AppResult,
         models::{
-            FileNode, FileVersion, Folder, ListedFile, NamedPath, OpenedFile, PathResult,
+            FileNode, FileVersion, Folder, ListedFilesResponse, NamedPath, OpenedFile, PathResult,
             WriteResult,
         },
     },
@@ -112,7 +112,7 @@ pub async fn read_dir(app: AppHandle, path: String) -> AppResult<Vec<FileNode>> 
 }
 
 #[tauri::command]
-pub async fn list_files(app: AppHandle, root: String) -> AppResult<Vec<ListedFile>> {
+pub async fn list_files(app: AppHandle, root: String) -> AppResult<ListedFilesResponse> {
     blocking(move || workspace::list_files(&app, &PathBuf::from(root))).await
 }
 

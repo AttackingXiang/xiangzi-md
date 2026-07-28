@@ -283,8 +283,10 @@ export const browserDesktopAdapter: DesktopPort = {
     return openedFile(path, content)
   },
   readDir: async (path) => (path === PREVIEW_ROOT ? previewTree() : []),
-  listFiles: async () =>
-    previewTree().map(({ path, name, modifiedNanos }) => ({ path, name, modifiedNanos })),
+  listFiles: async () => ({
+    items: previewTree().map(({ path, name, modifiedNanos }) => ({ path, name, modifiedNanos })),
+    truncated: false,
+  }),
   createFile: async (_dirPath, fileName) => {
     const path = nextPreviewPath(fileName)
     files.set(path, '')

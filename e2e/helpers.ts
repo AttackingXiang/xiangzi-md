@@ -1,14 +1,9 @@
 import { expect, type Page } from '@playwright/test'
 
 /**
- * Shared setup for the browser regression suite. NOTE: this whole suite has
- * been written but not run — see docs/ENGINEERING_CONSTRAINTS.md's "测试
- * 金字塔" section for first-run instructions. Selectors/flows below are
- * derived from reading the source (grepped for the real class names — see
- * src/features/cm6-editor/{livePreview,codeBlockPreview}.css/.ts and
- * src/components/Welcome.tsx) rather than from an actual run, so the exact
- * input sequencing (especially around live-preview reveal timing) is the
- * most likely thing to need adjustment once someone runs this for real.
+ * Shared setup for the browser regression suite. The suite runs in both
+ * Chromium and Playwright WebKit; selectors intentionally use visible product
+ * behavior rather than private CodeMirror state wherever possible.
  */
 
 /**

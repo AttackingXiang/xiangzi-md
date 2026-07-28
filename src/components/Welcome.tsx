@@ -110,11 +110,17 @@ export default function Welcome({
                 <Clock size={14} /> {t('最近文件')}
               </div>
               {recentFiles.slice(0, 8).map((p) => (
-                <div key={p} className="recent-item" title={p} onClick={() => onOpenRecentFile(p)}>
+                <button
+                  key={p}
+                  type="button"
+                  className="recent-item"
+                  title={p}
+                  onClick={() => onOpenRecentFile(p)}
+                >
                   <FileText size={14} />
                   <span className="recent-name">{baseName(p)}</span>
                   <span className="recent-dir">{parentDir(p)}</span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -125,8 +131,9 @@ export default function Welcome({
                 <Folder size={14} /> {t('最近文件夹')}
               </div>
               {recentFolders.slice(0, 8).map((p) => (
-                <div
+                <button
                   key={p}
+                  type="button"
                   className="recent-item"
                   title={p}
                   onClick={() => onOpenRecentFolder(p)}
@@ -134,7 +141,7 @@ export default function Welcome({
                   <Folder size={14} />
                   <span className="recent-name">{baseName(p)}</span>
                   <span className="recent-dir">{parentDir(p)}</span>
-                </div>
+                </button>
               ))}
             </div>
           )}

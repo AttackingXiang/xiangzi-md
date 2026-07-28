@@ -1,6 +1,6 @@
 use crate::domain::{
     error::{AppError, AppResult},
-    models::{FileNode, FileVersion, Folder, ListedFile, OpenedFile},
+    models::{FileNode, FileVersion, Folder, ListedFile, ListedFilesResponse, OpenedFile},
 };
 use crate::infrastructure::settings::AppSettings;
 use std::{
@@ -333,13 +333,9 @@ pub fn open_folder_path(
     if !root.is_dir() {
         return Ok(None);
     }
-    // Reopening a path the app already knows about (favorites, recent
-    // folders) is not privilege escalation the way `open_containing_folder`'s
-    // file-to-parent jump is — it's the exact same path the user picked when
-    // it was first added. Authorize it up front instead of requiring it to
-    // already be in scope, otherwise this call can never grant scope for a
-    // path it doesn't already have: `ensure_allowed` checked first made
-    // every never-before-reopened favorite/recent folder fail on first click.
+    // 最近记录、收藏和会话路径只是普通设置数据，不能充当权限凭据。首次选择目录以及
+    // persisted-scope 恢复负责把它加入 scope；此处必须先校验，再补 asset scope。
+    ensure_allowed(app, root)?;
     authorize_directory(app, root)?;
     Ok(Some(Folder {
         root: path_string(root),
@@ -348,7 +344,7 @@ pub fn open_folder_path(
     }))
 }
 
-fn authorize_directory(app: &AppHandle, root: &Path) -> AppResult<()> {
+pub(crate) fn authorize_directory(app: &AppHandle, root: &Path) -> AppResult<()> {
     app.fs_scope()
         .allow_directory(root, true)
         .map_err(|error| AppError::new("scope_failed", error.to_string()))?;
@@ -366,10 +362,10 @@ fn authorize_directory(app: &AppHandle, root: &Path) -> AppResult<()> {
 ///
 /// 每额外向上授权「一层」目录（越出 powerbox 授权的文件夹、落入 ~/Documents 等
 /// 受保护区），macOS 就会多弹一次「想访问文稿文件夹」——旧值 3 正是每次单文件
-/// 打开弹三次的原因。取 1：只向上覆盖一层，兼容「文档被挪进子文件夹、图片仍在
-/// 上级 assets/」这一最常见布局（此时恰好一次弹窗、图片正常），又把权限打扰降到
-/// 最低。更深层级的图片请改用「打开文件夹」的方式，powerbox 会持久覆盖整棵树。
-const DOC_ANCESTOR_AUTH_LEVELS: usize = 1;
+/// 打开弹三次的原因。这里保持为 0，只授权文档所在目录；否则打开
+/// ~/Documents/note.md 会递归授权整个用户主目录。上级资源请通过打开文件夹或额外
+/// 资源目录显式授权。
+const DOC_ANCESTOR_AUTH_LEVELS: usize = 0;
 
 /// 需要为某个文档授予读权限的目录集合：文档所在目录 + 向上 `levels` 层祖先。
 fn document_scope_dirs(doc_path: &Path, levels: usize) -> Vec<PathBuf> {
@@ -420,12 +416,9 @@ pub fn open_containing_folder(
 }
 
 pub fn read_file(app: &AppHandle, path: &Path) -> AppResult<OpenedFile> {
-    // Authorize before reading, not after: this is a direct reopen of a path
-    // the app already persisted itself (recent files, favorites), not a new
-    // escalation, and gating on prior scope here just made every
-    // never-before-reopened recent file fail silently on first click. This
-    // also covers the document's directory (and limited ancestors) so
-    // relative images resolve without a second round trip.
+    // recent/favorite 等设置值不是权限。系统文件选择器、文件关联生命周期或
+    // persisted-scope 必须先授予该文件权限，验证后才扩到文档目录解析相对资源。
+    ensure_allowed(app, path)?;
     authorize_document_context(app, path);
     let bytes = read_limited(path, MAX_DOCUMENT_BYTES, "读取文件失败")?;
     // 先用 &bytes 借用计算版本信息，再把 bytes 移入 UTF-8 校验消费掉，
@@ -466,8 +459,13 @@ pub fn read_binary_file(app: &AppHandle, path: &Path, max_bytes: u64) -> AppResu
 
 /// 递归收集 root 下的 markdown 文件及其 mtime，供前端做增量扫描。抽成不依赖
 /// AppHandle 的纯函数，方便单测直接用临时目录验证，不必搭建 Tauri app 环境。
-fn walk_markdown_files(root: &Path) -> Vec<ListedFile> {
+fn walk_markdown_files(root: &Path) -> ListedFilesResponse {
+    walk_markdown_files_with_limit(root, MAX_LISTED_FILES)
+}
+
+fn walk_markdown_files_with_limit(root: &Path, limit: usize) -> ListedFilesResponse {
     let mut files = Vec::new();
+    let mut truncated = false;
     for entry in WalkDir::new(root)
         .follow_links(false)
         .into_iter()
@@ -476,6 +474,10 @@ fn walk_markdown_files(root: &Path) -> Vec<ListedFile> {
     {
         let path = entry.path();
         if entry.file_type().is_file() && is_markdown(path) {
+            if files.len() >= limit {
+                truncated = true;
+                break;
+            }
             // metadata() 在极端情况下（权限突变、软链目标消失等）可能失败；
             // 用 0 兜底而不是让单个文件的失败中断整份列表——前端拿到 0 会
             // 判定“缓存不命中”，退化为照常 readFile，不影响正确性。
@@ -490,15 +492,15 @@ fn walk_markdown_files(root: &Path) -> Vec<ListedFile> {
                 name: file_name(path),
                 modified_nanos,
             });
-            if files.len() >= MAX_LISTED_FILES {
-                break;
-            }
         }
     }
-    files
+    ListedFilesResponse {
+        items: files,
+        truncated,
+    }
 }
 
-pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<Vec<ListedFile>> {
+pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<ListedFilesResponse> {
     ensure_allowed(app, root)?;
     Ok(walk_markdown_files(root))
 }
@@ -513,18 +515,13 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     #[test]
-    fn document_scope_covers_only_the_folder_and_one_ancestor() {
-        // 默认层数为 1：文档所在目录 + 恰好一层父目录。前者由 powerbox 覆盖不弹窗，
-        // 后者最多引发一次系统权限框，兼容「图片在上级 assets/」且把打扰降到最低。
-        assert_eq!(DOC_ANCESTOR_AUTH_LEVELS, 1);
+    fn document_scope_covers_only_the_document_folder() {
+        assert_eq!(DOC_ANCESTOR_AUTH_LEVELS, 0);
         let doc = Path::new("/note/xiangzi-note/科学上网/客户端/修改sim卡国家码.md");
         let dirs = document_scope_dirs(doc, DOC_ANCESTOR_AUTH_LEVELS);
         assert_eq!(
             dirs,
-            vec![
-                PathBuf::from("/note/xiangzi-note/科学上网/客户端"),
-                PathBuf::from("/note/xiangzi-note/科学上网"),
-            ]
+            vec![PathBuf::from("/note/xiangzi-note/科学上网/客户端")]
         );
     }
 
@@ -612,10 +609,22 @@ mod tests {
         std::fs::write(directory.path().join("ignored.png"), b"not markdown")
             .expect("write ignored.png");
 
-        let files = walk_markdown_files(directory.path());
+        let response = walk_markdown_files(directory.path());
 
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].name, "note.md");
-        assert!(files[0].modified_nanos > 0);
+        assert!(!response.truncated);
+        assert_eq!(response.items.len(), 1);
+        assert_eq!(response.items[0].name, "note.md");
+        assert!(response.items[0].modified_nanos > 0);
+    }
+
+    #[test]
+    fn reports_when_the_markdown_listing_is_truncated() {
+        let directory = tempfile::tempdir().expect("temp workspace directory");
+        for name in ["a.md", "b.md", "c.md"] {
+            std::fs::write(directory.path().join(name), "# note").expect("write markdown");
+        }
+        let response = super::walk_markdown_files_with_limit(directory.path(), 2);
+        assert_eq!(response.items.len(), 2);
+        assert!(response.truncated);
     }
 }

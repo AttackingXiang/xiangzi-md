@@ -1149,6 +1149,7 @@ export default function App(): JSX.Element {
                   activeTag={tagNavigation.selectedTag}
                   loading={tagIndex.loading}
                   error={tagIndex.error}
+                  truncated={tagIndex.truncated}
                   onClose={tagNavigation.hideOverview}
                   onOpenTag={openTreeTag}
                   onTogglePin={togglePinnedTag}
@@ -1217,6 +1218,7 @@ export default function App(): JSX.Element {
                 folderName={folder?.name ?? null}
                 loading={tagIndex.loading}
                 error={tagIndex.error}
+                truncated={tagIndex.truncated}
                 overviewOpen={tagNavigation.overviewOpen}
                 onShowAllTags={showAllTags}
                 onClose={tagNavigation.closeResults}

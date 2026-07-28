@@ -295,14 +295,15 @@ export const tauriDesktopAdapter: DesktopPort = {
     })
     return { path }
   },
-  exportPDF: async (html, suggestedName) => {
+  exportPDF: async (html, suggestedName, signal) => {
     const path = await save({
       defaultPath: exportFileStem(suggestedName) + '.pdf',
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     })
     if (!path) return null
+    signal?.throwIfAborted()
     const { renderDocumentPdf } = await import('../lib/exportDocument')
-    await invoke('write_binary_file', await renderDocumentPdf(html), {
+    await invoke('write_binary_file', await renderDocumentPdf(html, signal), {
       headers: { 'x-xmd-output-path': encodeURIComponent(path) },
     })
     return { path }

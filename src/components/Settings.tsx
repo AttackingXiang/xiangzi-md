@@ -24,6 +24,7 @@ import AttachmentsSection from './settings/AttachmentsSection'
 import PandocSettingsPage from './settings/PandocSettingsPage'
 import UpdatesSection from './settings/UpdatesSection'
 import AboutSection from './settings/AboutSection'
+import { useModalFocus } from '../hooks/useModalFocus'
 
 export type SettingsSection =
   | 'appearance'
@@ -58,6 +59,7 @@ export default function Settings({
   const en = getLang() === 'en'
   const [section, setSection] = useState<SettingsSection>(initialSection)
   const [appVersion, setAppVersion] = useState('—')
+  const dialogRef = useModalFocus<HTMLElement>()
 
   useEffect(() => {
     void desktop
@@ -85,6 +87,7 @@ export default function Settings({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section
+        ref={dialogRef}
         className="modal settings-modal"
         role="dialog"
         aria-modal="true"

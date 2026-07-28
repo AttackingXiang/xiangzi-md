@@ -19,8 +19,11 @@ use std::{
 use tauri::{AppHandle, State};
 use tempfile::NamedTempFile;
 
-const MAX_PNG_RAW_BYTES: u64 = 8 * 1024 * 1024 * 1024;
-const MAX_JPEG_RAW_BYTES: u64 = 512 * 1024 * 1024;
+// 1200px × 20000px 长图约 96 MB。保留正常导出的余量，同时避免单任务占满磁盘
+// 或让 JPEG 在低内存设备上申请数百 MB 连续内存。
+const MAX_PNG_RAW_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_JPEG_RAW_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_RASTER_SESSIONS: usize = 1;
 
 fn raster_chunk_payload(bytes: &[u8]) -> AppResult<(&str, &[u8])> {
     let id_length = bytes.first().copied().unwrap_or_default() as usize;
@@ -114,8 +117,8 @@ impl RasterExportStore {
             return Err(AppError::new(
                 "raster_export_too_large",
                 match format {
-                    RasterFormat::Png => "导出图片原始像素超过 8 GB 安全上限",
-                    RasterFormat::Jpeg => "JPEG 原始像素超过 512 MB，请改用 PNG",
+                    RasterFormat::Png => "导出图片原始像素超过 256 MB 安全上限",
+                    RasterFormat::Jpeg => "JPEG 原始像素超过 128 MB，请改用 PNG",
                 },
             ));
         }
@@ -135,11 +138,18 @@ impl RasterExportStore {
             raw: NamedTempFile::new()
                 .map_err(|error| AppError::io("创建导出像素临时文件失败", error))?,
         };
-        self.inner
+        let mut sessions = self
+            .inner
             .sessions
             .lock()
-            .map_err(|_| AppError::new("导出状态异常", "导出状态锁已损坏"))?
-            .insert(id.clone(), session);
+            .map_err(|_| AppError::new("导出状态异常", "导出状态锁已损坏"))?;
+        if sessions.len() >= MAX_RASTER_SESSIONS {
+            return Err(AppError::new(
+                "raster_export_busy",
+                "已有图片导出任务，请先完成或取消当前任务",
+            ));
+        }
+        sessions.insert(id.clone(), session);
         Ok(id)
     }
 
@@ -326,6 +336,28 @@ mod tests {
             .expect_err("one RGBA pixel is four bytes");
         assert_eq!(error.code, "raster_data_overflow");
         store.cancel(&id).expect("cancel");
+    }
+
+    #[test]
+    fn allows_only_one_live_export_session() {
+        let store = RasterExportStore::default();
+        let id = store
+            .begin("/tmp/a.png".into(), 1, 1, "png")
+            .expect("first session");
+        let error = store
+            .begin("/tmp/b.png".into(), 1, 1, "png")
+            .expect_err("second session must be rejected");
+        assert_eq!(error.code, "raster_export_busy");
+        store.cancel(&id).expect("cancel");
+    }
+
+    #[test]
+    fn rejects_raw_pixel_buffers_above_the_memory_budget() {
+        let store = RasterExportStore::default();
+        let error = store
+            .begin("/tmp/huge.jpg".into(), 8_192, 4_097, "jpeg")
+            .expect_err("raw JPEG buffer exceeds 128 MB");
+        assert_eq!(error.code, "raster_export_too_large");
     }
 
     #[test]

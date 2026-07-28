@@ -24,7 +24,8 @@ export function normalizeTag(value: string): string {
 }
 
 export function tagKey(value: string): string {
-  return normalizeTag(value).toLocaleLowerCase()
+  // 标签 key 会持久化到设置并在不同机器间同步，不能依赖运行机器的系统 locale。
+  return normalizeTag(value).toLowerCase()
 }
 
 function unquoteYaml(value: string): string {
@@ -220,13 +221,97 @@ export function replaceMarkdownBody(markdown: string, body: string): string {
 // 不含开头的 "#"。renameTag.ts 改写正文标签时复用同一份，保证识别规则一致。
 export const INLINE_TAG_RE = /(^|\s)#([\p{L}\p{N}_/-]+)/gmu
 
-// 代码围栏 / 行内代码：三选一交替分支合并成一次 replace，比原来分三趟 replace
-// （``` 再 ~~~ 再行内 `）少产生两份全文中间字符串。renameTag.ts 改写行内标签时
-// 用它跳过代码段，跟这里扫描标签时跳过的范围保持一致。
-export const CODE_SPAN_RE = /```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`/g
+interface TextRange {
+  from: number
+  to: number
+}
+
+function mergeRanges(ranges: TextRange[]): TextRange[] {
+  const sorted = ranges.sort((a, b) => a.from - b.from || a.to - b.to)
+  const merged: TextRange[] = []
+  for (const range of sorted) {
+    const previous = merged.at(-1)
+    if (previous && range.from <= previous.to) previous.to = Math.max(previous.to, range.to)
+    else merged.push({ ...range })
+  }
+  return merged
+}
+
+/** CommonMark 代码范围：可变长度/未闭合围栏、缩进代码和可变长度行内代码。
+ * 这里只用于“不要改写/索引代码里的 #tag”，宁可多保护一段文本，也不能改坏代码。 */
+export function markdownCodeRanges(body: string): TextRange[] {
+  const ranges: TextRange[] = []
+  const lines = body.matchAll(/.*(?:\n|$)/g)
+  let fence: { marker: '`' | '~'; length: number; from: number } | null = null
+  for (const match of lines) {
+    if (!match[0]) continue
+    const from = match.index
+    const text = match[0].replace(/\n$/, '')
+    const to = from + match[0].length
+    if (fence) {
+      const closing = text.match(/^ {0,3}(`+|~+)[ \t]*$/)
+      if (closing && closing[1][0] === fence.marker && closing[1].length >= fence.length) {
+        ranges.push({ from: fence.from, to })
+        fence = null
+      }
+      continue
+    }
+    const opening = text.match(/^ {0,3}(`{3,}|~{3,})/)
+    if (opening) {
+      fence = {
+        marker: opening[1][0] as '`' | '~',
+        length: opening[1].length,
+        from,
+      }
+      continue
+    }
+    if (/^(?: {4}|\t)/.test(text)) ranges.push({ from, to })
+  }
+  if (fence) ranges.push({ from: fence.from, to: body.length })
+
+  // 行内 code span 的反引号分隔符可以多于一个，也允许跨行。围栏范围稍后统一合并。
+  for (let index = 0; index < body.length; ) {
+    if (body[index] !== '`') {
+      index += 1
+      continue
+    }
+    let length = 1
+    while (body[index + length] === '`') length += 1
+    const delimiter = '`'.repeat(length)
+    const closing = body.indexOf(delimiter, index + length)
+    if (closing >= 0) {
+      ranges.push({ from: index, to: closing + length })
+      index = closing + length
+    } else {
+      index += length
+    }
+  }
+  return mergeRanges(ranges)
+}
+
+export function rewriteOutsideMarkdownCode(
+  body: string,
+  rewrite: (text: string) => string,
+): string {
+  let result = ''
+  let last = 0
+  for (const range of markdownCodeRanges(body)) {
+    result += rewrite(body.slice(last, range.from))
+    result += body.slice(range.from, range.to)
+    last = range.to
+  }
+  return result + rewrite(body.slice(last))
+}
 
 function stripCodeForTagScan(body: string): string {
-  return body.replace(CODE_SPAN_RE, '')
+  let result = ''
+  let last = 0
+  for (const range of markdownCodeRanges(body)) {
+    result += body.slice(last, range.from)
+    result += ' '.repeat(range.to - range.from)
+    last = range.to
+  }
+  return result + body.slice(last)
 }
 
 /** 抓取正文里手打的 #标签（跳过代码块/行内代码，避免把 shebang、C 的 #include

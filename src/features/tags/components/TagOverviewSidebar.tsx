@@ -14,6 +14,7 @@ interface Props {
   activeTag?: string | null
   loading: boolean
   error: string | null
+  truncated: boolean
   onClose: () => void
   onOpenTag: (tag: string) => void
   onTogglePin: (key: string) => void
@@ -37,6 +38,7 @@ export default function TagOverviewSidebar({
   activeTag,
   loading,
   error,
+  truncated,
   onClose,
   onOpenTag,
   onTogglePin,
@@ -244,6 +246,9 @@ export default function TagOverviewSidebar({
         </span>
       </div>
       <div className="tag-overview-list" ref={listRef}>
+        {truncated && !error && (
+          <div className="tag-sidebar-state tag-sidebar-error">{t('标签索引已达到文件上限')}</div>
+        )}
         {error ? (
           <div className="tag-sidebar-state tag-sidebar-error">{t('标签索引加载失败')}</div>
         ) : loading && !hasTags ? (
