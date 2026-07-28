@@ -402,39 +402,27 @@ jobs:
         run: |
           set -euo pipefail
           install -d release-assets
-          find src-tauri/target -type f \( \
-              -name '*.dmg' -o -name '*-setup.exe' -o \
-              -name '*.app.tar.gz' -o -name '*.sig' \
-            \) -exec cp {} release-assets/ \;
-          cp "SHA256SUMS-${{ matrix.artifact }}.txt" \
-            "sbom-${{ matrix.artifact }}.spdx.json" release-assets/
           if [ "${RUNNER_OS}" = "macOS" ]; then
-            APP_ARCHIVE_COUNT="$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')"
-            test "${APP_ARCHIVE_COUNT}" -eq 1
-            APP_ARCHIVE="$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | sort | sed -n '1p')"
-            APP_ARCHIVE_TARGET="release-assets/Xiangzi-MD-${{ matrix.artifact }}.app.tar.gz"
-            mv "${APP_ARCHIVE}" "${APP_ARCHIVE_TARGET}"
-            mv "${APP_ARCHIVE}.sig" "${APP_ARCHIVE_TARGET}.sig"
+            if [ "${{ matrix.artifact }}" = "macos-universal" ]; then
+              find src-tauri/target -type f \( \
+                  -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \
+                \) -exec cp {} release-assets/ \;
+              APP_ARCHIVE_COUNT="$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')"
+              test "${APP_ARCHIVE_COUNT}" -eq 1
+              APP_ARCHIVE="$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | sort | sed -n '1p')"
+              APP_ARCHIVE_TARGET="release-assets/Xiangzi-MD-${{ matrix.artifact }}.app.tar.gz"
+              mv "${APP_ARCHIVE}" "${APP_ARCHIVE_TARGET}"
+              mv "${APP_ARCHIVE}.sig" "${APP_ARCHIVE_TARGET}.sig"
+            else
+              # 原生架构包仅提供给用户手动安装；自动更新始终使用 Universal 归档。
+              find src-tauri/target -type f -name '*.dmg' -exec cp {} release-assets/ \;
+            fi
             test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 1
-            test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
-            test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 1
           else
+            find src-tauri/target -type f \( -name '*-setup.exe' -o -name '*-setup.exe.sig' \) -exec cp {} release-assets/ \;
             test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
             test "$(find release-assets -maxdepth 1 -name '*-setup.exe.sig' | wc -l | tr -d ' ')" -eq 1
           fi
-          if command -v sha256sum >/dev/null 2>&1; then
-            HASH_CMD=(sha256sum)
-          else
-            HASH_CMD=(shasum -a 256)
-          fi
-          (
-            cd release-assets
-            find . -maxdepth 1 -type f \
-              ! -name 'SHA256SUMS-*.txt' \
-              ! -name 'sbom-*.spdx.json' \
-              -print0 | sort -z | xargs -0 "${HASH_CMD[@]}" \
-                > "SHA256SUMS-${{ matrix.artifact }}.txt"
-          )
 
       - name: Upload temporary ${{ matrix.artifact }} artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -479,11 +467,9 @@ jobs:
           fi
           test "$(find release-assets -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')" -eq 3
           test "$(find release-assets -maxdepth 1 -name '*-setup.exe' | wc -l | tr -d ' ')" -eq 1
-          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 3
-          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 3
+          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz' | wc -l | tr -d ' ')" -eq 1
+          test "$(find release-assets -maxdepth 1 -name '*.app.tar.gz.sig' | wc -l | tr -d ' ')" -eq 1
           test "$(find release-assets -maxdepth 1 -name '*-setup.exe.sig' | wc -l | tr -d ' ')" -eq 1
-          test "$(find release-assets -maxdepth 1 -name 'SHA256SUMS-*.txt' | wc -l | tr -d ' ')" -eq 4
-          test "$(find release-assets -maxdepth 1 -name 'sbom-*.spdx.json' | wc -l | tr -d ' ')" -eq 4
 
       - name: Generate the single cross-platform updater manifest
         env:
@@ -527,6 +513,21 @@ jobs:
             }' > release-assets/latest.json
           jq -e '.platforms | length == 6' release-assets/latest.json >/dev/null
           jq -e '[.platforms[].url | test("[[:space:]]")] | any | not' release-assets/latest.json >/dev/null
+
+      - name: Generate unified release checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd release-assets
+            if command -v sha256sum >/dev/null 2>&1; then
+              find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+            else
+              find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS.txt
+            fi
+          )
+          test -s release-assets/SHA256SUMS.txt
+          test "$(find release-assets -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 9
 
       - name: Create or repair the GitHub Release
         env:
@@ -601,7 +602,9 @@ jobs:
               }
           done < <(jq -r '.platforms[].url' release-assets/latest.json | sort -u)
 
-      - name: Attest the unified updater manifest
+      - name: Attest the unified updater manifest and checksum
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
-          subject-path: release-assets/latest.json
+          subject-path: |
+            release-assets/latest.json
+            release-assets/SHA256SUMS.txt

@@ -57,7 +57,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
             >/tmp/github-release.json
-          jq -e '[.assets[].name | select(test("\\.(dmg|exe|sig|tar\\.gz)$") or . == "latest.json")] | length >= 6' \
+          jq -e '[.assets[].name | select(test("\\.(dmg|exe|sig|tar\\.gz)$") or . == "latest.json")] | length == 8' \
             /tmp/github-release.json >/dev/null
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
 
@@ -120,7 +120,7 @@ jobs:
           RELEASE_ID=$(printf '%s' "${RELEASE}" | jq -r '.id // empty')
           if [ -z "${RELEASE_ID}" ]; then
             PAYLOAD=$(jq -n --arg tag "${TAG}" \
-              '{tag_name:$tag,name:$tag,target_commitish:"main",body:"macOS Universal DMG 与 Windows x64 安装包见附件。"}')
+              '{tag_name:$tag,name:$tag,target_commitish:"main",body:"macOS（Universal、Apple Silicon、Intel）与 Windows x64 安装包见附件。"}')
             RELEASE=$(gitee_curl --fail --silent --show-error -X POST \
               --retry 4 --retry-all-errors --connect-timeout 20 --max-time 60 \
               "${API}/releases" -H 'Content-Type: application/json' -d "${PAYLOAD}")
