@@ -777,3 +777,42 @@ describe('CM6 Markdown live preview: the blank-line model', () => {
     ])
   })
 })
+
+describe('CM6 Markdown live preview: compact blank lines', () => {
+  const blankLines = (doc: string): number[] =>
+    decorations(createState(doc), 0, doc.length)
+      .filter((item) => item.className === 'xmd-cm-blank-line')
+      .map((item) => item.from)
+
+  it('marks the single blank line that separates two blocks', () => {
+    const doc = 'first\n\nsecond'
+
+    expect(blankLines(doc)).toEqual([doc.indexOf('first') + 'first\n'.length])
+  })
+
+  it('marks only the first row of a run so deliberate whitespace keeps its height', () => {
+    const doc = 'first\n\n\n\nsecond'
+
+    expect(blankLines(doc)).toEqual(['first\n'.length])
+  })
+
+  it('leaves blank lines inside fenced and indented code blocks alone', () => {
+    const fenced = '```js\nconst a = 1\n\nconst b = 2\n```'
+    const indented = 'para\n\n    const a = 1\n\n    const b = 2'
+
+    expect(blankLines(fenced)).toEqual([])
+    // Only the separator between the paragraph and the code block qualifies;
+    // the blank row *inside* the indented block is code content.
+    expect(blankLines(indented)).toEqual(['para\n'.length])
+  })
+
+  it('never marks a blank line as replaced or hidden', () => {
+    const doc = 'first\n\nsecond'
+    const blankFrom = 'first\n'.length
+
+    expect(decorations(createState(doc), 0, doc.length)).toContainEqual(
+      expect.objectContaining({ from: blankFrom, to: blankFrom, replacement: false }),
+    )
+    expect(hiddenRanges(createState(doc), 0, doc.length)).toEqual([])
+  })
+})

@@ -15,6 +15,9 @@
   --xmd-document-line-height: 1.75;
   --xmd-paragraph-spacing: 0.38em;
   --xmd-paragraph-separated-spacing: 0.12em;
+  /* 「紧凑空行」开启时，分隔空行的行高与段落边缘补偿（见 livePreview.css）。 */
+  --xmd-blank-line-height: 0.62em;
+  --xmd-paragraph-compact-separated-spacing: 0.26em;
 
   /* Headings */
   --xmd-heading-color: var(--text);

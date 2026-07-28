@@ -96,6 +96,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     codeBlockOpacity: 30,
     codeBlockLineWrapping: false,
     themeShade: 0,
+    compactBlankLines: true,
     headingNumber: false,
     autoSave: false,
     checkUpdatesOnStartup: false,

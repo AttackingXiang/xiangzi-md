@@ -25,6 +25,16 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
           onChange={(checked) => onChange({ headingNumber: checked })}
         />
         <ToggleRow
+          label={en ? 'Compact blank lines' : '紧凑空行'}
+          description={
+            en
+              ? 'Draw the blank line that separates two blocks as paragraph spacing instead of a full empty row. Extra consecutive blank lines keep their height, and the Markdown source is never modified.'
+              : '把两个块之间的分隔空行显示为段间距，而不是一整行留白；连续多敲的空行仍保留完整高度，不修改 Markdown 源文档。'
+          }
+          checked={settings.compactBlankLines ?? true}
+          onChange={(compactBlankLines) => onChange({ compactBlankLines })}
+        />
+        <ToggleRow
           label={t('自动保存')}
           description={t('开启后，已保存过的文档在停止输入约 1 秒后自动写回磁盘。')}
           checked={settings.autoSave}

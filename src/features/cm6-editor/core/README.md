@@ -50,9 +50,16 @@
 
 ## 不变式
 
-1. **每一行都是文档里真实存在、可点击、可用方向键到达的一行**，包括空行。不存在
-   "结构性" vs "显式" 空行的区分——这条区分（以及它背后的 `editableBlankParagraph`
-   状态机和 `visualGapEdit` 点击补偿）在本阶段被整体删除。
+1. **每一行都是文档里真实存在、可点击、可用方向键到达的一行**，包括空行。空行**永远不
+   折叠、不原子化、不参与任何隐藏范围**——旧模型下的 `editableBlankParagraph` 状态机和
+   `visualGapEdit` 点击补偿因此被整体删除，且不得以任何形式回来。
+
+   「紧凑空行」设置（`livePreview.ts` 的 `xmd-cm-blank-line` line decoration）确实区分了
+   分隔空行（一段连续空行里的第一行）与留白空行，但这个区分**只驱动一条 CSS 行高**，
+   而且是当前文档文本的纯函数：不改变可寻址性、不产生原子范围、不依赖编辑历史或选区。
+   它与被删掉的旧机制没有共同点，读到时不要"顺手修复"成折叠。判断标准是：行高可以变，
+   **高度不得为 0**（零高度会让 caret 画不出、`posAtCoords` 命中不到，并让 CM6 原生
+   `moveVertically` 失效——见不变式 4/5）。
 2. **任何隐藏范围都不跨越换行符**（`atomic-block` 例外，但 Phase 1 未注册任何
    `atomic-block`）。需要隐藏一整个"结构性"物理行（如 Setext 下划线、链接引用定义）时，
    必须按行拆分成多个 `Decoration.replace`，见 `livePreview.ts` 的 `perLineRanges`。

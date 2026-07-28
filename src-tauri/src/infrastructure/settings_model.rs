@@ -99,6 +99,9 @@ pub struct AppSettings {
     pub code_block_line_wrapping: bool,
     /// 当前主题背景色的深浅偏移，-50（更深）到 50（更浅），0 表示不调整。
     pub theme_shade: i32,
+    /// 是否把「块之间的分隔空行」压缩成段间距显示；默认开启。仅影响行高，
+    /// 不改变 Markdown 源文档。
+    pub compact_blank_lines: bool,
     pub heading_number: bool,
     pub auto_save: bool,
     pub check_updates_on_startup: bool,
@@ -196,6 +199,7 @@ impl Default for AppSettings {
             code_block_opacity: 30,
             code_block_line_wrapping: false,
             theme_shade: 0,
+            compact_blank_lines: true,
             heading_number: false,
             auto_save: false,
             check_updates_on_startup: true,
@@ -322,6 +326,7 @@ pub struct SettingsPatch {
     pub code_block_opacity: Option<u32>,
     pub code_block_line_wrapping: Option<bool>,
     pub theme_shade: Option<i32>,
+    pub compact_blank_lines: Option<bool>,
     pub heading_number: Option<bool>,
     pub auto_save: Option<bool>,
     pub check_updates_on_startup: Option<bool>,

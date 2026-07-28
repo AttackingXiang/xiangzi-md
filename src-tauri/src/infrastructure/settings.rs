@@ -268,6 +268,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(code_block_opacity);
     replace_if_some!(code_block_line_wrapping);
     replace_if_some!(theme_shade);
+    replace_if_some!(compact_blank_lines);
     replace_if_some!(heading_number);
     replace_if_some!(auto_save);
     replace_if_some!(check_updates_on_startup);

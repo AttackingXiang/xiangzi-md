@@ -206,6 +206,9 @@ export async function generateExportHTML(title: string): Promise<string> {
   const styles = await inlineExportCssAssets(preferWoff2FontSources(liveStyles), document.baseURI)
   const theme = document.documentElement.getAttribute('data-theme') ?? ''
   const headingNumber = document.documentElement.getAttribute('data-heading-number') ?? ''
+  // The export reuses the on-screen CM6 DOM, blank rows included, so the blank
+  // line height must be carried over or the export reads looser than the editor.
+  const compactBlankLines = document.documentElement.getAttribute('data-compact-blank-lines') ?? ''
   const codeBlockOpacity = document.documentElement.style
     .getPropertyValue('--code-block-opacity')
     .trim()
@@ -213,6 +216,7 @@ export async function generateExportHTML(title: string): Promise<string> {
     'lang="zh-CN"',
     theme ? `data-theme="${escapeHtmlText(theme)}"` : '',
     headingNumber ? `data-heading-number="${escapeHtmlText(headingNumber)}"` : '',
+    compactBlankLines ? `data-compact-blank-lines="${escapeHtmlText(compactBlankLines)}"` : '',
     /^\d+(?:\.\d+)?%$/.test(codeBlockOpacity)
       ? `style="--code-block-opacity:${escapeHtmlText(codeBlockOpacity)}"`
       : '',

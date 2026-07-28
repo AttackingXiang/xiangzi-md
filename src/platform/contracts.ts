@@ -75,6 +75,12 @@ export interface AppSettings {
   /** Whether long lines inside fenced code blocks wrap automatically. */
   codeBlockLineWrapping: boolean
   themeShade: number
+  /**
+   * Draw the blank line that separates two blocks as paragraph spacing instead
+   * of a full empty row. Affects line height only — the Markdown source and the
+   * addressability of every line are unchanged. On by default.
+   */
+  compactBlankLines: boolean
   headingNumber: boolean
   autoSave: boolean
   checkUpdatesOnStartup: boolean

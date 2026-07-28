@@ -91,6 +91,14 @@ export function useSettings() {
     document.documentElement.style.setProperty('--editor-max-width', w)
   }, [settings?.editorWidth])
 
+  // ── 紧凑空行 ────────────────────────────────────────────────────────────────
+  // 只切一个根属性，由 livePreview.css 决定分隔空行的行高。编辑器扩展无需重配置，
+  // 所以开关是即时生效的，且关掉后完全退回默认行高。
+  useEffect(() => {
+    if (!settings) return
+    document.documentElement.dataset.compactBlankLines = settings.compactBlankLines ? 'on' : 'off'
+  }, [settings?.compactBlankLines])
+
   // ── Heading numbering ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!settings) return

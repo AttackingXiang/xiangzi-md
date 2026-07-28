@@ -1,4 +1,5 @@
 import { syntaxTree } from '@codemirror/language'
+import type { SyntaxNode } from '@lezer/common'
 import { EditorState, Prec, type Extension } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import type { EditorView } from '@codemirror/view'
@@ -222,6 +223,23 @@ function inlineHtmlSpans(state: EditorState, visible: PreviewRange): InlineHtmlS
 }
 
 /**
+ * Blocks whose interior blank lines are literal content rather than block
+ * separators. Their rows must keep the document line height, and their DOM is
+ * owned by the code-block/table preview extensions anyway.
+ */
+const LITERAL_BLOCK_NAMES = new Set(['FencedCode', 'CodeBlock', 'Table'])
+
+/** Whether `pos` sits inside one of those literal blocks. */
+function isLiteralBlockPosition(state: EditorState, pos: number): boolean {
+  let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1)
+  while (node) {
+    if (LITERAL_BLOCK_NAMES.has(node.name)) return true
+    node = node.parent
+  }
+  return false
+}
+
+/**
  * Builds decorations only for the supplied viewport ranges. This function is
  * exported separately so range/selection behaviour can be unit tested without
  * constructing an EditorView. It only paints *visible* content — line
@@ -403,6 +421,22 @@ export function buildLivePreviewDecorations(
           alert.markerTo,
         ),
       )
+    }
+    // A blank line is a block separator, not content. Mark the *first* row of
+    // each run so it can be drawn as paragraph spacing instead of a full empty
+    // row (the Typora reading of Markdown: one blank line separates blocks,
+    // extra ones are deliberate whitespace and keep their height).
+    //
+    // This class only ever changes line *height* via CSS. The row stays a real,
+    // clickable, arrow-key reachable line and produces no atomic range, so
+    // core/README.md invariant 1 still holds and none of the deleted
+    // `editableBlankParagraph`/`visualGapEdit` machinery comes back.
+    for (let number = firstLine.number; number <= lastLine.number; number += 1) {
+      const line = state.doc.line(number)
+      if (line.length > 0) continue
+      if (number > 1 && state.doc.line(number - 1).length === 0) continue
+      if (isLiteralBlockPosition(state, line.from)) continue
+      ranges.push(Decoration.line({ class: 'xmd-cm-blank-line' }).range(line.from))
     }
     for (const [lineFrom, depth] of quoteDepthByLine) {
       ranges.push(

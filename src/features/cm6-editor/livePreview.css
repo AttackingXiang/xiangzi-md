@@ -32,6 +32,28 @@
   padding-bottom: var(--xmd-paragraph-separated-spacing, 0.12em);
 }
 
+/* 「紧凑空行」：一段连续空行里的第一行是块分隔符，把它画成段间距而不是一整行
+   留白（Typora 观感）。刻意压到一个较小但非零的高度——归零会让 caret 画不出、
+   posAtCoords 命中不到，正是 core/README.md 不变式 4/5 删掉的旧做法。行本身
+   仍然真实、可点击、方向键可达，关掉设置也只是恢复行高，没有任何交互差异。 */
+[data-compact-blank-lines='on'] .xmd-cm-editor .cm-line.xmd-cm-blank-line {
+  line-height: var(--xmd-blank-line-height, 0.62em);
+  min-height: 10px;
+}
+
+/* 空行被压扁后不再提供一整行留白，段落边缘的补偿 padding 要相应加回来。 */
+[data-compact-blank-lines='on']
+  .xmd-cm-editor
+  .cm-line.xmd-cm-paragraph-first.xmd-cm-paragraph-gap-before {
+  padding-top: var(--xmd-paragraph-compact-separated-spacing, 0.26em);
+}
+
+[data-compact-blank-lines='on']
+  .xmd-cm-editor
+  .cm-line.xmd-cm-paragraph-last.xmd-cm-paragraph-gap-after {
+  padding-bottom: var(--xmd-paragraph-compact-separated-spacing, 0.26em);
+}
+
 .xmd-cm-editor .cm-line.xmd-cm-horizontal-rule {
   line-height: 0;
   min-height: 0;
