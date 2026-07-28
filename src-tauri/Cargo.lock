@@ -5921,7 +5921,7 @@ dependencies = [
 
 [[package]]
 name = "xiangzi-md"
-version = "2.0.25"
+version = "2.0.26"
 dependencies = [
  "blake3",
  "dirs",
