@@ -5,6 +5,7 @@ import type { InstalledTheme } from '../../platform/contracts'
 import type { AppSettings } from '../../types'
 import { t } from '../../lib/i18n'
 import { THEME_GALLERY_URL } from '../../lib/themeMarketplace'
+import { useModalFocus } from '../../hooks/useModalFocus'
 import { SettingsPage, SettingsCard, SettingRow } from './primitives'
 
 interface Props {
@@ -27,6 +28,7 @@ export default function AppearanceSection({
   const [themeManagerOpen, setThemeManagerOpen] = useState(false)
   const [removingThemeId, setRemovingThemeId] = useState<string | null>(null)
   const [themeActionError, setThemeActionError] = useState<string | null>(null)
+  const themeManagerDialogRef = useModalFocus<HTMLElement>(themeManagerOpen)
 
   useEffect(() => {
     let cancelled = false
@@ -360,6 +362,7 @@ export default function AppearanceSection({
           }}
         >
           <section
+            ref={themeManagerDialogRef}
             className="modal theme-manager-modal"
             role="dialog"
             aria-modal="true"

@@ -5926,6 +5926,7 @@ dependencies = [
  "blake3",
  "dirs",
  "image",
+ "libc",
  "mime_guess",
  "pathdiff",
  "percent-encoding",

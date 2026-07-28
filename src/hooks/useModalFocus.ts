@@ -10,9 +10,10 @@ const FOCUSABLE = [
 ].join(',')
 
 /** 把键盘焦点限制在模态框内，并在关闭后还给打开它的控件。 */
-export function useModalFocus<T extends HTMLElement>(): RefObject<T> {
+export function useModalFocus<T extends HTMLElement>(active = true): RefObject<T> {
   const ref = useRef<T>(null)
   useEffect(() => {
+    if (!active) return undefined
     const dialog = ref.current
     if (!dialog) return undefined
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -44,6 +45,6 @@ export function useModalFocus<T extends HTMLElement>(): RefObject<T> {
       dialog.removeEventListener('keydown', onKeyDown)
       previous?.focus()
     }
-  }, [])
+  }, [active])
   return ref
 }

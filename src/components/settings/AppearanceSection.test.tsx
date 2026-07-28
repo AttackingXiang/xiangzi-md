@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createBrowserPreviewSettings } from '../../platform/browserAdapter'
 import type { InstalledTheme } from '../../platform/contracts'
 
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+
 const desktop = vi.hoisted(() => ({
   listInstalledThemes: vi.fn(),
   openExternal: vi.fn(),
@@ -55,7 +57,7 @@ async function render(customCssPath = '', onChange = vi.fn()): Promise<void> {
         backgroundImageError={false}
       />,
     )
-    await Promise.resolve()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
   })
 }
 
@@ -102,13 +104,36 @@ describe('AppearanceSection theme actions', () => {
 
     await act(async () => {
       host.querySelector<HTMLButtonElement>('[data-theme-id="morandi-light"]')?.click()
-      await Promise.resolve()
-      await Promise.resolve()
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
     })
 
     expect(desktop.removeInstalledTheme).toHaveBeenCalledWith('morandi-light')
     expect(onChange).toHaveBeenCalledWith({ theme: 'light', customCssPath: '' })
     expect(dialog?.textContent).not.toContain('Morandi')
     expect(dialog?.textContent).toContain('Midnight')
+  })
+
+  it('traps focus in the local-theme manager and returns it to its opener', async () => {
+    desktop.listInstalledThemes.mockResolvedValue([installedTheme])
+    await render()
+
+    const opener = host.querySelector<HTMLButtonElement>('.settings-manage-themes')
+    act(() => {
+      opener?.focus()
+      opener?.click()
+    })
+    const dialog = host.querySelector<HTMLElement>('.theme-manager-modal')
+    const close = dialog?.querySelector<HTMLButtonElement>('[aria-label="关闭本地主题管理"]')
+    const remove = dialog?.querySelector<HTMLButtonElement>('[data-theme-id="morandi-light"]')
+    expect(document.activeElement).toBe(close)
+
+    act(() => {
+      remove?.focus()
+      remove?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    })
+    expect(document.activeElement).toBe(close)
+
+    act(() => close?.click())
+    expect(document.activeElement).toBe(opener)
   })
 })

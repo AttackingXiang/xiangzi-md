@@ -4,7 +4,7 @@ use crate::domain::{
     models::{NamedPath, PathResult},
     safe_name::validate_item_name,
 };
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::{ffi::CString, os::unix::ffi::OsStrExt};
 use std::{fs, fs::OpenOptions, io::ErrorKind, path::Path};
 use tauri::AppHandle;
@@ -31,11 +31,44 @@ fn rename_without_replace(source: &Path, target: &Path) -> std::io::Result<()> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn rename_without_replace(source: &Path, target: &Path) -> std::io::Result<()> {
-    // Windows MoveFileEx without REPLACE_EXISTING (std::fs::rename) 不覆盖目标。
-    // 非发布目标保留系统 rename 语义；macOS 发布路径使用上面的 RENAME_EXCL。
+    // Linux 的 std::fs::rename 会覆盖已有目标。renameat2 + RENAME_NOREPLACE
+    // 把“目标不存在”和移动合并成一次原子操作，避免 exists() 预检查后的竞态覆盖。
+    const RENAME_NOREPLACE: u32 = 1;
+    let source = CString::new(source.as_os_str().as_bytes())
+        .map_err(|_| std::io::Error::new(ErrorKind::InvalidInput, "源路径包含 NUL"))?;
+    let target = CString::new(target.as_os_str().as_bytes())
+        .map_err(|_| std::io::Error::new(ErrorKind::InvalidInput, "目标路径包含 NUL"))?;
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            libc::AT_FDCWD,
+            source.as_ptr(),
+            libc::AT_FDCWD,
+            target.as_ptr(),
+            RENAME_NOREPLACE,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn rename_without_replace(source: &Path, target: &Path) -> std::io::Result<()> {
+    // Windows 的 std::fs::rename 不覆盖目标。
     fs::rename(source, target)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn rename_without_replace(_source: &Path, _target: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        ErrorKind::Unsupported,
+        "当前平台不支持原子不覆盖重命名",
+    ))
 }
 
 pub fn create_file(app: &AppHandle, directory: &Path, name: &str) -> AppResult<NamedPath> {
@@ -138,7 +171,7 @@ pub fn trash_item(app: &AppHandle, target: &Path) -> AppResult<PathResult> {
 mod tests {
     use super::rename_without_replace;
 
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     #[test]
     fn rename_never_replaces_an_existing_target() {
         let directory = tempfile::tempdir().expect("temp directory");
