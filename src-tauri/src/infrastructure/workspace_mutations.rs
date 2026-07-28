@@ -4,6 +4,8 @@ use crate::domain::{
     models::{NamedPath, PathResult},
     safe_name::validate_item_name,
 };
+#[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStrExt;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::{ffi::CString, os::unix::ffi::OsStrExt};
 use std::{fs, fs::OpenOptions, io::ErrorKind, path::Path};
@@ -59,8 +61,33 @@ fn rename_without_replace(source: &Path, target: &Path) -> std::io::Result<()> {
 
 #[cfg(target_os = "windows")]
 fn rename_without_replace(source: &Path, target: &Path) -> std::io::Result<()> {
-    // Windows 的 std::fs::rename 不覆盖目标。
-    fs::rename(source, target)
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn MoveFileExW(
+            existing_file_name: *const u16,
+            new_file_name: *const u16,
+            flags: u32,
+        ) -> i32;
+    }
+    // MoveFileExW only replaces an existing target when MOVEFILE_REPLACE_EXISTING
+    // is explicitly set. Passing no flags gives files and directories one atomic
+    // no-replace operation, unlike std::fs::rename on the current Windows runner.
+    let source: Vec<u16> = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let target: Vec<u16> = target
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let result = unsafe { MoveFileExW(source.as_ptr(), target.as_ptr(), 0) };
+    if result != 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]

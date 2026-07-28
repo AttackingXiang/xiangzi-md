@@ -10,24 +10,39 @@ async function dragFromVisibleStartToPreviousLine(
   page: Page,
   line: Locator,
   previousLine: Locator,
+  targetText: string,
 ): Promise<SelectionProbe> {
-  const geometry = await line.evaluate((element) => {
+  const geometry = await line.evaluate((element, target) => {
     const prefixes = element.querySelectorAll<HTMLElement>('.xmd-cm-preserved-hidden-source')
     const prefix = prefixes.item(prefixes.length - 1)
     if (!prefix) return null
     const lineRect = element.getBoundingClientRect()
     const prefixRect = prefix.getBoundingClientRect()
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    let visibleTextRect: DOMRect | null = null
+    while (walker.nextNode()) {
+      const node = walker.currentNode
+      const offset = node.textContent?.indexOf(target) ?? -1
+      if (offset < 0) continue
+      const range = document.createRange()
+      const probeOffset = offset + Math.max(0, target.length - 1)
+      range.setStart(node, probeOffset)
+      range.setEnd(node, probeOffset + 1)
+      visibleTextRect = range.getBoundingClientRect()
+      break
+    }
+    if (!visibleTextRect) return null
     return {
       start: {
         x: prefixRect.right + 1,
         y: lineRect.top + lineRect.height / 2,
       },
       visibleTextPoint: {
-        x: prefixRect.right + 24,
-        y: lineRect.top + lineRect.height / 2,
+        x: visibleTextRect.left + visibleTextRect.width / 2,
+        y: visibleTextRect.top + visibleTextRect.height / 2,
       },
     }
-  })
+  }, targetText)
   const previous = await previousLine.boundingBox()
   expect(geometry).not.toBeNull()
   expect(previous).not.toBeNull()
@@ -111,7 +126,7 @@ test('cross-line reverse selections do not paint unselected line-leading content
     await expect(line).toBeVisible()
     await expect(line.locator('.xmd-cm-preserved-hidden-source')).toHaveCount(item.prefixCount)
 
-    const result = await dragFromVisibleStartToPreviousLine(page, line, previousLine)
+    const result = await dragFromVisibleStartToPreviousLine(page, line, previousLine, item.target)
 
     // The drag ends 32px into the previous row, so only its suffix is
     // intentionally selected; the exact character varies with font metrics.
