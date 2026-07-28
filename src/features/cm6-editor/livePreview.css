@@ -105,9 +105,13 @@
 
 .xmd-cm-editor .xmd-cm-preserved-hidden-source-boundary {
   color: transparent;
+  display: inline-block;
   font: inherit;
+  inline-size: 0.125px;
   line-height: inherit;
+  overflow: clip;
   pointer-events: none;
+  vertical-align: baseline;
   -webkit-text-fill-color: transparent;
 }
 

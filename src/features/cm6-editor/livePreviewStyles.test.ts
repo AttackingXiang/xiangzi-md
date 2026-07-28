@@ -41,6 +41,12 @@ describe('CM6 live preview styles', () => {
     expect(hiddenSource).not.toContain('display: none')
     expect(hiddenSource).not.toContain('position: absolute')
     expect(hiddenSource).not.toContain('user-select: none')
+
+    const boundary = css.match(/\.xmd-cm-preserved-hidden-source-boundary\s*\{([^}]*)\}/)?.[1]
+    expect(boundary).toContain('display: inline-block')
+    expect(boundary).toContain('inline-size: 0.125px')
+    expect(boundary).toContain('line-height: inherit')
+    expect(boundary).toContain('overflow: clip')
   })
 
   it('uses native painting only while the native selection class is active', () => {
