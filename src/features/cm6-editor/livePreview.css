@@ -61,12 +61,21 @@
 }
 
 .xmd-cm-editor .xmd-cm-horizontal-rule-widget {
-  border-top: var(--xmd-horizontal-rule-width, 1px) solid
-    var(--xmd-horizontal-rule-color, var(--border-strong));
   box-sizing: border-box;
   display: block;
   height: 0;
+  position: relative;
   width: 100%;
+}
+
+.xmd-cm-editor .xmd-cm-horizontal-rule-widget::after {
+  border-top: var(--xmd-horizontal-rule-width, 1px) solid
+    var(--xmd-horizontal-rule-color, var(--border-strong));
+  content: '';
+  inset: 0 0 auto;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-heading {

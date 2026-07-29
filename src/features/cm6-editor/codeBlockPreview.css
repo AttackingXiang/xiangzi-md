@@ -48,21 +48,30 @@
   white-space: pre-wrap;
 }
 
-/* The card visuals live on a pseudo-element sunk below CM6's selection layer
-   (drawSelection renders behind-layers at z-index -1-pos), so a drawn
-   selection stays visible on top of the card instead of being painted over
-   by an opaque line background. */
+/* Keep the surface below CM6's selection layer (drawSelection renders
+   behind-layers at z-index -1-pos), while the separate ::after outline stays
+   above both CM6 and native selection painting. This preserves the card edge
+   without letting its translucent surface wash out a selection. */
 .xmd-cm-editor .cm-line.xmd-cm-code-line::before {
   /* The appearance setting is a real surface opacity: the page/background
      remains visible beneath the code card at lower values. */
   background: color-mix(in srgb, var(--xmd-code-bg) var(--code-block-opacity, 30%), transparent);
-  border-left: 1px solid var(--xmd-code-border);
-  border-right: 1px solid var(--xmd-code-border);
   content: '';
   inset: 0;
   pointer-events: none;
   position: absolute;
   z-index: -5;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line::after {
+  border-left: 1px solid var(--xmd-code-border);
+  border-right: 1px solid var(--xmd-code-border);
+  box-sizing: border-box;
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-code-line-first {
@@ -73,17 +82,26 @@
   padding-bottom: 10px;
 }
 
-.xmd-cm-editor .cm-line.xmd-cm-code-line-first::before {
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first::before,
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first::after {
   border-radius: var(--xmd-code-radius) var(--xmd-code-radius) 0 0;
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first::after {
   border-top: 1px solid var(--xmd-code-border);
 }
 
-.xmd-cm-editor .cm-line.xmd-cm-code-line-last::before {
-  border-bottom: 1px solid var(--xmd-code-border);
+.xmd-cm-editor .cm-line.xmd-cm-code-line-last::before,
+.xmd-cm-editor .cm-line.xmd-cm-code-line-last::after {
   border-radius: 0 0 var(--xmd-code-radius) var(--xmd-code-radius);
 }
 
-.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-line-last::before {
+.xmd-cm-editor .cm-line.xmd-cm-code-line-last::after {
+  border-bottom: 1px solid var(--xmd-code-border);
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-line-last::before,
+.xmd-cm-editor .cm-line.xmd-cm-code-line-first.xmd-cm-code-line-last::after {
   border-radius: var(--xmd-code-radius);
 }
 

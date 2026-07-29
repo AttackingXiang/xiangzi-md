@@ -100,9 +100,12 @@
   border-left-color: var(--xmd-document-accent, var(--accent));
 }
 
-.xmd-cm-editor .cm-selectionBackground,
-.xmd-cm-editor .cm-focused .cm-selectionBackground {
-  background: var(--xmd-document-selection-bg);
+.xmd-cm-editor .cm-selectionLayer .cm-selectionBackground,
+.xmd-cm-editor .cm-focused .cm-selectionLayer .cm-selectionBackground {
+  /* CodeMirror's focused base theme has a more specific built-in color.
+     Keep its painter on the same token as the native Range presentation so
+     switching at a paragraph boundary is visually seamless on Windows. */
+  background: var(--xmd-document-selection-bg) !important;
 }
 
 /* Every native Range presentation (document line, code card or table cell)

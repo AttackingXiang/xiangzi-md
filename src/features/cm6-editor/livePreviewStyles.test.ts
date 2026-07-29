@@ -6,12 +6,16 @@ describe('CM6 live preview styles', () => {
     const css = readFileSync(new URL('./livePreview.css', import.meta.url), 'utf8')
     const line = css.match(/\.cm-line\.xmd-cm-horizontal-rule\s*\{([^}]*)\}/)?.[1]
     const widget = css.match(/\.xmd-cm-horizontal-rule-widget\s*\{([^}]*)\}/)?.[1]
+    const rule = css.match(/\.xmd-cm-horizontal-rule-widget::after\s*\{([^}]*)\}/)?.[1]
 
     expect(line).toContain('padding-block: 0.24em')
     expect(line).toContain('line-height: 0')
     expect(line).toContain('min-height: 0')
     expect(widget).toContain('width: 100%')
     expect(widget).not.toContain('max-width')
+    expect(widget).not.toContain('border-top:')
+    expect(rule).toContain('border-top:')
+    expect(rule).toContain('z-index: 1')
   })
 
   it('uses a hanging indent so wrapped list content stays aligned with its first line', () => {
@@ -52,19 +56,41 @@ describe('CM6 live preview styles', () => {
     const nativeSelection = editorCss.match(
       /\.xmd-cm-native-selection \.cm-content \*::selection\s*\{([^}]*)\}/,
     )?.[1]
+    const cm6Selection = editorCss.match(
+      /\.cm-focused \.cm-selectionLayer \.cm-selectionBackground\s*\{([\s\S]*?)\n\}/,
+    )?.[1]
 
     expect(hidesLayer).toContain('display: none')
     expect(nativeSelection).toContain('background-color:')
     expect(nativeSelection).toContain('var(--xmd-document-selection-bg)')
     expect(nativeSelection).toContain('!important')
+    expect(cm6Selection).toContain('var(--xmd-document-selection-bg)')
+    expect(cm6Selection).toContain('!important')
   })
 
   it('uses the configured code-block opacity for the editor card surface', () => {
     const css = readFileSync(new URL('./codeBlockPreview.css', import.meta.url), 'utf8')
-    const card = css.match(/\.cm-line\.xmd-cm-code-line::before\s*\{([\s\S]*?)\n\}/)?.[1]
+    const surface = css.match(/\.cm-line\.xmd-cm-code-line::before\s*\{([\s\S]*?)\n\}/)?.[1]
+    const outline = css.match(/\.cm-line\.xmd-cm-code-line::after\s*\{([\s\S]*?)\n\}/)?.[1]
 
-    expect(card).toContain('var(--code-block-opacity, 30%)')
-    expect(card).toContain('transparent')
+    expect(surface).toContain('var(--code-block-opacity, 30%)')
+    expect(surface).toContain('transparent')
+    expect(surface).toContain('z-index: -5')
+    expect(surface).not.toContain('border-left:')
+    expect(outline).toContain('border-left: 1px solid var(--xmd-code-border)')
+    expect(outline).toContain('border-right: 1px solid var(--xmd-code-border)')
+    expect(outline).toContain('z-index: 1')
+  })
+
+  it('keeps every code-card edge on the foreground outline', () => {
+    const css = readFileSync(new URL('./codeBlockPreview.css', import.meta.url), 'utf8')
+
+    expect(css).toMatch(
+      /\.cm-line\.xmd-cm-code-line-first::after\s*\{\s*border-top: 1px solid var\(--xmd-code-border\)/,
+    )
+    expect(css).toMatch(
+      /\.cm-line\.xmd-cm-code-line-last::after\s*\{\s*border-bottom: 1px solid var\(--xmd-code-border\)/,
+    )
   })
 
   it('hides CM6 painting for native code-block selections', () => {

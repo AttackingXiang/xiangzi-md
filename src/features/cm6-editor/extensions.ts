@@ -45,7 +45,7 @@ export const defaultCm6Theme = EditorView.theme({
   },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-    backgroundColor: 'var(--selection-color, rgba(99, 102, 241, 0.2))',
+    backgroundColor: 'var(--xmd-document-selection-bg)',
   },
   '.cm-activeLine': { backgroundColor: 'transparent' },
   '&.cm-focused': { outline: 'none' },
