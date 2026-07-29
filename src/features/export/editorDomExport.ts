@@ -11,6 +11,12 @@ const ASSET_SETTLE_TIMEOUT_MS = 15_000
 const FONT_SETTLE_TIMEOUT_MS = 5_000
 const WARM_PASSES = 5
 const CAPTURE_OVERLAP = 128
+const UNSPLITTABLE_BLOCK_SELECTOR = [
+  '.xmd-cm-mermaid-block',
+  '.xmd-cm-math-block',
+  '.xmd-cm-table-preview',
+  '.xmd-cm-image-preview.is-block',
+].join(',')
 
 export function exportRasterViewportHeight(webViewHeight: number): number {
   if (!Number.isFinite(webViewHeight)) return 1
@@ -21,6 +27,15 @@ interface EditorDomExportSession {
   root: HTMLElement
   view: EditorView
   destroy(): void
+}
+
+interface EditorDomExportSessionOptions {
+  signal?: AbortSignal
+}
+
+interface RasterBlockBounds {
+  top: number
+  bottom: number
 }
 
 interface PrintableEditorView extends EditorView {
@@ -133,6 +148,61 @@ function rasterDocumentHeight(view: EditorView): number {
   return Math.max(1, view.scrollDOM.scrollHeight)
 }
 
+function documentBoundsForRects(
+  session: EditorDomExportSession,
+  rects: readonly DOMRect[],
+): RasterBlockBounds | null {
+  if (rects.length === 0) return null
+  const scrollerTop = session.view.scrollDOM.getBoundingClientRect().top
+  const scrollTop = session.view.scrollDOM.scrollTop
+  const top = Math.min(...rects.map((rect) => rect.top)) - scrollerTop + scrollTop
+  const bottom = Math.max(...rects.map((rect) => rect.bottom)) - scrollerTop + scrollTop
+  return bottom > top ? { top, bottom } : null
+}
+
+function visibleUnsplittableBlocks(session: EditorDomExportSession): RasterBlockBounds[] {
+  const bounds = Array.from(session.root.querySelectorAll<HTMLElement>(UNSPLITTABLE_BLOCK_SELECTOR))
+    .map((element) => documentBoundsForRects(session, [element.getBoundingClientRect()]))
+    .filter((value): value is RasterBlockBounds => value !== null)
+
+  for (const first of session.root.querySelectorAll<HTMLElement>(
+    '.cm-line.xmd-cm-code-line-first',
+  )) {
+    const lines = [first]
+    let current = first.nextElementSibling
+    while (current instanceof HTMLElement && current.classList.contains('xmd-cm-code-line')) {
+      lines.push(current)
+      if (current.classList.contains('xmd-cm-code-line-last')) break
+      current = current.nextElementSibling
+    }
+    const block = documentBoundsForRects(
+      session,
+      lines.map((line) => line.getBoundingClientRect()),
+    )
+    if (block) bounds.push(block)
+  }
+
+  return bounds.sort((left, right) => left.top - right.top)
+}
+
+export function rowsBeforeUnsplittableBlock(
+  outputTop: number,
+  maxRows: number,
+  viewportHeight: number,
+  blocks: readonly RasterBlockBounds[],
+): number {
+  const proposedBottom = outputTop + maxRows
+  for (const block of blocks) {
+    const top = Math.floor(block.top)
+    const bottom = Math.ceil(block.bottom)
+    if (bottom - top > viewportHeight) continue
+    if (top <= outputTop || top >= proposedBottom || bottom <= proposedBottom) continue
+    const rows = top - outputTop
+    if (rows > 0) return rows
+  }
+  return maxRows
+}
+
 async function scrollTo(
   session: EditorDomExportSession,
   top: number,
@@ -149,9 +219,10 @@ async function positionOutputViewport(
   outputTop: number,
   viewportHeight: number,
   signal?: AbortSignal,
+  preferExactTop = false,
 ): Promise<number> {
   let desiredTop = Math.min(
-    Math.max(0, outputTop - CAPTURE_OVERLAP),
+    Math.max(0, preferExactTop ? outputTop : outputTop - CAPTURE_OVERLAP),
     Math.max(0, session.view.scrollDOM.scrollHeight - viewportHeight),
   )
   let actualTop = 0
@@ -197,9 +268,15 @@ async function stabilizeRasterDocument(
   return rasterDocumentHeight(session.view)
 }
 
-async function createEditorDomExportSession(): Promise<EditorDomExportSession> {
+async function createEditorDomExportSession(
+  options: EditorDomExportSessionOptions = {},
+): Promise<EditorDomExportSession> {
   const snapshot = markdownEditorExportBridge.snapshot()
   if (!snapshot) throw new Error('当前没有可导出的 Markdown 编辑器')
+  // Mermaid measures labels while producing its SVG viewBox. Rendering before
+  // the active fonts settle can permanently cache bounds computed with a
+  // fallback font and clip labels at the SVG edge on another WebView engine.
+  await waitForFonts(options.signal)
 
   const root = document.createElement('div')
   // CM6 only materializes the part of a scroll container that intersects the
@@ -294,7 +371,7 @@ export async function createEditorRasterImage(
   signal?: AbortSignal,
 ): Promise<RasterImageSource> {
   void _format
-  const session = await createEditorDomExportSession()
+  const session = await createEditorDomExportSession({ signal })
   try {
     const availableViewportHeight = session.root.clientHeight
     const height = await stabilizeRasterDocument(session, availableViewportHeight, signal)
@@ -312,20 +389,34 @@ export async function createEditorRasterImage(
       height: stableHeight,
       async *chunks() {
         let outputTop = 0
+        let preferExactTop = false
         while (outputTop < stableHeight) {
           throwIfAborted(signal)
           // Rendering a newly visible widget can refine CM6's height map and
           // nudge scrollTop. Capture with an overlap and advance by the rows we
           // actually emitted, so those corrections never create gaps or make
           // the final crop exceed its canvas.
-          const actualTop = await positionOutputViewport(session, outputTop, viewportHeight, signal)
+          const actualTop = await positionOutputViewport(
+            session,
+            outputTop,
+            viewportHeight,
+            signal,
+            preferExactTop,
+          )
+          preferExactTop = false
           const cropTop = Math.max(0, outputTop - actualTop)
           const canvas = await captureViewport(session, backgroundColor)
           try {
             throwIfAborted(signal)
             const context = canvas.getContext('2d', { willReadFrequently: true })
             if (!context) throw new Error('无法读取导出图片分片')
-            const rows = Math.min(stableHeight - outputTop, canvas.height - cropTop)
+            const maxRows = Math.min(stableHeight - outputTop, canvas.height - cropTop)
+            const rows = rowsBeforeUnsplittableBlock(
+              outputTop,
+              maxRows,
+              viewportHeight,
+              visibleUnsplittableBlocks(session),
+            )
             if (actualTop > outputTop || rows <= 0) {
               throw new Error(
                 `导出图片分片尺寸不一致（outputTop=${outputTop}, actualTop=${actualTop}, cropTop=${cropTop}, rows=${rows}, canvasHeight=${canvas.height}, documentHeight=${stableHeight}）`,
@@ -334,6 +425,7 @@ export async function createEditorRasterImage(
             const pixels = context.getImageData(0, cropTop, width, rows)
             yield new Uint8Array(pixels.data)
             outputTop += rows
+            preferExactTop = rows < maxRows
           } finally {
             canvas.width = 1
             canvas.height = 1
@@ -353,7 +445,6 @@ export async function createFullEditorDom(): Promise<HTMLElement> {
   const session = await createEditorDomExportSession()
   const printable = session.view as unknown as PrintableEditorView
   try {
-    await waitForFonts()
     let height = documentHeight(session.view)
     // CM6 already owns a full-document render path for printing. Reuse that
     // exact path while cloning HTML instead of inventing a second Markdown
