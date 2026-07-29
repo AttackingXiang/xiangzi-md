@@ -67,7 +67,8 @@ ${mermaidSource}
     ).length
     const source = await createEditorRasterImage('png')
     try {
-      const { renderMermaidForExport } = (await import('/src/lib/mermaidPreview.ts')) as {
+      const mermaidModulePath = '/src/lib/mermaidPreview.ts'
+      const { renderMermaidForExport } = (await import(mermaidModulePath)) as {
         renderMermaidForExport: (source: string) => Promise<string>
       }
       const pureTemplate = document.createElement('template')
