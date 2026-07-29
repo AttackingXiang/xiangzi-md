@@ -94,6 +94,12 @@
   --xmd-callout-warning-bg: color-mix(in srgb, #d97706 9%, transparent);
   --xmd-callout-important: #b91c1c;
   --xmd-callout-important-bg: color-mix(in srgb, #dc2626 8%, transparent);
+  --xmd-callout-success: #15803d;
+  --xmd-callout-success-bg: color-mix(in srgb, #16a34a 9%, transparent);
+  --xmd-callout-example: #7e22ce;
+  --xmd-callout-example-bg: color-mix(in srgb, #9333ea 8%, transparent);
+  --xmd-callout-quote: var(--xmd-document-secondary);
+  --xmd-callout-quote-bg: color-mix(in srgb, var(--xmd-document-secondary) 7%, transparent);
 
   /* Code blocks and syntax */
   --xmd-code-bg: var(--code-card-bg);

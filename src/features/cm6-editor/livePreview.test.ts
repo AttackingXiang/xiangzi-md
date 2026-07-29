@@ -567,6 +567,48 @@ describe('CM6 Markdown live preview: paragraphs, callouts and thematic breaks', 
     ).toBe(true)
   })
 
+  it('renders Obsidian callout kinds and aliases while leaving unknown kinds editable', () => {
+    const cases = [
+      ['ABSTRACT', 'abstract'],
+      ['SUMMARY', 'abstract'],
+      ['INFO', 'info'],
+      ['TODO', 'todo'],
+      ['HINT', 'tip'],
+      ['SUCCESS', 'success'],
+      ['FAQ', 'question'],
+      ['ATTENTION', 'warning'],
+      ['FAIL', 'failure'],
+      ['ERROR', 'danger'],
+      ['BUG', 'bug'],
+      ['EXAMPLE', 'example'],
+      ['CITE', 'quote'],
+    ] as const
+    const doc = [...cases.map(([label]) => `> [!${label}]`), '> [!CUSTOM]'].join('\n')
+    const seen = decorations(createState(doc), 0, doc.length)
+
+    for (const [label, kind] of cases) {
+      const markerStart = doc.indexOf(`[!${label}]`)
+      expect(
+        seen.some(
+          (item) =>
+            item.className === `xmd-cm-callout xmd-cm-callout-${kind}` &&
+            item.from === doc.lastIndexOf('> ', markerStart),
+        ),
+      ).toBe(true)
+      expect(
+        seen.some(
+          (item) =>
+            item.replacement &&
+            item.from === markerStart &&
+            item.to === markerStart + label.length + 3,
+        ),
+      ).toBe(true)
+    }
+
+    const unknownStart = doc.indexOf('[!CUSTOM]')
+    expect(seen.some((item) => item.replacement && item.from === unknownStart)).toBe(false)
+  })
+
   it('renders only Lezer HorizontalRule nodes as thematic breaks', () => {
     const doc = 'paragraph\n\n---\n\n- - -\n\ncaption\n---'
     const state = createState(doc)

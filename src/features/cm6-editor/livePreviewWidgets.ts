@@ -2,11 +2,40 @@ import type { EditorState } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import { WidgetType } from '@codemirror/view'
 
-/** GitHub/Obsidian-style alert kinds recognised at the start of a quote line. */
-const CALLOUT_KINDS = new Set(['NOTE', 'TIP', 'WARNING', 'IMPORTANT', 'CAUTION'])
+/** Canonical visual kind for GitHub alerts and Obsidian callouts. */
+const CALLOUT_KIND_BY_NAME = {
+  NOTE: 'note',
+  ABSTRACT: 'abstract',
+  SUMMARY: 'abstract',
+  TLDR: 'abstract',
+  INFO: 'info',
+  TODO: 'todo',
+  TIP: 'tip',
+  HINT: 'tip',
+  IMPORTANT: 'important',
+  SUCCESS: 'success',
+  CHECK: 'success',
+  DONE: 'success',
+  QUESTION: 'question',
+  HELP: 'question',
+  FAQ: 'question',
+  WARNING: 'warning',
+  CAUTION: 'caution',
+  ATTENTION: 'warning',
+  FAILURE: 'failure',
+  FAIL: 'failure',
+  MISSING: 'failure',
+  DANGER: 'danger',
+  ERROR: 'danger',
+  BUG: 'bug',
+  EXAMPLE: 'example',
+  QUOTE: 'quote',
+  CITE: 'quote',
+} as const
 
 export interface CalloutStart {
   kind: string
+  label: string
   markerFrom: number
   markerTo: number
 }
@@ -18,28 +47,33 @@ export function calloutStartAtLine(state: EditorState, lineNumber: number): Call
   if (!prefix) return null
   const match = /^\[!([A-Za-z]+)\][ \t]*/.exec(line.text.slice(prefix.length))
   if (!match) return null
-  const kind = match[1].toUpperCase()
-  if (!CALLOUT_KINDS.has(kind)) return null
+  const label = match[1].toUpperCase()
+  const kind = CALLOUT_KIND_BY_NAME[label as keyof typeof CALLOUT_KIND_BY_NAME]
+  if (!kind) return null
   return {
     kind,
+    label,
     markerFrom: line.from + prefix.length,
     markerTo: line.from + prefix.length + match[0].length,
   }
 }
 
 export class CalloutLabelWidget extends WidgetType {
-  constructor(readonly kind: string) {
+  constructor(
+    readonly kind: string,
+    readonly label: string,
+  ) {
     super()
   }
 
   eq(other: CalloutLabelWidget): boolean {
-    return other.kind === this.kind
+    return other.kind === this.kind && other.label === this.label
   }
 
   toDOM(): HTMLElement {
     const label = document.createElement('span')
     label.className = `xmd-cm-callout-label xmd-cm-callout-${this.kind.toLowerCase()}`
-    label.textContent = this.kind
+    label.textContent = this.label
     return label
   }
 

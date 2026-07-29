@@ -416,7 +416,7 @@ export function buildLivePreviewDecorations(
         Decoration.line({
           class: `xmd-cm-callout xmd-cm-callout-${alert.kind.toLowerCase()}`,
         }).range(line.from),
-        Decoration.replace({ widget: new CalloutLabelWidget(alert.kind) }).range(
+        Decoration.replace({ widget: new CalloutLabelWidget(alert.kind, alert.label) }).range(
           alert.markerFrom,
           alert.markerTo,
         ),

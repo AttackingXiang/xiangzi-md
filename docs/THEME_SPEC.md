@@ -64,7 +64,7 @@ assets without changing the v1 rendering variables.
 | `--xmd-quote-text`, `--xmd-quote-border`, `--xmd-quote-bg` | Blockquotes |
 | `--xmd-list-marker-color` | Ordered and unordered markers |
 | `--xmd-task-border`, `--xmd-task-checked-bg`, `--xmd-task-check-color` | Task checkboxes |
-| `--xmd-callout-*` | Note, warning, caution, and important callouts |
+| `--xmd-callout-*` | GitHub alerts and Obsidian callouts, including warning, success, example, and quote variants |
 
 ### Code
 

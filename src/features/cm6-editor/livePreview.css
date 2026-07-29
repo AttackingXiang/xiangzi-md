@@ -261,19 +261,50 @@
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-callout-warning,
-.xmd-cm-editor .cm-line.xmd-cm-callout-caution {
+.xmd-cm-editor .cm-line.xmd-cm-callout-caution,
+.xmd-cm-editor .cm-line.xmd-cm-callout-question {
   background-color: var(--xmd-callout-warning-bg);
 }
 .xmd-cm-editor .xmd-cm-callout-warning,
-.xmd-cm-editor .xmd-cm-callout-caution {
+.xmd-cm-editor .xmd-cm-callout-caution,
+.xmd-cm-editor .xmd-cm-callout-question {
   color: var(--xmd-callout-warning);
 }
 
-.xmd-cm-editor .cm-line.xmd-cm-callout-important {
+.xmd-cm-editor .cm-line.xmd-cm-callout-important,
+.xmd-cm-editor .cm-line.xmd-cm-callout-failure,
+.xmd-cm-editor .cm-line.xmd-cm-callout-danger,
+.xmd-cm-editor .cm-line.xmd-cm-callout-bug {
   background-color: var(--xmd-callout-important-bg);
 }
-.xmd-cm-editor .xmd-cm-callout-important {
+.xmd-cm-editor .xmd-cm-callout-important,
+.xmd-cm-editor .xmd-cm-callout-failure,
+.xmd-cm-editor .xmd-cm-callout-danger,
+.xmd-cm-editor .xmd-cm-callout-bug {
   color: var(--xmd-callout-important);
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-callout-tip,
+.xmd-cm-editor .cm-line.xmd-cm-callout-success {
+  background-color: var(--xmd-callout-success-bg);
+}
+.xmd-cm-editor .xmd-cm-callout-tip,
+.xmd-cm-editor .xmd-cm-callout-success {
+  color: var(--xmd-callout-success);
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-callout-example {
+  background-color: var(--xmd-callout-example-bg);
+}
+.xmd-cm-editor .xmd-cm-callout-example {
+  color: var(--xmd-callout-example);
+}
+
+.xmd-cm-editor .cm-line.xmd-cm-callout-quote {
+  background-color: var(--xmd-callout-quote-bg);
+}
+.xmd-cm-editor .xmd-cm-callout-quote {
+  color: var(--xmd-callout-quote);
 }
 
 .xmd-cm-editor .cm-line.xmd-cm-list-line {
