@@ -140,6 +140,7 @@ class SelectionCoordinatorPlugin {
     view.contentDOM.addEventListener('blur', this.onFocusChange)
     window.addEventListener('pointerup', this.onPointerUp)
     window.addEventListener('pointercancel', this.onPointerCancel)
+    window.addEventListener('mouseup', this.onMouseUp)
     this.syncPresentation()
   }
 
@@ -155,6 +156,7 @@ class SelectionCoordinatorPlugin {
     this.view.contentDOM.removeEventListener('blur', this.onFocusChange)
     window.removeEventListener('pointerup', this.onPointerUp)
     window.removeEventListener('pointercancel', this.onPointerCancel)
+    window.removeEventListener('mouseup', this.onMouseUp)
     this.view.dom.classList.remove(NATIVE_LINE_SELECTION_CLASS, NATIVE_CODE_SELECTION_CLASS)
     this.view.dom.classList.remove(NATIVE_SELECTION_CLASS)
   }
@@ -181,6 +183,7 @@ class SelectionCoordinatorPlugin {
 
   private readonly onPointerUp = (): void => this.finishPointerSelection(false)
   private readonly onPointerCancel = (): void => this.finishPointerSelection(true)
+  private readonly onMouseUp = (): void => this.finishPointerSelection(false)
 
   private finishPointerSelection(canceled: boolean): void {
     if (!selectionSnapshot(this.view.state).pointerActive) return

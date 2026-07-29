@@ -48,6 +48,7 @@ interface Props {
   defaultTextColor: string
   highlightColors: readonly string[]
   defaultHighlightColor: string
+  onDefaultHighlightColorChange?: (color: string) => void
 }
 
 export default function EditorToolbar({
@@ -56,6 +57,7 @@ export default function EditorToolbar({
   defaultTextColor,
   highlightColors,
   defaultHighlightColor,
+  onDefaultHighlightColorChange,
 }: Props): JSX.Element {
   const [ts, setTs] = useState<ToolbarActiveState>(DEFAULT_TOOLBAR_ACTIVE_STATE)
   const [cellState, setCellState] = useState<TableCellCommandState>(
@@ -273,7 +275,14 @@ export default function EditorToolbar({
           onMouseDown={preserveEditorSelection}
           onClick={() => {
             setShowColors(false)
-            setShowHighlightColors((visible) => !visible)
+            if (highlighterMode.active) {
+              setShowHighlightColors((visible) => !visible)
+            } else {
+              const color = highlighterMode.color || defaultHighlightColor
+              highlighterModeBridge.selectColor(color)
+              onDefaultHighlightColorChange?.(color)
+              setShowHighlightColors(false)
+            }
           }}
         >
           <Highlighter
@@ -281,15 +290,16 @@ export default function EditorToolbar({
             color={highlighterMode.active ? highlighterMode.color : undefined}
           />
         </button>
-        {showHighlightColors && !cellState.focused && !ts.codeBlock && (
+        {showHighlightColors && highlighterMode.active && !cellState.focused && !ts.codeBlock && (
           <div className="toolbar-color-popover">
             <HighlightColorPalette
               lang={lang}
               colors={highlightColors}
-              defaultColor={defaultHighlightColor}
+              defaultColor={highlighterMode.color || defaultHighlightColor}
               onSelect={(color) => {
                 if (color) {
                   highlighterModeBridge.selectColor(color)
+                  onDefaultHighlightColorChange?.(color)
                 } else {
                   highlighterModeBridge.deactivate()
                 }

@@ -35,6 +35,7 @@ export interface MarkdownEditorProps {
   defaultTextColor?: string
   highlightColors?: readonly string[]
   defaultHighlightColor?: string
+  onDefaultHighlightColorChange?: (color: string) => void
   /** Keep one EditorState while switching between live preview and plain source. */
   livePreview?: boolean
   resolveImageSrc?: (src: string) => Promise<string | null> | string | null
@@ -104,6 +105,7 @@ export function MarkdownEditor({
   defaultTextColor,
   highlightColors,
   defaultHighlightColor,
+  onDefaultHighlightColorChange,
   livePreview = true,
   resolveImageSrc = identityImageSource,
   allowRemoteImages = false,
@@ -492,6 +494,7 @@ export function MarkdownEditor({
           defaultTextColor={defaultTextColor}
           highlightColors={highlightColors}
           defaultHighlightColor={defaultHighlightColor}
+          onDefaultHighlightColorChange={onDefaultHighlightColorChange}
         />
       ) : null}
     </div>

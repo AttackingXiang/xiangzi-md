@@ -1,4 +1,14 @@
-import { ExternalLink, LoaderCircle, Trash2, X } from 'lucide-react'
+import {
+  Check,
+  ExternalLink,
+  LoaderCircle,
+  Monitor,
+  Moon,
+  Palette,
+  Sun,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { desktop } from '../../platform'
 import type { InstalledTheme } from '../../platform/contracts'
@@ -7,6 +17,91 @@ import { t } from '../../lib/i18n'
 import { THEME_GALLERY_URL } from '../../lib/themeMarketplace'
 import { useModalFocus } from '../../hooks/useModalFocus'
 import { SettingsPage, SettingsCard, SettingRow } from './primitives'
+
+type BuiltInTheme = {
+  value: AppSettings['theme']
+  labelZh: string
+  labelEn: string
+  descriptionZh: string
+  descriptionEn: string
+  colors: string[]
+  icon: typeof Monitor
+}
+
+const BUILT_IN_THEMES: BuiltInTheme[] = [
+  {
+    value: 'system',
+    labelZh: '跟随系统',
+    labelEn: 'System',
+    descriptionZh: '自动匹配系统外观',
+    descriptionEn: 'Matches your OS',
+    colors: ['#f8f5ed', '#2d2f34', '#6f8f72'],
+    icon: Monitor,
+  },
+  {
+    value: 'light',
+    labelZh: '浅色',
+    labelEn: 'Light',
+    descriptionZh: '清爽明亮',
+    descriptionEn: 'Clean and bright',
+    colors: ['#fbfaf7', '#ece7dc', '#577d86'],
+    icon: Sun,
+  },
+  {
+    value: 'dark',
+    labelZh: '深色',
+    labelEn: 'Dark',
+    descriptionZh: '低亮度写作',
+    descriptionEn: 'Low-light writing',
+    colors: ['#1e2026', '#2f3440', '#9ab3a6'],
+    icon: Moon,
+  },
+  {
+    value: 'warm',
+    labelZh: '暖色',
+    labelEn: 'Warm',
+    descriptionZh: '柔和纸感',
+    descriptionEn: 'Soft paper tone',
+    colors: ['#f7efe4', '#e3d0b8', '#a6634b'],
+    icon: Palette,
+  },
+  {
+    value: 'mint',
+    labelZh: '浅绿',
+    labelEn: 'Mint',
+    descriptionZh: '清淡护眼',
+    descriptionEn: 'Quiet and fresh',
+    colors: ['#f2f8f3', '#d8eadc', '#4f8c72'],
+    icon: Palette,
+  },
+  {
+    value: 'blue',
+    labelZh: '蓝调',
+    labelEn: 'Blue',
+    descriptionZh: '冷静专注',
+    descriptionEn: 'Calm focus',
+    colors: ['#f2f6fb', '#d8e4f0', '#507aa6'],
+    icon: Palette,
+  },
+  {
+    value: 'summer',
+    labelZh: '夏日',
+    labelEn: 'Summer',
+    descriptionZh: '轻快明亮',
+    descriptionEn: 'Light and vivid',
+    colors: ['#fff8dc', '#f4d37d', '#2f9c8f'],
+    icon: Sun,
+  },
+  {
+    value: 'sakura',
+    labelZh: '樱粉',
+    labelEn: 'Sakura',
+    descriptionZh: '温柔粉调',
+    descriptionEn: 'Gentle pink tone',
+    colors: ['#fff3f6', '#f2c6d3', '#b86c84'],
+    icon: Palette,
+  },
+]
 
 interface Props {
   settings: AppSettings
@@ -25,6 +120,7 @@ export default function AppearanceSection({
 }: Props): JSX.Element {
   const [installedThemes, setInstalledThemes] = useState<InstalledTheme[]>([])
   const [themesLoading, setThemesLoading] = useState(true)
+  const [themePickerOpen, setThemePickerOpen] = useState(false)
   const [themeManagerOpen, setThemeManagerOpen] = useState(false)
   const [removingThemeId, setRemovingThemeId] = useState<string | null>(null)
   const [themeActionError, setThemeActionError] = useState<string | null>(null)
@@ -73,6 +169,24 @@ export default function AppearanceSection({
     : settings.customCssPath
       ? 'local'
       : `builtin:${settings.theme}`
+  const selectedBuiltInTheme = BUILT_IN_THEMES.find((theme) => theme.value === settings.theme)
+  const selectedThemeName =
+    installedTheme?.name ??
+    (settings.customCssPath
+      ? en
+        ? 'Local custom CSS'
+        : '本地自定义 CSS'
+      : BUILT_IN_THEMES.find((theme) => theme.value === settings.theme)?.[
+          en ? 'labelEn' : 'labelZh'
+        ]) ??
+    (en ? 'Custom CSS' : '自定义 CSS')
+  const currentThemeColors = installedTheme
+    ? installedTheme.colorScheme === 'dark'
+      ? ['#20242b', '#353b45', '#aeb8c8']
+      : ['#fbfaf8', '#ebe7de', '#8a8f75']
+    : settings.customCssPath
+      ? ['#f8f5ed', '#d7cec0', '#4f6f73']
+      : (selectedBuiltInTheme?.colors ?? BUILT_IN_THEMES[0].colors)
 
   const removeInstalledTheme = async (theme: InstalledTheme): Promise<void> => {
     if (removingThemeId) return
@@ -103,8 +217,8 @@ export default function AppearanceSection({
       <SettingsCard title={en ? 'Interface' : '界面'}>
         <p className="appearance-group-description">
           {en
-            ? 'Choose the language used across Xiangzi MD.'
-            : '设置 Xiangzi MD 整体界面的显示语言。'}
+            ? 'Choose the language and how much horizontal room the editor uses.'
+            : '设置界面语言，以及编辑区域使用的横向空间。'}
         </p>
         <SettingRow label={t('界面语言')}>
           <select
@@ -117,94 +231,6 @@ export default function AppearanceSection({
             <option value="en">English</option>
           </select>
         </SettingRow>
-      </SettingsCard>
-
-      <SettingsCard title={en ? 'Themes' : '主题'}>
-        <p className="appearance-group-description">
-          {en
-            ? 'Choose a theme and manage themes installed from the gallery.'
-            : '选择当前主题，并管理从主题库安装到本机的主题。'}
-        </p>
-        <SettingRow label={t('主题')}>
-          <select
-            id="settings-theme-select"
-            className="settings-theme-select"
-            value={themeValue}
-            onChange={(event) => {
-              setThemeActionError(null)
-              const value = event.target.value
-              if (value.startsWith('builtin:')) {
-                onChange({
-                  theme: value.slice('builtin:'.length) as AppSettings['theme'],
-                  customCssPath: '',
-                })
-                return
-              }
-              if (value.startsWith('installed:')) {
-                const selected = installedThemes.find(
-                  (theme) => theme.id === value.slice('installed:'.length),
-                )
-                if (selected) {
-                  onChange({ theme: selected.colorScheme, customCssPath: selected.cssPath })
-                }
-              }
-            }}
-          >
-            <optgroup label={en ? 'Built-in themes' : '内置主题'}>
-              <option value="builtin:system">{t('跟随系统')}</option>
-              <option value="builtin:light">{t('浅色')}</option>
-              <option value="builtin:dark">{t('深色')}</option>
-              <option value="builtin:warm">{t('暖色')}</option>
-              <option value="builtin:mint">{t('浅绿')}</option>
-              <option value="builtin:blue">{t('蓝调')}</option>
-              <option value="builtin:summer">{t('夏日')}</option>
-              <option value="builtin:sakura">{t('樱粉')}</option>
-            </optgroup>
-            {installedThemes.length > 0 && (
-              <optgroup label={en ? 'Installed themes' : '已安装主题'}>
-                {installedThemes.map((theme) => (
-                  <option key={theme.id} value={`installed:${theme.id}`}>
-                    {theme.name} · {theme.version}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {settings.customCssPath && !installedTheme && (
-              <option value="local">{en ? 'Local custom CSS' : '本地自定义 CSS'}</option>
-            )}
-          </select>
-        </SettingRow>
-        <div className="settings-row settings-theme-gallery-row">
-          <span className="settings-label">{en ? 'Theme gallery' : '更多主题'}</span>
-          <button
-            type="button"
-            className="secondary-btn settings-more-themes"
-            onClick={() => void desktop.openExternal(THEME_GALLERY_URL)}
-          >
-            <ExternalLink size={14} aria-hidden="true" />
-            {en ? 'Browse themes' : '浏览主题库'}
-          </button>
-        </div>
-        <div className="settings-row settings-local-themes-row">
-          <span className="settings-label">{en ? 'Local themes' : '本地主题'}</span>
-          <button
-            type="button"
-            className="secondary-btn settings-manage-themes"
-            onClick={() => setThemeManagerOpen(true)}
-          >
-            <Trash2 size={14} aria-hidden="true" />
-            {en ? 'Uninstall themes' : '卸载主题'}
-            {!themesLoading && installedThemes.length > 0 && ` (${installedThemes.length})`}
-          </button>
-        </div>
-      </SettingsCard>
-
-      <SettingsCard title={en ? 'Reading details' : '阅读细节'}>
-        <p className="appearance-group-description">
-          {en
-            ? 'Fine-tune the editor canvas and content surfaces.'
-            : '微调编辑区域宽度与内容表面的显示效果。'}
-        </p>
         <SettingRow label={t('编辑区宽度')}>
           <select
             value={settings.editorWidth}
@@ -217,6 +243,160 @@ export default function AppearanceSection({
             <option value="full">{t('全宽')}</option>
           </select>
         </SettingRow>
+      </SettingsCard>
+
+      <SettingsCard title={en ? 'Themes' : '主题'}>
+        <p className="appearance-group-description">
+          {en
+            ? 'Pick the workspace color system, then fine-tune surfaces and code blocks.'
+            : '选择工作区的配色系统，并微调主题底色与代码块表面。'}
+        </p>
+        <div className="theme-current-panel">
+          <div className="theme-current-summary">
+            <span className="theme-choice-swatch" aria-hidden="true">
+              {currentThemeColors.map((color) => (
+                <span key={color} style={{ backgroundColor: color }} />
+              ))}
+            </span>
+            <span className="theme-choice-copy">
+              <strong>{selectedThemeName}</strong>
+              <small>{en ? 'Current theme' : '当前主题'}</small>
+            </span>
+          </div>
+          <button
+            type="button"
+            className="secondary-btn theme-current-change"
+            aria-expanded={themePickerOpen}
+            onClick={() => setThemePickerOpen((open) => !open)}
+          >
+            {themePickerOpen ? (en ? 'Done' : '完成') : en ? 'Change…' : '更换…'}
+          </button>
+        </div>
+        {themePickerOpen && (
+          <div className="theme-picker-panel">
+            <div className="theme-choice-grid" role="radiogroup" aria-label={en ? 'Theme' : '主题'}>
+              {BUILT_IN_THEMES.map((theme) => {
+                const Icon = theme.icon
+                const active = themeValue === `builtin:${theme.value}`
+                return (
+                  <button
+                    key={theme.value}
+                    type="button"
+                    className={`theme-choice-card${active ? ' is-active' : ''}`}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => {
+                      setThemeActionError(null)
+                      onChange({ theme: theme.value, customCssPath: '' })
+                      setThemePickerOpen(false)
+                    }}
+                  >
+                    <span className="theme-choice-swatch" aria-hidden="true">
+                      {theme.colors.map((color) => (
+                        <span key={color} style={{ backgroundColor: color }} />
+                      ))}
+                    </span>
+                    <span className="theme-choice-copy">
+                      <strong>
+                        <Icon size={14} aria-hidden="true" />
+                        {en ? theme.labelEn : theme.labelZh}
+                      </strong>
+                      <small>{en ? theme.descriptionEn : theme.descriptionZh}</small>
+                    </span>
+                    {active && (
+                      <Check size={14} className="theme-choice-check" aria-hidden="true" />
+                    )}
+                  </button>
+                )
+              })}
+              {installedThemes.map((theme) => {
+                const active = themeValue === `installed:${theme.id}`
+                const colors =
+                  theme.colorScheme === 'dark'
+                    ? ['#20242b', '#353b45', '#aeb8c8']
+                    : ['#fbfaf8', '#ebe7de', '#8a8f75']
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    className={`theme-choice-card theme-choice-card-installed${active ? ' is-active' : ''}`}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => {
+                      setThemeActionError(null)
+                      onChange({ theme: theme.colorScheme, customCssPath: theme.cssPath })
+                      setThemePickerOpen(false)
+                    }}
+                  >
+                    <span className="theme-choice-swatch" aria-hidden="true">
+                      {colors.map((color) => (
+                        <span key={color} style={{ backgroundColor: color }} />
+                      ))}
+                    </span>
+                    <span className="theme-choice-copy">
+                      <strong>
+                        <Palette size={14} aria-hidden="true" />
+                        {theme.name}
+                      </strong>
+                      <small>
+                        {theme.author} · {theme.version}
+                      </small>
+                    </span>
+                    {active && (
+                      <Check size={14} className="theme-choice-check" aria-hidden="true" />
+                    )}
+                  </button>
+                )
+              })}
+              {settings.customCssPath && !installedTheme && (
+                <button
+                  type="button"
+                  className="theme-choice-card is-active"
+                  role="radio"
+                  aria-checked="true"
+                  onClick={() => setThemePickerOpen(false)}
+                >
+                  <span className="theme-choice-swatch" aria-hidden="true">
+                    <span style={{ backgroundColor: '#f8f5ed' }} />
+                    <span style={{ backgroundColor: '#d7cec0' }} />
+                    <span style={{ backgroundColor: '#4f6f73' }} />
+                  </span>
+                  <span className="theme-choice-copy">
+                    <strong>
+                      <Palette size={14} aria-hidden="true" />
+                      {en ? 'Local custom CSS' : '本地自定义 CSS'}
+                    </strong>
+                    <small>{en ? 'Loaded from disk' : '从本机文件加载'}</small>
+                  </span>
+                  <Check size={14} className="theme-choice-check" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <div className="settings-row settings-theme-gallery-row">
+              <span className="settings-label">{en ? 'Theme gallery' : '更多主题'}</span>
+              <button
+                type="button"
+                className="secondary-btn settings-more-themes"
+                onClick={() => void desktop.openExternal(THEME_GALLERY_URL)}
+              >
+                <ExternalLink size={14} aria-hidden="true" />
+                {en ? 'Browse themes' : '浏览主题库'}
+              </button>
+            </div>
+            <div className="settings-row settings-local-themes-row">
+              <span className="settings-label">{en ? 'Local themes' : '本地主题'}</span>
+              <button
+                type="button"
+                className="secondary-btn settings-manage-themes"
+                onClick={() => setThemeManagerOpen(true)}
+              >
+                <Trash2 size={14} aria-hidden="true" />
+                {en ? 'Uninstall themes' : '卸载主题'}
+                {!themesLoading && installedThemes.length > 0 && ` (${installedThemes.length})`}
+              </button>
+            </div>
+          </div>
+        )}
         <SettingRow label={t('主题深浅')}>
           <span className="settings-range-control">
             <input
@@ -256,6 +436,52 @@ export default function AppearanceSection({
             <small>{settings.codeBlockOpacity}%</small>
           </span>
         </SettingRow>
+        <select
+          id="settings-theme-select"
+          className="settings-theme-select"
+          value={themeValue}
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={(event) => {
+            setThemeActionError(null)
+            const value = event.target.value
+            if (value.startsWith('builtin:')) {
+              onChange({
+                theme: value.slice('builtin:'.length) as AppSettings['theme'],
+                customCssPath: '',
+              })
+              return
+            }
+            if (value.startsWith('installed:')) {
+              const selected = installedThemes.find(
+                (theme) => theme.id === value.slice('installed:'.length),
+              )
+              if (selected) {
+                onChange({ theme: selected.colorScheme, customCssPath: selected.cssPath })
+              }
+            }
+          }}
+        >
+          <optgroup label={en ? 'Built-in themes' : '内置主题'}>
+            {BUILT_IN_THEMES.map((theme) => (
+              <option key={theme.value} value={`builtin:${theme.value}`}>
+                {en ? theme.labelEn : theme.labelZh}
+              </option>
+            ))}
+          </optgroup>
+          {installedThemes.length > 0 && (
+            <optgroup label={en ? 'Installed themes' : '已安装主题'}>
+              {installedThemes.map((theme) => (
+                <option key={theme.id} value={`installed:${theme.id}`}>
+                  {theme.name} · {theme.version}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {settings.customCssPath && !installedTheme && (
+            <option value="local">{en ? 'Local custom CSS' : '本地自定义 CSS'}</option>
+          )}
+        </select>
       </SettingsCard>
 
       <SettingsCard title={en ? 'Background & custom styling' : '背景与自定义'}>

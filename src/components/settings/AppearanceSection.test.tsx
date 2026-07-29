@@ -69,7 +69,16 @@ describe('AppearanceSection theme actions', () => {
       Array.from(host.querySelectorAll('.settings-card > h3')).map((heading) =>
         heading.textContent?.trim(),
       ),
-    ).toEqual(['界面', '主题', '阅读细节', '背景与自定义'])
+    ).toEqual(['界面', '主题', '背景与自定义'])
+
+    expect(host.querySelector('.theme-current-panel')).not.toBeNull()
+    expect(host.querySelector('.theme-choice-grid')).toBeNull()
+    expect(host.textContent).toContain('编辑区宽度')
+    expect(host.textContent).toContain('主题深浅')
+    expect(host.textContent).toContain('代码块不透明度')
+
+    act(() => host.querySelector<HTMLButtonElement>('.theme-current-change')?.click())
+    expect(host.querySelector('.theme-choice-grid')).not.toBeNull()
 
     const row = host.querySelector('.settings-theme-gallery-row')
     const moreThemes = host.querySelector<HTMLButtonElement>('.settings-more-themes')
@@ -97,6 +106,7 @@ describe('AppearanceSection theme actions', () => {
     const onChange = vi.fn()
     await render(installedTheme.cssPath, onChange)
 
+    act(() => host.querySelector<HTMLButtonElement>('.theme-current-change')?.click())
     act(() => host.querySelector<HTMLButtonElement>('.settings-manage-themes')?.click())
     const dialog = host.querySelector('[role="dialog"]')
     expect(dialog?.textContent).toContain('Morandi')
@@ -117,6 +127,7 @@ describe('AppearanceSection theme actions', () => {
     desktop.listInstalledThemes.mockResolvedValue([installedTheme])
     await render()
 
+    act(() => host.querySelector<HTMLButtonElement>('.theme-current-change')?.click())
     const opener = host.querySelector<HTMLButtonElement>('.settings-manage-themes')
     act(() => {
       opener?.focus()

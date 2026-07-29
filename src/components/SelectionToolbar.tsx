@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bold, Code, Highlighter, Italic, Link, Palette, Strikethrough } from 'lucide-react'
 import { editorCmd } from '../lib/editorCommands'
 import { highlighterModeBridge } from '../lib/highlighterModeBridge'
 import TextColorPalette from './TextColorPalette'
 import HighlightColorPalette from './HighlightColorPalette'
+import type { HighlighterModeState } from '../lib/highlighterModeBridge'
 
 export interface SelectionToolbarAnchor {
   left: number
@@ -18,6 +19,7 @@ interface Props {
   defaultTextColor?: string
   highlightColors?: readonly string[]
   defaultHighlightColor?: string
+  onDefaultHighlightColorChange?: (color: string) => void
 }
 
 export default function SelectionToolbar({
@@ -27,10 +29,17 @@ export default function SelectionToolbar({
   defaultTextColor,
   highlightColors,
   defaultHighlightColor,
+  onDefaultHighlightColorChange,
 }: Props): JSX.Element {
   const [showColors, setShowColors] = useState(false)
   const [showHighlightColors, setShowHighlightColors] = useState(false)
+  const [highlighterMode, setHighlighterMode] = useState<HighlighterModeState>(
+    highlighterModeBridge.getState(),
+  )
   const label = (zh: string, en: string): string => (lang === 'en' ? en : zh)
+
+  useEffect(() => highlighterModeBridge.subscribe(setHighlighterMode), [])
+
   const actions = [
     { label: label('加粗', 'Bold'), icon: <Bold size={14} />, run: editorCmd.bold },
     { label: label('斜体', 'Italic'), icon: <Italic size={14} />, run: editorCmd.italic },
@@ -96,26 +105,34 @@ export default function SelectionToolbar({
       )}
       <button
         type="button"
-        className={`selection-toolbar-btn${showHighlightColors ? ' is-active' : ''}`}
+        className={`selection-toolbar-btn${highlighterMode.active ? ' is-active' : ''}`}
         title={label('荧光笔', 'Highlighter')}
         aria-label={label('荧光笔', 'Highlighter')}
         aria-expanded={showHighlightColors}
         onClick={() => {
           setShowColors(false)
-          setShowHighlightColors((visible) => !visible)
+          if (highlighterMode.active) {
+            setShowHighlightColors((visible) => !visible)
+          } else {
+            const color = highlighterMode.color || defaultHighlightColor || '#fde047'
+            highlighterModeBridge.selectColor(color)
+            onDefaultHighlightColorChange?.(color)
+            setShowHighlightColors(false)
+          }
         }}
       >
-        <Highlighter size={14} />
+        <Highlighter size={14} color={highlighterMode.active ? highlighterMode.color : undefined} />
       </button>
-      {showHighlightColors && (
+      {showHighlightColors && highlighterMode.active && (
         <div className="selection-color-popover">
           <HighlightColorPalette
             lang={lang}
             colors={highlightColors}
-            defaultColor={defaultHighlightColor}
+            defaultColor={highlighterMode.color || defaultHighlightColor}
             onSelect={(color) => {
               if (color) {
                 highlighterModeBridge.selectColor(color)
+                onDefaultHighlightColorChange?.(color)
               } else {
                 highlighterModeBridge.deactivate()
               }

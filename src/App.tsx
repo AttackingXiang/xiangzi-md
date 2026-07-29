@@ -118,6 +118,22 @@ export default function App(): JSX.Element {
     if (selectionToolbarEnabled === undefined) return
     void saveSettings({ showSelectionToolbar: !selectionToolbarEnabled })
   }, [saveSettings, selectionToolbarEnabled])
+  const saveDefaultHighlightColor = useCallback(
+    (defaultHighlightColor: string): void => {
+      if (settings?.defaultHighlightColor === defaultHighlightColor) return
+      void saveSettings({ defaultHighlightColor }).catch((error: unknown) => {
+        const readOnly =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === ErrorCode.SETTINGS_READ_ONLY
+        void desktop.notify(
+          readOnly ? t('这些设置来自更高版本，当前以只读模式运行。') : t('设置保存失败。'),
+        )
+      })
+    },
+    [saveSettings, settings?.defaultHighlightColor],
+  )
 
   // ── Unsaved changes confirmation ─────────────────────────────────────────
   const closeRequestRef = useRef<{
@@ -1268,6 +1284,7 @@ export default function App(): JSX.Element {
                 defaultTextColor={settings.defaultTextColor}
                 highlightColors={settings.highlightColorPresets}
                 defaultHighlightColor={settings.defaultHighlightColor}
+                onDefaultHighlightColorChange={saveDefaultHighlightColor}
               />
             </Suspense>
           )}
@@ -1341,6 +1358,7 @@ export default function App(): JSX.Element {
                     defaultTextColor={settings.defaultTextColor}
                     highlightColors={settings.highlightColorPresets}
                     defaultHighlightColor={settings.defaultHighlightColor}
+                    onDefaultHighlightColorChange={saveDefaultHighlightColor}
                     resolveImageSrc={resolveEditorImageSrc}
                     allowRemoteImages={settings.allowRemoteImages ?? false}
                     codeBlockLineWrapping={settings.codeBlockLineWrapping ?? false}
