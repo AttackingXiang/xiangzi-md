@@ -17,7 +17,7 @@ export interface MermaidPreviewOptions {
   viewportMargin?: number
   errorLabel?: string
   cacheSize?: number
-  /** Re-render without foreignObject for reliable PNG clipboard conversion. */
+  /** Optional dedicated renderer for PNG clipboard conversion. */
   renderForCopy?: MermaidRenderer
   /**
    * Overrides the module-level default cache `markdownMermaidPreview` reuses

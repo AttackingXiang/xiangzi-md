@@ -13,11 +13,10 @@ interface MermaidRenderJob<T> {
 }
 
 /**
- * Mermaid keeps its configuration in a module-global singleton. Preview rendering uses
- * HTML labels, while clipboard/export rendering deliberately disables them. Running those
- * two modes at the same time lets one initialize() call change the other render halfway
- * through. This scheduler keeps different configurations exclusive, but still lets a batch
- * of same-mode diagrams render concurrently so documents with many diagrams stay responsive.
+ * Mermaid keeps its configuration in a module-global singleton. A theme/configuration change
+ * during another render can alter that render halfway through. This scheduler keeps different
+ * configurations exclusive, but still lets a batch of same-mode diagrams render concurrently
+ * so documents with many diagrams stay responsive.
  */
 export class MermaidRenderScheduler {
   private activeKey: string | null = null
@@ -105,8 +104,9 @@ function mermaidThemeVariables(): Record<string, string> {
 }
 
 /**
- * htmlLabels=false 用于导出/复制成图：屏幕预览用 foreignObject 排版更好，但
- * WebKit 把含 foreignObject 的 SVG 画上 canvas 会污染画布，无法转 PNG。
+ * Mermaid 的所有渲染统一使用 htmlLabels=false。HTML foreignObject 标签在长
+ * token + 显式换行组合下会把 72px 内容错误测量成 48px，直接裁掉最后一行；
+ * WebKit 把含 foreignObject 的 SVG 画上 canvas 时也可能污染画布。
  * mermaid 的配置是全局的（%%{init}%% 指令对 htmlLabels 实测不生效），因此
  * 这里按「配色+标签模式」记忆当前配置，模式变化时重新 initialize。
  */
@@ -151,13 +151,12 @@ async function renderMermaidMarkup(
 /**
  * 以「可栅格化」配置（htmlLabels:false，纯 <text> 标签、无 foreignObject）
  * 重新渲染 mermaid 源码，返回 SVG 字符串，专供复制/导出成图片。
- * 不影响屏幕预览：下一次预览渲染会按需切回 htmlLabels:true。
  */
 export async function renderMermaidForExport(content: string): Promise<string> {
   return renderMermaidMarkup(content, false, 'mmdx-')
 }
 
-/** Render an interactive screen preview using Mermaid's HTML label mode. */
+/** Render the interactive preview with the same pure-SVG labels used by export. */
 export async function renderMermaidForPreview(content: string): Promise<string> {
-  return renderMermaidMarkup(content, true, 'mmd-screen-')
+  return renderMermaidMarkup(content, false, 'mmd-screen-')
 }

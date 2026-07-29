@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { openNewDocument } from './helpers'
 
-test('raster export preserves a tall Mermaid diagram across tiled capture', async ({ page }) => {
+test('workspace and raster export preserve a tall Mermaid diagram', async ({ page }) => {
   await openNewDocument(page)
   const leadingText = Array.from({ length: 12 }, (_, index) => `导出前置段落 ${index + 1}`).join(
     '\n\n',
@@ -36,7 +36,18 @@ ${mermaidSource}
     '.xmd-cm-mermaid-preview:not(.is-loading) .xmd-cm-mermaid-content > svg',
   )
   await expect(previewSvg).toBeVisible()
-  await expect(previewSvg.locator('foreignObject')).not.toHaveCount(0)
+  await expect(previewSvg.locator('foreignObject')).toHaveCount(0)
+  const screenLabel = await previewSvg.evaluate((svg) => {
+    const node = Array.from(svg.querySelectorAll<SVGGElement>('g.node')).find((candidate) =>
+      candidate.textContent?.includes('mapToolResultToToolResultBlockParam'),
+    )
+    return {
+      nodeText: node?.textContent ?? '',
+      rows: node?.querySelectorAll('.text-outer-tspan').length ?? 0,
+    }
+  })
+  expect(screenLabel.nodeText).toContain('序列化为 API 格式')
+  expect(screenLabel.rows).toBe(3)
 
   const exported = await page.evaluate(async (sourceText) => {
     const modulePath = '/src/features/export/editorDomExport.ts'
@@ -166,11 +177,11 @@ ${mermaidSource}
     }
   }, mermaidSource)
 
-  expect(exported.htmlForeignObjects).toBeGreaterThan(0)
+  expect(exported.htmlForeignObjects).toBe(0)
   expect(exported.pureForeignObjects).toBe(0)
   expect(exported.pureLabelText).toContain('mapToolResultToToolResultBlockParam')
   expect(exported.pureLabelText).toContain('序列化为 API 格式')
-  expect(exported.rasterForeignObjects).toBeGreaterThan(0)
+  expect(exported.rasterForeignObjects).toBe(0)
   expect(exported.rasterInlineSvgs).toBe(1)
   expect(exported.labelText).toContain('mapToolResultToToolResult')
   expect(exported.labelText).toContain('BlockParam')
