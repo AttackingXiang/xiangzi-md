@@ -51,3 +51,7 @@ vitest.config.d.ts
 # Internal engineering notes (migration plans, QA logs, size baselines) — kept
 # locally for reference but not meant for the public repo alongside user docs.
 /docs/internal/
+
+# Draft for an unrelated product concept, kept locally for reference only —
+# not part of Xiangzi MD and must never be committed to this repo.
+/docs/AI_PROJECT_MEMORY_PRODUCT_CONCEPT.md
