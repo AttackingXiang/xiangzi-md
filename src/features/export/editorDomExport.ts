@@ -3,8 +3,10 @@ import { EditorView } from '@codemirror/view'
 import { createCm6Editor } from '../cm6-editor/controller'
 import { cm6ExportMode } from '../cm6-editor/core/exportMode'
 import { markdownEditorExportBridge } from '../cm6-editor/exportBridge'
+import { mermaidSourceForBlock } from '../cm6-editor/mermaidPreview'
 import type { RasterImageSource } from '../../platform/contracts'
 import type { ExportImageFormat } from '../../lib/exportFormat'
+import { renderMermaidForExport } from '../../lib/mermaidPreview'
 
 const CAPTURE_VIEWPORT_HEIGHT = 2_048
 const ASSET_SETTLE_TIMEOUT_MS = 15_000
@@ -26,6 +28,7 @@ export function exportRasterViewportHeight(webViewHeight: number): number {
 interface EditorDomExportSession {
   root: HTMLElement
   view: EditorView
+  requiresFullRasterDom: boolean
   destroy(): void
 }
 
@@ -36,6 +39,12 @@ interface EditorDomExportSessionOptions {
 interface RasterBlockBounds {
   top: number
   bottom: number
+}
+
+interface RasterBlockSnapshot {
+  canvas: HTMLCanvasElement
+  left: number
+  top: number
 }
 
 interface PrintableEditorView extends EditorView {
@@ -126,6 +135,13 @@ async function settleViewport(
       (image) => !image.complete,
     )
     const pendingMermaid = Boolean(session.root.querySelector('.xmd-cm-mermaid-preview.is-loading'))
+    if (
+      visibleUnsplittableBlocks(session).some(
+        ({ top, bottom }) => bottom - top > session.root.clientHeight,
+      )
+    ) {
+      session.requiresFullRasterDom = true
+    }
     stableFrames = signature === previous ? stableFrames + 1 : 0
     previous = signature
     if (stableFrames >= 2 && !pendingImage && !pendingMermaid) return
@@ -268,6 +284,36 @@ async function stabilizeRasterDocument(
   return rasterDocumentHeight(session.view)
 }
 
+async function materializeFullRasterDocument(
+  session: EditorDomExportSession,
+  signal?: AbortSignal,
+): Promise<number> {
+  const printable = session.view as unknown as PrintableEditorView
+  printable.viewState.printing = true
+  let height = documentHeight(session.view)
+  let previousHeight = -1
+
+  for (let attempt = 0; attempt < WARM_PASSES; attempt += 1) {
+    throwIfAborted(signal)
+    session.root.style.height = `${height}px`
+    session.view.scrollDOM.scrollTop = 0
+    printable.measure()
+    await settleViewport(session, ASSET_SETTLE_TIMEOUT_MS, signal)
+    const measured = documentHeight(session.view)
+    if (measured === previousHeight) {
+      height = measured
+      break
+    }
+    previousHeight = height = measured
+  }
+
+  session.root.style.height = `${height}px`
+  session.view.scrollDOM.scrollTop = 0
+  printable.measure()
+  await settleViewport(session, ASSET_SETTLE_TIMEOUT_MS, signal)
+  return documentHeight(session.view)
+}
+
 async function createEditorDomExportSession(
   options: EditorDomExportSessionOptions = {},
 ): Promise<EditorDomExportSession> {
@@ -317,6 +363,7 @@ async function createEditorDomExportSession(
     return {
       root,
       view: controller.view,
+      requiresFullRasterDom: false,
       destroy: () => {
         controller.destroy()
         root.remove()
@@ -336,12 +383,14 @@ function exportBackgroundColor(): string {
 async function captureViewport(
   session: EditorDomExportSession,
   backgroundColor: string,
+  top = 0,
+  height = session.root.clientHeight,
 ): Promise<HTMLCanvasElement> {
   const { default: html2canvas } = await import('html2canvas-pro')
   return html2canvas(session.root, {
     allowTaint: false,
     backgroundColor,
-    height: session.root.clientHeight,
+    height,
     imageSmoothing: true,
     imageSmoothingQuality: 'high',
     logging: false,
@@ -351,8 +400,9 @@ async function captureViewport(
     scrollY: 0,
     useCORS: true,
     width: session.root.clientWidth,
-    windowHeight: session.root.clientHeight,
+    windowHeight: Math.max(window.innerHeight, height),
     windowWidth: session.root.clientWidth,
+    y: top,
     onclone: (clonedDocument) => {
       const clonedScroller = clonedDocument.querySelector<HTMLElement>(
         '.xmd-export-renderer .cm-scroller',
@@ -362,9 +412,169 @@ async function captureViewport(
   })
 }
 
+function roundedRectPath(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2))
+  context.beginPath()
+  context.moveTo(x + r, y)
+  context.lineTo(x + width - r, y)
+  context.quadraticCurveTo(x + width, y, x + width, y + r)
+  context.lineTo(x + width, y + height - r)
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height)
+  context.lineTo(x + r, y + height)
+  context.quadraticCurveTo(x, y + height, x, y + height - r)
+  context.lineTo(x, y + r)
+  context.quadraticCurveTo(x, y, x + r, y)
+  context.closePath()
+}
+
+async function captureMermaidBlock(
+  element: HTMLElement,
+  source: string,
+): Promise<HTMLCanvasElement | null> {
+  // html2canvas serializes an inline SVG as one replaced image. When that SVG
+  // starts in an earlier tile, WebView engines may omit or clip it entirely.
+  // Rasterize a foreignObject-free Mermaid SVG once, then composite slices of
+  // this stable bitmap into every document tile below.
+  const displayedSvg = element.querySelector<SVGSVGElement>('.xmd-cm-mermaid-content > svg')
+  const preview = element.querySelector<HTMLElement>('.xmd-cm-mermaid-preview')
+  if (!displayedSvg || !preview) return null
+
+  const template = document.createElement('template')
+  template.innerHTML = await renderMermaidForExport(source)
+  const svg = template.content.querySelector('svg')
+  if (!svg) return null
+
+  const rect = element.getBoundingClientRect()
+  const previewRect = preview.getBoundingClientRect()
+  const svgRect = displayedSvg.getBoundingClientRect()
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.ceil(rect.width)
+  canvas.height = Math.ceil(rect.height)
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('无法创建 Mermaid 导出画布')
+
+  const previewStyle = getComputedStyle(preview)
+  roundedRectPath(
+    context,
+    previewRect.left - rect.left,
+    previewRect.top - rect.top,
+    previewRect.width,
+    previewRect.height,
+    Number.parseFloat(previewStyle.borderRadius) || 0,
+  )
+  context.fillStyle = previewStyle.backgroundColor
+  context.fill()
+  const borderWidth = Number.parseFloat(previewStyle.borderTopWidth) || 0
+  if (borderWidth > 0) {
+    context.strokeStyle = previewStyle.borderTopColor
+    context.lineWidth = borderWidth
+    context.stroke()
+  }
+
+  const serialized = svg.cloneNode(true) as SVGSVGElement
+  serialized.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  serialized.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+  serialized.setAttribute('width', String(svgRect.width))
+  serialized.setAttribute('height', String(svgRect.height))
+  serialized.style.width = `${svgRect.width}px`
+  serialized.style.height = `${svgRect.height}px`
+  serialized.style.maxWidth = 'none'
+  const image = new Image()
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    new XMLSerializer().serializeToString(serialized),
+  )}`
+  await image.decode()
+  context.drawImage(
+    image,
+    svgRect.left - rect.left,
+    svgRect.top - rect.top,
+    svgRect.width,
+    svgRect.height,
+  )
+  return canvas
+}
+
+async function captureOversizedBlocks(
+  session: EditorDomExportSession,
+  viewportHeight: number,
+): Promise<RasterBlockSnapshot[]> {
+  const { default: html2canvas } = await import('html2canvas-pro')
+  const rootRect = session.root.getBoundingClientRect()
+  const snapshots: RasterBlockSnapshot[] = []
+
+  for (const element of session.root.querySelectorAll<HTMLElement>(UNSPLITTABLE_BLOCK_SELECTOR)) {
+    const rect = element.getBoundingClientRect()
+    if (rect.height <= viewportHeight) continue
+    let canvas: HTMLCanvasElement | null = null
+    if (element.classList.contains('xmd-cm-mermaid-block')) {
+      const source = mermaidSourceForBlock(element)
+      if (source) canvas = await captureMermaidBlock(element, source)
+    }
+    canvas ??= await html2canvas(element, {
+      allowTaint: false,
+      backgroundColor: null,
+      height: Math.ceil(rect.height),
+      imageSmoothing: true,
+      imageSmoothingQuality: 'high',
+      logging: false,
+      removeContainer: true,
+      scale: 1,
+      scrollX: 0,
+      scrollY: 0,
+      useCORS: true,
+      width: Math.ceil(rect.width),
+      windowHeight: Math.max(window.innerHeight, Math.ceil(rect.height)),
+      windowWidth: Math.max(window.innerWidth, Math.ceil(rect.width)),
+    })
+    snapshots.push({
+      canvas,
+      left: Math.round(rect.left - rootRect.left),
+      top: Math.round(rect.top - rootRect.top),
+    })
+    element.style.visibility = 'hidden'
+  }
+
+  return snapshots
+}
+
+function drawBlockSnapshots(
+  context: CanvasRenderingContext2D,
+  snapshots: readonly RasterBlockSnapshot[],
+  outputTop: number,
+  rows: number,
+): void {
+  const outputBottom = outputTop + rows
+  for (const { canvas, left, top } of snapshots) {
+    const bottom = top + canvas.height
+    if (bottom <= outputTop || top >= outputBottom) continue
+    const sourceTop = Math.max(0, outputTop - top)
+    const destinationTop = Math.max(0, top - outputTop)
+    const height = Math.min(canvas.height - sourceTop, rows - destinationTop)
+    context.drawImage(
+      canvas,
+      0,
+      sourceTop,
+      canvas.width,
+      height,
+      left,
+      destinationTop,
+      canvas.width,
+      height,
+    )
+  }
+}
+
 /**
- * Creates a lazy RGBA stream. Only one CM6 viewport and one canvas tile exist
- * at a time; the desktop adapter writes the yielded rows to the native encoder.
+ * Creates a lazy RGBA stream. Ordinary documents keep one CM6 viewport in
+ * memory. A rendered block taller than that viewport switches to CM6's print
+ * DOM so its stable snapshot can be composited across multiple canvas tiles.
  */
 export async function createEditorRasterImage(
   _format: ExportImageFormat,
@@ -381,13 +591,37 @@ export async function createEditorRasterImage(
       session.view.requestMeasure()
     }
     const width = Math.max(1, session.root.clientWidth)
-    const stableHeight = await stabilizeRasterDocument(session, viewportHeight, signal)
+    let stableHeight = await stabilizeRasterDocument(session, viewportHeight, signal)
+    const useFullRasterDom = session.requiresFullRasterDom
+    if (useFullRasterDom) stableHeight = await materializeFullRasterDocument(session, signal)
     const backgroundColor = exportBackgroundColor()
+    const blockSnapshots = useFullRasterDom
+      ? await captureOversizedBlocks(session, viewportHeight)
+      : []
 
     return {
       width,
       height: stableHeight,
       async *chunks() {
+        if (useFullRasterDom) {
+          for (let outputTop = 0; outputTop < stableHeight; outputTop += viewportHeight) {
+            throwIfAborted(signal)
+            const rows = Math.min(viewportHeight, stableHeight - outputTop)
+            const canvas = await captureViewport(session, backgroundColor, outputTop, rows)
+            try {
+              const context = canvas.getContext('2d', { willReadFrequently: true })
+              if (!context) throw new Error('无法读取导出图片分片')
+              context.setTransform(1, 0, 0, 1, 0, 0)
+              drawBlockSnapshots(context, blockSnapshots, outputTop, rows)
+              yield new Uint8Array(context.getImageData(0, 0, width, rows).data)
+            } finally {
+              canvas.width = 1
+              canvas.height = 1
+            }
+          }
+          return
+        }
+
         let outputTop = 0
         let preferExactTop = false
         while (outputTop < stableHeight) {
@@ -432,7 +666,13 @@ export async function createEditorRasterImage(
           }
         }
       },
-      dispose: () => session.destroy(),
+      dispose: () => {
+        for (const snapshot of blockSnapshots) {
+          snapshot.canvas.width = 1
+          snapshot.canvas.height = 1
+        }
+        session.destroy()
+      },
     }
   } catch (error) {
     session.destroy()

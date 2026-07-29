@@ -38,6 +38,12 @@ interface MermaidSourceRange {
   to: number
 }
 
+const mermaidBlockSources = new WeakMap<Element, string>()
+
+export function mermaidSourceForBlock(element: Element): string | undefined {
+  return mermaidBlockSources.get(element)
+}
+
 export const setMermaidSourceRange = StateEffect.define<MermaidSourceRange | null>({
   map(value, mapping) {
     return value && { from: mapping.mapPos(value.from), to: mapping.mapPos(value.to) }
@@ -277,6 +283,7 @@ export class MermaidWidget extends WidgetType {
   toDOM(view: EditorView): HTMLElement {
     const block = document.createElement('div')
     block.className = 'xmd-cm-mermaid-block'
+    mermaidBlockSources.set(block, this.block.source)
     const container = document.createElement('div')
     container.className = 'xmd-cm-mermaid-preview is-loading'
     const content = document.createElement('div')
