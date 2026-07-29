@@ -14,6 +14,7 @@ import {
 } from '@codemirror/view'
 import { contextMenuSelection } from './contextMenuSelection'
 import { richMarkdownPaste } from './richPaste'
+import { activeInlineSearchMatchHighlight } from './searchMatchHighlight'
 import { selectionCoordinator } from './selection/selectionCoordinator'
 import { cm6ToolbarState } from './toolbarState'
 
@@ -56,6 +57,7 @@ export function createBaseExtensions(): Extension[] {
     markdown({ base: markdownLanguage, extensions: GFM, codeLanguages: languages }),
     history(),
     search({ top: true }),
+    activeInlineSearchMatchHighlight(),
     drawSelection(),
     dropCursor(),
     bracketMatching(),

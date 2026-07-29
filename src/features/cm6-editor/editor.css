@@ -116,6 +116,16 @@
   background-color: var(--xmd-document-selection-bg) !important;
 }
 
+/* The CM6 selection layer sits behind rendered inline surfaces. While the
+   find input owns focus, mirror only an exact inline-code search match into a
+   foreground mark so its active result remains visible. */
+.xmd-cm-editor .xmd-cm-active-search-match {
+  background: var(--xmd-document-selection-bg);
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .xmd-cm-editor .cm-activeLine {
   background: transparent;
 }
