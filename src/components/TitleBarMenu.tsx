@@ -5,6 +5,7 @@ import { t } from '../lib/i18n'
 import { displayShortcut, effectiveShortcut, type ShortcutAction } from '../lib/shortcuts'
 import { toggleWindowFullscreen } from '../lib/windowActions'
 import { desktop } from '../platform'
+import appIconUrl from '../../src-tauri/icons/icon.png'
 
 interface Props {
   shortcuts: Record<string, string>
@@ -183,13 +184,19 @@ export default function TitleBarMenu({
             if (el) buttonRefs.current[id] = el
             else delete buttonRefs.current[id]
           }}
-          className={`titlebar-menubar-button${open === id ? ' active' : ''}`}
+          className={`titlebar-menubar-button${id === 'app' ? ' titlebar-menubar-button-app' : ''}${open === id ? ' active' : ''}`}
+          aria-label={menus[id].label}
+          title={id === 'app' ? menus[id].label : undefined}
           onClick={() => (open === id ? setOpen(null) : showMenu(id))}
           onMouseEnter={() => {
             if (open && open !== id) showMenu(id)
           }}
         >
-          {menus[id].label}
+          {id === 'app' ? (
+            <img className="titlebar-app-icon" src={appIconUrl} alt="" draggable={false} />
+          ) : (
+            menus[id].label
+          )}
         </button>
       ))}
       {open && anchor && (

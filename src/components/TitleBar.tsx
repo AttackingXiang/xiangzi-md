@@ -30,6 +30,10 @@ export default function TitleBar({
   return (
     <header
       className={`titlebar ${isMac ? 'titlebar-mac' : 'titlebar-standard'}`}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
       onPointerDown={(event) => {
         if (
           event.button !== 0 ||
@@ -86,12 +90,8 @@ export default function TitleBar({
       )}
 
       <div className="titlebar-title">
-        <span className="titlebar-app-name">Xiangzi MD</span>
-        {documentName && (
+        {documentName ? (
           <>
-            <span className="titlebar-separator" aria-hidden="true">
-              /
-            </span>
             <span className="titlebar-document-name">{documentName}</span>
             {dirty && (
               <Circle
@@ -102,6 +102,8 @@ export default function TitleBar({
               />
             )}
           </>
+        ) : (
+          <span className="titlebar-app-name">Xiangzi MD</span>
         )}
       </div>
     </header>

@@ -35,10 +35,6 @@
   letter-spacing: -0.01em;
 }
 
-.titlebar-separator {
-  color: var(--workspace-divider-strong);
-}
-
 .titlebar-document-name {
   min-width: 0;
   overflow: hidden;
@@ -91,6 +87,21 @@
   transition:
     color 0.12s ease,
     background 0.12s ease;
+}
+
+.titlebar-menubar-button-app {
+  width: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.titlebar-app-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  border-radius: 4px;
 }
 
 .titlebar-menubar-button:hover,
