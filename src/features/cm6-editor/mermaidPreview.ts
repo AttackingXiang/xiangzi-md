@@ -5,8 +5,9 @@ import { hiddenRangeSource, type HiddenRange } from './core/hiddenRanges'
 import type { PreviewRange } from './livePreview'
 import { viewportDecorationExtension } from './viewportDecorations'
 import { copySvgMarkupAsImage } from '../../lib/richClipboard'
-import { checkIcon, codeIcon, copyIcon } from './widgetIcons'
+import { checkIcon, codeIcon, copyIcon, editDiagramIcon } from './widgetIcons'
 import { isExternalDocumentSync } from './sync'
+import type { FlowPosition } from '../visual-mermaid/flowchartModel'
 
 export type MermaidRenderer = (source: string) => Promise<string>
 
@@ -27,10 +28,85 @@ export interface MermaidPreviewOptions {
   cache?: MermaidRenderCache
 }
 
-interface MermaidBlock {
+export interface MermaidBlock {
   from: number
   to: number
   source: string
+}
+
+function supportsVisualFlowchart(source: string): boolean {
+  const declaration = source
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .find((line) => line.trim() && !line.trim().startsWith('%%'))
+  return Boolean(
+    declaration && /^(?:flowchart|graph)\s+(?:TB|TD|BT|LR|RL)\s*;?$/i.test(declaration.trim()),
+  )
+}
+
+function showVisualEditorError(message: string): void {
+  const notice = document.createElement('div')
+  notice.className = 'xmd-visual-flow-notice'
+  notice.setAttribute('role', 'alert')
+  notice.textContent = message
+  notice.title = '点击关闭'
+  const remove = (): void => notice.remove()
+  notice.addEventListener('click', remove, { once: true })
+  document.body.append(notice)
+  window.setTimeout(remove, 5_000)
+}
+
+/** Capture the currently rendered Mermaid node geometry before swapping to the interactive canvas. */
+export function readRenderedMermaidPositions(container: HTMLElement): Record<string, FlowPosition> {
+  const rendered = Array.from(container.querySelectorAll<SVGGElement>('svg g.node'), (element) => {
+    const transform = /^translate\(\s*([\d.+-]+)[,\s]+([\d.+-]+)\s*\)/.exec(
+      element.getAttribute('transform') ?? '',
+    )
+    const rect = element.getBoundingClientRect()
+    return {
+      id: element.dataset.id ?? /-flowchart-(.+)-\d+$/.exec(element.id)?.[1] ?? '',
+      x: transform ? Number(transform[1]) : rect.left,
+      y: transform ? Number(transform[2]) : rect.top,
+      visible: Boolean(transform) || (rect.width > 0 && rect.height > 0),
+    }
+  }).filter(({ id, x, y, visible }) => id && visible && Number.isFinite(x) && Number.isFinite(y))
+  if (rendered.length === 0) return {}
+
+  const minLeft = Math.min(...rendered.map(({ x }) => x))
+  const minTop = Math.min(...rendered.map(({ y }) => y))
+  return Object.fromEntries(
+    rendered.map(({ id, x, y }) => [
+      id,
+      {
+        x: Math.round(x - minLeft + 80),
+        y: Math.round(y - minTop + 70),
+      },
+    ]),
+  )
+}
+
+/** Replace only the body of the fence that was opened by the visual editor. */
+export function replaceMermaidBlockSource(
+  view: EditorView,
+  block: MermaidBlock,
+  nextSource: string,
+): void {
+  if (view.state.readOnly) throw new Error('当前文档是只读状态，无法保存流程图。')
+  const currentFence = view.state.sliceDoc(block.from, block.to)
+  const openingBreak = currentFence.indexOf('\n')
+  const closingFence = /\n[ \t]{0,3}(?:`{3,}|~{3,})[^\n]*(?:\n)?$/.exec(currentFence)
+  if (openingBreak < 0 || !closingFence || closingFence.index <= openingBreak) {
+    throw new Error('无法定位原 Mermaid 代码块，请关闭编辑器后重试。')
+  }
+  const bodyFrom = block.from + openingBreak + 1
+  const bodyTo = block.from + closingFence.index
+  const currentSource = view.state.sliceDoc(bodyFrom, bodyTo)
+  if (currentSource.trim() !== block.source.trim()) {
+    throw new Error('Mermaid 源码在编辑期间发生了变化，已取消覆盖。')
+  }
+  view.dispatch({
+    changes: { from: bodyFrom, to: bodyTo, insert: nextSource.trim() },
+  })
 }
 
 interface MermaidSourceRange {
@@ -310,6 +386,41 @@ export class MermaidWidget extends WidgetType {
       })
       view.focus()
     })
+    const visual = supportsVisualFlowchart(this.block.source)
+      ? document.createElement('button')
+      : null
+    if (visual) {
+      visual.type = 'button'
+      visual.className = 'xmd-cm-mermaid-visual-edit'
+      visual.append(editDiagramIcon())
+      visual.title = view.state.readOnly ? '当前文档为只读状态' : '可视化编辑流程图'
+      visual.setAttribute('aria-label', '可视化编辑 Mermaid 流程图')
+      visual.disabled = view.state.readOnly
+      visual.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (visual.disabled) return
+        visual.disabled = true
+        visual.title = '正在加载可视化编辑器…'
+        void import('../visual-mermaid/openVisualFlowchartEditor')
+          .then(({ openVisualFlowchartEditor }) => {
+            openVisualFlowchartEditor({
+              source: this.block.source,
+              renderedPositions: readRenderedMermaidPositions(content),
+              onSave: (nextSource) => replaceMermaidBlockSource(view, this.block, nextSource),
+            })
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error)
+            showVisualEditorError(message)
+          })
+          .finally(() => {
+            if (!visual.isConnected) return
+            visual.disabled = false
+            visual.title = '可视化编辑流程图'
+          })
+      })
+    }
     const copy = document.createElement('button')
     copy.type = 'button'
     copy.className = 'xmd-cm-preview-copy'
@@ -347,6 +458,7 @@ export class MermaidWidget extends WidgetType {
           }, 1_500)
         })
     })
+    if (visual) actions.append(visual)
     actions.append(source, copy)
     container.append(actions)
     block.append(container)
