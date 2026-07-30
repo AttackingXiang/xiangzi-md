@@ -5,13 +5,7 @@ import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { afterEach, describe, expect, it } from 'vitest'
 import { markdownCodeBlockPreview } from './codeBlockPreview'
-import {
-  MermaidRenderCache,
-  markdownMermaidPreview,
-  mermaidSourceRange,
-  readRenderedMermaidPositions,
-  replaceMermaidBlockSource,
-} from './mermaidPreview'
+import { MermaidRenderCache, markdownMermaidPreview, mermaidSourceRange } from './mermaidPreview'
 
 describe('Mermaid preview controls', () => {
   let view: EditorView | undefined
@@ -39,8 +33,6 @@ describe('Mermaid preview controls', () => {
     view.focus = () => undefined
     await new Promise((resolve) => window.setTimeout(resolve, 0))
 
-    expect(view.dom.querySelector('.xmd-cm-mermaid-visual-edit')).not.toBeNull()
-
     view.dom.querySelector<HTMLButtonElement>('.xmd-cm-mermaid-source-toggle')?.click()
     expect(view.state.field(mermaidSourceRange)).not.toBeNull()
     await new Promise((resolve) => window.setTimeout(resolve, 0))
@@ -60,57 +52,5 @@ describe('Mermaid preview controls', () => {
 
     expect(view.state.field(mermaidSourceRange)).toBeNull()
     expect(view.dom.querySelector('.xmd-cm-mermaid-preview')).not.toBeNull()
-  })
-
-  it('writes visual edits back into only the Mermaid fence body', () => {
-    const source = 'flowchart LR\nA[开始] --> B[结束]'
-    const document = `前文\n\n\`\`\`mermaid\n${source}\n\`\`\`\n\n后文`
-    const from = document.indexOf('```mermaid')
-    const to = document.indexOf('```', from + 3) + 3
-    view = new EditorView({
-      state: EditorState.create({ doc: document }),
-    })
-
-    replaceMermaidBlockSource(view, { from, to, source }, 'flowchart TD\nA[开始] --> C[完成]')
-
-    expect(view.state.doc.toString()).toBe(
-      '前文\n\n```mermaid\nflowchart TD\nA[开始] --> C[完成]\n```\n\n后文',
-    )
-  })
-
-  it('does not overwrite a Mermaid block that changed while the visual editor was open', () => {
-    const source = 'flowchart LR\nA --> B'
-    const document = `\`\`\`mermaid\n${source}\n\`\`\``
-    view = new EditorView({ state: EditorState.create({ doc: document }) })
-    view.dispatch({
-      changes: { from: document.indexOf('B'), to: document.indexOf('B') + 1, insert: 'C' },
-    })
-
-    expect(() =>
-      replaceMermaidBlockSource(
-        view as EditorView,
-        { from: 0, to: document.length, source },
-        'flowchart LR\nA --> D',
-      ),
-    ).toThrow('发生了变化')
-  })
-
-  it('captures the rendered Mermaid node layout for the visual editor', () => {
-    const container = document.createElement('div')
-    container.innerHTML = `
-      <svg>
-        <g class="node default" data-id="A" transform="translate(120, 80)"></g>
-        <g class="node default" id="mmd-screen-example-flowchart-B-1" transform="translate(360, 220)"></g>
-      </svg>
-    `
-    const [first, second] = Array.from(container.querySelectorAll<SVGGElement>('g.node'))
-    first.getBoundingClientRect = () => ({ left: 120, top: 80, width: 100, height: 50 }) as DOMRect
-    second.getBoundingClientRect = () =>
-      ({ left: 360, top: 220, width: 120, height: 60 }) as DOMRect
-
-    expect(readRenderedMermaidPositions(container)).toEqual({
-      A: { x: 80, y: 70 },
-      B: { x: 320, y: 210 },
-    })
   })
 })

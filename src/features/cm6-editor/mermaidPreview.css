@@ -42,7 +42,6 @@
 /* Icon-only square buttons: no border/background by default, a subtle hover fill —
    matches the code-block copy button instead of looking like bordered pill chips. */
 .xmd-cm-mermaid-actions .xmd-cm-preview-copy,
-.xmd-cm-mermaid-visual-edit,
 .xmd-cm-mermaid-source-toggle,
 .xmd-cm-mermaid-preview-toggle {
   align-items: center;
@@ -60,16 +59,10 @@
 }
 
 .xmd-cm-mermaid-actions .xmd-cm-preview-copy:hover,
-.xmd-cm-mermaid-visual-edit:hover,
 .xmd-cm-mermaid-source-toggle:hover,
 .xmd-cm-mermaid-preview-toggle:hover {
   background: var(--xmd-render-control-hover-bg);
   color: var(--xmd-render-control-hover-text);
-}
-
-.xmd-cm-mermaid-visual-edit:disabled {
-  cursor: wait;
-  opacity: 0.55;
 }
 
 .xmd-cm-mermaid-actions .xmd-cm-preview-copy[data-copy-state='success'] {
@@ -108,21 +101,4 @@
   font-size: 13px;
   justify-content: flex-start;
   white-space: pre-wrap;
-}
-
-.xmd-visual-flow-notice {
-  background: var(--bg-elevated, var(--bg));
-  border: 1px solid var(--xmd-status-danger);
-  border-radius: 8px;
-  bottom: 24px;
-  box-shadow: 0 10px 36px rgb(0 0 0 / 20%);
-  color: var(--xmd-status-danger);
-  cursor: pointer;
-  font-size: 13px;
-  left: 50%;
-  max-width: min(520px, calc(100vw - 32px));
-  padding: 10px 14px;
-  position: fixed;
-  transform: translateX(-50%);
-  z-index: 10020;
 }

@@ -77,16 +77,3 @@ export function copyIcon(size = 14): SVGSVGElement {
 export function checkIcon(size = 14): SVGSVGElement {
   return buildIcon([{ tag: 'path', d: 'M20 6 9 17l-5-5' }], size)
 }
-
-/** A compact node-and-edge diagram icon for Mermaid visual editing. */
-export function editDiagramIcon(size = 14): SVGSVGElement {
-  return buildIcon(
-    [
-      { tag: 'rect', x: '3', y: '3', width: '6', height: '6', rx: '1' },
-      { tag: 'rect', x: '15', y: '15', width: '6', height: '6', rx: '1' },
-      { tag: 'path', d: 'M9 6h3a3 3 0 0 1 3 3v6' },
-      { tag: 'path', d: 'm12 13 3 3 3-3' },
-    ],
-    size,
-  )
-}
