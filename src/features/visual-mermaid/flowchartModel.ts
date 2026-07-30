@@ -57,13 +57,34 @@ const EDGE_TOKENS: Array<{ token: string; style: FlowEdgeStyle }> = [
   { token: '---', style: 'line' },
 ]
 
+function unescapeQuoted(inner: string, quoteChar: string): string {
+  let result = ''
+  for (let index = 0; index < inner.length; index += 1) {
+    if (inner[index] === '\\' && index + 1 < inner.length) {
+      const next = inner[index + 1]
+      if (next === '\\' || next === quoteChar) {
+        result += next
+        index += 1
+        continue
+      }
+      if (next === 'n') {
+        result += '\n'
+        index += 1
+        continue
+      }
+    }
+    result += inner[index]
+  }
+  return result
+}
+
 function unquote(value: string): string {
   const trimmed = value.trim()
   if (trimmed.length >= 2) {
     const first = trimmed[0]
     const last = trimmed.at(-1)
     if ((first === '"' || first === "'") && last === first) {
-      return trimmed.slice(1, -1).split(`\\${first}`).join(first)
+      return unescapeQuoted(trimmed.slice(1, -1), first)
     }
   }
   return trimmed
@@ -121,7 +142,7 @@ function parseEdgeAt(
   if (source[index] === '|') {
     const closing = source.indexOf('|', index + 1)
     if (closing < 0) return null
-    label = unquote(source.slice(index + 1, closing))
+    label = unquote(source.slice(index + 1, closing)).split('&#124;').join('|')
     index = closing + 1
   }
   return { style: token.style, label, end: index }
@@ -238,7 +259,9 @@ export function parseFlowchart(source: string): FlowchartParseResult {
 }
 
 function safeLabel(label: string): string {
-  return JSON.stringify(label.trim() || '节点')
+  const trimmed = label.trim() || '节点'
+  const escaped = trimmed.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')
+  return `"${escaped}"`
 }
 
 function formatNode(node: FlowNodeModel): string {

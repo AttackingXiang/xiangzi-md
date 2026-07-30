@@ -55,6 +55,32 @@ A[One] --> B(Two)`)
     expect(serializeFlowchart(result.model)).toContain('A -->|继续| B')
   })
 
+  it('round-trips edge labels containing a pipe character', () => {
+    const result = parseFlowchart('flowchart TD\nA[Start] --> B(End)')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    result.model.edges[0].label = 'a|b'
+
+    const serialized = serializeFlowchart(result.model)
+    const reparsed = parseFlowchart(serialized)
+    expect(reparsed.ok).toBe(true)
+    if (!reparsed.ok) return
+    expect(reparsed.model.edges[0].label).toBe('a|b')
+  })
+
+  it('round-trips node labels containing backslashes and newlines', () => {
+    const result = parseFlowchart('flowchart TD\nA[Start] --> B(End)')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    result.model.nodes[0].label = 'C:\\path\nnext line'
+
+    const serialized = serializeFlowchart(result.model)
+    const reparsed = parseFlowchart(serialized)
+    expect(reparsed.ok).toBe(true)
+    if (!reparsed.ok) return
+    expect(reparsed.model.nodes[0].label).toBe('C:\\path\nnext line')
+  })
+
   it('rejects unsupported syntax instead of silently dropping it', () => {
     const result = parseFlowchart(`flowchart TD
       subgraph Group
