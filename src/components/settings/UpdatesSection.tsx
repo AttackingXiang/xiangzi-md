@@ -1,5 +1,6 @@
-import { RefreshCw, RotateCcw } from 'lucide-react'
+import { Download, RefreshCw, RotateCcw } from 'lucide-react'
 import { useEffect } from 'react'
+import { compareVersions } from '../../lib/versionComparison'
 import { desktop } from '../../platform'
 import type { UpdaterController } from '../../hooks/useUpdater'
 import { SettingsPage, SettingsCard, ToggleRow } from './primitives'
@@ -41,12 +42,30 @@ export default function UpdatesSection({
   const installing = releaseInstall.phase === 'checking' || releaseInstall.phase === 'downloading'
 
   const handleInstall = async (tag: string, version: string): Promise<void> => {
+    const comparison = compareVersions(version, appVersion)
+    const isUpgrade = comparison > 0
     const confirmed = await desktop.confirm(
-      en
-        ? `Install v${version}? Xiangzi MD will restart. Rolling back to an older version can occasionally be incompatible with settings or files a newer version has already written.`
-        : `确认安装 v${version}？Xiangzi MD 将重启。回退到旧版本时，偶尔可能与新版本已经写入的设置或文件不兼容。`,
-      en ? 'Install this version' : '安装该版本',
-      en ? 'Install and restart' : '安装并重启',
+      isUpgrade
+        ? en
+          ? `Update to v${version}? Xiangzi MD will restart.`
+          : `确认更新到 v${version}？Xiangzi MD 将重启。`
+        : en
+          ? `Install v${version}? Xiangzi MD will restart. Rolling back to an older version can occasionally be incompatible with settings or files a newer version has already written.`
+          : `确认安装 v${version}？Xiangzi MD 将重启。回退到旧版本时，偶尔可能与新版本已经写入的设置或文件不兼容。`,
+      isUpgrade
+        ? en
+          ? 'Update Xiangzi MD'
+          : '更新 Xiangzi MD'
+        : en
+          ? 'Install this version'
+          : '安装该版本',
+      isUpgrade
+        ? en
+          ? 'Update and restart'
+          : '更新并重启'
+        : en
+          ? 'Install and restart'
+          : '安装并重启',
       en ? 'Cancel' : '取消',
     )
     if (!confirmed) return
@@ -111,6 +130,8 @@ export default function UpdatesSection({
           <ul className="release-list">
             {releases.items.map((release) => {
               const isBusy = installing && releaseInstall.tag === release.tag
+              const isUpgrade = compareVersions(release.version, appVersion) > 0
+              const ActionIcon = isUpgrade ? Download : RotateCcw
               return (
                 <li key={release.tag} className="release-row">
                   <div className="release-row-copy">
@@ -127,7 +148,7 @@ export default function UpdatesSection({
                     disabled={release.isCurrent || installing}
                     onClick={() => void handleInstall(release.tag, release.version)}
                   >
-                    <RotateCcw size={14} className={isBusy ? 'spin' : ''} />
+                    <ActionIcon size={14} className={isBusy ? 'spin' : ''} />
                     {isBusy
                       ? releaseInstall.phase === 'checking'
                         ? en
@@ -137,8 +158,12 @@ export default function UpdatesSection({
                           ? 'Installing…'
                           : '安装中…'
                       : en
-                        ? 'Install'
-                        : '安装'}
+                        ? isUpgrade
+                          ? 'Update'
+                          : 'Install'
+                        : isUpgrade
+                          ? '更新'
+                          : '安装'}
                   </button>
                 </li>
               )
