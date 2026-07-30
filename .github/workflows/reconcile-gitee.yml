@@ -84,7 +84,8 @@ jobs:
           echo "Gitee is NOT fully synced to ${TAG}."
 
           # 4) 已有针对发布的 run 在排队/运行时不重复触发，交给它跑完即可。
-          ACTIVE=$(gh run list --workflow publish-gitee-release.yml \
+          ACTIVE=$(gh run list --repo "${GITHUB_REPOSITORY}" \
+            --workflow publish-gitee-release.yml \
             --json status \
             --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length')
           if [ "${ACTIVE}" -gt 0 ]; then
@@ -94,4 +95,4 @@ jobs:
 
           # 5) 触发既有的幂等发布工作流补传缺失产物（已存在的附件会被自动跳过）。
           echo "Dispatching publish-gitee-release for ${TAG}"
-          gh workflow run publish-gitee-release.yml -f tag="${TAG}"
+          gh workflow run publish-gitee-release.yml --repo "${GITHUB_REPOSITORY}" -f tag="${TAG}"
