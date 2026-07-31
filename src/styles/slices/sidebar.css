@@ -236,6 +236,12 @@
   color: var(--accent-text);
 }
 
+.tree-row:focus-visible {
+  position: relative;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .tree-caret {
   width: 14px;
   display: inline-flex;

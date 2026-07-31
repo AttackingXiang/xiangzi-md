@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
-import { memo, useCallback, type RefObject } from 'react'
+import { memo, useCallback, useState, type RefObject } from 'react'
 import FileTree from './FileTree'
 import SidebarHeader from './SidebarHeader'
 import type { FileNode, Folder as FolderType } from '../types'
@@ -83,6 +83,12 @@ const Sidebar = memo(function Sidebar({
 }: Props): JSX.Element {
   const isFav = folder ? favorites.includes(folder.root) : false
   const hideFolderNames = hideAttachmentFolders && attachmentFolder ? [attachmentFolder] : []
+
+  // Roving-tabindex target for the file tree's keyboard navigation. Lifted here (rather than
+  // into FileTree itself) because FileTree recurses into itself for nested directories — a
+  // single shared "which row is the Tab stop" state can't live inside a component that is its
+  // own grandparent.
+  const [focusedPath, setFocusedPath] = useState<string | null>(null)
 
   const handleToggleExpanded = useCallback(
     (path: string, expanded: boolean) => {
@@ -175,6 +181,8 @@ const Sidebar = memo(function Sidebar({
             depth={0}
             expandedPaths={expandedPathsRef.current ?? new Set()}
             onToggleExpanded={handleToggleExpanded}
+            focusedPath={focusedPath}
+            onFocusPath={setFocusedPath}
           />
         ) : (
           <div className="sidebar-empty">

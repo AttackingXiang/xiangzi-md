@@ -27,6 +27,9 @@ interface Props {
   /** Set of currently expanded folder paths — used to restore state across remounts. */
   expandedPaths: ReadonlySet<string>
   onToggleExpanded: (path: string, expanded: boolean) => void
+  /** Roving-tabindex focus target; lives in Sidebar so it survives this component's recursion. */
+  focusedPath: string | null
+  onFocusPath: (path: string) => void
 }
 
 export default function FileTree({
@@ -44,6 +47,8 @@ export default function FileTree({
   depth,
   expandedPaths,
   onToggleExpanded,
+  focusedPath,
+  onFocusPath,
 }: Props): JSX.Element {
   const visible = useMemo(() => {
     const filtered =
@@ -54,8 +59,12 @@ export default function FileTree({
   }, [nodes, hideFolderNames, sortContext])
 
   return (
-    <ul className="file-tree">
-      {visible.map((node) => (
+    <ul
+      className="file-tree"
+      role={depth === 0 ? 'tree' : 'group'}
+      aria-label={depth === 0 ? t('文件树') : undefined}
+    >
+      {visible.map((node, index) => (
         <TreeNode
           key={node.path}
           node={node}
@@ -72,6 +81,9 @@ export default function FileTree({
           depth={depth}
           expandedPaths={expandedPaths}
           onToggleExpanded={onToggleExpanded}
+          focusedPath={focusedPath}
+          onFocusPath={onFocusPath}
+          isFirstRootNode={depth === 0 && index === 0}
         />
       ))}
     </ul>
@@ -93,6 +105,9 @@ const TreeNode = memo(function TreeNode({
   depth,
   expandedPaths,
   onToggleExpanded,
+  focusedPath,
+  onFocusPath,
+  isFirstRootNode,
 }: {
   node: FileNode
   activePath: string | null
@@ -108,6 +123,10 @@ const TreeNode = memo(function TreeNode({
   depth: number
   expandedPaths: ReadonlySet<string>
   onToggleExpanded: (path: string, expanded: boolean) => void
+  focusedPath: string | null
+  onFocusPath: (path: string) => void
+  /** True only for the very first row in the whole tree — the default roving-tabindex stop. */
+  isFirstRootNode: boolean
 }): JSX.Element {
   // Restore expansion from the persistent set (survives tree remounts on refresh/rename).
   const [expanded, setExpanded] = useState(() => expandedPaths.has(node.path))
@@ -273,6 +292,89 @@ const TreeNode = memo(function TreeNode({
     return true
   }
 
+  // Roving tabindex: exactly one row in the whole tree is a Tab stop. Once the user has
+  // interacted via keyboard/click (focusedPath set), that row wins; before that, default to
+  // the active file if it's currently rendered, else the very first row.
+  const isRovingTabStop =
+    focusedPath !== null
+      ? focusedPath === node.path
+      : activePath !== null
+        ? activePath === node.path
+        : isFirstRootNode
+
+  // Rows are plain divs found via role/data attributes rather than a parallel index — the DOM
+  // already mirrors "visible state" exactly, since collapsed directories simply don't render
+  // their children (see the `expanded && children...` guard below).
+  const findParentRow = (row: HTMLElement): HTMLElement | null => {
+    const group = row.closest<HTMLElement>('ul[role="group"]')
+    return group?.parentElement?.querySelector<HTMLElement>('.tree-row') ?? null
+  }
+
+  const findFirstChildRow = (row: HTMLElement): HTMLElement | null =>
+    row.parentElement?.querySelector<HTMLElement>('ul[role="group"] .tree-row') ?? null
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    switch (e.key) {
+      case 'ArrowDown':
+      case 'ArrowUp':
+      case 'Home':
+      case 'End': {
+        const container = e.currentTarget.closest<HTMLElement>('[role="tree"]')
+        const rows = container
+          ? Array.from(container.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+          : []
+        if (rows.length === 0) return
+        e.preventDefault()
+        if (e.key === 'Home') {
+          rows[0]?.focus()
+        } else if (e.key === 'End') {
+          rows[rows.length - 1]?.focus()
+        } else {
+          const index = rows.indexOf(e.currentTarget)
+          rows[index + (e.key === 'ArrowDown' ? 1 : -1)]?.focus()
+        }
+        return
+      }
+      case 'ArrowRight': {
+        if (!node.isDir) return
+        e.preventDefault()
+        if (!expanded) {
+          // Children may still be loading (aria-busy); focus intentionally stays on this row
+          // rather than guessing at a not-yet-rendered child.
+          void toggle()
+        } else {
+          findFirstChildRow(e.currentTarget)?.focus()
+        }
+        return
+      }
+      case 'ArrowLeft': {
+        e.preventDefault()
+        if (node.isDir && expanded) {
+          void toggle()
+        } else {
+          findParentRow(e.currentTarget)?.focus()
+        }
+        return
+      }
+      case 'Enter': {
+        // Keyboard activation bypasses consumeSuppressedClick() on purpose — that guard only
+        // exists to swallow the synthetic click a pointer-drag release generates, which Enter
+        // never goes through.
+        e.preventDefault()
+        if (node.isDir) {
+          void toggle()
+        } else if (node.openable) {
+          onOpenFile(node.path, node.name)
+        } else {
+          void desktop.openWithDefault(node.path)
+        }
+        return
+      }
+      default:
+        return
+    }
+  }
+
   if (node.isDir) {
     return (
       <li>
@@ -281,10 +383,15 @@ const TreeNode = memo(function TreeNode({
           className={`tree-row dir${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
           style={indent}
           data-tree-path={node.path}
+          role="treeitem"
+          aria-level={depth + 1}
+          tabIndex={isRovingTabStop ? 0 : -1}
           aria-grabbed={isDragging}
           aria-expanded={expanded}
           aria-busy={loading}
           onPointerDown={handlePointerDown}
+          onFocus={() => onFocusPath(node.path)}
+          onKeyDown={handleKeyDown}
           onClick={() => {
             if (!consumeSuppressedClick()) void toggle()
           }}
@@ -322,6 +429,8 @@ const TreeNode = memo(function TreeNode({
             depth={depth + 1}
             expandedPaths={expandedPaths}
             onToggleExpanded={onToggleExpanded}
+            focusedPath={focusedPath}
+            onFocusPath={onFocusPath}
           />
         )}
         {expanded && children?.length === 0 && !loading && (
@@ -340,9 +449,15 @@ const TreeNode = memo(function TreeNode({
         className={`tree-row file${node.openable ? '' : ' unsupported'}${isActive ? ' active' : ''}${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
         style={indent}
         data-tree-path={node.path}
+        role="treeitem"
+        aria-level={depth + 1}
+        tabIndex={isRovingTabStop ? 0 : -1}
+        aria-selected={isActive}
         aria-grabbed={isDragging}
         title={node.name}
         onPointerDown={handlePointerDown}
+        onFocus={() => onFocusPath(node.path)}
+        onKeyDown={handleKeyDown}
         onClick={() => {
           if (consumeSuppressedClick()) return
           if (node.openable) {
