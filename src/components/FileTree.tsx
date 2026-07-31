@@ -1,10 +1,11 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, Folder, LoaderCircle } from 'lucide-react'
 import { desktop } from '../platform'
 import type { FileNode } from '../types'
 import { canDropTreeItem } from '../lib/treeDrag'
 import { sortNodes, type SortContext } from '../lib/fileTreeSort'
 import { t } from '../lib/i18n'
+import { FocusedPathContext } from './fileTreeFocusContext'
 
 interface Props {
   nodes: FileNode[]
@@ -27,8 +28,6 @@ interface Props {
   /** Set of currently expanded folder paths — used to restore state across remounts. */
   expandedPaths: ReadonlySet<string>
   onToggleExpanded: (path: string, expanded: boolean) => void
-  /** Roving-tabindex focus target; lives in Sidebar so it survives this component's recursion. */
-  focusedPath: string | null
   onFocusPath: (path: string) => void
 }
 
@@ -47,7 +46,6 @@ export default function FileTree({
   depth,
   expandedPaths,
   onToggleExpanded,
-  focusedPath,
   onFocusPath,
 }: Props): JSX.Element {
   const visible = useMemo(() => {
@@ -58,34 +56,50 @@ export default function FileTree({
     return sortNodes(filtered, sortContext)
   }, [nodes, hideFolderNames, sortContext])
 
+  const focusedPath = useContext(FocusedPathContext)
+
   return (
     <ul
       className="file-tree"
       role={depth === 0 ? 'tree' : 'group'}
       aria-label={depth === 0 ? t('文件树') : undefined}
     >
-      {visible.map((node, index) => (
-        <TreeNode
-          key={node.path}
-          node={node}
-          activePath={activePath}
-          revealPath={revealPath}
-          revealRequestId={revealRequestId}
-          onRevealComplete={onRevealComplete}
-          hideFolderNames={hideFolderNames}
-          sortContext={sortContext}
-          onOpenFile={onOpenFile}
-          onNodeContext={onNodeContext}
-          onMove={onMove}
-          rootPath={rootPath}
-          depth={depth}
-          expandedPaths={expandedPaths}
-          onToggleExpanded={onToggleExpanded}
-          focusedPath={focusedPath}
-          onFocusPath={onFocusPath}
-          isFirstRootNode={depth === 0 && index === 0}
-        />
-      ))}
+      {visible.map((node, index) => {
+        // 只有生成 TreeNode 元素的这一层需要知道 focusedPath 的具体值；算出布尔值后
+        // 就把它当普通 prop 传下去，未命中的节点两次渲染布尔值都是 false，memo() 能拦下。
+        //
+        // Roving tabindex: exactly one row in the whole tree is a Tab stop. Once the user has
+        // interacted via keyboard/click (focusedPath set), that row wins; before that, default to
+        // the active file if it's currently rendered, else the very first row.
+        const isFirstRootNode = depth === 0 && index === 0
+        const isRovingTabStop =
+          focusedPath !== null
+            ? focusedPath === node.path
+            : activePath !== null
+              ? activePath === node.path
+              : isFirstRootNode
+        return (
+          <TreeNode
+            key={node.path}
+            node={node}
+            activePath={activePath}
+            revealPath={revealPath}
+            revealRequestId={revealRequestId}
+            onRevealComplete={onRevealComplete}
+            hideFolderNames={hideFolderNames}
+            sortContext={sortContext}
+            onOpenFile={onOpenFile}
+            onNodeContext={onNodeContext}
+            onMove={onMove}
+            rootPath={rootPath}
+            depth={depth}
+            expandedPaths={expandedPaths}
+            onToggleExpanded={onToggleExpanded}
+            onFocusPath={onFocusPath}
+            isRovingTabStop={isRovingTabStop}
+          />
+        )
+      })}
     </ul>
   )
 }
@@ -105,9 +119,8 @@ const TreeNode = memo(function TreeNode({
   depth,
   expandedPaths,
   onToggleExpanded,
-  focusedPath,
   onFocusPath,
-  isFirstRootNode,
+  isRovingTabStop,
 }: {
   node: FileNode
   activePath: string | null
@@ -123,10 +136,11 @@ const TreeNode = memo(function TreeNode({
   depth: number
   expandedPaths: ReadonlySet<string>
   onToggleExpanded: (path: string, expanded: boolean) => void
-  focusedPath: string | null
   onFocusPath: (path: string) => void
-  /** True only for the very first row in the whole tree — the default roving-tabindex stop. */
-  isFirstRootNode: boolean
+  /** 是否是整棵树唯一的 Tab 停靠点；由父级 FileTree 算好传入的布尔值，而非 focusedPath
+   * 本身——这样命中与未命中的行才能各自独立地被 memo() 挡下，而不是随便一次按键就
+   * 让所有节点一起因为 props 变化而重渲染。 */
+  isRovingTabStop: boolean
 }): JSX.Element {
   // Restore expansion from the persistent set (survives tree remounts on refresh/rename).
   const [expanded, setExpanded] = useState(() => expandedPaths.has(node.path))
@@ -292,16 +306,6 @@ const TreeNode = memo(function TreeNode({
     return true
   }
 
-  // Roving tabindex: exactly one row in the whole tree is a Tab stop. Once the user has
-  // interacted via keyboard/click (focusedPath set), that row wins; before that, default to
-  // the active file if it's currently rendered, else the very first row.
-  const isRovingTabStop =
-    focusedPath !== null
-      ? focusedPath === node.path
-      : activePath !== null
-        ? activePath === node.path
-        : isFirstRootNode
-
   // Rows are plain divs found via role/data attributes rather than a parallel index — the DOM
   // already mirrors "visible state" exactly, since collapsed directories simply don't render
   // their children (see the `expanded && children...` guard below).
@@ -429,7 +433,6 @@ const TreeNode = memo(function TreeNode({
             depth={depth + 1}
             expandedPaths={expandedPaths}
             onToggleExpanded={onToggleExpanded}
-            focusedPath={focusedPath}
             onFocusPath={onFocusPath}
           />
         )}

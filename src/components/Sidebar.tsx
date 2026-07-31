@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import { memo, useCallback, useState, type RefObject } from 'react'
 import FileTree from './FileTree'
+import { FocusedPathContext } from './fileTreeFocusContext'
 import SidebarHeader from './SidebarHeader'
 import type { FileNode, Folder as FolderType } from '../types'
 import type { SortContext } from '../lib/fileTreeSort'
@@ -165,25 +166,29 @@ const Sidebar = memo(function Sidebar({
         }}
       >
         {folder ? (
-          <FileTree
-            key={reloadKey}
-            nodes={folder.tree}
-            activePath={activePath}
-            revealPath={revealPath}
-            revealRequestId={revealRequestId}
-            onRevealComplete={onRevealComplete}
-            hideFolderNames={hideFolderNames}
-            sortContext={sortContext}
-            onOpenFile={onOpenFile}
-            onNodeContext={onNodeContext}
-            onMove={onMove}
-            rootPath={folder.root}
-            depth={0}
-            expandedPaths={expandedPathsRef.current ?? new Set()}
-            onToggleExpanded={handleToggleExpanded}
-            focusedPath={focusedPath}
-            onFocusPath={setFocusedPath}
-          />
+          // focusedPath 走 Context 而不是 prop：见 FileTree.tsx 里 FocusedPathContext 的注释，
+          // 这样按方向键只会重渲染实际翻转 tab-stop 状态的那一两行，不会因为逐层转发 prop
+          // 而牵连路径上所有已展开目录的 TreeNode。
+          <FocusedPathContext.Provider value={focusedPath}>
+            <FileTree
+              key={reloadKey}
+              nodes={folder.tree}
+              activePath={activePath}
+              revealPath={revealPath}
+              revealRequestId={revealRequestId}
+              onRevealComplete={onRevealComplete}
+              hideFolderNames={hideFolderNames}
+              sortContext={sortContext}
+              onOpenFile={onOpenFile}
+              onNodeContext={onNodeContext}
+              onMove={onMove}
+              rootPath={folder.root}
+              depth={0}
+              expandedPaths={expandedPathsRef.current ?? new Set()}
+              onToggleExpanded={handleToggleExpanded}
+              onFocusPath={setFocusedPath}
+            />
+          </FocusedPathContext.Provider>
         ) : (
           <div className="sidebar-empty">
             <p>{t('尚未打开文件夹')}</p>
