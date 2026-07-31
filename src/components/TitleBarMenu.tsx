@@ -195,12 +195,36 @@ export default function TitleBarMenu({
           label: t('标题'),
           onClick: () => undefined,
           submenu: [
-            { label: t('标题 1'), hint: hint(shortcuts, 'heading-1'), onClick: trigger('heading-1') },
-            { label: t('标题 2'), hint: hint(shortcuts, 'heading-2'), onClick: trigger('heading-2') },
-            { label: t('标题 3'), hint: hint(shortcuts, 'heading-3'), onClick: trigger('heading-3') },
-            { label: t('标题 4'), hint: hint(shortcuts, 'heading-4'), onClick: trigger('heading-4') },
-            { label: t('标题 5'), hint: hint(shortcuts, 'heading-5'), onClick: trigger('heading-5') },
-            { label: t('标题 6'), hint: hint(shortcuts, 'heading-6'), onClick: trigger('heading-6') },
+            {
+              label: t('标题 1'),
+              hint: hint(shortcuts, 'heading-1'),
+              onClick: trigger('heading-1'),
+            },
+            {
+              label: t('标题 2'),
+              hint: hint(shortcuts, 'heading-2'),
+              onClick: trigger('heading-2'),
+            },
+            {
+              label: t('标题 3'),
+              hint: hint(shortcuts, 'heading-3'),
+              onClick: trigger('heading-3'),
+            },
+            {
+              label: t('标题 4'),
+              hint: hint(shortcuts, 'heading-4'),
+              onClick: trigger('heading-4'),
+            },
+            {
+              label: t('标题 5'),
+              hint: hint(shortcuts, 'heading-5'),
+              onClick: trigger('heading-5'),
+            },
+            {
+              label: t('标题 6'),
+              hint: hint(shortcuts, 'heading-6'),
+              onClick: trigger('heading-6'),
+            },
           ],
         },
         {
