@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import CustomColorSwatch from './CustomColorSwatch'
 import { DEFAULT_HIGHLIGHT_COLOR_PRESETS } from '../lib/colorPresets'
+import { t } from '../lib/i18n'
 
 interface Props {
   lang: 'zh' | 'en'
@@ -15,12 +16,12 @@ export default function HighlightColorPalette({
   defaultColor = colors[0] ?? '#fde047',
   onSelect,
 }: Props): JSX.Element {
-  const cancelLabel = lang === 'en' ? 'Cancel highlighter' : '取消荧光笔'
+  const cancelLabel = t('取消荧光笔')
   return (
     <div
       className="text-color-palette highlight-color-palette"
       role="group"
-      aria-label={lang === 'en' ? 'Highlight colors' : '荧光笔颜色'}
+      aria-label={t('荧光笔颜色')}
     >
       {colors.map((color) => (
         <button
@@ -29,7 +30,7 @@ export default function HighlightColorPalette({
           className="text-color-swatch highlight-color-swatch"
           style={{ '--xmd-highlight-color': color } as React.CSSProperties}
           title={color}
-          aria-label={`${lang === 'en' ? 'Highlight color' : '荧光笔颜色'} ${color}`}
+          aria-label={`${t('荧光笔颜色')} ${color}`}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(color)}
         />

@@ -41,6 +41,7 @@ import TextColorPalette from './TextColorPalette'
 import HighlightColorPalette from './HighlightColorPalette'
 import { highlighterModeBridge } from '../lib/highlighterModeBridge'
 import type { HighlighterModeState } from '../lib/highlighterModeBridge'
+import { t } from '../lib/i18n'
 
 interface Props {
   lang: 'zh' | 'en'
@@ -109,8 +110,6 @@ export default function EditorToolbar({
     return () => document.removeEventListener('pointerdown', closeColorPopovers, true)
   }, [showColors, showHighlightColors])
 
-  const t = (zh: string, en: string): string => (lang === 'en' ? en : zh)
-
   const preserveEditorSelection = (event: React.MouseEvent<HTMLButtonElement>): void => {
     // Keep CM6 focused so its selection and active syntax context remain intact.
     event.preventDefault()
@@ -143,13 +142,13 @@ export default function EditorToolbar({
 
   return (
     <div className="editor-toolbar">
-      {btn(t('撤销', 'Undo'), <Undo2 size={15} />, false, () => editorCmd.undo?.(), !ts.canUndo)}
-      {btn(t('重做', 'Redo'), <Redo2 size={15} />, false, () => editorCmd.redo?.(), !ts.canRedo)}
+      {btn(t('撤销'), <Undo2 size={15} />, false, () => editorCmd.undo?.(), !ts.canUndo)}
+      {btn(t('重做'), <Redo2 size={15} />, false, () => editorCmd.redo?.(), !ts.canRedo)}
 
       <span className="toolbar-sep" />
 
       {btn(
-        t('正文', 'Paragraph'),
+        t('正文'),
         <Pilcrow size={15} />,
         !cellState.focused &&
           !ts.headingLevel &&
@@ -183,14 +182,14 @@ export default function EditorToolbar({
         ),
       )}
       {btn(
-        t('升级标题', 'Promote heading'),
+        t('升级标题'),
         <ArrowUp size={15} />,
         false,
         () => editorCmd.promoteHeading(),
         cellState.focused || ts.headingLevel === null || ts.headingLevel <= 1,
       )}
       {btn(
-        t('降级标题', 'Demote heading'),
+        t('降级标题'),
         <ArrowDown size={15} />,
         false,
         () => editorCmd.demoteHeading(),
@@ -200,28 +199,28 @@ export default function EditorToolbar({
       <span className="toolbar-sep" />
 
       {btn(
-        t('加粗', 'Bold'),
+        t('加粗'),
         <Bold size={15} />,
         cellState.focused ? cellState.bold : ts.bold,
         () => editorCmd.bold(),
         cellState.focused && !cellState.hasSelection,
       )}
       {btn(
-        t('斜体', 'Italic'),
+        t('斜体'),
         <Italic size={15} />,
         cellState.focused ? cellState.italic : ts.italic,
         () => editorCmd.italic(),
         cellState.focused && !cellState.hasSelection,
       )}
       {btn(
-        t('删除线', 'Strikethrough'),
+        t('删除线'),
         <Strikethrough size={15} />,
         cellState.focused ? cellState.strike : ts.strike,
         () => editorCmd.strike(),
         cellState.focused && !cellState.hasSelection,
       )}
       {btn(
-        t('行内代码', 'Inline code'),
+        t('行内代码'),
         <Code size={15} />,
         cellState.focused ? cellState.inlineCode : ts.inlineCode,
         () => editorCmd.inlineCode(),
@@ -231,8 +230,8 @@ export default function EditorToolbar({
         <button
           type="button"
           className={`toolbar-btn${showColors ? ' is-active' : ''}`}
-          aria-label={t('文字颜色', 'Text color')}
-          data-tooltip={t('文字颜色', 'Text color')}
+          aria-label={t('文字颜色')}
+          data-tooltip={t('文字颜色')}
           aria-expanded={showColors}
           disabled={cellState.focused || ts.codeBlock}
           onMouseDown={preserveEditorSelection}
@@ -268,8 +267,8 @@ export default function EditorToolbar({
                 : 'transparent',
             } as React.CSSProperties
           }
-          aria-label={t('荧光笔', 'Highlighter')}
-          data-tooltip={t('荧光笔', 'Highlighter')}
+          aria-label={t('荧光笔')}
+          data-tooltip={t('荧光笔')}
           aria-expanded={showHighlightColors}
           disabled={cellState.focused || ts.codeBlock}
           onMouseDown={preserveEditorSelection}
@@ -313,35 +312,35 @@ export default function EditorToolbar({
       <span className="toolbar-sep" />
 
       {btn(
-        t('无序列表', 'Bullet list'),
+        t('无序列表'),
         <List size={15} />,
         ts.bulletList,
         () => editorCmd.bulletList(),
         cellState.focused,
       )}
       {btn(
-        t('有序列表', 'Ordered list'),
+        t('有序列表'),
         <ListOrdered size={15} />,
         ts.orderedList,
         () => editorCmd.orderedList(),
         cellState.focused,
       )}
       {btn(
-        t('任务列表', 'Task list'),
+        t('任务列表'),
         <ListTodo size={15} />,
         ts.taskList,
         () => editorCmd.taskList(),
         cellState.focused,
       )}
       {btn(
-        t('引用', 'Quote'),
+        t('引用'),
         <Quote size={15} />,
         ts.blockquote,
         () => editorCmd.quote(),
         cellState.focused,
       )}
       {btn(
-        t('代码块', 'Code block'),
+        t('代码块'),
         <Code2 size={15} />,
         ts.codeBlock,
         () => editorCmd.codeBlock(),
@@ -353,8 +352,8 @@ export default function EditorToolbar({
       <button
         type="button"
         className="toolbar-btn"
-        aria-label={t('插入表格', 'Insert table')}
-        data-tooltip={t('插入表格', 'Insert table')}
+        aria-label={t('插入表格')}
+        data-tooltip={t('插入表格')}
         disabled={cellState.focused}
         onMouseDown={preserveEditorSelection}
         onClick={(e) => {
@@ -365,7 +364,7 @@ export default function EditorToolbar({
         <Table size={15} />
       </button>
       {btn(
-        t('插入链接', 'Insert link'),
+        t('插入链接'),
         <Link size={15} />,
         ts.link,
         () => editorCmd.insertLink?.(),

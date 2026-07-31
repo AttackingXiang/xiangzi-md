@@ -5,6 +5,7 @@ const EN: Record<string, string> = {
   加载中: 'Loading',
   // Sidebar
   资源管理器: 'Explorer',
+  文件树: 'File tree',
   收藏目录: 'Favorites',
   收藏: 'Favorites',
   收藏文件夹: 'Add folder to favorites',
@@ -40,6 +41,20 @@ const EN: Record<string, string> = {
   // Editor commands
   插入链接: 'Insert link',
   插入: 'Insert',
+  // Editor toolbar
+  文字颜色: 'Text color',
+  文字颜色面板: 'Text colors',
+  荧光笔: 'Highlighter',
+  荧光笔颜色: 'Highlight color',
+  荧光笔颜色面板: 'Highlight colors',
+  取消荧光笔: 'Cancel highlighter',
+  取消文字颜色: 'Cancel text color',
+  // Theme marketplace install
+  '正在安装「{name}」…': 'Installing "{name}"…',
+  '已安装并应用。': 'is now active.',
+  主题安装完成: 'Theme installed',
+  '主题安装失败：{message}': 'Theme installation failed: {message}',
+  主题安装: 'Theme installation',
   // Document properties panel
   文档属性: 'Document properties',
   添加属性: 'Add property',
@@ -462,6 +477,15 @@ export function getLang(): Lang {
 export function t(zh: string): string {
   if (lang === 'zh') return zh
   return EN[zh] ?? zh
+}
+
+/**
+ * 带占位符的翻译：词典里存的是完整句子（含 `{name}` 这类占位符），调用处再填值。
+ * 不要把句子拆成「前缀 + 变量 + 后缀」三个 key——那样每个片段都失去上下文，且写死了
+ * 语序，换一种语序不同的语言就会散架。
+ */
+export function tf(zh: string, params: Record<string, string>): string {
+  return t(zh).replace(/\{(\w+)\}/g, (_, key: string) => params[key] ?? '')
 }
 
 /**

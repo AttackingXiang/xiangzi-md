@@ -32,10 +32,20 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
 // 提取范围内——这些 key 目前数量很少，可以在后续人工审阅时兜底。
 const SINGLE_QUOTE_CALL = /\bt\(\s*'([^'\\]*)'\s*\)/g
 const DOUBLE_QUOTE_CALL = /\bt\(\s*"([^"\\]*)"\s*\)/g
+// tf('...', { ... }) 是带占位符的翻译，第二个实参是插值对象，所以结尾是逗号而不是右括号；
+// 上面两条 t() 的正则匹配不到它。少了这两条，tf 的 key 会整体逃出本守护——而这正是本文件
+// 要防的那类静默退化，所以必须一起扫。
+const SINGLE_QUOTE_FORMAT_CALL = /\btf\(\s*'([^'\\]*)'\s*,/g
+const DOUBLE_QUOTE_FORMAT_CALL = /\btf\(\s*"([^"\\]*)"\s*,/g
 
 function extractTranslationKeys(content: string): string[] {
   const keys: string[] = []
-  for (const re of [SINGLE_QUOTE_CALL, DOUBLE_QUOTE_CALL]) {
+  for (const re of [
+    SINGLE_QUOTE_CALL,
+    DOUBLE_QUOTE_CALL,
+    SINGLE_QUOTE_FORMAT_CALL,
+    DOUBLE_QUOTE_FORMAT_CALL,
+  ]) {
     re.lastIndex = 0
     let match: RegExpExecArray | null
     while ((match = re.exec(content))) {

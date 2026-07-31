@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import CustomColorSwatch from './CustomColorSwatch'
 import { DEFAULT_TEXT_COLOR_PRESETS } from '../lib/colorPresets'
+import { t } from '../lib/i18n'
 
 interface Props {
   lang: 'zh' | 'en'
@@ -15,13 +16,9 @@ export default function TextColorPalette({
   defaultColor = colors[0] ?? '#dc2626',
   onSelect,
 }: Props): JSX.Element {
-  const cancelLabel = lang === 'en' ? 'Cancel text color' : '取消文字颜色'
+  const cancelLabel = t('取消文字颜色')
   return (
-    <div
-      className="text-color-palette"
-      role="group"
-      aria-label={lang === 'en' ? 'Text colors' : '文字颜色'}
-    >
+    <div className="text-color-palette" role="group" aria-label={t('文字颜色')}>
       {colors.map((color) => (
         <button
           type="button"
@@ -29,7 +26,7 @@ export default function TextColorPalette({
           className="text-color-swatch"
           style={{ '--xmd-text-color': color } as React.CSSProperties}
           title={color}
-          aria-label={`${lang === 'en' ? 'Text color' : '文字颜色'} ${color}`}
+          aria-label={`${t('文字颜色')} ${color}`}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onSelect(color)}
         />
