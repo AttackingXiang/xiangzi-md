@@ -655,6 +655,35 @@ describe('setupRichClipboard', () => {
     dispose()
   })
 
+  it('leaves no copy listener behind when execCommand reports success without dispatching', async () => {
+    // execCommand('copy') is deprecated and is simply a no-op in some WebViews — the very
+    // environments this last-resort path exists for. legacyWrite registers its handler with
+    // { once: true }, which only self-removes when the event actually fires, so a no-op
+    // execCommand would strand it on document where it would preventDefault and inject this
+    // copy's stale HTML into the next, unrelated one.
+    vi.useFakeTimers()
+    stubCanvas()
+    desktop.writeClipboardImage.mockRejectedValue(new Error('no native adapter'))
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    vi.stubGlobal('ClipboardItem', undefined)
+    document.execCommand = vi.fn(() => true)
+    const root = mountRoot('')
+    const image = makeRenderedImage('https://example.com/no-dispatch.png')
+    markAsSelectedImage(image)
+    root.append(image)
+    const dispose = setup(root)
+
+    dispatchCopy(root, new DataTransfer())
+    await vi.runAllTimersAsync()
+    dispose()
+
+    const laterData = new DataTransfer()
+    const later = new ClipboardEvent('copy', { clipboardData: laterData, cancelable: true })
+    document.dispatchEvent(later)
+    expect(laterData.getData('text/html')).toBe('')
+    expect(later.defaultPrevented).toBe(false)
+  })
+
   it('stops reacting to copy events once the returned cleanup function runs', () => {
     const root = mountRoot('<p>hello</p>')
     const dispose = setup(root)

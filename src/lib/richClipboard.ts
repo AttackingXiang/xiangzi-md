@@ -631,6 +631,11 @@ function legacyWrite(html: string, text: string): boolean {
   try {
     return document.execCommand('copy')
   } finally {
+    // `once: true` 只在事件真的派发时才自摘。execCommand('copy') 已被废弃，在部分 WebView
+    // 里直接是 no-op——而这条路径恰恰只在现代剪贴板 API 都失败后才走到，正是最可能遇到
+    // no-op 的场景。那时监听器会永久留在 document 上，劫持下一次无关的复制并塞进本次的
+    // 陈旧内容。显式移除；若已被 once 摘除，这里是无害的空操作。
+    document.removeEventListener('copy', onCopy, { capture: true })
     legacyWriteInProgress = false
   }
 }
