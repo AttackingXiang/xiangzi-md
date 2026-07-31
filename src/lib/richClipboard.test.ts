@@ -203,6 +203,25 @@ describe('replaceClipboardImagePlaceholders', () => {
   it('leaves unrelated HTML unchanged when there are no images to resolve', () => {
     expect(replaceClipboardImagePlaceholders('<p>text only</p>', [])).toBe('<p>text only</p>')
   })
+
+  // 回归：`xmd-copy-image-1` 是 `xmd-copy-image-10` 的前缀。按下标顺序做 split/join 时，
+  // 处理到 1 会先吃掉 10 的前半段，把第 10 张之后的 src 污染成「第 1 张的地址 + 残留数字」。
+  // 一次选区里复制 10 张以上图片就会触发，而且是静默的——剪贴板里拿到的是坏地址。
+  it('does not let a low-index placeholder corrupt one whose index shares its prefix', () => {
+    const sources = Array.from({ length: 11 }, (_, index) => `file:///photo-${index}.png`)
+    expect(
+      replaceClipboardImagePlaceholders(
+        '<img src="xmd-copy-image-1"><img src="xmd-copy-image-10">',
+        sources,
+      ),
+    ).toBe('<img src="file:///photo-1.png"><img src="file:///photo-10.png">')
+  })
+
+  it('leaves a placeholder untouched when no source is resolved for its index', () => {
+    expect(replaceClipboardImagePlaceholders('<img src="xmd-copy-image-3">', ['a.png'])).toBe(
+      '<img src="xmd-copy-image-3">',
+    )
+  })
 })
 
 describe('svgMarkupToPng', () => {

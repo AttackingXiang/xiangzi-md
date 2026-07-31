@@ -568,9 +568,13 @@ export function replaceClipboardImagePlaceholders(
   htmlTemplate: string,
   sources: readonly string[],
 ): string {
-  return sources.reduce(
-    (html, source, index) => html.split(`${PLACEHOLDER_PREFIX}${index}`).join(source),
-    htmlTemplate,
+  // 一次扫描、整个下标一起匹配，而不是按 index 逐个 split/join：`xmd-copy-image-1` 是
+  // `xmd-copy-image-10` 的前缀，顺序替换会在处理 1 时吃掉 10 的前半段，把第 10 张之后的
+  // src 静默污染成「第 1 张的地址 + 残留数字」。单次替换同时也避免了图片地址本身若含有
+  // 占位符文本时被后续轮次二次替换。
+  return htmlTemplate.replace(
+    new RegExp(`${PLACEHOLDER_PREFIX}(\\d+)`, 'g'),
+    (placeholder, index: string) => sources[Number(index)] ?? placeholder,
   )
 }
 
