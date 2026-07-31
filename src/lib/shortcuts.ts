@@ -17,6 +17,8 @@ export type ShortcutAction =
   | 'toggle-focus'
   | 'toggle-typewriter'
   | 'toggle-selection-toolbar'
+  | 'toggle-toolbar'
+  | 'toggle-reading'
   | 'open-settings'
   | 'show-shortcuts'
   | 'heading-1'
@@ -38,6 +40,7 @@ export type ShortcutAction =
   | 'insert-table'
   | 'bullet-list'
   | 'ordered-list'
+  | 'task-list'
 
 export interface ShortcutDefinition {
   id: ShortcutAction
@@ -149,6 +152,20 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     labelZh: '切换选中文本快捷工具栏',
     labelEn: 'Toggle Selection Toolbar',
     defaultBinding: 'Mod+Alt+Shift+T',
+  },
+  {
+    id: 'toggle-toolbar',
+    category: 'navigation',
+    labelZh: '切换顶部工具栏',
+    labelEn: 'Toggle Top Toolbar',
+    defaultBinding: 'Mod+Alt+Shift+B',
+  },
+  {
+    id: 'toggle-reading',
+    category: 'navigation',
+    labelZh: '阅读模式',
+    labelEn: 'Reading Mode',
+    defaultBinding: 'Mod+Alt+Shift+R',
   },
   {
     id: 'open-settings',
@@ -290,6 +307,14 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     labelEn: 'Ordered List',
     defaultBinding: 'Mod+Shift+[',
     macDefaultBinding: 'Mod+Alt+O',
+  },
+  {
+    id: 'task-list',
+    category: 'format',
+    labelZh: '任务列表',
+    labelEn: 'Task List',
+    defaultBinding: 'Mod+Shift+9',
+    macDefaultBinding: 'Mod+Alt+X',
   },
 ] as const
 

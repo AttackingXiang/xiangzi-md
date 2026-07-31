@@ -34,6 +34,8 @@ pub(crate) const SHORTCUT_ACTIONS: &[&str] = &[
     "toggle-focus",
     "toggle-typewriter",
     "toggle-selection-toolbar",
+    "toggle-toolbar",
+    "toggle-reading",
     "open-settings",
     "show-shortcuts",
     "heading-1",
@@ -55,6 +57,7 @@ pub(crate) const SHORTCUT_ACTIONS: &[&str] = &[
     "insert-table",
     "bullet-list",
     "ordered-list",
+    "task-list",
 ];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

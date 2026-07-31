@@ -47,6 +47,8 @@ interface AppCommandOptions {
   setFocusMode: Dispatch<SetStateAction<boolean>>
   setTypewriterMode: Dispatch<SetStateAction<boolean>>
   toggleSelectionToolbar: () => void
+  toggleToolbar: () => void
+  toggleReadingMode: () => void
   setSettingsSection: Dispatch<SetStateAction<SettingsSection | null>>
 }
 
@@ -82,6 +84,8 @@ export function useAppCommands(options: AppCommandOptions): {
     setFocusMode,
     setTypewriterMode,
     toggleSelectionToolbar,
+    toggleToolbar,
+    toggleReadingMode,
     setSettingsSection,
   } = options
   const [paletteFiles, setPaletteFiles] = useState<FileEntry[]>([])
@@ -214,6 +218,12 @@ export function useAppCommands(options: AppCommandOptions): {
         case 'toggle-selection-toolbar':
           toggleSelectionToolbar()
           break
+        case 'toggle-toolbar':
+          toggleToolbar()
+          break
+        case 'toggle-reading':
+          toggleReadingMode()
+          break
         case 'open-settings':
           setSettingsSection('appearance')
           break
@@ -267,6 +277,9 @@ export function useAppCommands(options: AppCommandOptions): {
         case 'ordered-list':
           editorCmd.orderedList()
           break
+        case 'task-list':
+          editorCmd.taskList()
+          break
       }
     },
     [
@@ -286,6 +299,8 @@ export function useAppCommands(options: AppCommandOptions): {
       setSourceMode,
       setTypewriterMode,
       toggleSelectionToolbar,
+      toggleToolbar,
+      toggleReadingMode,
       stateRef,
     ],
   )

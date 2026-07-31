@@ -14,7 +14,7 @@ interface Props {
   canAddProperty?: boolean
 }
 
-type MenuId = 'app' | 'file' | 'edit' | 'view'
+type MenuId = 'app' | 'file' | 'edit' | 'view' | 'tools'
 
 function hint(shortcuts: Record<string, string>, id: ShortcutAction): string | undefined {
   const binding = effectiveShortcut(shortcuts, id)
@@ -170,6 +170,100 @@ export default function TitleBarMenu({
         { label: t('放大'), onClick: trigger('zoom-in') },
         { label: t('缩小'), onClick: trigger('zoom-out') },
         { label: t('切换全屏'), onClick: toggleFullscreen, separatorBefore: true },
+      ],
+    },
+    tools: {
+      label: t('工具'),
+      items: [
+        {
+          label: t('顶部工具栏'),
+          hint: hint(shortcuts, 'toggle-toolbar'),
+          onClick: trigger('toggle-toolbar'),
+        },
+        {
+          label: t('选中文本工具栏'),
+          hint: hint(shortcuts, 'toggle-selection-toolbar'),
+          onClick: trigger('toggle-selection-toolbar'),
+        },
+        {
+          label: t('正文'),
+          hint: hint(shortcuts, 'paragraph'),
+          onClick: trigger('paragraph'),
+          separatorBefore: true,
+        },
+        {
+          label: t('标题'),
+          onClick: () => undefined,
+          submenu: [
+            { label: t('标题 1'), hint: hint(shortcuts, 'heading-1'), onClick: trigger('heading-1') },
+            { label: t('标题 2'), hint: hint(shortcuts, 'heading-2'), onClick: trigger('heading-2') },
+            { label: t('标题 3'), hint: hint(shortcuts, 'heading-3'), onClick: trigger('heading-3') },
+            { label: t('标题 4'), hint: hint(shortcuts, 'heading-4'), onClick: trigger('heading-4') },
+            { label: t('标题 5'), hint: hint(shortcuts, 'heading-5'), onClick: trigger('heading-5') },
+            { label: t('标题 6'), hint: hint(shortcuts, 'heading-6'), onClick: trigger('heading-6') },
+          ],
+        },
+        {
+          label: t('升级标题'),
+          hint: hint(shortcuts, 'promote-heading'),
+          onClick: trigger('promote-heading'),
+        },
+        {
+          label: t('降级标题'),
+          hint: hint(shortcuts, 'demote-heading'),
+          onClick: trigger('demote-heading'),
+        },
+        {
+          label: t('加粗'),
+          hint: hint(shortcuts, 'bold'),
+          onClick: trigger('bold'),
+          separatorBefore: true,
+        },
+        { label: t('斜体'), hint: hint(shortcuts, 'italic'), onClick: trigger('italic') },
+        { label: t('删除线'), hint: hint(shortcuts, 'strike'), onClick: trigger('strike') },
+        {
+          label: t('行内代码'),
+          hint: hint(shortcuts, 'inline-code'),
+          onClick: trigger('inline-code'),
+        },
+        {
+          label: t('引用'),
+          hint: hint(shortcuts, 'quote'),
+          onClick: trigger('quote'),
+          separatorBefore: true,
+        },
+        {
+          label: t('代码块'),
+          hint: hint(shortcuts, 'code-block'),
+          onClick: trigger('code-block'),
+        },
+        {
+          label: t('无序列表'),
+          hint: hint(shortcuts, 'bullet-list'),
+          onClick: trigger('bullet-list'),
+          separatorBefore: true,
+        },
+        {
+          label: t('有序列表'),
+          hint: hint(shortcuts, 'ordered-list'),
+          onClick: trigger('ordered-list'),
+        },
+        {
+          label: t('任务列表'),
+          hint: hint(shortcuts, 'task-list'),
+          onClick: trigger('task-list'),
+        },
+        {
+          label: t('插入表格'),
+          hint: hint(shortcuts, 'insert-table'),
+          onClick: trigger('insert-table'),
+          separatorBefore: true,
+        },
+        {
+          label: t('插入链接'),
+          hint: hint(shortcuts, 'insert-link'),
+          onClick: trigger('insert-link'),
+        },
       ],
     },
   }

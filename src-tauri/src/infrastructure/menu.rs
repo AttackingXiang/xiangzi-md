@@ -304,6 +304,208 @@ fn view_menu(
         .build()
 }
 
+fn tools_menu(
+    app: &AppHandle,
+    language: &str,
+    shortcuts: &BTreeMap<String, String>,
+) -> tauri::Result<Submenu<tauri::Wry>> {
+    let toggle_toolbar = action(
+        app,
+        "toggle-toolbar",
+        tr(language, "顶部工具栏", "Top Toolbar"),
+        accelerator(shortcuts, "toggle-toolbar", "Mod+Alt+Shift+B"),
+    )?;
+    let toggle_selection_toolbar = action(
+        app,
+        "toggle-selection-toolbar",
+        tr(language, "选中文本工具栏", "Selection Toolbar"),
+        accelerator(shortcuts, "toggle-selection-toolbar", "Mod+Alt+Shift+T"),
+    )?;
+    let paragraph = action(
+        app,
+        "paragraph",
+        tr(language, "正文", "Paragraph"),
+        accelerator(shortcuts, "paragraph", "Mod+0"),
+    )?;
+
+    let heading_1 = action(
+        app,
+        "heading-1",
+        tr(language, "标题 1", "Heading 1"),
+        accelerator(shortcuts, "heading-1", "Mod+1"),
+    )?;
+    let heading_2 = action(
+        app,
+        "heading-2",
+        tr(language, "标题 2", "Heading 2"),
+        accelerator(shortcuts, "heading-2", "Mod+2"),
+    )?;
+    let heading_3 = action(
+        app,
+        "heading-3",
+        tr(language, "标题 3", "Heading 3"),
+        accelerator(shortcuts, "heading-3", "Mod+3"),
+    )?;
+    let heading_4 = action(
+        app,
+        "heading-4",
+        tr(language, "标题 4", "Heading 4"),
+        accelerator(shortcuts, "heading-4", "Mod+4"),
+    )?;
+    let heading_5 = action(
+        app,
+        "heading-5",
+        tr(language, "标题 5", "Heading 5"),
+        accelerator(shortcuts, "heading-5", "Mod+5"),
+    )?;
+    let heading_6 = action(
+        app,
+        "heading-6",
+        tr(language, "标题 6", "Heading 6"),
+        accelerator(shortcuts, "heading-6", "Mod+6"),
+    )?;
+    let heading = SubmenuBuilder::new(app, tr(language, "标题", "Heading"))
+        .item(&heading_1)
+        .item(&heading_2)
+        .item(&heading_3)
+        .item(&heading_4)
+        .item(&heading_5)
+        .item(&heading_6)
+        .build()?;
+
+    let promote_heading = action(
+        app,
+        "promote-heading",
+        tr(language, "升级标题", "Promote Heading"),
+        accelerator(shortcuts, "promote-heading", "Mod+="),
+    )?;
+    let demote_heading = action(
+        app,
+        "demote-heading",
+        tr(language, "降级标题", "Demote Heading"),
+        accelerator(shortcuts, "demote-heading", "Mod+-"),
+    )?;
+    let bold = action(
+        app,
+        "bold",
+        tr(language, "加粗", "Bold"),
+        accelerator(shortcuts, "bold", "Mod+B"),
+    )?;
+    let italic = action(
+        app,
+        "italic",
+        tr(language, "斜体", "Italic"),
+        accelerator(shortcuts, "italic", "Mod+I"),
+    )?;
+    let strike = action(
+        app,
+        "strike",
+        tr(language, "删除线", "Strikethrough"),
+        accelerator(
+            shortcuts,
+            "strike",
+            platform_default("Control+Shift+`", "Alt+Shift+5"),
+        ),
+    )?;
+    let inline_code = action(
+        app,
+        "inline-code",
+        tr(language, "行内代码", "Inline Code"),
+        accelerator(shortcuts, "inline-code", "Mod+Shift+`"),
+    )?;
+    let quote = action(
+        app,
+        "quote",
+        tr(language, "引用", "Quote"),
+        accelerator(
+            shortcuts,
+            "quote",
+            platform_default("Mod+Alt+Q", "Mod+Shift+Q"),
+        ),
+    )?;
+    let code_block = action(
+        app,
+        "code-block",
+        tr(language, "代码块", "Code Block"),
+        accelerator(
+            shortcuts,
+            "code-block",
+            platform_default("Mod+Alt+C", "Mod+Shift+K"),
+        ),
+    )?;
+    let bullet_list = action(
+        app,
+        "bullet-list",
+        tr(language, "无序列表", "Bullet List"),
+        accelerator(
+            shortcuts,
+            "bullet-list",
+            platform_default("Mod+Alt+U", "Mod+Shift+]"),
+        ),
+    )?;
+    let ordered_list = action(
+        app,
+        "ordered-list",
+        tr(language, "有序列表", "Ordered List"),
+        accelerator(
+            shortcuts,
+            "ordered-list",
+            platform_default("Mod+Alt+O", "Mod+Shift+["),
+        ),
+    )?;
+    let task_list = action(
+        app,
+        "task-list",
+        tr(language, "任务列表", "Task List"),
+        accelerator(
+            shortcuts,
+            "task-list",
+            platform_default("Mod+Alt+X", "Mod+Shift+9"),
+        ),
+    )?;
+    let insert_table = action(
+        app,
+        "insert-table",
+        tr(language, "插入表格", "Insert Table"),
+        accelerator(
+            shortcuts,
+            "insert-table",
+            platform_default("Mod+Alt+T", "Mod+T"),
+        ),
+    )?;
+    let insert_link = action(
+        app,
+        "insert-link",
+        tr(language, "插入链接", "Insert Link"),
+        accelerator(shortcuts, "insert-link", "Mod+K"),
+    )?;
+
+    SubmenuBuilder::new(app, tr(language, "工具", "Tools"))
+        .item(&toggle_toolbar)
+        .item(&toggle_selection_toolbar)
+        .separator()
+        .item(&paragraph)
+        .item(&heading)
+        .item(&promote_heading)
+        .item(&demote_heading)
+        .separator()
+        .item(&bold)
+        .item(&italic)
+        .item(&strike)
+        .item(&inline_code)
+        .separator()
+        .item(&quote)
+        .item(&code_block)
+        .separator()
+        .item(&bullet_list)
+        .item(&ordered_list)
+        .item(&task_list)
+        .separator()
+        .item(&insert_table)
+        .item(&insert_link)
+        .build()
+}
+
 pub fn install(
     app: &AppHandle,
     language: &str,
@@ -314,9 +516,10 @@ pub fn install(
         let file = file_menu(app, language, shortcuts)?;
         let edit = edit_menu(app, language, shortcuts)?;
         let view = view_menu(app, language, shortcuts)?;
+        let tools = tools_menu(app, language, shortcuts)?;
         // No "Window" submenu: the app is single-window, so minimize/zoom there
         // duplicated the traffic-light controls without adding anything.
-        let menu = Menu::with_items(app, &[&application, &file, &edit, &view])?;
+        let menu = Menu::with_items(app, &[&application, &file, &edit, &view, &tools])?;
         app.set_menu(menu)?;
         Ok(())
     };

@@ -227,6 +227,7 @@ const EN: Record<string, string> = {
   加粗: 'Bold',
   斜体: 'Italic',
   行内代码: 'Inline code',
+  标题: 'Heading',
   '标题 1': 'Heading 1',
   '标题 2': 'Heading 2',
   '标题 3': 'Heading 3',
@@ -363,6 +364,9 @@ const EN: Record<string, string> = {
   文件: 'File',
   视图: 'View',
   编辑: 'Edit',
+  工具: 'Tools',
+  顶部工具栏: 'Top Toolbar',
+  选中文本工具栏: 'Selection Toolbar',
   // Title bar menu (non-macOS custom menu bar)
   '关于 Xiangzi MD': 'About Xiangzi MD',
   '设置…': 'Settings…',

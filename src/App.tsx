@@ -118,6 +118,11 @@ export default function App(): JSX.Element {
     if (selectionToolbarEnabled === undefined) return
     void saveSettings({ showSelectionToolbar: !selectionToolbarEnabled })
   }, [saveSettings, selectionToolbarEnabled])
+  const toolbarEnabled = settings?.showToolbar
+  const toggleToolbar = useCallback((): void => {
+    if (toolbarEnabled === undefined) return
+    void saveSettings({ showToolbar: !toolbarEnabled })
+  }, [saveSettings, toolbarEnabled])
   const saveDefaultHighlightColor = useCallback(
     (defaultHighlightColor: string): void => {
       if (settings?.defaultHighlightColor === defaultHighlightColor) return
@@ -1084,6 +1089,8 @@ export default function App(): JSX.Element {
     setFocusMode,
     setTypewriterMode,
     toggleSelectionToolbar,
+    toggleToolbar,
+    toggleReadingMode,
     setSettingsSection,
   })
   // ── Auto-save ─────────────────────────────────────────────────────────────

@@ -75,6 +75,10 @@
   background: var(--bg-hover);
 }
 
+.ctx-item.is-open {
+  background: var(--bg-hover);
+}
+
 .ctx-icon {
   display: inline-flex;
   align-items: center;
