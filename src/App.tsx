@@ -26,15 +26,15 @@ const TextEditor = lazy(() => import('./components/TextEditor'))
 const Settings = lazy(() => import('./components/Settings'))
 const UpdateNotice = lazy(() => import('./components/UpdateNotice'))
 const EditorToolbar = lazy(() => import('./components/EditorToolbar'))
+const Lightbox = lazy(() => import('./components/Lightbox'))
+const TableZoomModal = lazy(() => import('./components/TableZoomModal'))
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
 import TitleBar from './components/TitleBar'
 import Outline from './components/Outline'
 import FindBar from './components/FindBar'
-import Lightbox from './components/Lightbox'
 import ContextMenu, { type ContextMenuState, type MenuItem } from './components/ContextMenu'
 import TableGridPicker from './components/TableGridPicker'
-import TableZoomModal from './components/TableZoomModal'
 import InputDialog from './components/InputDialog'
 import ExportCompleteDialog from './components/ExportCompleteDialog'
 import ExportProgressToast from './components/ExportProgressToast'
@@ -1573,7 +1573,11 @@ export default function App(): JSX.Element {
         />
       )}
 
-      {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
+      {zoomSrc && (
+        <Suspense fallback={null}>
+          <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />
+        </Suspense>
+      )}
 
       {ctxMenu && (
         <ContextMenu
@@ -1595,7 +1599,9 @@ export default function App(): JSX.Element {
       )}
 
       {tableZoomHtml !== null && (
-        <TableZoomModal html={tableZoomHtml} onClose={() => setTableZoomHtml(null)} />
+        <Suspense fallback={null}>
+          <TableZoomModal html={tableZoomHtml} onClose={() => setTableZoomHtml(null)} />
+        </Suspense>
       )}
 
       {inputDialog && (

@@ -1,55 +1,87 @@
-/* ---------- 图片放大预览 ---------- */
-.lightbox {
+/* ---------- Shared image / Mermaid / table preview ---------- */
+.preview-backdrop {
   position: fixed;
   inset: 0;
   z-index: 1200;
-  background: color-mix(in srgb, #000 45%, transparent);
-  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 40px;
-  animation: lb-fade 0.12s ease;
+  background: color-mix(in srgb, #000 45%, transparent);
+  backdrop-filter: blur(2px);
+  animation: preview-fade 0.12s ease;
 }
 
-.lightbox-panel {
+.preview-panel {
+  width: min(96vw, 1600px);
+  height: min(90vh, 1080px);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  max-height: 90vh;
-  overflow: hidden;
-  width: min(96vw, 1600px);
+  transition:
+    width 0.16s ease,
+    height 0.16s ease,
+    border-radius 0.16s ease;
 }
 
-.lightbox-header {
+.preview-backdrop.is-maximized {
+  padding: 8px;
+}
+
+.preview-backdrop.is-maximized .preview-panel {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+}
+
+.preview-header {
+  min-width: 0;
   align-items: center;
   border-bottom: 1px solid var(--border);
   display: flex;
   flex: 0 0 48px;
-  padding: 0 10px 0 18px;
+  gap: 8px;
+  padding: 0 10px 0 16px;
 }
 
-.lightbox-title {
+.preview-title {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
   font-size: 14px;
   font-weight: 600;
 }
 
-.lightbox-toolbar {
-  align-items: center;
-  background: var(--bg-hover);
-  border-radius: 7px;
-  display: flex;
-  gap: 3px;
-  padding: 5px;
+.preview-tools {
+  min-width: 0;
   margin-left: auto;
-  padding: 2px;
+  align-items: center;
+  display: flex;
+  gap: 6px;
 }
 
-.lightbox-toolbar button {
+.preview-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+}
+
+.preview-tools button,
+.preview-close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
   align-items: center;
   appearance: none;
   background: transparent;
@@ -58,90 +90,142 @@
   color: var(--text);
   cursor: pointer;
   display: inline-flex;
-  height: 30px;
   justify-content: center;
-  padding: 0;
-  width: 30px;
 }
 
-.lightbox-toolbar button:hover {
+.preview-tools button:hover:not(:disabled),
+.preview-tools button.is-active {
   background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
-.lightbox-close {
-  align-items: center;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-radius: 7px;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: inline-flex;
-  height: 30px;
-  justify-content: center;
-  margin-left: 6px;
-  padding: 0;
-  width: 30px;
+.preview-tools button.is-active {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
-.lightbox-close:hover {
+.preview-tools button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.preview-close {
+  flex: 0 0 30px;
+  color: var(--text-muted);
+}
+
+.preview-close:hover {
   background: var(--bg-active);
   color: var(--text);
 }
 
-.lightbox-toolbar svg,
-.lightbox-close svg {
+.preview-tools svg,
+.preview-close svg {
   height: 16px;
   width: 16px;
 }
 
-.lightbox-scale {
+.preview-scale {
   color: var(--text-muted);
   font-size: 12px;
-  min-width: 44px;
+  min-width: 42px;
   text-align: center;
 }
 
-.lightbox-scroll {
+.preview-viewport {
   background: var(--bg);
-  cursor: zoom-in;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 28px;
+  overscroll-behavior: contain;
+}
+
+.preview-viewport.is-pan,
+.preview-viewport.is-space-pan {
+  cursor: grab;
   user-select: none;
 }
 
-.lightbox-scroll:active {
-  cursor: crosshair;
+.preview-viewport.is-dragging {
+  cursor: grabbing;
 }
 
-.lightbox-canvas {
-  align-items: center;
-  background: var(--code-card-bg, #fff);
-  box-sizing: border-box;
-  display: flex;
-  justify-content: center;
-  margin: auto;
+.preview-viewport.is-zoom {
+  cursor: zoom-in;
+  user-select: none;
+}
+
+.preview-stage {
+  display: grid;
+  place-items: center;
   min-height: 100%;
   min-width: 100%;
-  padding: 24px;
-  -webkit-user-select: none;
-  user-select: none;
+  box-sizing: border-box;
 }
 
-.lightbox-img {
+.preview-content-frame {
+  position: relative;
+  flex: none;
+}
+
+.preview-content {
+  position: absolute;
+  inset: 0 auto auto 0;
+  transform-origin: top left;
+}
+
+.preview-graphic-content {
+  padding: 0;
+  background: var(--code-card-bg, #fff);
+}
+
+.preview-graphic {
   display: block;
-  height: auto;
-  max-width: 100%;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
   pointer-events: none;
   -webkit-user-drag: none;
   -webkit-user-select: none;
   user-select: none;
-  width: 100%;
 }
 
-@keyframes lb-fade {
+.preview-table-content {
+  display: inline-block;
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.preview-viewport.is-pan .preview-table-content,
+.preview-viewport.is-space-pan .preview-table-content,
+.preview-viewport.is-zoom .preview-table-content {
+  user-select: none;
+}
+
+@media (max-width: 760px) {
+  .preview-backdrop {
+    padding: 12px;
+  }
+
+  .preview-panel {
+    width: 100%;
+    height: 100%;
+  }
+
+  .preview-title {
+    display: none;
+  }
+
+  .preview-header {
+    padding-left: 8px;
+  }
+
+  .preview-tools {
+    overflow-x: auto;
+  }
+}
+
+@keyframes preview-fade {
   from {
     opacity: 0;
   }

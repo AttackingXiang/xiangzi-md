@@ -29,3 +29,11 @@ export async function toggleWindowFullscreen(): Promise<void> {
   const fullscreen = await win.isFullscreen()
   await win.setFullscreen(!fullscreen)
 }
+
+export async function getWindowFullscreen(): Promise<boolean> {
+  return getCurrentWindow().isFullscreen()
+}
+
+export async function setWindowFullscreen(fullscreen: boolean): Promise<void> {
+  await getCurrentWindow().setFullscreen(fullscreen)
+}

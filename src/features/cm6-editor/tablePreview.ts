@@ -596,6 +596,7 @@ function expandedTableHtml(wrapper: HTMLElement): string | null {
   const clone = table.cloneNode(true) as HTMLTableElement
   clone.className = 'xmd-table-zoom-table'
   clone.removeAttribute('style')
+  if (totalWidth > 0) clone.style.width = `${Math.ceil(totalWidth)}px`
   clone.querySelectorAll<HTMLElement>('[contenteditable]').forEach((element) => {
     element.removeAttribute('contenteditable')
     element.removeAttribute('aria-readonly')

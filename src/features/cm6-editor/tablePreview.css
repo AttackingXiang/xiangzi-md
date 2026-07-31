@@ -173,62 +173,7 @@
   z-index: 1100;
 }
 
-/* ---------- Full-screen table expansion ---------- */
-.table-zoom-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  background: color-mix(in srgb, #000 45%, transparent);
-  backdrop-filter: blur(2px);
-}
-
-.table-zoom-panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: min(96vw, 1400px);
-  max-height: 90vh;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-
-.table-zoom-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: none;
-  border-radius: 7px;
-  background: var(--bg-hover);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.table-zoom-close:hover {
-  background: var(--bg-active);
-  color: var(--text);
-}
-
-.table-zoom-scroll {
-  overflow: auto;
-  padding: 44px 28px 28px;
-}
-
 .xmd-table-zoom-table {
-  width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 14px;
