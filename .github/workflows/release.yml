@@ -387,7 +387,7 @@ jobs:
           test -s SHA256SUMS-${{ matrix.artifact }}.txt
 
       - name: Attest installers, updater signatures, checksums and SBOM
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: |
             src-tauri/target/**/bundle/**/*.dmg
@@ -603,7 +603,7 @@ jobs:
           done < <(jq -r '.platforms[].url' release-assets/latest.json | sort -u)
 
       - name: Attest the unified updater manifest and checksum
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: |
             release-assets/latest.json
