@@ -29,10 +29,8 @@ vitest.config.d.ts
 *.sln
 *.sw?
 
-# Local visual-audit captures can contain workspace paths or document text.
-/audit/current-state/*.png
-/audit/final-state/*.png
-# Ad-hoc QA screenshots taken at the repo root during design reviews.
+# Ad-hoc QA screenshots taken at the repo root during design reviews. These can
+# contain workspace paths or document text, so they stay local.
 /qa-*.png
 
 # Local Playwright CLI sessions and snapshots.
@@ -51,6 +49,11 @@ vitest.config.d.ts
 # Internal engineering notes (migration plans, QA logs, size baselines) — kept
 # locally for reference but not meant for the public repo alongside user docs.
 /docs/internal/
+
+# Local-only scratch: one-off audit reports, ad-hoc test fixtures, and rendered
+# showcase artifacts (the .md sources they were generated from live in docs/).
+# Kept out of the repo so the root stays legible — none of it is a build input.
+/selfdocs/
 
 # Draft for an unrelated product concept, kept locally for reference only —
 # not part of Xiangzi MD and must never be committed to this repo.
