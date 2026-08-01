@@ -35,3 +35,44 @@ test('welcome recents and settings modal are keyboard accessible', async ({ page
   await expect(dialog).toBeHidden()
   await expect(opener).toBeFocused()
 })
+
+test('Escape closes the settings modal', async ({ page }) => {
+  await page.goto('/')
+  const opener = page.locator('.action-card', { hasText: '新建文件' })
+  await opener.focus()
+  const modifier = await page.evaluate(() =>
+    /Mac|iPhone|iPad/.test(navigator.platform) ? 'Meta' : 'Control',
+  )
+  await page.keyboard.press(`${modifier}+,`)
+
+  const dialog = page.getByRole('dialog', { name: '设置' })
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(opener).toBeFocused()
+})
+
+test('Escape closes a nested settings modal before the parent', async ({ page }) => {
+  await page.goto('/')
+  const opener = page.locator('.action-card', { hasText: '新建文件' })
+  await opener.focus()
+  const modifier = await page.evaluate(() =>
+    /Mac|iPhone|iPad/.test(navigator.platform) ? 'Meta' : 'Control',
+  )
+  await page.keyboard.press(`${modifier}+,`)
+
+  const settingsDialog = page.getByRole('dialog', { name: '设置' })
+  await expect(settingsDialog).toBeVisible()
+  await settingsDialog.getByRole('button', { name: '更换…' }).click()
+  await settingsDialog.getByRole('button', { name: /卸载主题/ }).click()
+
+  const themeDialog = page.getByRole('dialog', { name: '卸载本地主题' })
+  await expect(themeDialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(themeDialog).toBeHidden()
+  await expect(settingsDialog).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(settingsDialog).toBeHidden()
+  await expect(opener).toBeFocused()
+})

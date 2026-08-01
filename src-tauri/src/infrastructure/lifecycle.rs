@@ -106,7 +106,10 @@ mod tests {
 
     #[test]
     fn supported_extensions_cover_legacy_formats() {
+        assert!(SUPPORTED_EXTENSIONS.contains(&"md"));
         assert!(SUPPORTED_EXTENSIONS.contains(&"markdown"));
+        assert!(SUPPORTED_EXTENSIONS.contains(&"mdown"));
+        assert!(SUPPORTED_EXTENSIONS.contains(&"mkd"));
         assert!(SUPPORTED_EXTENSIONS.contains(&"mdx"));
         assert!(SUPPORTED_EXTENSIONS.contains(&"txt"));
         assert!(!SUPPORTED_EXTENSIONS.contains(&"html"));

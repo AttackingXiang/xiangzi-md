@@ -62,6 +62,28 @@ export default function Settings({
   const dialogRef = useModalFocus<HTMLElement>()
 
   useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return undefined
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      // A nested modal, such as the local theme manager, owns its own
+      // Escape handling. Do not close Settings while that child dialog is
+      // still open.
+      const modalTarget =
+        event.target instanceof Element ? event.target.closest('[aria-modal="true"]') : null
+      if (modalTarget && modalTarget !== dialog) return
+      event.preventDefault()
+      onClose()
+    }
+
+    // Capture the event so Escape still works when a child modal has just
+    // closed and focus has temporarily returned to the WebView root.
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [dialogRef, onClose])
+
+  useEffect(() => {
     void desktop
       .getAppInfo()
       .then((info) => setAppVersion(info.version))
