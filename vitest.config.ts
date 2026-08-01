@@ -15,11 +15,15 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.{ts,tsx}', 'src/main.tsx', 'src/perfMain.tsx'],
+      // 棘轮：贴着实测值下方约 1.5 个点，只留 CI 环境波动的余量。设得太松等于允许覆盖率
+      // 无声下滑——之前这四个数比实测低 6 点，退化 6 个点都不会有人发现。补测试之后请顺手
+      // 往上抬，不要让差距重新拉开。
+      // 实测（2026-08-01）：statements 40.85 / branches 36.95 / functions 33.71 / lines 42.33
       thresholds: {
-        statements: 32,
-        branches: 30,
-        functions: 25,
-        lines: 33,
+        statements: 39,
+        branches: 35,
+        functions: 32,
+        lines: 41,
       },
     },
   },
