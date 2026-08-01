@@ -574,19 +574,40 @@ jobs:
             sleep $((attempt * 3))
           done
 
-          # Download every asset through its public browser_download_url. A 200
-          # alone is insufficient: also require the downloaded byte count to
-          # match the size recorded by the GitHub Release API.
+          # Download every asset through its public browser_download_url. GitHub
+          # can expose the Release API asset before the public CDN URL is ready
+          # (the v2.0.31 run saw a transient 404 for latest.json). Poll each
+          # asset independently instead of failing the whole release on that
+          # short propagation window. A 200 alone is insufficient: also require
+          # the downloaded byte count to match the Release API size.
+          download_public_asset() {
+            local name="$1" url="$2" expected_size="$3"
+            local attempt actual_size
+            for attempt in $(seq 1 12); do
+              if curl --fail --location --silent --show-error \
+                --retry 2 --retry-delay 5 --retry-all-errors \
+                --connect-timeout 20 --max-time 1800 \
+                "${url}" -o "${DOWNLOADED}"; then
+                actual_size=$(stat -c '%s' "${DOWNLOADED}")
+                if [ "${actual_size}" -eq "${expected_size}" ]; then
+                  return 0
+                fi
+                echo "${name}: expected ${expected_size} bytes, downloaded ${actual_size}; retrying." >&2
+              else
+                echo "${name}: public download is not ready (attempt ${attempt}/12); retrying." >&2
+              fi
+              rm -f "${DOWNLOADED}"
+              if [ "${attempt}" -lt 12 ]; then
+                sleep $((attempt * 10))
+              fi
+            done
+            echo "::error::${name}: public download did not become available with the expected size." >&2
+            return 1
+          }
+
           while IFS=$'\t' read -r name url expected_size; do
             echo "Verifying ${name} (${expected_size} bytes)"
-            curl --fail --location --silent --show-error \
-              --retry 4 --retry-all-errors --connect-timeout 20 --max-time 1800 \
-              "${url}" -o "${DOWNLOADED}"
-            actual_size=$(stat -c '%s' "${DOWNLOADED}")
-            if [ "${actual_size}" -ne "${expected_size}" ]; then
-              echo "::error::${name}: expected ${expected_size} bytes, downloaded ${actual_size}."
-              exit 1
-            fi
+            download_public_asset "${name}" "${url}" "${expected_size}"
           done < <(jq -r '.assets[] | [.name, .browser_download_url, (.size | tostring)] | @tsv' "${RELEASE_JSON}")
 
           # Finally verify that all six updater entries resolve to an asset that

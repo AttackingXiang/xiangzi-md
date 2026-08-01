@@ -73,6 +73,23 @@ describe('planScan', () => {
     expect(plan.stalePaths).toEqual(['/root/gone.md'])
   })
 
+  it('截断列表不把未列出的缓存路径误判为已删除', () => {
+    const listed = makeMeta('/root/listed.md')
+    const omitted = makeMeta('/root/omitted.md')
+    const cache = makeCache([
+      ['/root/listed.md', 100, listed],
+      ['/root/omitted.md', 50, omitted],
+    ])
+    const files: ListedScanFile[] = [
+      { path: '/root/listed.md', name: 'listed.md', modifiedNanos: 100 },
+    ]
+
+    const plan = planScan(files, cache, false)
+
+    expect(plan.cached).toEqual([listed])
+    expect(plan.stalePaths).toEqual([])
+  })
+
   it('mtime 倒退（变小）也当作变化处理，走重读而不是复用', () => {
     const meta = makeMeta('/root/a.md')
     const cache = makeCache([['/root/a.md', 200, meta]])

@@ -32,14 +32,20 @@ export interface ScanPlan {
 }
 
 /** 根据本次 listFiles 结果与已有缓存，纯函数地决定“谁能直接复用、谁要重读、谁该从
- * 缓存里剔除”。不依赖 React/IO，方便单测覆盖增量决策本身。
+ * 缓存里剔除”。当文件列表被后端截断时，列表并不完整，不能据此判断缓存里的
+ * 其它路径已经删除；此时传入 `complete=false`，只做命中/重读决策，不做 stale 清理。
+ * 不依赖 React/IO，方便单测覆盖增量决策本身。
  *
  * 判定“未变”用的是 mtime **相等**，而不是“缓存值 <= 本次列出的值”这种更宽松的判断：
  * mtime 可能因为 git checkout、时间同步、从别处复制回一份旧文件等操作而变小（倒退），
  * 不只是单调变大。只要跟缓存记录的不一致（无论变大变小），内容就可能已经不同，
  * 必须重读；只有严格相等才能安全地跳过 IPC 全文传输。
  */
-export function planScan(files: readonly ListedScanFile[], cache: TagScanCache): ScanPlan {
+export function planScan(
+  files: readonly ListedScanFile[],
+  cache: TagScanCache,
+  complete = true,
+): ScanPlan {
   const cached: DocumentMeta[] = []
   const toRead: Array<{ path: string; name: string }> = []
   const listedPaths = new Set<string>()
@@ -53,8 +59,10 @@ export function planScan(files: readonly ListedScanFile[], cache: TagScanCache):
     }
   }
   const stalePaths: string[] = []
-  for (const path of cache.keys()) {
-    if (!listedPaths.has(path)) stalePaths.push(path)
+  if (complete) {
+    for (const path of cache.keys()) {
+      if (!listedPaths.has(path)) stalePaths.push(path)
+    }
   }
   return { cached, toRead, stalePaths }
 }
@@ -103,10 +111,13 @@ export function useTagIndex(root: string | null, reloadKey: number) {
       .listFiles(root)
       .then((response) => {
         if (scanId === scanIdRef.current) setTruncated(response.truncated)
-        return response.items.filter((file) => MARKDOWN_EXTENSION_RE.test(file.name))
+        return {
+          complete: !response.truncated,
+          files: response.items.filter((file) => MARKDOWN_EXTENSION_RE.test(file.name)),
+        }
       })
-      .then(async (files) => {
-        const { cached, toRead, stalePaths } = planScan(files, cacheRef.current)
+      .then(async ({ complete, files }) => {
+        const { cached, toRead, stalePaths } = planScan(files, cacheRef.current, complete)
         const read = await mapWithConcurrencyLimit(toRead, SCAN_CONCURRENCY, async (file) => {
           try {
             const opened = await desktop.readFile(file.path)

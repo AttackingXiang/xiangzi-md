@@ -1,4 +1,5 @@
 import { GFM, parser as markdownParser } from '@lezer/markdown'
+import { fileExtension, MARKDOWN_EXTENSIONS } from './fileKind'
 import { dirName } from './path'
 
 export type RelativeLinkTarget =
@@ -364,7 +365,7 @@ export function resolveRelativeMarkdownLink(
   )
     return null
   const fileName = segments.at(-1) ?? ''
-  if (!/\.md(?:own)?$/i.test(fileName)) return null
+  if (!(MARKDOWN_EXTENSIONS as readonly string[]).includes(fileExtension(fileName))) return null
 
   const directory = dirName(activeFilePath)
   if (!directory) return null

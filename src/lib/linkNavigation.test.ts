@@ -108,6 +108,16 @@ describe('relative Markdown link navigation', () => {
     })
   })
 
+  it.each(['md', 'markdown', 'mdown', 'mkd', 'mdx'])(
+    'resolves links to every supported Markdown extension: .%s',
+    (extension) => {
+      expect(resolveRelativeMarkdownLink(`notes/next.${extension}`, '/vault/current.md')).toEqual({
+        kind: 'markdown',
+        path: `/vault/notes/next.${extension}`,
+      })
+    },
+  )
+
   it('rejects traversal, absolute, malformed and non-Markdown targets', () => {
     expect(resolveRelativeMarkdownLink('../secret.md', '/vault/docs/current.md')).toBeNull()
     expect(resolveRelativeMarkdownLink('%2e%2e/secret.md', '/vault/docs/current.md')).toBeNull()
