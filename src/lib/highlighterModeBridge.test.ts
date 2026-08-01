@@ -35,4 +35,41 @@ describe('highlighterModeBridge', () => {
     highlighterModeBridge.selectColor('#fda4af', false)
     expect(highlighterModeBridge.getState()).toEqual({ active: false, color: '#fda4af' })
   })
+
+  it('toggle() flips activation without touching the color', () => {
+    highlighterModeBridge.selectColor('#93c5fd', false)
+
+    highlighterModeBridge.toggle()
+    expect(highlighterModeBridge.getState()).toEqual({ active: true, color: '#93c5fd' })
+
+    highlighterModeBridge.toggle()
+    expect(highlighterModeBridge.getState()).toEqual({ active: false, color: '#93c5fd' })
+  })
+
+  it('syncDefaultColor() only follows the settings default until the user picks their own color', () => {
+    highlighterModeBridge.syncDefaultColor('#fde047')
+    expect(highlighterModeBridge.getState().color).toBe('#fde047')
+
+    // Settings default changes and the user hasn't picked a color yet: follow it.
+    highlighterModeBridge.syncDefaultColor('#93c5fd')
+    expect(highlighterModeBridge.getState().color).toBe('#93c5fd')
+
+    // User actively picks a color: further default syncs must not clobber it.
+    highlighterModeBridge.selectColor('#fda4af', false)
+    highlighterModeBridge.syncDefaultColor('#6ee7b7')
+    expect(highlighterModeBridge.getState().color).toBe('#fda4af')
+  })
+
+  it('reset() drops subscribers and restores the initial state', () => {
+    highlighterModeBridge.selectColor('#93c5fd')
+    const listener = vi.fn()
+    highlighterModeBridge.subscribe(listener)
+    listener.mockClear()
+
+    highlighterModeBridge.reset()
+
+    expect(highlighterModeBridge.getState()).toEqual({ active: false, color: '#fde047' })
+    highlighterModeBridge.activate()
+    expect(listener).not.toHaveBeenCalled()
+  })
 })

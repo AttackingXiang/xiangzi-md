@@ -1,17 +1,17 @@
+import { createRequestBridge } from './bridgeFactory'
+
 /**
  * 让全局 ⌘F / 「查找替换」命令能触发当前 TextEditor 的 CodeMirror 搜索面板。
  * 文本文件使用 CodeMirror 自带搜索；Markdown
  * 文件仍走应用自己的 FindBar，两者互不干扰。
  */
-let openSearch: (() => void) | null = null
+const bridge = createRequestBridge<[]>('textEditorBridge')
 
 export const textEditorBridge = {
   /** TextEditor 挂载时注册打开搜索面板的回调，卸载时传 null 注销。 */
-  set(fn: (() => void) | null): void {
-    openSearch = fn
-  },
+  set: bridge.setHandler,
   /** 打开当前 TextEditor 的搜索面板；无活跃编辑器时静默返回。 */
-  openSearch(): void {
-    openSearch?.()
-  },
+  openSearch: bridge.request,
+  /** 清空已注册的回调。仅供测试之间重置单例状态使用。 */
+  reset: bridge.reset,
 }

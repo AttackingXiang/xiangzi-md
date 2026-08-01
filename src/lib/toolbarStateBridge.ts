@@ -1,3 +1,5 @@
+import { createStateBridge } from './bridgeFactory'
+
 export interface ToolbarActiveState {
   bold: boolean
   italic: boolean
@@ -31,20 +33,26 @@ export const DEFAULT_TOOLBAR_ACTIVE_STATE: ToolbarActiveState = {
 }
 
 type Listener = (state: ToolbarActiveState) => void
-let _listener: Listener | null = null
-let _lastState: ToolbarActiveState = DEFAULT_TOOLBAR_ACTIVE_STATE
+
+const bridge = createStateBridge<ToolbarActiveState>(DEFAULT_TOOLBAR_ACTIVE_STATE)
+
+// Only one consumer (the toolbar) ever holds this slot, and it replaces
+// wholesale rather than adding a subscriber — mirror that on top of the
+// (multi-subscriber) shared store instead of exposing bridge.subscribe raw.
+let unsubscribe: (() => void) | null = null
 
 export const toolbarStateBridge = {
   setListener(fn: Listener | null): void {
-    _listener = fn
-    if (fn) fn(_lastState)
+    unsubscribe?.()
+    unsubscribe = fn ? bridge.subscribe(fn) : null
   },
   notify(state: ToolbarActiveState): void {
-    _lastState = state
-    _listener?.(state)
+    bridge.setState(state)
   },
+  // Domain reset (editor went away, blank out the toolbar) — not the same as
+  // test hygiene, so it deliberately doesn't touch the listener slot above.
+  // setListener(null) already gives tests the same teardown production uses.
   reset(): void {
-    _lastState = DEFAULT_TOOLBAR_ACTIVE_STATE
-    _listener?.(DEFAULT_TOOLBAR_ACTIVE_STATE)
+    bridge.setState(DEFAULT_TOOLBAR_ACTIVE_STATE)
   },
 }

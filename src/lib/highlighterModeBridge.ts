@@ -1,40 +1,36 @@
+import { createStateBridge } from './bridgeFactory'
+
 export interface HighlighterModeState {
   active: boolean
   color: string
 }
 
-type Listener = (state: HighlighterModeState) => void
+const bridge = createStateBridge<HighlighterModeState>(
+  { active: false, color: '#fde047' },
+  { isEqual: (a, b) => a.active === b.active && a.color === b.color },
+)
 
-let state: HighlighterModeState = { active: false, color: '#fde047' }
-const listeners = new Set<Listener>()
 let lastKnownDefaultColor: string | null = null
-
-function publish(next: HighlighterModeState): void {
-  if (state.active === next.active && state.color === next.color) return
-  state = next
-  for (const listener of [...listeners]) listener(state)
-}
 
 /** Shared, document-agnostic state for the pointer-driven highlighter tool. */
 export const highlighterModeBridge = {
-  getState(): HighlighterModeState {
-    return state
-  },
+  getState: bridge.getState,
 
   activate(): void {
-    publish({ ...state, active: true })
+    bridge.setState({ ...bridge.getState(), active: true })
   },
 
   deactivate(): void {
-    publish({ ...state, active: false })
+    bridge.setState({ ...bridge.getState(), active: false })
   },
 
   toggle(): void {
-    publish({ ...state, active: !state.active })
+    const state = bridge.getState()
+    bridge.setState({ ...state, active: !state.active })
   },
 
   selectColor(color: string, activate = true): void {
-    publish({ active: activate, color })
+    bridge.setState({ active: activate, color })
   },
 
   /**
@@ -45,16 +41,19 @@ export const highlighterModeBridge = {
    * the component that calls it (e.g. toggling source/reading mode).
    */
   syncDefaultColor(defaultColor: string): void {
+    const state = bridge.getState()
     const followsDefault = lastKnownDefaultColor === null || state.color === lastKnownDefaultColor
     lastKnownDefaultColor = defaultColor
     if (followsDefault) {
-      publish({ ...state, color: defaultColor })
+      bridge.setState({ ...state, color: defaultColor })
     }
   },
 
-  subscribe(listener: Listener): () => void {
-    listeners.add(listener)
-    listener(state)
-    return () => listeners.delete(listener)
+  subscribe: bridge.subscribe,
+
+  /** Drops all subscribers and restores defaults. For tests only. */
+  reset(): void {
+    bridge.reset()
+    lastKnownDefaultColor = null
   },
 }

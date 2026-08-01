@@ -1,13 +1,4 @@
-type RequestHandler = (html: string) => void
-
-let handler: RequestHandler | null = null
+import { createRequestBridge } from './bridgeFactory'
 
 /** Publishes a rendered table snapshot from the CM6 widget into the React modal layer. */
-export const tableZoomBridge = {
-  setHandler(next: RequestHandler | null): void {
-    handler = next
-  },
-  request(html: string): void {
-    handler?.(html)
-  },
-}
+export const tableZoomBridge = createRequestBridge<[html: string]>('tableZoomBridge')
