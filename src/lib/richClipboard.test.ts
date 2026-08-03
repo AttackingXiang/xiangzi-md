@@ -550,6 +550,24 @@ describe('setupRichClipboard', () => {
     dispose()
   })
 
+  it('keeps color and highlighter formatting when the rich-copy options are enabled', () => {
+    setCopyPreferences({ copyTextColor: true, copyHighlightColor: true })
+    const root = mountRoot(
+      '<p><span class="xmd-cm-inline-color" style="color:red">red</span> and ' +
+        '<span class="xmd-cm-inline-highlight" style="background-color:yellow">marked</span></p>',
+    )
+    const dispose = setup(root)
+    selectContents(root)
+
+    const clipboardData = new DataTransfer()
+    const event = dispatchCopy(root, clipboardData)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(clipboardData.getData('text/html')).toContain('color:red')
+    expect(clipboardData.getData('text/html')).toContain('background-color:yellow')
+    dispose()
+  })
+
   it('does not intercept copy when image mode is "address" and the selection holds only an image', () => {
     setCopyPreferences({ imageCopyMode: 'address' })
     const root = mountRoot('')

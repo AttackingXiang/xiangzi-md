@@ -1,4 +1,8 @@
 import { removeHiddenSource } from './hiddenSourceDom'
+import {
+  DEFAULT_CLIPBOARD_FORMATTING,
+  type ClipboardFormattingOptions,
+} from './clipboardFormatting'
 
 const INLINE_SEMANTIC_ELEMENTS = [
   ['.xmd-cm-strong', 'strong'],
@@ -14,14 +18,17 @@ const BLOCK_WIDGET_SELECTOR = [
   '.xmd-cm-mermaid-block',
 ].join(',')
 
-export interface ClipboardFormattingOptions {
-  copyTextColor?: boolean
-  copyHighlightColor?: boolean
-}
-
 function unwrapElements(root: HTMLElement, selector: string): void {
   root.querySelectorAll<HTMLElement>(selector).forEach((element) => {
     element.replaceWith(...Array.from(element.childNodes))
+  })
+}
+
+function stripInlineStyleProperty(root: HTMLElement, property: string): void {
+  root.querySelectorAll<HTMLElement>('span[style]').forEach((span) => {
+    if (span.closest('.katex, .xmd-cm-math, .xmd-cm-mermaid-block, svg')) return
+    span.style.removeProperty(property)
+    if (!span.style.cssText.trim()) span.removeAttribute('style')
   })
 }
 
@@ -34,6 +41,10 @@ function stripOptionalFormatting(
   }
   if (options.copyHighlightColor === false) {
     unwrapElements(root, '.xmd-cm-inline-highlight, mark')
+  }
+  if (options.copyTextColor === false) stripInlineStyleProperty(root, 'color')
+  if (options.copyHighlightColor === false) {
+    stripInlineStyleProperty(root, 'background-color')
   }
 }
 
@@ -236,10 +247,7 @@ function stripEditorOnlySpans(root: HTMLElement): void {
 /** Convert CM6's class-driven preview DOM into compact, portable clipboard HTML. */
 export function materializePortableClipboard(
   root: HTMLElement,
-  options: ClipboardFormattingOptions = {
-    copyTextColor: true,
-    copyHighlightColor: true,
-  },
+  options: ClipboardFormattingOptions = DEFAULT_CLIPBOARD_FORMATTING,
 ): void {
   // Must run before headings and paragraphs are materialized, otherwise
   // visually collapsed Markdown source becomes semantic clipboard text.

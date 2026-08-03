@@ -164,7 +164,9 @@ describe('materializePortableClipboard', () => {
   })
 
   it('drops the class but keeps the style on a span with inline styling', () => {
-    const root = materialize('<span class="xmd-cm-inline-color" style="color:red">x</span>')
+    const root = document.createElement('div')
+    root.innerHTML = '<span class="xmd-cm-inline-color" style="color:red">x</span>'
+    materializePortableClipboard(root, { copyTextColor: true, copyHighlightColor: true })
     const span = root.querySelector('span')
     expect(span?.getAttribute('class')).toBeNull()
     expect(span?.getAttribute('style')).toBe('color:red')
@@ -177,6 +179,19 @@ describe('materializePortableClipboard', () => {
       '<span class="xmd-cm-inline-highlight" style="background-color:yellow">marked</span>'
     materializePortableClipboard(root, { copyTextColor: false, copyHighlightColor: false })
     expect(root.innerHTML).toBe('redmarked')
+  })
+
+  it('removes color properties from style-only spans while preserving other inline styles', () => {
+    const root = document.createElement('div')
+    root.innerHTML =
+      '<span style="color:red;font-weight:700">red</span>' +
+      '<span style="background-color:yellow;padding:1px">marked</span>'
+    materializePortableClipboard(root, { copyTextColor: false, copyHighlightColor: false })
+    const spans = root.querySelectorAll('span')
+    expect(spans[0]?.style.color).toBe('')
+    expect(spans[0]?.style.fontWeight).toBe('700')
+    expect(spans[1]?.style.backgroundColor).toBe('')
+    expect(spans[1]?.style.padding).toBe('1px')
   })
 
   it('unwraps a bare styling-free span, keeping its text', () => {

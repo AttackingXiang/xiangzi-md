@@ -65,6 +65,22 @@ const value = 1
     expect(formattedRichHtml).toContain('<mark style="background-color:#fde047">marked</mark>')
   })
 
+  it('handles multiline color and highlighter HTML blocks', () => {
+    const source = '<font color="#dc2626">\nred\n</font>\n\n<mark>\nmarked\n</mark>'
+    const withoutFormatting = markdownToPortableHtml(source)
+    expect(withoutFormatting).not.toContain('&lt;font')
+    expect(withoutFormatting).not.toContain('&lt;mark')
+    expect(withoutFormatting).toContain('red')
+    expect(withoutFormatting).toContain('marked')
+
+    const withFormatting = markdownToPortableHtml(source, {
+      copyTextColor: true,
+      copyHighlightColor: true,
+    })
+    expect(withFormatting).toContain('<font color="#dc2626">')
+    expect(withFormatting).toContain('<mark>')
+  })
+
   it('marks only Mermaid fences for clipboard image completion', () => {
     const html = markdownToPortableHtml(`\`\`\`mermaid
 flowchart LR

@@ -6,6 +6,8 @@ import type { SectionProps } from './types'
 import ColorPresetSettings from './ColorPresetSettings'
 
 export default function EditorSection({ settings, onChange, en }: SectionProps): JSX.Element {
+  const clipboardFormat = settings.clipboardFormat ?? 'rich'
+
   return (
     <SettingsPage
       title={en ? 'Editor' : '编辑器'}
@@ -135,7 +137,7 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
       <SettingsCard title={en ? 'Copy control' : '复制控制'}>
         <SettingRow label={en ? 'Default copy format' : '默认复制格式'}>
           <select
-            value={settings.clipboardFormat ?? 'rich'}
+            value={clipboardFormat}
             onChange={(event) =>
               onChange({
                 clipboardFormat: event.target.value as AppSettings['clipboardFormat'],
@@ -180,7 +182,7 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
               : '富文本复制时保留字体颜色标签；默认关闭。'
           }
           checked={settings.copyTextColor ?? false}
-          disabled={settings.clipboardFormat !== 'rich'}
+          disabled={clipboardFormat !== 'rich'}
           onChange={(copyTextColor) => onChange({ copyTextColor })}
         />
         <ToggleRow
@@ -191,7 +193,7 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
               : '富文本复制时保留荧光笔标签；默认关闭。'
           }
           checked={settings.copyHighlightColor ?? false}
-          disabled={settings.clipboardFormat !== 'rich'}
+          disabled={clipboardFormat !== 'rich'}
           onChange={(copyHighlightColor) => onChange({ copyHighlightColor })}
         />
         <p className="settings-hint">

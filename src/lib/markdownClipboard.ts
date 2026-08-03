@@ -1,6 +1,10 @@
 import type { SyntaxNode } from '@lezer/common'
 import { GFM, parser as markdownParser } from '@lezer/markdown'
-import type { ClipboardFormattingOptions } from './portableClipboard'
+import {
+  DEFAULT_CLIPBOARD_FORMATTING,
+  safeClipboardColor,
+  type ClipboardFormattingOptions,
+} from './clipboardFormatting'
 
 const parser = markdownParser.configure([GFM])
 
@@ -27,15 +31,7 @@ function safeHref(value: string, image = false): string | null {
   return allowed.includes(scheme) ? href : null
 }
 
-function safeInlineHtmlColor(value: string): string | null {
-  const color = value.trim()
-  if (/^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(color)) return color
-  if (/^[a-z]+$/i.test(color)) return color
-  return null
-}
-
-function inlineHtmlTag(source: string, node: SyntaxNode, options: ClipboardFormattingOptions): string {
-  const raw = source.slice(node.from, node.to)
+function inlineHtmlTag(raw: string, options: ClipboardFormattingOptions): string {
   const closing = /^<\s*\/\s*(font|mark)\s*>$/i.exec(raw)
   if (closing) {
     const name = closing[1].toLowerCase()
@@ -53,7 +49,7 @@ function inlineHtmlTag(source: string, node: SyntaxNode, options: ClipboardForma
     const colorAttribute = /\bcolor\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(
       opening[2],
     )
-    const color = safeInlineHtmlColor(
+    const color = safeClipboardColor(
       colorAttribute?.[1] ?? colorAttribute?.[2] ?? colorAttribute?.[3] ?? '',
     )
     return color ? `<font color="${escapeAttribute(color)}">` : escapeText(raw)
@@ -63,10 +59,35 @@ function inlineHtmlTag(source: string, node: SyntaxNode, options: ClipboardForma
   const styleAttribute = /^\s+style\s*=\s*(?:"([^"]*)"|'([^']*)')\s*$/i.exec(opening[2])
   const style = styleAttribute?.[1] ?? styleAttribute?.[2] ?? ''
   const background = /^background-color\s*:\s*([^;]+)\s*;?$/i.exec(style)
-  const color = safeInlineHtmlColor(background?.[1] ?? '')
+  const color = safeClipboardColor(background?.[1] ?? '')
   return color
     ? `<mark style="background-color:${escapeAttribute(color)}">`
     : escapeText(raw)
+}
+
+function inlineHtmlNode(
+  source: string,
+  node: SyntaxNode,
+  options: ClipboardFormattingOptions,
+): string {
+  return inlineHtmlTag(source.slice(node.from, node.to), options)
+}
+
+function htmlBlock(source: string, options: ClipboardFormattingOptions): string {
+  const tagPattern = /<[^>]*>/gs
+  let html = ''
+  let cursor = 0
+  for (const match of source.matchAll(tagPattern)) {
+    const index = match.index ?? cursor
+    const raw = match[0]
+    html += escapeText(source.slice(cursor, index))
+    html += /<\s*\/?\s*(?:font|mark)\b/i.test(raw)
+      ? inlineHtmlTag(raw, options)
+      : escapeText(raw)
+    cursor = index + raw.length
+  }
+  html += escapeText(source.slice(cursor))
+  return `<p>${html}</p>`
 }
 
 function inlineRange(
@@ -143,7 +164,7 @@ function inlineNode(source: string, node: SyntaxNode, options: ClipboardFormatti
     case 'Image':
       return linkOrImage(source, node, true, options)
     case 'HTMLTag':
-      return inlineHtmlTag(source, node, options)
+      return inlineHtmlNode(source, node, options)
     case 'Autolink': {
       const value = source.slice(node.from + 1, node.to - 1)
       const href = safeHref(value)
@@ -267,6 +288,8 @@ function blockNode(source: string, node: SyntaxNode, options: ClipboardFormattin
     case 'FencedCode':
     case 'CodeBlock':
       return codeBlock(source, parts)
+    case 'HTMLBlock':
+      return htmlBlock(source.slice(node.from, node.to), options)
     case 'Table': {
       const header = parts.find((part) => part.name === 'TableHeader')
       const rows = parts.filter((part) => part.name === 'TableRow')
@@ -285,10 +308,7 @@ function blockNode(source: string, node: SyntaxNode, options: ClipboardFormattin
 /** Synchronous full-document serializer used when CM6's live DOM is virtualized. */
 export function markdownToPortableHtml(
   source: string,
-  options: ClipboardFormattingOptions = {
-    copyTextColor: false,
-    copyHighlightColor: false,
-  },
+  options: ClipboardFormattingOptions = DEFAULT_CLIPBOARD_FORMATTING,
 ): string {
   return blockNode(source, parser.parse(source).topNode, options)
 }

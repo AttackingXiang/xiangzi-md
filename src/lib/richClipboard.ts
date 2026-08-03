@@ -15,8 +15,8 @@ import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
 import {
   materializePortableClipboard,
   portableClipboardText,
-  type ClipboardFormattingOptions,
 } from './portableClipboard'
+import type { ClipboardFormattingOptions } from './clipboardFormatting'
 import { markdownToPortableHtml } from './markdownClipboard'
 import { embedMarkdownSourceInClipboardHtml } from './markdownPaste'
 
