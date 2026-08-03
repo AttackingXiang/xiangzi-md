@@ -144,6 +144,24 @@ describe('CM6 Markdown commands', () => {
     )
   })
 
+  it('defers color markup at an empty caret until text is entered', () => {
+    expect(run('text', EditorSelection.cursor(2), setTextColor('#dc2626'))).toEqual({
+      doc: 'text',
+      from: 2,
+      to: 2,
+    })
+  })
+
+  it('does not color a fenced code language even when only the info string is selected', () => {
+    const doc = '```bash\necho hello\n```'
+    const languageFrom = doc.indexOf('bash')
+    expectNotHandled(
+      doc,
+      EditorSelection.range(languageFrom, languageFrom + 'bash'.length),
+      setTextColor('#dc2626'),
+    )
+  })
+
   it('never writes text-color HTML into or across a code block', () => {
     const doc = 'before\n\n```ts\nconst value = 1\n```\n\nafter'
     const codeFrom = doc.indexOf('const')

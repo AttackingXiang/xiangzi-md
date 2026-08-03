@@ -1,4 +1,10 @@
-import { EditorSelection, type ChangeSpec, type EditorState } from '@codemirror/state'
+import {
+  EditorSelection,
+  StateEffect,
+  StateField,
+  type ChangeSpec,
+  type EditorState,
+} from '@codemirror/state'
 import { redo as cm6Redo, undo as cm6Undo } from '@codemirror/commands'
 import { syntaxTree } from '@codemirror/language'
 import type { Command, EditorView } from '@codemirror/view'
@@ -14,6 +20,26 @@ export interface MarkdownEditPlan {
 type InlineMark = '**' | '*' | '~~' | '`'
 type LineKind = 'blockquote' | 'bullet' | 'ordered' | 'task'
 type MarkdownSyntaxNode = ReturnType<typeof syntaxTree>['topNode']
+
+/** Color selected at an empty caret, waiting for the first real text input. */
+export const setPendingTextColor = StateEffect.define<string | null>()
+export const pendingTextColor = StateField.define<string | null>({
+  create: () => null,
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setPendingTextColor)) return effect.value
+    }
+    if (
+      transaction.docChanged ||
+      !transaction.startState.selection.eq(
+        transaction.selection ?? transaction.startState.selection,
+      )
+    ) {
+      return null
+    }
+    return value
+  },
+})
 
 const INLINE_MARK_SYNTAX: Record<InlineMark, { node: string; delimiter: string }> = {
   '**': { node: 'StrongEmphasis', delimiter: 'EmphasisMark' },
@@ -229,6 +255,23 @@ function textColorPlan(state: EditorState, color: string | null): MarkdownEditPl
 
   if (opening && closing) {
     const openingFrom = range.from - opening[0].length
+    // A color command at an empty caret must not create or preserve an empty
+    // HTML span. There is no text to color yet, and leaving the pair in the
+    // document makes the next Markdown construct (especially a fenced code
+    // block) inherit the color.
+    if (range.empty && range.from === openingFrom + opening[0].length) {
+      const contentFrom = openingFrom + opening[0].length
+      const contentTo = range.to
+      if (contentFrom === contentTo && closing.index === 0) {
+        return {
+          changes: [
+            { from: openingFrom, to: range.from, insert: '' },
+            { from: range.to, to: range.to + closing[0].length, insert: '' },
+          ],
+          selection: selection(openingFrom),
+        }
+      }
+    }
     const changes: ChangeSpec[] = normalized
       ? [{ from: openingFrom, to: range.from, insert: `<font color="${normalized}">` }]
       : [
@@ -239,6 +282,7 @@ function textColorPlan(state: EditorState, color: string | null): MarkdownEditPl
   }
 
   if (!normalized) return null
+  if (range.empty) return null
   const openingTag = `<font color="${normalized}">`
   const closingTag = '</font>'
   const selected = state.sliceDoc(range.from, range.to)
@@ -610,8 +654,34 @@ export const toggleBold = applyPlan((state) => inlineMarkPlan(state, '**'))
 export const toggleItalic = applyPlan((state) => inlineMarkPlan(state, '*'))
 export const toggleStrike = applyPlan((state) => inlineMarkPlan(state, '~~'))
 export const toggleInlineCode = applyPlan((state) => inlineMarkPlan(state, '`'))
-export const setTextColor = (color: string | null): Command =>
-  applyPlan((state) => textColorPlan(state, color))
+export const setTextColor =
+  (color: string | null): Command =>
+  (target) => {
+    if (target.state.readOnly) return false
+    const range = target.state.selection.main
+    if (range.empty) {
+      // Existing spans still use the normal edit plan so a caret inside a color
+      // span can change or remove that span. A plain empty caret only arms a
+      // deferred color; it must not write `<font></font>` into the document.
+      const plan = textColorPlan(target.state, color)
+      if (plan) {
+        target.dispatch(
+          target.state.update({
+            changes: plan.changes,
+            selection: plan.selection,
+            scrollIntoView: true,
+          }),
+        )
+        return true
+      }
+      if (selectionTouchesCodeBlock(target.state)) return false
+      const normalized = color?.trim() ?? null
+      if (normalized && !/^#[\da-f]{6}$/i.test(normalized)) return false
+      target.dispatch(target.state.update({ effects: setPendingTextColor.of(normalized) }))
+      return true
+    }
+    return applyPlan((state) => textColorPlan(state, color))(target)
+  }
 export const setTextHighlight = (color: string | null): Command =>
   applyPlan((state) => textHighlightPlan(state, color))
 export const setHeading = (level: 1 | 2 | 3 | 4 | 5 | 6): Command =>
