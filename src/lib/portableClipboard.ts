@@ -14,6 +14,29 @@ const BLOCK_WIDGET_SELECTOR = [
   '.xmd-cm-mermaid-block',
 ].join(',')
 
+export interface ClipboardFormattingOptions {
+  copyTextColor?: boolean
+  copyHighlightColor?: boolean
+}
+
+function unwrapElements(root: HTMLElement, selector: string): void {
+  root.querySelectorAll<HTMLElement>(selector).forEach((element) => {
+    element.replaceWith(...Array.from(element.childNodes))
+  })
+}
+
+function stripOptionalFormatting(
+  root: HTMLElement,
+  options: ClipboardFormattingOptions,
+): void {
+  if (options.copyTextColor === false) {
+    unwrapElements(root, '.xmd-cm-inline-color, font')
+  }
+  if (options.copyHighlightColor === false) {
+    unwrapElements(root, '.xmd-cm-inline-highlight, mark')
+  }
+}
+
 function replaceTag(element: HTMLElement, tagName: string): HTMLElement {
   const replacement = element.ownerDocument.createElement(tagName)
   replacement.append(...Array.from(element.childNodes))
@@ -211,9 +234,16 @@ function stripEditorOnlySpans(root: HTMLElement): void {
 }
 
 /** Convert CM6's class-driven preview DOM into compact, portable clipboard HTML. */
-export function materializePortableClipboard(root: HTMLElement): void {
+export function materializePortableClipboard(
+  root: HTMLElement,
+  options: ClipboardFormattingOptions = {
+    copyTextColor: true,
+    copyHighlightColor: true,
+  },
+): void {
   // Must run before headings and paragraphs are materialized, otherwise
   // visually collapsed Markdown source becomes semantic clipboard text.
+  stripOptionalFormatting(root, options)
   removeHiddenSource(root)
   materializeLinks(root)
   materializeInlineFormatting(root)

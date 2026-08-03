@@ -170,6 +170,15 @@ describe('materializePortableClipboard', () => {
     expect(span?.getAttribute('style')).toBe('color:red')
   })
 
+  it('unwraps color and highlighter formatting when those options are disabled', () => {
+    const root = document.createElement('div')
+    root.innerHTML =
+      '<span class="xmd-cm-inline-color" style="color:red">red</span>' +
+      '<span class="xmd-cm-inline-highlight" style="background-color:yellow">marked</span>'
+    materializePortableClipboard(root, { copyTextColor: false, copyHighlightColor: false })
+    expect(root.innerHTML).toBe('redmarked')
+  })
+
   it('unwraps a bare styling-free span, keeping its text', () => {
     const root = materialize('<span class="xmd-cm-marker">x</span>')
     expect(root.querySelector('span')).toBeNull()

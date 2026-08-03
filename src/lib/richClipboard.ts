@@ -1,12 +1,22 @@
 import { desktop } from '../platform'
-import { getClipboardFormat, getImageCopyMode, getMermaidCopyMode } from './copyPreferences'
+import {
+  getClipboardFormat,
+  getCopyHighlightColor,
+  getCopyTextColor,
+  getImageCopyMode,
+  getMermaidCopyMode,
+} from './copyPreferences'
 import { renderMermaidForExport } from './mermaidPreview'
 import { createTaskQueue } from './asyncPool'
 import { blobPartFromBytes, imageMimeType, xmdAssetPaths } from './asset'
 import { fitImageDimensions } from './imageDimensions'
 import { InFlightCache } from './inFlightCache'
 import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
-import { materializePortableClipboard, portableClipboardText } from './portableClipboard'
+import {
+  materializePortableClipboard,
+  portableClipboardText,
+  type ClipboardFormattingOptions,
+} from './portableClipboard'
 import { markdownToPortableHtml } from './markdownClipboard'
 import { embedMarkdownSourceInClipboardHtml } from './markdownPaste'
 
@@ -38,6 +48,13 @@ const MAX_CACHE_ENTRIES = 12
 const MAX_CACHE_BYTES = 64 * 1024 * 1024
 const MAX_CLIPBOARD_IMAGE_BYTES = 32 * 1024 * 1024
 const MAX_CLIPBOARD_IMAGE_PIXELS = 16_000_000
+
+function clipboardFormattingOptions(): ClipboardFormattingOptions {
+  return {
+    copyTextColor: getCopyTextColor(),
+    copyHighlightColor: getCopyHighlightColor(),
+  }
+}
 const MAX_IN_FLIGHT_IMAGES = 16
 const imagePromises = new InFlightCache<string, CachedClipboardImage>()
 const resolvedImages = new Map<string, CachedClipboardImage>()
@@ -394,7 +411,7 @@ function prepareSnapshot(
   markdownSource?: string,
 ): ClipboardSnapshot {
   cleanClipboardFragment(wrapper)
-  materializePortableClipboard(wrapper)
+  materializePortableClipboard(wrapper, clipboardFormattingOptions())
 
   // Mermaid 先处理：把每个图表代码块整块换成占位 <img>，并打标记，避免下面
   // 统计真实图片时把图表里可能内嵌的 <img> 也算进去、错乱占位序号。
@@ -535,7 +552,7 @@ function snapshotFromWholeMarkdown(
   if (!view) return null
   const markdown = view.state.doc.toString()
   const wrapper = document.createElement('div')
-  wrapper.innerHTML = markdownToPortableHtml(markdown)
+  wrapper.innerHTML = markdownToPortableHtml(markdown, clipboardFormattingOptions())
   return prepareSnapshot(
     wrapper,
     [],

@@ -127,7 +127,13 @@ afterEach(() => {
   activeDisposers.splice(0).forEach((dispose) => dispose())
   document.body.replaceChildren()
   window.getSelection()?.removeAllRanges()
-  setCopyPreferences({ clipboardFormat: 'rich', imageCopyMode: 'image', mermaidCopyMode: 'image' })
+  setCopyPreferences({
+    clipboardFormat: 'rich',
+    imageCopyMode: 'image',
+    mermaidCopyMode: 'image',
+    copyTextColor: false,
+    copyHighlightColor: false,
+  })
   vi.unstubAllGlobals()
   vi.useRealTimers()
   Reflect.deleteProperty(window, '__TAURI_INTERNALS__')
@@ -522,6 +528,25 @@ describe('setupRichClipboard', () => {
     expect(event.defaultPrevented).toBe(true)
     expect(clipboardData.getData('text/html')).toContain('<strong>world</strong>')
     expect(clipboardData.getData('text/plain')).toBe('hello world')
+    dispose()
+  })
+
+  it('omits color and highlighter tags from rich clipboard HTML by default', () => {
+    const root = mountRoot(
+      '<p><span class="xmd-cm-inline-color" style="color:red">red</span> and ' +
+        '<span class="xmd-cm-inline-highlight" style="background-color:yellow">marked</span></p>',
+    )
+    const dispose = setup(root)
+    selectContents(root)
+
+    const clipboardData = new DataTransfer()
+    const event = dispatchCopy(root, clipboardData)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(clipboardData.getData('text/html')).not.toContain('color:red')
+    expect(clipboardData.getData('text/html')).not.toContain('background-color:yellow')
+    expect(clipboardData.getData('text/html')).toContain('red')
+    expect(clipboardData.getData('text/html')).toContain('marked')
     dispose()
   })
 

@@ -202,6 +202,8 @@ export function createBrowserPreviewSettings(): AppSettings {
     imageCopyMode: 'image',
     mermaidCopyMode: 'image',
     clipboardFormat: 'rich',
+    copyTextColor: false,
+    copyHighlightColor: false,
     pandocPath: '',
     pandocReferenceDoc: '',
     pandocExportArgs: '',

@@ -19,18 +19,24 @@ export interface CopyPreferences {
   imageCopyMode: ImageCopyMode
   mermaidCopyMode: MermaidCopyMode
   clipboardFormat: ClipboardFormat
+  copyTextColor: boolean
+  copyHighlightColor: boolean
 }
 
 const current: CopyPreferences = {
   imageCopyMode: 'image',
   mermaidCopyMode: 'image',
   clipboardFormat: 'rich',
+  copyTextColor: false,
+  copyHighlightColor: false,
 }
 
 export function setCopyPreferences(prefs: Partial<CopyPreferences>): void {
   if (prefs.imageCopyMode) current.imageCopyMode = prefs.imageCopyMode
   if (prefs.mermaidCopyMode) current.mermaidCopyMode = prefs.mermaidCopyMode
   if (prefs.clipboardFormat) current.clipboardFormat = prefs.clipboardFormat
+  if (prefs.copyTextColor !== undefined) current.copyTextColor = prefs.copyTextColor
+  if (prefs.copyHighlightColor !== undefined) current.copyHighlightColor = prefs.copyHighlightColor
 }
 
 export function getImageCopyMode(): ImageCopyMode {
@@ -43,4 +49,12 @@ export function getMermaidCopyMode(): MermaidCopyMode {
 
 export function getClipboardFormat(): ClipboardFormat {
   return current.clipboardFormat
+}
+
+export function getCopyTextColor(): boolean {
+  return current.copyTextColor
+}
+
+export function getCopyHighlightColor(): boolean {
+  return current.copyHighlightColor
 }

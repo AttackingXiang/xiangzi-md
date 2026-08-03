@@ -49,6 +49,22 @@ const value = 1
     expect(html).not.toContain('href="javascript:')
   })
 
+  it('omits inline color and highlighter tags by default, with opt-in rich formatting', () => {
+    const source = '<font color="#dc2626">red</font> and <mark style="background-color:#fde047">marked</mark>'
+    const plainRichHtml = markdownToPortableHtml(source)
+    expect(plainRichHtml).not.toContain('<font')
+    expect(plainRichHtml).not.toContain('<mark')
+    expect(plainRichHtml).toContain('red')
+    expect(plainRichHtml).toContain('marked')
+
+    const formattedRichHtml = markdownToPortableHtml(source, {
+      copyTextColor: true,
+      copyHighlightColor: true,
+    })
+    expect(formattedRichHtml).toContain('<font color="#dc2626">red</font>')
+    expect(formattedRichHtml).toContain('<mark style="background-color:#fde047">marked</mark>')
+  })
+
   it('marks only Mermaid fences for clipboard image completion', () => {
     const html = markdownToPortableHtml(`\`\`\`mermaid
 flowchart LR

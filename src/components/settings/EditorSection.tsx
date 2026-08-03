@@ -172,10 +172,32 @@ export default function EditorSection({ settings, onChange, en }: SectionProps):
             <option value="source">{en ? 'Source text' : '源文本'}</option>
           </select>
         </SettingRow>
+        <ToggleRow
+          label={en ? 'Copy text color' : '复制字体颜色'}
+          description={
+            en
+              ? 'Keep text color markup in rich-text clipboard HTML.'
+              : '富文本复制时保留字体颜色标签；默认关闭。'
+          }
+          checked={settings.copyTextColor ?? false}
+          disabled={settings.clipboardFormat !== 'rich'}
+          onChange={(copyTextColor) => onChange({ copyTextColor })}
+        />
+        <ToggleRow
+          label={en ? 'Copy highlighter' : '复制荧光笔'}
+          description={
+            en
+              ? 'Keep text highlight markup in rich-text clipboard HTML.'
+              : '富文本复制时保留荧光笔标签；默认关闭。'
+          }
+          checked={settings.copyHighlightColor ?? false}
+          disabled={settings.clipboardFormat !== 'rich'}
+          onChange={(copyHighlightColor) => onChange({ copyHighlightColor })}
+        />
         <p className="settings-hint">
           {en
-            ? 'Rich text includes a plain-text fallback. Image and Mermaid options apply only to rich-text copying.'
-            : '富文本会同时携带纯文本兜底；图片和 Mermaid 选项仅对富文本复制生效。'}
+            ? 'Rich text includes a plain-text fallback. Image, Mermaid, color, and highlighter options apply only to rich-text copying.'
+            : '富文本会同时携带纯文本兜底；图片、Mermaid、字体颜色和荧光笔选项仅对富文本复制生效。'}
         </p>
       </SettingsCard>
       <SettingsCard title={en ? 'Tags' : '标签'}>

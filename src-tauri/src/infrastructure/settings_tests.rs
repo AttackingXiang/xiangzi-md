@@ -30,6 +30,8 @@ fn legacy_settings_receive_current_defaults() {
     assert!(settings.show_source_mode_control);
     assert!(settings.show_reveal_button);
     assert_eq!(settings.clipboard_format, "rich");
+    assert!(!settings.copy_text_color);
+    assert!(!settings.copy_highlight_color);
 }
 
 #[test]

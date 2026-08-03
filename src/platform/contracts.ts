@@ -147,6 +147,10 @@ export interface AppSettings {
   mermaidCopyMode: 'image' | 'source'
   /** 默认复制格式：富文本同时携带纯文本兜底，纯文本不写入 HTML。 */
   clipboardFormat: 'rich' | 'plain'
+  /** 富文本复制时是否保留字体颜色格式；默认关闭。 */
+  copyTextColor: boolean
+  /** 富文本复制时是否保留荧光笔格式；默认关闭。 */
+  copyHighlightColor: boolean
   pandocPath: string
   pandocReferenceDoc: string
   pandocExportArgs: string
