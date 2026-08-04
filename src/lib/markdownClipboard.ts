@@ -46,9 +46,7 @@ function inlineHtmlTag(raw: string, options: ClipboardFormattingOptions): string
   if (enabled === false) return ''
 
   if (name === 'font') {
-    const colorAttribute = /\bcolor\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(
-      opening[2],
-    )
+    const colorAttribute = /\bcolor\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(opening[2])
     const color = safeClipboardColor(
       colorAttribute?.[1] ?? colorAttribute?.[2] ?? colorAttribute?.[3] ?? '',
     )
@@ -60,9 +58,7 @@ function inlineHtmlTag(raw: string, options: ClipboardFormattingOptions): string
   const style = styleAttribute?.[1] ?? styleAttribute?.[2] ?? ''
   const background = /^background-color\s*:\s*([^;]+)\s*;?$/i.exec(style)
   const color = safeClipboardColor(background?.[1] ?? '')
-  return color
-    ? `<mark style="background-color:${escapeAttribute(color)}">`
-    : escapeText(raw)
+  return color ? `<mark style="background-color:${escapeAttribute(color)}">` : escapeText(raw)
 }
 
 function inlineHtmlNode(
@@ -81,9 +77,7 @@ function htmlBlock(source: string, options: ClipboardFormattingOptions): string 
     const index = match.index ?? cursor
     const raw = match[0]
     html += escapeText(source.slice(cursor, index))
-    html += /<\s*\/?\s*(?:font|mark)\b/i.test(raw)
-      ? inlineHtmlTag(raw, options)
-      : escapeText(raw)
+    html += /<\s*\/?\s*(?:font|mark)\b/i.test(raw) ? inlineHtmlTag(raw, options) : escapeText(raw)
     cursor = index + raw.length
   }
   html += escapeText(source.slice(cursor))

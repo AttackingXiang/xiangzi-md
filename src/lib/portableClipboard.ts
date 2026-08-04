@@ -32,10 +32,7 @@ function stripInlineStyleProperty(root: HTMLElement, property: string): void {
   })
 }
 
-function stripOptionalFormatting(
-  root: HTMLElement,
-  options: ClipboardFormattingOptions,
-): void {
+function stripOptionalFormatting(root: HTMLElement, options: ClipboardFormattingOptions): void {
   if (options.copyTextColor === false) {
     unwrapElements(root, '.xmd-cm-inline-color, font')
   }

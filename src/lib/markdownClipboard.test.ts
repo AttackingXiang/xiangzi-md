@@ -50,7 +50,8 @@ const value = 1
   })
 
   it('omits inline color and highlighter tags by default, with opt-in rich formatting', () => {
-    const source = '<font color="#dc2626">red</font> and <mark style="background-color:#fde047">marked</mark>'
+    const source =
+      '<font color="#dc2626">red</font> and <mark style="background-color:#fde047">marked</mark>'
     const plainRichHtml = markdownToPortableHtml(source)
     expect(plainRichHtml).not.toContain('<font')
     expect(plainRichHtml).not.toContain('<mark')
