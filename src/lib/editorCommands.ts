@@ -6,6 +6,7 @@ import { fencedCodeContentRange } from '../features/cm6-editor/codeBlockPreview'
 import { computeCm6ToolbarState } from '../features/cm6-editor/toolbarState'
 import { linkPromptBridge } from './linkPromptBridge'
 import { tableCellCommandBridge, type TableCellInlineFormat } from './tableCellCommandBridge'
+import { withClipboardFormat } from './copyPreferences'
 
 type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
 
@@ -113,6 +114,12 @@ export const editorCmd = {
 export const clipboardCmd = {
   copy: (): void => {
     document.execCommand('copy')
+  },
+  copyAsPlainText: (): void => {
+    withClipboardFormat('plain', () => document.execCommand('copy'))
+  },
+  copyAsRichText: (): void => {
+    withClipboardFormat('rich', () => document.execCommand('copy'))
   },
   cut: (): void => {
     document.execCommand('cut')

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setCopyPreferences } from './copyPreferences'
+import { subscribeCopyFeedback, type CopyFeedbackFormat } from './copyFeedback'
 
 const desktop = vi.hoisted(() => ({
   readBinaryFile: vi.fn(),
@@ -528,6 +529,22 @@ describe('setupRichClipboard', () => {
     expect(event.defaultPrevented).toBe(true)
     expect(clipboardData.getData('text/html')).toContain('<strong>world</strong>')
     expect(clipboardData.getData('text/plain')).toBe('hello world')
+    dispose()
+  })
+
+  it('reports the effective copy format for the feedback surface', () => {
+    const formats: CopyFeedbackFormat[] = []
+    const unsubscribe = subscribeCopyFeedback(({ format }) => formats.push(format))
+    const root = mountRoot('<p>hello <strong>world</strong></p>')
+    const dispose = setup(root)
+    selectContents(root)
+
+    dispatchCopy(root, new DataTransfer())
+    setCopyPreferences({ clipboardFormat: 'plain' })
+    dispatchCopy(root, new DataTransfer())
+
+    expect(formats).toEqual(['rich', 'plain'])
+    unsubscribe()
     dispose()
   })
 

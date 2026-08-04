@@ -111,6 +111,7 @@ export default function TitleBarMenu({
         { label: t('重做'), onClick: editorCmd.redo, separatorBefore: true },
         { label: t('剪切'), onClick: clipboardCmd.cut, separatorBefore: true },
         { label: t('复制'), onClick: clipboardCmd.copy },
+        { label: t('复制为纯文本'), onClick: clipboardCmd.copyAsPlainText },
         { label: t('粘贴'), onClick: clipboardCmd.paste },
         { label: t('全选'), onClick: clipboardCmd.selectAll, separatorBefore: true },
         {

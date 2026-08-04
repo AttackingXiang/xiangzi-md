@@ -60,6 +60,11 @@ export function useEditorContextMenu(
           onClick: clipboardCmd.copy,
         },
         {
+          label: t('复制为纯文本'),
+          icon: <TextSelect size={sz} />,
+          onClick: clipboardCmd.copyAsPlainText,
+        },
+        {
           label: t('粘贴'),
           icon: <ClipboardPaste size={sz} />,
           hint: shortcutHint('Mod+V'),

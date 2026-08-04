@@ -424,6 +424,69 @@
   }
 }
 
+.copy-feedback-toast {
+  position: absolute;
+  z-index: 67;
+  right: 14px;
+  bottom: 54px;
+  display: flex;
+  max-width: min(430px, calc(100% - 28px));
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px 8px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
+  box-shadow: var(--shadow);
+  color: var(--text-2);
+  font-size: 12px;
+  animation: copy-feedback-in 0.14s ease-out;
+}
+
+.copy-feedback-toast > svg {
+  flex: 0 0 auto;
+  color: var(--accent-text);
+}
+
+.copy-feedback-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.copy-feedback-label strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.copy-feedback-action {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.copy-feedback-action:hover {
+  background: var(--bg-hover);
+}
+
+@keyframes copy-feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .editor-loading {
   flex: 1;
   background: transparent;

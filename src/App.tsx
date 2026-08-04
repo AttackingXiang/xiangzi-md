@@ -61,6 +61,7 @@ import ContextMenu, { type ContextMenuState, type MenuItem } from './components/
 import ExportProgressToast from './components/ExportProgressToast'
 import ExternalChangeBanner from './components/ExternalChangeBanner'
 import ExternalReloadToast from './components/ExternalReloadToast'
+import CopyFeedbackToast from './components/CopyFeedbackToast'
 import type { CloseDecision, CloseReason } from './components/UnsavedChangesDialog'
 import { t, tf } from './lib/i18n'
 import { ErrorCode } from './lib/errorCodes'
@@ -71,6 +72,8 @@ import type { SortContext } from './lib/fileTreeSort'
 import { buildFrecencyRank } from './lib/recency'
 import { parseOutline } from './lib/outline'
 import { setCopyPreferences } from './lib/copyPreferences'
+import { subscribeCopyFeedback, type CopyFeedbackDetail } from './lib/copyFeedback'
+import { clipboardCmd } from './lib/editorCommands'
 import { cm6ActiveViewBridge } from './features/cm6-editor/activeViewBridge'
 import { reorderHeading, revealHeading } from './features/cm6-editor/outline'
 import { tablePickerBridge } from './lib/tablePickerBridge'
@@ -530,6 +533,16 @@ export default function App(): JSX.Element {
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>(null)
   const openEditorContext = useEditorContextMenu(setCtxMenu)
+  const [copyFeedback, setCopyFeedback] = useState<
+    (CopyFeedbackDetail & { sequence: number }) | null
+  >(null)
+  useEffect(() => {
+    let sequence = 0
+    return subscribeCopyFeedback((detail) => {
+      setCopyFeedback({ ...detail, sequence: ++sequence })
+    })
+  }, [])
+  const dismissCopyFeedback = useCallback(() => setCopyFeedback(null), [])
   const [tablePicker, setTablePicker] = useState<{
     x: number
     y: number
@@ -1525,6 +1538,20 @@ export default function App(): JSX.Element {
                 name={externalReloadNotice.name}
                 sequence={externalReloadNotice.sequence}
                 onClose={dismissExternalReloadNotice}
+              />
+            )}
+
+            {copyFeedback && (
+              <CopyFeedbackToast
+                key={copyFeedback.sequence}
+                format={copyFeedback.format}
+                sequence={copyFeedback.sequence}
+                onCopyAlternate={
+                  copyFeedback.format === 'rich'
+                    ? clipboardCmd.copyAsPlainText
+                    : clipboardCmd.copyAsRichText
+                }
+                onClose={dismissCopyFeedback}
               />
             )}
           </div>

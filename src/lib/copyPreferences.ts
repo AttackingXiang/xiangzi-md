@@ -39,6 +39,17 @@ export function setCopyPreferences(prefs: Partial<CopyPreferences>): void {
   if (prefs.copyHighlightColor !== undefined) current.copyHighlightColor = prefs.copyHighlightColor
 }
 
+/** 在一次同步复制动作内临时覆盖默认格式，不改变持久化设置。 */
+export function withClipboardFormat<T>(format: ClipboardFormat, action: () => T): T {
+  const previous = current.clipboardFormat
+  current.clipboardFormat = format
+  try {
+    return action()
+  } finally {
+    current.clipboardFormat = previous
+  }
+}
+
 export function getImageCopyMode(): ImageCopyMode {
   return current.imageCopyMode
 }

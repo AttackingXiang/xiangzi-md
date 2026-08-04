@@ -6,16 +6,14 @@ import {
   getImageCopyMode,
   getMermaidCopyMode,
 } from './copyPreferences'
+import { emitCopyFeedback } from './copyFeedback'
 import { renderMermaidForExport } from './mermaidPreview'
 import { createTaskQueue } from './asyncPool'
 import { blobPartFromBytes, imageMimeType, xmdAssetPaths } from './asset'
 import { fitImageDimensions } from './imageDimensions'
 import { InFlightCache } from './inFlightCache'
 import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
-import {
-  materializePortableClipboard,
-  portableClipboardText,
-} from './portableClipboard'
+import { materializePortableClipboard, portableClipboardText } from './portableClipboard'
 import type { ClipboardFormattingOptions } from './clipboardFormatting'
 import { markdownToPortableHtml } from './markdownClipboard'
 import { embedMarkdownSourceInClipboardHtml } from './markdownPaste'
@@ -866,6 +864,7 @@ export function setupRichClipboard(
       if (text === null) return
       event.preventDefault()
       event.clipboardData?.setData('text/plain', text)
+      emitCopyFeedback('plain')
       return
     }
     // 「复制地址」模式：图片不拦截，交给编辑器复制 ![alt](路径) 这类文本引用。
@@ -893,6 +892,7 @@ export function setupRichClipboard(
     event.preventDefault()
     event.clipboardData?.setData('text/html', resolvedHtml(snapshot))
     event.clipboardData?.setData('text/plain', snapshot.text)
+    emitCopyFeedback('rich')
 
     if (wholeDocument) {
       // The model-derived HTML is complete and must never be replaced with a

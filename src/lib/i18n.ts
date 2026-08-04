@@ -237,7 +237,11 @@ const EN: Record<string, string> = {
   // Editor context menu
   剪切: 'Cut',
   复制: 'Copy',
+  复制为纯文本: 'Copy as plain text',
+  复制为保留格式: 'Copy with formatting',
   复制图片: 'Copy Image',
+  已复制: 'Copied',
+  保留格式: 'Keep formatting',
   粘贴: 'Paste',
   加粗: 'Bold',
   斜体: 'Italic',
