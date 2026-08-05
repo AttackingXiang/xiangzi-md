@@ -49,10 +49,20 @@ pub fn open_with_default(app: AppHandle, path: String) -> AppResult<()> {
     if !path.exists() {
         return Err(AppError::new("file_not_found", "文件不存在"));
     }
+    open_path_with_default_app(&path)
+}
+
+/// 平台相关的"用默认程序打开"，不带 `ensure_allowed`/`exists` 校验。
+///
+/// 供其它命令内部复用，处理它们自己刚生成、还没进入 fs_scope 的临时文件
+/// （比如排版预览的临时 docx）——那类路径既不该、也不需要走
+/// `ensure_allowed`：那个校验是为了不让前端传来的任意主机路径被打开，
+/// 而这里的路径是本进程自己刚写下的，信任前提本来就不同。
+pub(crate) fn open_path_with_default_app(path: &std::path::Path) -> AppResult<()> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(&path)
+            .arg(path)
             .spawn()
             .map(|_| ())
             .map_err(|e| AppError::new("open_failed", e.to_string()))
@@ -63,7 +73,7 @@ pub fn open_with_default(app: AppHandle, path: String) -> AppResult<()> {
         // 文件名恰好包含 `%...%` 时会被静默替换甚至打开错误路径。
         // explorer 直接接收路径参数交给系统关联程序打开，不经过 cmd 的字符串解析。
         std::process::Command::new("explorer")
-            .arg(&path)
+            .arg(path)
             .spawn()
             .map(|_| ())
             .map_err(|e| AppError::new("open_failed", e.to_string()))
@@ -71,7 +81,7 @@ pub fn open_with_default(app: AppHandle, path: String) -> AppResult<()> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         std::process::Command::new("xdg-open")
-            .arg(&path)
+            .arg(path)
             .spawn()
             .map(|_| ())
             .map_err(|e| AppError::new("open_failed", e.to_string()))

@@ -87,6 +87,7 @@ pub fn run() {
             commands::pandoc::export_docx,
             commands::pandoc::import_docx,
             commands::pandoc::export_pandoc_default_template,
+            commands::pandoc::preview_academic_docx,
             commands::updates::list_release_versions,
             commands::updates::check_release_version,
         ])

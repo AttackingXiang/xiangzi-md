@@ -5,6 +5,7 @@
 ///   因此先按平台候选路径逐个探测，最后才尝试 PATH。
 /// - normalize_docx_fonts 对 pandoc 生成的 docx 后处理，把 word/styles.xml
 ///   和 word/theme/theme1.xml 里的字体归一化为指定规范，不依赖 pandoc 版本。
+use crate::commands::app::open_path_with_default_app;
 use crate::domain::academic_layout::AcademicLayout;
 use crate::domain::error::{AppError, AppResult};
 use crate::infrastructure::{settings::SettingsStore, workspace};
@@ -546,6 +547,90 @@ pub async fn export_docx(
     .await?;
 
     Ok(ExportDocxResult { path: output_path })
+}
+
+/// 论文排版预览：把当前文档按给定的排版参数导出成一份临时 docx，交给系统
+/// 默认程序（Word/Pages/…）打开，供用户在真实渲染下核对效果，改完再回来调。
+///
+/// 与 `export_docx` 的关键差异：
+/// - `layout` 由调用方直接传入，不从持久化设置读——用户很可能还在拖滑块，
+///   没点保存就想先看看效果，这是这个命令存在的全部意义。
+/// - 目标路径由本命令自己在系统临时目录里选定，不接受前端传入的任意路径：
+///   预览用途不需要那份自由度，还能省一次「另存为」对话框。
+/// - 忽略 `pandoc_reference_doc`：论文排版只作用于内置模板，选了自定义模板时
+///   这些参数在真实导出里本就不生效，预览没有理由假装生效。
+/// - `apply_academic_layout` 恒为 true：点「预览效果」这个动作本身就是想看
+///   参数生效的样子，不管持久化设置里那个总开关当前是否勾选。
+#[tauri::command]
+pub async fn preview_academic_docx(
+    app: AppHandle,
+    settings_store: State<'_, SettingsStore>,
+    markdown: String,
+    layout: AcademicLayout,
+) -> AppResult<()> {
+    let mut layout = layout;
+    layout.sanitize();
+    let settings = settings_store.get(&app)?;
+    let override_path = settings.pandoc_path.clone();
+    let pandoc_path = find_pandoc_full(if override_path.is_empty() {
+        None
+    } else {
+        Some(&override_path)
+    })
+    .ok_or_else(|| {
+        AppError::new(
+            "pandoc_not_found",
+            "未找到 pandoc，请先安装或在设置中指定路径",
+        )
+    })?;
+
+    let options = PandocExportOptions {
+        reference_doc: None,
+        extra_args: Vec::new(),
+        table_of_contents: false,
+        number_sections: false,
+    };
+    let post = DocxPostProcessing {
+        normalize_fonts: settings.pandoc_normalize_fonts,
+        apply_academic_layout: true,
+        layout,
+    };
+
+    crate::commands::blocking(move || {
+        let mut last_error = None;
+        for output_path in preview_output_candidates() {
+            match run_export_docx_atomic(
+                &pandoc_path,
+                &markdown,
+                None,
+                &output_path,
+                &options,
+                &post,
+            ) {
+                Ok(()) => return open_path_with_default_app(&output_path),
+                // 最常见的失败原因：固定文件名还被上一次预览打开的 Word 占着，
+                // 覆盖/改名失败。换一个带时间戳的名字重试，而不是让用户先手动
+                // 关掉旧预览才能看到新的。
+                Err(error) => last_error = Some(error),
+            }
+        }
+        Err(last_error.unwrap_or_else(|| AppError::new("preview_docx_failed", "生成预览文档失败")))
+    })
+    .await
+}
+
+/// 预览文档的候选输出路径：固定名在前（重复预览时直接覆盖，不在临时目录堆
+/// 文件），带时间戳的备用名在后（固定名被占用时的退路）。
+fn preview_output_candidates() -> [PathBuf; 2] {
+    let dir = std::env::temp_dir();
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis())
+        .unwrap_or_default();
+    [
+        dir.join("Xiangzi MD 论文排版预览.docx"),
+        dir.join(format!("Xiangzi MD 论文排版预览 {millis}.docx")),
+    ]
 }
 
 /// `layout` 在 `apply_academic_layout` 为 false 或使用了自定义 reference.docx
@@ -2308,6 +2393,21 @@ mod tests {
             })
             .count();
         assert_eq!(leftovers, 0, "失败后不应残留 Word 导出临时文件");
+    }
+
+    #[test]
+    fn preview_candidates_are_distinct_and_land_in_the_temp_dir() {
+        let candidates = preview_output_candidates();
+        let dir = std::env::temp_dir();
+        assert_eq!(candidates[0].parent(), Some(dir.as_path()));
+        assert_eq!(candidates[1].parent(), Some(dir.as_path()));
+        // 固定名必须是可预测的，方便重复预览时覆盖同一个文件；备用名必须
+        // 和固定名不同，否则"占用时退回一个新名字"这条逻辑就是摆设。
+        assert_ne!(candidates[0], candidates[1]);
+        assert_eq!(
+            candidates[0].file_name().and_then(|name| name.to_str()),
+            Some("Xiangzi MD 论文排版预览.docx")
+        );
     }
 
     // ── 集成测试：需要真实 pandoc（不存在则跳过）──────────────────────────────
