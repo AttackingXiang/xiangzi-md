@@ -3,7 +3,7 @@ import { memo, useCallback, useState, type RefObject } from 'react'
 import FileTree from './FileTree'
 import { FocusedPathContext } from './fileTreeFocusContext'
 import SidebarHeader from './SidebarHeader'
-import type { FileNode, Folder as FolderType } from '../types'
+import type { FileNode, FileTreeSort, Folder as FolderType } from '../types'
 import type { SortContext } from '../lib/fileTreeSort'
 import { t } from '../lib/i18n'
 import { baseName } from '../lib/path'
@@ -28,6 +28,7 @@ interface Props {
   onOpenFolderPath: (root: string) => void
   onOpenFile: (path: string, name?: string) => void
   onOpenSettings: () => void
+  onFileTreeSortChange: (sort: FileTreeSort) => void
   /** 侧边栏顶部按钮显隐（默认隐藏，见控件设置） */
   showOpenFolderButton: boolean
   showSettingsButton: boolean
@@ -65,6 +66,7 @@ const Sidebar = memo(function Sidebar({
   onOpenFolderPath,
   onOpenFile,
   onOpenSettings,
+  onFileTreeSortChange,
   showOpenFolderButton,
   showSettingsButton,
   onOpenSearch,
@@ -114,6 +116,8 @@ const Sidebar = memo(function Sidebar({
         onShowTags={onShowTags}
         onOpenFolder={onOpenFolder}
         onOpenSettings={onOpenSettings}
+        fileTreeSort={sortContext.mode}
+        onFileTreeSortChange={onFileTreeSortChange}
         onRootContext={onRootContext}
       />
 

@@ -80,7 +80,7 @@ import { tablePickerBridge } from './lib/tablePickerBridge'
 import { tableZoomBridge } from './lib/tableZoomBridge'
 import { linkPromptBridge } from './lib/linkPromptBridge'
 import { editorZoomSource } from './lib/editorZoom'
-import type { Folder, Tab } from './types'
+import type { FileTreeSort, Folder, Tab } from './types'
 import { useSettings } from './hooks/useSettings'
 import { useNow } from './hooks/useNow'
 import { useFileOps } from './hooks/useFileOps'
@@ -497,6 +497,21 @@ export default function App(): JSX.Element {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null)
   // 提为 useCallback 保持引用稳定，配合 Sidebar 的 memo() 避免每次击键都重渲染 Sidebar
   const openSidebarSettings = useCallback(() => setSettingsSection('appearance'), [])
+  const changeFileTreeSort = useCallback(
+    (fileTreeSort: FileTreeSort): void => {
+      void saveSettings({ fileTreeSort }).catch((error: unknown) => {
+        const readOnly =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === ErrorCode.SETTINGS_READ_ONLY
+        void desktop.notify(
+          readOnly ? t('这些设置来自更高版本，当前以只读模式运行。') : t('设置保存失败。'),
+        )
+      })
+    },
+    [saveSettings],
+  )
   const [showFind, setShowFind] = useState(false)
   const [findInitial, setFindInitial] = useState('')
   const [findLine, setFindLine] = useState<number | undefined>(undefined)
@@ -1228,6 +1243,7 @@ export default function App(): JSX.Element {
                 onOpenFolderPath={openFolderByPath}
                 onOpenFile={openPath}
                 onOpenSettings={openSidebarSettings}
+                onFileTreeSortChange={changeFileTreeSort}
                 showOpenFolderButton={settings.showOpenFolderButton}
                 showSettingsButton={settings.showSettingsButton}
                 onOpenSearch={openSidebarSearch}

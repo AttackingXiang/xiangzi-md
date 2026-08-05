@@ -1,4 +1,6 @@
 import {
+  ArrowDownAZ,
+  Check,
   FolderOpen,
   RefreshCw,
   RotateCcw,
@@ -7,7 +9,8 @@ import {
   Star,
   Tags,
 } from 'lucide-react'
-import type { Folder as FolderType } from '../types'
+import { useEffect, useRef, useState } from 'react'
+import type { FileTreeSort, Folder as FolderType } from '../types'
 import { t } from '../lib/i18n'
 
 interface Props {
@@ -26,7 +29,18 @@ interface Props {
   onOpenFolder: () => void
   onOpenSettings: () => void
   onRootContext: (x: number, y: number) => void
+  /** 文件树快捷排序；标签面板复用头部时不传入。 */
+  fileTreeSort?: FileTreeSort
+  onFileTreeSortChange?: (sort: FileTreeSort) => void
 }
+
+const SORT_OPTIONS: readonly { value: FileTreeSort; label: string }[] = [
+  { value: 'default', label: '名称（A→Z）' },
+  { value: 'nameDesc', label: '名称（Z→A）' },
+  { value: 'modified', label: '最近修改' },
+  { value: 'opened', label: '最近打开' },
+  { value: 'smart', label: '智能推荐' },
+]
 
 /** 侧边栏顶部固定头部：当前文件夹名 + 操作按钮。文件树 / 标签面板都复用它，
  * 这样切到标签视图时"当前打开的文件夹"这一行不会消失。 */
@@ -44,7 +58,32 @@ export default function SidebarHeader({
   onOpenFolder,
   onOpenSettings,
   onRootContext,
+  fileTreeSort,
+  onFileTreeSortChange,
 }: Props): JSX.Element {
+  const [sortMenuOpen, setSortMenuOpen] = useState(false)
+  const sortControlRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!sortMenuOpen) return undefined
+    const closeOnOutsidePointer = (event: PointerEvent): void => {
+      if (!sortControlRef.current?.contains(event.target as Node)) setSortMenuOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setSortMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [sortMenuOpen])
+
+  const sortOptions = SORT_OPTIONS.map((option) => ({ ...option, label: t(option.label) }))
+  const currentSortLabel =
+    sortOptions.find((option) => option.value === fileTreeSort)?.label ?? t('名称（A→Z）')
+
   return (
     <div className="sidebar-header">
       <span
@@ -86,6 +125,39 @@ export default function SidebarHeader({
           <button className="icon-btn sm" title={t('在文件夹中搜索')} onClick={onOpenSearch}>
             <Search size={15} />
           </button>
+        )}
+        {folder && fileTreeSort && onFileTreeSortChange && (
+          <div className="sidebar-sort-control" ref={sortControlRef}>
+            <button
+              className={`icon-btn sm${sortMenuOpen ? ' active' : ''}`}
+              title={`${t('文件树排序')}：${currentSortLabel}`}
+              aria-label={`${t('文件树排序')}：${currentSortLabel}`}
+              aria-haspopup="menu"
+              aria-expanded={sortMenuOpen}
+              onClick={() => setSortMenuOpen((open) => !open)}
+            >
+              <ArrowDownAZ size={15} />
+            </button>
+            {sortMenuOpen && (
+              <div className="sidebar-sort-menu" role="menu" aria-label={t('文件树排序')}>
+                {sortOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    className={`sidebar-sort-option${option.value === fileTreeSort ? ' active' : ''}`}
+                    role="menuitemradio"
+                    aria-checked={option.value === fileTreeSort}
+                    onClick={() => {
+                      onFileTreeSortChange(option.value)
+                      setSortMenuOpen(false)
+                    }}
+                  >
+                    <span>{option.label}</span>
+                    {option.value === fileTreeSort && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         {folder && (
           <button className="icon-btn sm" title={t('标签治理')} onClick={onShowTags}>
