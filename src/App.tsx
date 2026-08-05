@@ -69,6 +69,9 @@ import { ErrorCode } from './lib/errorCodes'
 import { baseName, dirName } from './lib/path'
 import { clipboardPath } from './lib/clipboardPath'
 import { revealLocationKey } from './lib/platform'
+import { HIDDEN_SIDEBAR_CONTROLS, sidebarControlsFromSettings } from './lib/sidebarControls'
+import { recordContentChanges } from './lib/searchReload'
+import type { PathStat } from './platform/contracts'
 import { replaceMovedPath } from './lib/treeDrag'
 import type { SortContext } from './lib/fileTreeSort'
 import { buildFrecencyRank } from './lib/recency'
@@ -702,28 +705,28 @@ export default function App(): JSX.Element {
     const path = clipboardPath(rawText)
     if (!path || requestId !== clipboardProbeRef.current) return
 
-    let kind: 'file' | 'folder' | null = null
+    // 只做一次 metadata 探测。早先这里用 readFile / openFolderPath 试探，
+    // 等于为了判断类型就把整个文件读进内存、把整棵目录树扫一遍——剪贴板里
+    // 随便一个大文件或 home 目录都会让开始页卡住。
+    let stat: PathStat
     try {
-      await desktop.readFile(path)
-      kind = 'file'
+      stat = await desktop.statPath(path)
     } catch {
-      // It may be a folder, or a file type the editor cannot open.
+      // Ignore invalid, inaccessible, and non-local paths.
+      return
     }
+    if (!stat.exists || requestId !== clipboardProbeRef.current) return
 
-    if (!kind) {
-      try {
-        const folderResult = await desktop.openFolderPath(path)
-        if (folderResult) kind = 'folder'
-      } catch {
-        // Ignore invalid, inaccessible, and non-local paths.
-      }
-    }
-
-    if (kind && requestId === clipboardProbeRef.current) {
-      setClipboardPathPrompt({ path, kind })
-      setClipboardPathDialog({ path, kind })
-    }
+    const kind = stat.isDir ? 'folder' : 'file'
+    setClipboardPathPrompt({ path, kind })
+    setClipboardPathDialog({ path, kind })
   }, [])
+
+  // 冷启动时 Welcome 页是靠 activeId 初值渲染的，showWelcome 不会被调用，
+  // 所以这里单独探一次——否则「开始页提示剪贴板路径」只在关掉所有标签页后才生效。
+  useEffect(() => {
+    void inspectClipboardPath()
+  }, [inspectClipboardPath])
 
   const showWelcome = useCallback((): void => {
     captureActiveScroll()
@@ -858,15 +861,22 @@ export default function App(): JSX.Element {
     setCtxMenu,
   })
 
-  // 搜索后删除/重命名会刷新 treeKey；打开的文件保存后则通过版本哈希触发重搜，
-  // 这样搜索结果不会继续展示已不存在或已不再匹配的文件。
-  const searchReloadKey = useMemo(
-    () =>
-      [
-        String(treeKey),
-        ...tabs.map((tab) => `${tab.path ?? ''}:${tab.version?.contentHash ?? ''}`),
-      ].join('\0'),
-    [tabs, treeKey],
+  // 搜索后删除/重命名会刷新 treeKey；已打开的文件保存后内容哈希变化，也要重搜，
+  // 否则搜索结果会继续展示已不存在或已不再匹配的文件。判定逻辑见 recordContentChanges。
+  const knownContentHashesRef = useRef(new Map<string, string>())
+  const [searchRevision, setSearchRevision] = useState(0)
+  useEffect(() => {
+    const changed = recordContentChanges(
+      knownContentHashesRef.current,
+      tabs.map((tab) => ({ path: tab.path, contentHash: tab.version?.contentHash ?? '' })),
+    )
+    if (changed) setSearchRevision((value) => value + 1)
+  }, [tabs])
+  const searchReloadKey = `${treeKey}:${searchRevision}`
+
+  const sidebarControls = useMemo(
+    () => (settings ? sidebarControlsFromSettings(settings) : HIDDEN_SIDEBAR_CONTROLS),
+    [settings],
   )
 
   // 必须和传给 MarkdownEditor 的 content 用同一份文本（见下方 sourceMode 三元），
@@ -1274,14 +1284,7 @@ export default function App(): JSX.Element {
                   folder={folder}
                   isFav={folder ? settings.favorites.includes(folder.root) : false}
                   canUndo={canUndo}
-                  showSidebarUndoButton={settings.showSidebarUndoButton}
-                  showSidebarFavoriteButton={settings.showSidebarFavoriteButton}
-                  showSidebarRefreshButton={settings.showSidebarRefreshButton}
-                  showSidebarSearchButton={settings.showSidebarSearchButton}
-                  showSidebarTagsButton={settings.showSidebarTagsButton}
-                  showSidebarSortButton={settings.showSidebarSortButton}
-                  showOpenFolderButton={settings.showOpenFolderButton}
-                  showSettingsButton={settings.showSettingsButton}
+                  controls={sidebarControls}
                   onUndo={undoLastOp}
                   onToggleFavorite={toggleFavorite}
                   onRefresh={refreshTree}
@@ -1329,14 +1332,7 @@ export default function App(): JSX.Element {
                 onOpenFile={openPath}
                 onOpenSettings={openSidebarSettings}
                 onFileTreeSortChange={changeFileTreeSort}
-                showSidebarUndoButton={settings.showSidebarUndoButton}
-                showSidebarFavoriteButton={settings.showSidebarFavoriteButton}
-                showSidebarRefreshButton={settings.showSidebarRefreshButton}
-                showSidebarSearchButton={settings.showSidebarSearchButton}
-                showSidebarTagsButton={settings.showSidebarTagsButton}
-                showSidebarSortButton={settings.showSidebarSortButton}
-                showOpenFolderButton={settings.showOpenFolderButton}
-                showSettingsButton={settings.showSettingsButton}
+                controls={sidebarControls}
                 onOpenSearch={openSidebarSearch}
                 onShowTags={showAllTags}
                 onToggleFavorite={toggleFavorite}
@@ -1658,7 +1654,6 @@ export default function App(): JSX.Element {
               <CopyFeedbackToast
                 key={copyFeedback.sequence}
                 format={copyFeedback.format}
-                sequence={copyFeedback.sequence}
                 onCopyAlternate={
                   copyFeedback.format === 'rich'
                     ? clipboardCmd.copyAsPlainText

@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import type { FileTreeSort, Folder as FolderType } from '../types'
 import { FILE_TREE_SORT_OPTIONS } from '../lib/fileTreeSort'
+import type { SidebarControls } from '../lib/sidebarControls'
 import { t } from '../lib/i18n'
 
 interface Props {
@@ -19,9 +20,7 @@ interface Props {
   isFav: boolean
   canUndo: boolean
   /** 是否显示"打开文件夹"按钮（默认隐藏，见控件设置） */
-  showOpenFolderButton: boolean
   /** 是否显示"设置"按钮（默认隐藏，见控件设置） */
-  showSettingsButton: boolean
   onUndo: () => void
   onToggleFavorite: (root: string) => void
   onRefresh: () => void
@@ -30,12 +29,8 @@ interface Props {
   onOpenFolder: () => void
   onOpenSettings: () => void
   onRootContext: (x: number, y: number) => void
-  showSidebarUndoButton: boolean
-  showSidebarFavoriteButton: boolean
-  showSidebarRefreshButton: boolean
-  showSidebarSearchButton: boolean
-  showSidebarTagsButton: boolean
-  showSidebarSortButton: boolean
+  /** 顶部按钮显隐；见 SidebarControls 的注释。 */
+  controls: SidebarControls
   /** 文件树快捷排序；标签面板复用头部时不传入。 */
   fileTreeSort?: FileTreeSort
   onFileTreeSortChange?: (sort: FileTreeSort) => void
@@ -47,8 +42,6 @@ export default function SidebarHeader({
   folder,
   isFav,
   canUndo,
-  showOpenFolderButton,
-  showSettingsButton,
   onUndo,
   onToggleFavorite,
   onRefresh,
@@ -57,12 +50,7 @@ export default function SidebarHeader({
   onOpenFolder,
   onOpenSettings,
   onRootContext,
-  showSidebarUndoButton,
-  showSidebarFavoriteButton,
-  showSidebarRefreshButton,
-  showSidebarSearchButton,
-  showSidebarTagsButton,
-  showSidebarSortButton,
+  controls,
   fileTreeSort,
   onFileTreeSortChange,
 }: Props): JSX.Element {
@@ -110,12 +98,12 @@ export default function SidebarHeader({
         {folder ? folder.name : t('资源管理器')}
       </span>
       <div className="sidebar-actions">
-        {folder && canUndo && showSidebarUndoButton && (
+        {folder && canUndo && controls.undo && (
           <button className="icon-btn sm" title={t('撤销上次操作')} onClick={onUndo}>
             <RotateCcw size={15} />
           </button>
         )}
-        {folder && showSidebarFavoriteButton && (
+        {folder && controls.favorite && (
           <button
             className={`icon-btn sm${isFav ? ' active' : ''}`}
             title={isFav ? t('取消收藏') : t('收藏此目录')}
@@ -124,17 +112,17 @@ export default function SidebarHeader({
             <Star size={15} fill={isFav ? 'currentColor' : 'none'} />
           </button>
         )}
-        {folder && showSidebarRefreshButton && (
+        {folder && controls.refresh && (
           <button className="icon-btn sm" title={t('刷新')} onClick={onRefresh}>
             <RefreshCw size={15} />
           </button>
         )}
-        {folder && showSidebarSearchButton && (
+        {folder && controls.search && (
           <button className="icon-btn sm" title={t('在文件夹中搜索')} onClick={onOpenSearch}>
             <Search size={15} />
           </button>
         )}
-        {folder && showSidebarSortButton && fileTreeSort && onFileTreeSortChange && (
+        {folder && controls.sort && fileTreeSort && onFileTreeSortChange && (
           <div className="sidebar-sort-control" ref={sortControlRef}>
             <button
               className={`icon-btn sm${sortMenuOpen ? ' active' : ''}`}
@@ -167,17 +155,17 @@ export default function SidebarHeader({
             )}
           </div>
         )}
-        {folder && showSidebarTagsButton && (
+        {folder && controls.tags && (
           <button className="icon-btn sm" title={t('标签治理')} onClick={onShowTags}>
             <Tags size={15} />
           </button>
         )}
-        {showOpenFolderButton && (
+        {controls.openFolder && (
           <button className="icon-btn sm" title={t('打开文件夹')} onClick={() => onOpenFolder()}>
             <FolderOpen size={15} />
           </button>
         )}
-        {showSettingsButton && (
+        {controls.settings && (
           <button className="icon-btn sm" title={t('设置')} onClick={onOpenSettings}>
             <SettingsIcon size={15} />
           </button>

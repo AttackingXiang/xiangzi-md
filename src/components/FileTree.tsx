@@ -380,8 +380,10 @@ const TreeNode = memo(function TreeNode({
   }
 
   if (node.isDir) {
+    // li 上的 role="none" 抹掉隐式 listitem 语义：role=tree 只接受 treeitem/group
+    // 作为它拥有的子元素，中间夹一层 listitem 会让部分读屏软件丢失层级关系。
     return (
-      <li>
+      <li role="none">
         <div
           ref={nodeRef}
           className={`tree-row dir${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
@@ -389,6 +391,7 @@ const TreeNode = memo(function TreeNode({
           data-tree-path={node.path}
           role="treeitem"
           aria-level={depth + 1}
+          aria-selected={isActive}
           tabIndex={isRovingTabStop ? 0 : -1}
           aria-grabbed={isDragging}
           aria-expanded={expanded}
@@ -446,7 +449,7 @@ const TreeNode = memo(function TreeNode({
   }
 
   return (
-    <li>
+    <li role="none">
       <div
         ref={nodeRef}
         className={`tree-row file${node.openable ? '' : ' unsupported'}${isActive ? ' active' : ''}${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}

@@ -5,6 +5,7 @@ import { FocusedPathContext } from './fileTreeFocusContext'
 import SidebarHeader from './SidebarHeader'
 import type { FileNode, FileTreeSort, Folder as FolderType } from '../types'
 import type { SortContext } from '../lib/fileTreeSort'
+import type { SidebarControls } from '../lib/sidebarControls'
 import { t } from '../lib/i18n'
 import { baseName } from '../lib/path'
 
@@ -29,15 +30,7 @@ interface Props {
   onOpenFile: (path: string, name?: string) => void
   onOpenSettings: () => void
   onFileTreeSortChange: (sort: FileTreeSort) => void
-  showSidebarUndoButton: boolean
-  showSidebarFavoriteButton: boolean
-  showSidebarRefreshButton: boolean
-  showSidebarSearchButton: boolean
-  showSidebarTagsButton: boolean
-  showSidebarSortButton: boolean
-  /** 侧边栏顶部按钮显隐（默认隐藏，见控件设置） */
-  showOpenFolderButton: boolean
-  showSettingsButton: boolean
+  controls: SidebarControls
   onOpenSearch: () => void
   onShowTags: () => void
   onToggleFavorite: (path: string) => void
@@ -73,14 +66,7 @@ const Sidebar = memo(function Sidebar({
   onOpenFile,
   onOpenSettings,
   onFileTreeSortChange,
-  showSidebarUndoButton,
-  showSidebarFavoriteButton,
-  showSidebarRefreshButton,
-  showSidebarSearchButton,
-  showSidebarTagsButton,
-  showSidebarSortButton,
-  showOpenFolderButton,
-  showSettingsButton,
+  controls,
   onOpenSearch,
   onShowTags,
   onToggleFavorite,
@@ -119,8 +105,6 @@ const Sidebar = memo(function Sidebar({
         folder={folder}
         isFav={isFav}
         canUndo={canUndo}
-        showOpenFolderButton={showOpenFolderButton}
-        showSettingsButton={showSettingsButton}
         onUndo={onUndo}
         onToggleFavorite={onToggleFavorite}
         onRefresh={onRefresh}
@@ -128,12 +112,7 @@ const Sidebar = memo(function Sidebar({
         onShowTags={onShowTags}
         onOpenFolder={onOpenFolder}
         onOpenSettings={onOpenSettings}
-        showSidebarUndoButton={showSidebarUndoButton}
-        showSidebarFavoriteButton={showSidebarFavoriteButton}
-        showSidebarRefreshButton={showSidebarRefreshButton}
-        showSidebarSearchButton={showSidebarSearchButton}
-        showSidebarTagsButton={showSidebarTagsButton}
-        showSidebarSortButton={showSidebarSortButton}
+        controls={controls}
         fileTreeSort={sortContext.mode}
         onFileTreeSortChange={onFileTreeSortChange}
         onRootContext={onRootContext}

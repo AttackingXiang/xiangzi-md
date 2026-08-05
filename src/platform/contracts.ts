@@ -176,6 +176,8 @@ export interface AppSettings {
   pandocToc: boolean
   pandocNumberSections: boolean
   pandocNormalizeFonts: boolean
+  /** Apply the built-in academic Word layout. Ignored when a custom reference.docx is set. */
+  pandocAcademicLayout: boolean
 }
 
 export interface OpenedFile {
@@ -207,6 +209,12 @@ export interface SearchResult {
 }
 
 export type FolderSearchMode = 'all' | 'content' | 'filename'
+
+/** Result of a metadata-only path probe. */
+export interface PathStat {
+  exists: boolean
+  isDir: boolean
+}
 
 export interface SearchResponse {
   items: SearchResult[]
@@ -301,6 +309,8 @@ export interface DesktopPort {
   openParentFolder(root: string): Promise<Folder | null>
   openContainingFolder(filePath: string): Promise<Folder | null>
   readClipboardText(): Promise<string>
+  /** Cheap existence probe — never reads file content or expands a directory. */
+  statPath(path: string): Promise<PathStat>
   openFile(): Promise<OpenedFile | null>
   readFile(path: string): Promise<OpenedFile>
   watchPaths(

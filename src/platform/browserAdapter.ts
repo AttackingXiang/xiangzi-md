@@ -220,6 +220,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     pandocToc: false,
     pandocNumberSections: false,
     pandocNormalizeFonts: true,
+    pandocAcademicLayout: true,
   }
 }
 
@@ -280,6 +281,7 @@ export const browserDesktopAdapter: DesktopPort = {
   openParentFolder: async () => previewFolder(),
   openContainingFolder: async () => previewFolder(),
   readClipboardText: async () => '',
+  statPath: async () => ({ exists: false, isDir: false }),
   openFile: async () => requireFile(SAMPLE_PATH),
   readFile: async (path) => requireFile(path),
   watchPaths: async () => () => undefined,

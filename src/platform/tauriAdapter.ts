@@ -19,6 +19,7 @@ import type {
   Folder,
   InstalledTheme,
   OpenedFile,
+  PathStat,
   ReleaseSummary,
   SearchResponse,
   ThemeInstallRequest,
@@ -139,6 +140,7 @@ export const tauriDesktopAdapter: DesktopPort = {
   },
   openContainingFolder: (filePath) => invoke<Folder | null>('open_containing_folder', { filePath }),
   readClipboardText: () => readText(),
+  statPath: (path) => invoke<PathStat>('stat_path', { path }),
   openFile: async () => {
     const path = await open({
       multiple: false,
