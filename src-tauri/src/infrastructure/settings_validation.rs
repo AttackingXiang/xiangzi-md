@@ -35,6 +35,7 @@ pub(super) fn migrate_settings(settings: &mut AppSettings, source_version: u32) 
             7 => migrate_v7_to_v8(settings),
             8 => migrate_v8_to_v9(settings),
             9 => migrate_v9_to_v10(settings),
+            10 => migrate_v10_to_v11(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -58,6 +59,11 @@ fn migrate_v6_to_v7(_settings: &mut AppSettings) {}
 fn migrate_v7_to_v8(_settings: &mut AppSettings) {}
 
 fn migrate_v9_to_v10(_settings: &mut AppSettings) {}
+
+/// v10→v11：新增 academic_layout。字段级 `#[serde(default)]`（继承自结构体上的
+/// `#[serde(default)]`）已经把老配置文件里缺失的这个键填成
+/// `AcademicLayout::default()`，这里无需再做什么。
+fn migrate_v10_to_v11(_settings: &mut AppSettings) {}
 
 /// v8→v9：把纯 MRU 的 recent_files 灌进 frecency 语料 recent_docs，让老用户升级后立即
 /// 有打分原料。open_count 一律 1，last_opened_nanos 按 MRU 次序递减造一个单调时间戳
@@ -163,6 +169,7 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     settings.background_opacity = settings.background_opacity.min(100);
     settings.code_block_opacity = settings.code_block_opacity.min(100);
     settings.theme_shade = settings.theme_shade.clamp(-50, 50);
+    settings.academic_layout.sanitize();
     normalize_color_presets(
         &mut settings.text_color_presets,
         &mut settings.default_text_color,
@@ -248,6 +255,9 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
     }
     if !(-50..=50).contains(&settings.theme_shade) {
         return Err(AppError::new("settings_invalid", "主题深浅超出范围"));
+    }
+    if !settings.academic_layout.is_valid() {
+        return Err(AppError::new("settings_invalid", "论文排版参数超出范围"));
     }
     if !valid_folder_name(&settings.attachment_folder) {
         return Err(AppError::new("settings_invalid", "附件目录名称无效"));

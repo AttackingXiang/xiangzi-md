@@ -1,7 +1,8 @@
+use crate::domain::academic_layout::AcademicLayout;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 10;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 11;
 pub(crate) const MAX_RECENT_ITEMS: usize = 15;
 /// frecency 语料库上限：比展示用的 recent_files（15）大，保留更长的打开历史用于打分。
 pub(crate) const MAX_RECENT_DOCS: usize = 100;
@@ -204,6 +205,10 @@ pub struct AppSettings {
     /// 1.5 倍行距与首行缩进、三线表）。选了自定义 reference.docx 时本项无效——
     /// 用户自己的 Word 模板永远不会被论文规则覆盖。
     pub pandoc_academic_layout: bool,
+    /// 论文排版的具体参数（字号/行距/缩进/页边距/纸张…）；上面那个开关
+    /// 决定要不要套用，这里决定套用成什么样。拆成两个字段是因为用户可能
+    /// 想暂时关掉论文排版又不想丢掉已经调好的参数。
+    pub academic_layout: AcademicLayout,
 }
 
 impl Default for AppSettings {
@@ -341,6 +346,7 @@ impl Default for AppSettings {
             pandoc_number_sections: false,
             pandoc_normalize_fonts: true,
             pandoc_academic_layout: true,
+            academic_layout: AcademicLayout::default(),
         }
     }
 }
@@ -426,6 +432,9 @@ pub struct SettingsPatch {
     pub pandoc_number_sections: Option<bool>,
     pub pandoc_normalize_fonts: Option<bool>,
     pub pandoc_academic_layout: Option<bool>,
+    /// 整体替换，不做字段级合并——前端每次都发完整对象（与 session 等
+    /// 其它嵌套设置一致），这样服务端不用去猜"哪个子字段是真的要改"。
+    pub academic_layout: Option<AcademicLayout>,
 }
 
 impl SettingsPatch {

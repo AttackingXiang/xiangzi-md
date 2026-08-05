@@ -2,6 +2,7 @@ use super::{
     apply_patch, load_settings_paths, migrate_settings, parse_settings, validate_settings,
     AppSettings, SettingsPatch, SETTINGS_SCHEMA_VERSION,
 };
+use crate::domain::academic_layout::AcademicLayout;
 use std::fs;
 use tempfile::tempdir;
 
@@ -39,6 +40,9 @@ fn legacy_settings_receive_current_defaults() {
     // 老配置文件里没有这个键，必须落到「开启」的默认值上，
     // 否则升级会悄悄改变所有人的导出排版。
     assert!(settings.pandoc_academic_layout);
+    // 同理：老配置文件里没有 academicLayout，必须落到当前内置模板的实际取值上，
+    // 否则老用户升级后导出的排版会突然变样。
+    assert_eq!(settings.academic_layout, AcademicLayout::default());
     assert_eq!(settings.clipboard_format, "rich");
     assert!(!settings.copy_text_color);
     assert!(!settings.copy_highlight_color);
@@ -294,5 +298,31 @@ fn validates_favorite_display_labels_without_touching_folder_names() {
     settings
         .favorite_labels
         .insert("/notes/work".into(), "\n".into());
+    assert!(validate_settings(&settings).is_err());
+}
+
+#[test]
+fn academic_layout_patch_replaces_the_whole_struct() {
+    // 整体替换：只发一个字段也会覆盖掉其它已调好的字段，前端必须始终发完整对象。
+    let mut settings = AppSettings::default();
+    let tuned = AcademicLayout {
+        body_font_pt: 10.5,
+        title_font_pt: 20.0,
+        ..AcademicLayout::default()
+    };
+    apply_patch(
+        &mut settings,
+        SettingsPatch {
+            academic_layout: Some(tuned.clone()),
+            ..Default::default()
+        },
+    );
+    assert_eq!(settings.academic_layout, tuned);
+}
+
+#[test]
+fn rejects_out_of_range_academic_layout() {
+    let mut settings = AppSettings::default();
+    settings.academic_layout.body_font_pt = 900.0;
     assert!(validate_settings(&settings).is_err());
 }

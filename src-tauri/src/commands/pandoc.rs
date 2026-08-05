@@ -387,6 +387,15 @@ struct PandocExportOptions {
     number_sections: bool,
 }
 
+/// docx 生成之后、原子替换目标文件之前要做的后处理。三个真实导出与预览
+/// 导出两条路径共用同一份，分开传会让调用点变成一串分不清含义的 bool。
+#[derive(Debug, Clone)]
+struct DocxPostProcessing {
+    normalize_fonts: bool,
+    apply_academic_layout: bool,
+    layout: AcademicLayout,
+}
+
 /// 把 Pandoc 内置 reference.docx 导出为可编辑副本。
 #[tauri::command]
 pub async fn export_pandoc_default_template(
@@ -409,13 +418,15 @@ pub async fn export_pandoc_default_template(
     let output_path_for_task = output_path.clone();
 
     let normalize_fonts = settings.pandoc_normalize_fonts;
-    let academic_layout = settings.pandoc_academic_layout;
+    let apply_academic_layout = settings.pandoc_academic_layout;
+    let layout = settings.academic_layout.clone();
     crate::commands::blocking(move || {
         run_export_default_template(
             &pandoc_path,
             Path::new(&output_path_for_task),
             normalize_fonts,
-            academic_layout,
+            apply_academic_layout,
+            &layout,
         )
     })
     .await?;
@@ -427,7 +438,8 @@ fn run_export_default_template(
     pandoc_path: &Path,
     output_path: &Path,
     normalize_fonts: bool,
-    academic_layout: bool,
+    apply_academic_layout: bool,
+    layout: &AcademicLayout,
 ) -> AppResult<()> {
     let mut command = make_command(pandoc_path);
     command.args(["--print-default-data-file", "reference.docx"]);
@@ -444,8 +456,8 @@ fn run_export_default_template(
     std::fs::write(output_path, result.stdout)
         .map_err(|error| AppError::io("写入默认 Word 模板失败", error))?;
     // 导出的模板要和实际导出结果长得一样，所以跟着同一个开关走。
-    if academic_layout {
-        patch_builtin_default_template(output_path, normalize_fonts, &AcademicLayout::default())
+    if apply_academic_layout {
+        patch_builtin_default_template(output_path, normalize_fonts, layout)
     } else if normalize_fonts {
         normalize_docx_fonts(output_path)
     } else {
@@ -508,8 +520,11 @@ pub async fn export_docx(
         table_of_contents: settings.pandoc_toc,
         number_sections: settings.pandoc_number_sections,
     };
-    let normalize_fonts = settings.pandoc_normalize_fonts;
-    let academic_layout = settings.pandoc_academic_layout;
+    let post = DocxPostProcessing {
+        normalize_fonts: settings.pandoc_normalize_fonts,
+        apply_academic_layout: settings.pandoc_academic_layout,
+        layout: settings.academic_layout.clone(),
+    };
 
     // 在 spawn_blocking 里执行 Pandoc、字体后处理和最终原子替换，避免阻塞
     // Tauri 异步运行时，也避免失败时把半成品留在用户选择的目标路径。
@@ -525,8 +540,7 @@ pub async fn export_docx(
             doc_dir2.as_deref(),
             Path::new(&output_path2),
             &options,
-            normalize_fonts,
-            academic_layout,
+            &post,
         )
     })
     .await?;
@@ -534,14 +548,16 @@ pub async fn export_docx(
     Ok(ExportDocxResult { path: output_path })
 }
 
+/// `layout` 在 `apply_academic_layout` 为 false 或使用了自定义 reference.docx
+/// 时不生效，但签名上始终要求传入——调用方（真实导出、预览导出）本来就总是
+/// 手头有一份 AcademicLayout，不值得为了省一个引用而拆成两个函数。
 fn run_export_docx_atomic(
     pandoc_path: &Path,
     markdown: &str,
     doc_dir: Option<&str>,
     output_path: &Path,
     options: &PandocExportOptions,
-    normalize_fonts: bool,
-    academic_layout: bool,
+    post: &DocxPostProcessing,
 ) -> AppResult<()> {
     let parent = output_path
         .parent()
@@ -556,9 +572,9 @@ fn run_export_docx_atomic(
 
     run_export_docx(pandoc_path, markdown, doc_dir, &temporary_string, options)?;
     // 论文排版只作用于内置模板；选了自定义 reference.docx 就只按开关做字体规范化。
-    if options.reference_doc.is_none() && academic_layout {
-        patch_builtin_default_template(&temporary, normalize_fonts, &AcademicLayout::default())?;
-    } else if normalize_fonts {
+    if options.reference_doc.is_none() && post.apply_academic_layout {
+        patch_builtin_default_template(&temporary, post.normalize_fonts, &post.layout)?;
+    } else if post.normalize_fonts {
         normalize_docx_fonts(&temporary)?;
     }
     temporary
@@ -2261,14 +2277,18 @@ mod tests {
             number_sections: false,
         };
 
+        let post = DocxPostProcessing {
+            normalize_fonts: false,
+            apply_academic_layout: false,
+            layout: AcademicLayout::default(),
+        };
         let error = run_export_docx_atomic(
             &dir.path().join("missing-pandoc"),
             "# title",
             None,
             &output,
             &options,
-            false,
-            false,
+            &post,
         )
         .expect_err("不存在的 Pandoc 应导出失败");
 
@@ -2314,7 +2334,12 @@ mod tests {
             table_of_contents: false,
             number_sections: false,
         };
-        run_export_docx_atomic(&pandoc, md, None, &out, &options, true, true)
+        let post = DocxPostProcessing {
+            normalize_fonts: true,
+            apply_academic_layout: true,
+            layout: AcademicLayout::default(),
+        };
+        run_export_docx_atomic(&pandoc, md, None, &out, &options, &post)
             .expect("export_docx 应成功");
         assert!(out.exists(), "docx 文件应存在");
 
@@ -2408,7 +2433,8 @@ mod tests {
         };
         let dir = tempfile::tempdir().expect("创建临时目录失败");
         let output = dir.path().join("reference.docx");
-        run_export_default_template(&pandoc, &output, true, true).expect("默认模板应能导出");
+        run_export_default_template(&pandoc, &output, true, true, &AcademicLayout::default())
+            .expect("默认模板应能导出");
 
         let bytes = std::fs::read(output).expect("默认模板应可读");
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).expect("模板应为有效 docx");

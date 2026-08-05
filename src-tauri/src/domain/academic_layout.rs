@@ -160,6 +160,31 @@ impl AcademicLayout {
     pub fn bibliography_hanging(&self) -> u32 {
         chars_to_twips(2.0, self.body_font_pt)
     }
+
+    /// 把越界的取值收回可用范围。设置来自用户输入（含手改配置文件），
+    /// 不能直接信任——尤其字号，写进 XML 前必须是个合理的正数。
+    pub fn sanitize(&mut self) {
+        self.body_font_pt = self.body_font_pt.clamp(6.0, 36.0);
+        self.body_line_height = self.body_line_height.clamp(1.0, 3.0);
+        self.first_line_indent_chars = self.first_line_indent_chars.clamp(0.0, 8.0);
+        self.margin_mm = self.margin_mm.clamp(5.0, 60.0);
+        self.title_font_pt = self.title_font_pt.clamp(6.0, 72.0);
+        for size in &mut self.heading_font_pt {
+            *size = size.clamp(6.0, 48.0);
+        }
+        self.caption_font_pt = self.caption_font_pt.clamp(6.0, 24.0);
+        self.bibliography_font_pt = self.bibliography_font_pt.clamp(6.0, 24.0);
+    }
+
+    /// 是否已经落在 `sanitize` 允许的范围内。
+    ///
+    /// 故意不重复一份边界字面量：真出现两处判断悄悄漂移，比多一次
+    /// clone+比较的开销更难发现。
+    pub fn is_valid(&self) -> bool {
+        let mut sanitized = self.clone();
+        sanitized.sanitize();
+        &sanitized == self
+    }
 }
 
 #[cfg(test)]
@@ -205,5 +230,29 @@ mod tests {
         let layout = AcademicLayout::default();
         assert_eq!(layout.heading_size(0), layout.body_size());
         assert_eq!(layout.heading_size(9), layout.body_size());
+    }
+
+    #[test]
+    fn default_layout_is_valid() {
+        assert!(AcademicLayout::default().is_valid());
+    }
+
+    #[test]
+    fn sanitize_pulls_out_of_range_values_back() {
+        let mut layout = AcademicLayout {
+            body_font_pt: 900.0,
+            body_line_height: 0.1,
+            margin_mm: -5.0,
+            heading_font_pt: [0.0, 900.0, 12.0, 12.0, 12.0, 12.0],
+            ..AcademicLayout::default()
+        };
+        assert!(!layout.is_valid());
+        layout.sanitize();
+        assert_eq!(layout.body_font_pt, 36.0);
+        assert_eq!(layout.body_line_height, 1.0);
+        assert_eq!(layout.margin_mm, 5.0);
+        assert_eq!(layout.heading_font_pt[0], 6.0);
+        assert_eq!(layout.heading_font_pt[1], 48.0);
+        assert!(layout.is_valid());
     }
 }
