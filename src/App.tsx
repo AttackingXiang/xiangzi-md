@@ -854,6 +854,17 @@ export default function App(): JSX.Element {
     setCtxMenu,
   })
 
+  // 搜索后删除/重命名会刷新 treeKey；打开的文件保存后则通过版本哈希触发重搜，
+  // 这样搜索结果不会继续展示已不存在或已不再匹配的文件。
+  const searchReloadKey = useMemo(
+    () =>
+      [
+        String(treeKey),
+        ...tabs.map((tab) => `${tab.path ?? ''}:${tab.version?.contentHash ?? ''}`),
+      ].join('\0'),
+    [tabs, treeKey],
+  )
+
   // 必须和传给 MarkdownEditor 的 content 用同一份文本（见下方 sourceMode 三元），
   // 否则大纲的标题 offset 是按去 frontmatter 的正文算的，源码模式下编辑器用的是
   // 带 frontmatter 的原文，offset 会整体偏移 frontmatter 的长度，点击大纲跳到错误位置。
@@ -1346,6 +1357,7 @@ export default function App(): JSX.Element {
               <Suspense fallback={null}>
                 <SearchPanel
                   root={folder.root}
+                  reloadKey={searchReloadKey}
                   onOpenResult={openSearchResult}
                   onBack={() => setSearchView(false)}
                 />

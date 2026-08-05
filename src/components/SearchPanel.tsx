@@ -6,6 +6,8 @@ import { t, getLang } from '../lib/i18n'
 
 interface Props {
   root: string
+  /** 文件树变化或已打开文件保存后变化，用于清理旧搜索结果。 */
+  reloadKey: string
   onOpenResult: (path: string, query: string, lineNumber?: number, matchIndex?: number) => void
   onBack: () => void
 }
@@ -35,7 +37,7 @@ function highlight(text: string, query: string): JSX.Element {
   return <>{parts}</>
 }
 
-export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.Element {
+export default function SearchPanel({ root, reloadKey, onOpenResult, onBack }: Props): JSX.Element {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [searchMeta, setSearchMeta] = useState({
@@ -63,6 +65,8 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
       void desktop.cancelSearch()
       return
     }
+    setResults([])
+    setSearchMeta({ scannedFiles: 0, totalMatches: 0, truncated: false })
     setLoading(true)
     const timer = setTimeout(() => {
       void desktop
@@ -93,7 +97,7 @@ export default function SearchPanel({ root, onOpenResult, onBack }: Props): JSX.
       if (reqId.current === id) reqId.current += 1
       void desktop.cancelSearch()
     }
-  }, [query, root])
+  }, [query, reloadKey, root])
 
   return (
     <aside className="sidebar search-panel">
