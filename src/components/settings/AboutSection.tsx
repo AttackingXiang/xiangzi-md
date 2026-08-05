@@ -3,6 +3,7 @@ import {
   Bug,
   ChevronRight,
   ExternalLink,
+  Globe,
   HeartHandshake,
   RefreshCw,
   ScrollText,
@@ -21,7 +22,9 @@ import { updateStatusText } from './updateStatusText'
 
 const PROJECT_URL = 'https://github.com/AttackingXiang/xiangzi-md'
 const PAYPAL_SUPPORT_URL = 'https://www.paypal.com/ncp/payment/Q3YKYE86YKBPJ'
+const WEBSITE_URL = 'https://xz.xzfast.top'
 const ABOUT_LINKS = {
+  website: WEBSITE_URL,
   guide: `${PROJECT_URL}/blob/main/docs/USER_GUIDE.md`,
   releases: `${PROJECT_URL}/releases`,
   feedback: `${PROJECT_URL}/issues/new/choose`,
@@ -89,6 +92,7 @@ export default function AboutSection({ appVersion, updater, en }: Props): JSX.El
           <h3 id="about-resources-title">{en ? 'Resources' : '常用资源'}</h3>
           <div className="about-resource-list">
             {[
+              [ABOUT_LINKS.website, Globe, en ? 'Official website' : '官网'],
               [ABOUT_LINKS.guide, BookOpen, en ? 'User guide' : '使用指南'],
               [ABOUT_LINKS.releases, ScrollText, en ? 'Release notes' : '更新日志'],
               [ABOUT_LINKS.feedback, Bug, en ? 'Feedback' : '问题反馈'],

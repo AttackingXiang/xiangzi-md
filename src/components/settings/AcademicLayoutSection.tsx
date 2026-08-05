@@ -6,7 +6,7 @@ import {
 } from '../../lib/academicPreview'
 import { desktop } from '../../platform'
 import type { AcademicLayout, AppSettings } from '../../types'
-import { SettingRow, ToggleRow } from './primitives'
+import { SettingRow } from './primitives'
 
 interface Props {
   settings: AppSettings
@@ -89,8 +89,8 @@ export default function AcademicLayoutSection({
     <>
       <p className="settings-hint">
         {en
-          ? 'These values only apply to real Word exports when "Academic paper layout" above is on and no custom template is selected. The preview below always reflects them, so you can dial in a look before turning the switch on.'
-          : '这些参数只在上方「论文排版」开启且未选择自定义模板时应用到真实导出；下方预览始终反映它们，方便你在开启前先把效果调好。'}
+          ? 'These values only apply to real Word exports when "Use standard format" above is on. The preview below always reflects them, so you can dial in a look before turning the switch on.'
+          : '这些参数只在上方「使用标准格式」开启时应用到真实导出；下方预览始终反映它们，方便你在开启前先把效果调好。'}
       </p>
 
       <SettingRow label={en ? 'Body font size' : '正文字号'}>
@@ -196,23 +196,6 @@ export default function AcademicLayoutSection({
         </span>
       </SettingRow>
 
-      <ToggleRow
-        label={en ? 'Three-line tables' : '三线表'}
-        description={
-          en
-            ? 'Top/bottom rule and a rule under the header row only, no vertical or body rules.'
-            : '仅表格顶/底与表头下沿三条横线，无竖线、无表体横线。'
-        }
-        checked={layout.threeLineTable}
-        onChange={(threeLineTable) => update({ threeLineTable })}
-      />
-      <ToggleRow
-        label={en ? 'Centered page numbers' : '居中页码'}
-        description={en ? 'Add a centered page number to the footer.' : '在页脚居中显示页码。'}
-        checked={layout.pageNumberFooter}
-        onChange={(pageNumberFooter) => update({ pageNumberFooter })}
-      />
-
       <div className="academic-preview-header">
         <span className="settings-hint">
           {activeDocument
@@ -240,7 +223,7 @@ export default function AcademicLayoutSection({
       </div>
       <div className="academic-preview">
         <div
-          className={`academic-preview-page${layout.threeLineTable ? ' ap-three-line' : ''}`}
+          className={`academic-preview-page${layout.threeLineTable ? ' ap-three-line' : ''}${layout.codeBlockBordered ? ' ap-code-bordered' : ''}`}
           style={previewVars}
           // 内容来自 renderAcademicPreviewHtml：复用剪贴板序列化器的转义与安全
           // href 过滤，跟 TableZoomModal 的表格预览走的是同一条已被信任的路径。

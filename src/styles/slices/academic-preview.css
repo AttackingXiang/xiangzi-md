@@ -139,6 +139,13 @@
   text-indent: -2em;
 }
 
+/* 代码块加框：对应 layout.codeBlockBordered，页面级修饰类，跟 ap-three-line
+   走同一种"整页开关"模式。 */
+.academic-preview-page.ap-code-bordered pre {
+  border: 1px solid #000;
+  padding: 8px 10px;
+}
+
 .ap-image-placeholder {
   display: inline-block;
   padding: 1px 6px;

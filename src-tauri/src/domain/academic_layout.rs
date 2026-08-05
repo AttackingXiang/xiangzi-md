@@ -89,6 +89,11 @@ pub struct AcademicLayout {
     pub three_line_table: bool,
     /// 页脚居中显示页码。
     pub page_number_footer: bool,
+    /// 代码块加边框。默认关闭——这是新加的一项，开着的话会改变所有已有
+    /// 用户导出结果的观感，所以默认值必须是 false 才能让黄金哈希测试
+    /// （见 pandoc.rs 的 academic_styles_output_is_unchanged_for_default_layout）
+    /// 继续证明"默认排版下的重构不改变输出"。
+    pub code_block_bordered: bool,
 }
 
 impl Default for AcademicLayout {
@@ -105,6 +110,7 @@ impl Default for AcademicLayout {
             bibliography_font_pt: 10.5,
             three_line_table: true,
             page_number_footer: true,
+            code_block_bordered: false,
         }
     }
 }

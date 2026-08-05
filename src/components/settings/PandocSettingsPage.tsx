@@ -39,15 +39,29 @@ export default function PandocSettingsPage({
     if (result) onChange({ pandocPath: result.path })
   }
 
+  // 选中一份新的自定义模板时，四个「导出行为」开关默认全部关掉：模板通常已经
+  // 带着完整的样式/目录/页码，直接叠加我们的处理反而会覆盖用户在模板里做的
+  // 选择。这只是一次性的默认值——开关本身不会被禁用，用户随时可以按需重新
+  // 打开某一项，把"自定义模板 + 这个开关"的组合找回来。
+  const applyCustomTemplate = (path: string): void => {
+    onChange({
+      pandocReferenceDoc: path,
+      pandocToc: false,
+      pandocNumberSections: false,
+      pandocNormalizeFonts: false,
+      pandocAcademicLayout: false,
+    })
+  }
+
   const chooseTemplate = async (): Promise<void> => {
     const result = await desktop.pickWordTemplate()
-    if (result) onChange({ pandocReferenceDoc: result.path })
+    if (result) applyCustomTemplate(result.path)
   }
 
   const exportDefaultTemplate = async (): Promise<void> => {
     try {
       const result = await desktop.savePandocDefaultTemplate()
-      if (result) onChange({ pandocReferenceDoc: result.path })
+      if (result) applyCustomTemplate(result.path)
     } catch (error) {
       await desktop.notify(
         (en ? 'Could not export the default Word template:\n' : '默认 Word 模板导出失败：\n') +
@@ -206,25 +220,63 @@ export default function PandocSettingsPage({
           onChange={(pandocNormalizeFonts) => onChange({ pandocNormalizeFonts })}
         />
         <ToggleRow
-          label={en ? 'Academic paper layout' : '论文排版'}
+          label={en ? 'Use standard format' : '使用标准格式'}
           description={
             en
-              ? 'A4 pages with 2.5cm margins, a centered page-number footer, 1.5 line spacing, first-line indent, and three-line tables. Ignored when a custom template is selected.'
-              : 'A4 页面、2.5cm 页边距、居中页码页脚、1.5 倍行距、首行缩进两字与三线表；选择了自定义模板时本项不生效。'
+              ? 'A4 pages with 2.5cm margins, 1.5 line spacing, first-line indent, and title/heading sizes below. Applies together with a custom template, if one is selected above — it patches the named styles pandoc always uses (Body Text, Heading 1–6, Title, …), not the template itself.'
+              : 'A4 页面、2.5cm 页边距、1.5 倍行距、首行缩进两字，以及下方的题名/标题字号等参数。即使上方选了自定义模板也会一起生效——它改的是 pandoc 固定使用的命名样式（正文、一至六级标题、题名……），不是模板本身。'
           }
           checked={settings.pandocAcademicLayout}
           onChange={(pandocAcademicLayout) => onChange({ pandocAcademicLayout })}
         />
-      </SettingsCard>
-
-      <SettingsCard title={en ? 'Academic layout parameters' : '论文排版参数'}>
-        <AcademicLayoutSection
-          settings={settings}
-          onChange={onChange}
-          en={en}
-          activeDocument={activeDocument}
+        <ToggleRow
+          label={en ? 'Three-line tables' : '三线表'}
+          description={
+            en
+              ? 'Top/bottom rule and a rule under the header row only, no vertical or body rules. Only takes effect while "Use standard format" above is on.'
+              : '仅表格顶/底与表头下沿三条横线，无竖线、无表体横线；仅在上方「使用标准格式」开启时才实际生效。'
+          }
+          checked={settings.academicLayout.threeLineTable}
+          onChange={(threeLineTable) =>
+            onChange({ academicLayout: { ...settings.academicLayout, threeLineTable } })
+          }
+        />
+        <ToggleRow
+          label={en ? 'Centered page numbers' : '居中页码'}
+          description={
+            en
+              ? 'Add a centered page number to the footer. Only takes effect while "Use standard format" above is on.'
+              : '在页脚居中显示页码；仅在上方「使用标准格式」开启时才实际生效。'
+          }
+          checked={settings.academicLayout.pageNumberFooter}
+          onChange={(pageNumberFooter) =>
+            onChange({ academicLayout: { ...settings.academicLayout, pageNumberFooter } })
+          }
+        />
+        <ToggleRow
+          label={en ? 'Code block border' : '代码块加框'}
+          description={
+            en
+              ? 'Draw a box border around code blocks. Only takes effect while "Use standard format" above is on.'
+              : '给代码块加上边框。仅在上方「使用标准格式」开启时才实际生效。'
+          }
+          checked={settings.academicLayout.codeBlockBordered}
+          onChange={(codeBlockBordered) =>
+            onChange({ academicLayout: { ...settings.academicLayout, codeBlockBordered } })
+          }
         />
       </SettingsCard>
+
+      {settings.pandocAcademicLayout && (
+        <SettingsCard title={en ? 'Standard format parameters' : '标准格式参数'}>
+          <AcademicLayoutSection
+            settings={settings}
+            onChange={onChange}
+            en={en}
+            activeDocument={activeDocument}
+          />
+        </SettingsCard>
+      )}
 
       <SettingsCard title={en ? 'Import behavior' : '导入行为'}>
         <SettingRow label={en ? 'Media folder' : '图片目录'}>

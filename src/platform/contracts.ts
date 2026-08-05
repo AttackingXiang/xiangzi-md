@@ -178,7 +178,8 @@ export interface AppSettings {
   pandocToc: boolean
   pandocNumberSections: boolean
   pandocNormalizeFonts: boolean
-  /** Apply the built-in academic Word layout. Ignored when a custom reference.docx is set. */
+  /** Apply the standard format layout patches. Applies together with a custom
+   * reference.docx, if one is selected — it patches pandoc's named styles, not the template file. */
   pandocAcademicLayout: boolean
   /** The layout values that pandocAcademicLayout applies. Kept separate so
    * turning the switch off does not lose values the user already tuned. */
@@ -211,6 +212,8 @@ export interface AcademicLayout {
   threeLineTable: boolean
   /** 页脚居中显示页码。 */
   pageNumberFooter: boolean
+  /** 代码块加边框。默认关闭。 */
+  codeBlockBordered: boolean
 }
 
 /** 与 domain::academic_layout::AcademicLayout::default() 保持一致。 */
@@ -226,6 +229,7 @@ export const DEFAULT_ACADEMIC_LAYOUT: AcademicLayout = {
   bibliographyFontPt: 10.5,
   threeLineTable: true,
   pageNumberFooter: true,
+  codeBlockBordered: false,
 }
 
 export interface OpenedFile {

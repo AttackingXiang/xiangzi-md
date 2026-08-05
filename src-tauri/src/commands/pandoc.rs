@@ -458,12 +458,39 @@ fn run_export_default_template(
         .map_err(|error| AppError::io("写入默认 Word 模板失败", error))?;
     // 导出的模板要和实际导出结果长得一样，所以跟着同一个开关走。
     if apply_academic_layout {
-        patch_builtin_default_template(output_path, normalize_fonts, layout)
+        apply_academic_layout_to_docx(output_path, normalize_fonts, layout)
     } else if normalize_fonts {
         normalize_docx_fonts(output_path)
     } else {
         Ok(())
     }
+}
+
+/// 解析并校验设置里的自定义 Word 模板路径；未设置时返回 `None`（走内置模板）。
+/// `export_docx` 和 `preview_academic_docx` 共用——后者也要在预览里如实反映
+/// "自定义模板 + 论文排版参数"这个组合，不能自己单独一套判断。
+fn resolve_reference_doc(
+    app: &AppHandle,
+    reference_doc_setting: &str,
+) -> AppResult<Option<PathBuf>> {
+    let trimmed = reference_doc_setting.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let path = PathBuf::from(trimmed);
+    workspace::ensure_allowed(app, &path)?;
+    if !path.is_file()
+        || !path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("docx"))
+    {
+        return Err(AppError::new(
+            "pandoc_reference_doc_invalid",
+            "自定义 Word 模板不存在或不是 .docx 文件",
+        ));
+    }
+    Ok(Some(path))
 }
 
 /// 把 Markdown 文本（通过 stdin）用 pandoc 转换为 docx，然后后处理字体。
@@ -497,24 +524,7 @@ pub async fn export_docx(
         )
     })?;
 
-    let reference_doc = if settings.pandoc_reference_doc.trim().is_empty() {
-        None
-    } else {
-        let path = PathBuf::from(settings.pandoc_reference_doc.trim());
-        workspace::ensure_allowed(&app, &path)?;
-        if !path.is_file()
-            || !path
-                .extension()
-                .and_then(|value| value.to_str())
-                .is_some_and(|value| value.eq_ignore_ascii_case("docx"))
-        {
-            return Err(AppError::new(
-                "pandoc_reference_doc_invalid",
-                "自定义 Word 模板不存在或不是 .docx 文件",
-            ));
-        }
-        Some(path)
-    };
+    let reference_doc = resolve_reference_doc(&app, &settings.pandoc_reference_doc)?;
     let options = PandocExportOptions {
         reference_doc,
         extra_args: parse_pandoc_args(&settings.pandoc_export_args)?,
@@ -557,10 +567,11 @@ pub async fn export_docx(
 ///   没点保存就想先看看效果，这是这个命令存在的全部意义。
 /// - 目标路径由本命令自己在系统临时目录里选定，不接受前端传入的任意路径：
 ///   预览用途不需要那份自由度，还能省一次「另存为」对话框。
-/// - 忽略 `pandoc_reference_doc`：论文排版只作用于内置模板，选了自定义模板时
-///   这些参数在真实导出里本就不生效，预览没有理由假装生效。
 /// - `apply_academic_layout` 恒为 true：点「预览效果」这个动作本身就是想看
 ///   参数生效的样子，不管持久化设置里那个总开关当前是否勾选。
+///
+/// 会读取 `pandoc_reference_doc`（如果设置了）：真实导出现在允许"自定义模板 +
+/// 论文排版"组合生效，预览也要如实反映这个组合，而不是永远只演示内置模板。
 #[tauri::command]
 pub async fn preview_academic_docx(
     app: AppHandle,
@@ -584,8 +595,9 @@ pub async fn preview_academic_docx(
         )
     })?;
 
+    let reference_doc = resolve_reference_doc(&app, &settings.pandoc_reference_doc)?;
     let options = PandocExportOptions {
-        reference_doc: None,
+        reference_doc,
         extra_args: Vec::new(),
         table_of_contents: false,
         number_sections: false,
@@ -656,9 +668,12 @@ fn run_export_docx_atomic(
     let temporary_string = temporary.to_string_lossy().into_owned();
 
     run_export_docx(pandoc_path, markdown, doc_dir, &temporary_string, options)?;
-    // 论文排版只作用于内置模板；选了自定义 reference.docx 就只按开关做字体规范化。
-    if options.reference_doc.is_none() && post.apply_academic_layout {
-        patch_builtin_default_template(&temporary, post.normalize_fonts, &post.layout)?;
+    // 论文排版参数独立于是否选了自定义 reference.docx：pandoc 无论从内置模板
+    // 还是自定义模板生成 docx，输出里的命名样式（BodyText/Heading1-6/Title/…）
+    // 都是同一套 ID，只是外观来自不同的模板——在这些样式上打补丁对两种情况
+    // 都成立，所以用户可以选"自定义模板 + 论文排版"的组合，而不是二选一。
+    if post.apply_academic_layout {
+        apply_academic_layout_to_docx(&temporary, post.normalize_fonts, &post.layout)?;
     } else if post.normalize_fonts {
         normalize_docx_fonts(&temporary)?;
     }
@@ -907,11 +922,13 @@ pub fn normalize_docx_fonts(path: &Path) -> AppResult<()> {
     rewrite_docx_parts(path, None, true)
 }
 
-/// 为内置 Pandoc 默认模板应用论文排版样式。
+/// 给一份 pandoc 生成的 docx 打上论文排版补丁。
 ///
-/// 只在没有选择自定义 reference.docx 时调用。这样用户自己的 Word 模板
-/// 仍然只受原有“规范中文字体”开关影响，不会被论文排版规则覆盖。
-fn patch_builtin_default_template(
+/// 不区分这份 docx 是从内置模板还是自定义 reference.docx 转换来的——pandoc
+/// 输出里的命名样式 ID 是固定的一套（BodyText/Heading1-6/Title/…），补丁只
+/// 改这些样式的属性，同样适用于两种来源。调用方：真实导出（可能带自定义
+/// 模板）、导出可编辑模板副本（永远是内置模板）。
+fn apply_academic_layout_to_docx(
     path: &Path,
     normalize_fonts: bool,
     layout: &AcademicLayout,
@@ -928,6 +945,9 @@ fn rewrite_docx_parts(
 ) -> AppResult<()> {
     let apply_academic_styles = layout.is_some();
     let apply_page_layout = layout.is_some();
+    // 页码页脚是可以单独关掉的一项（layout.page_number_footer），跟纸张/页边距
+    // 分开判断——那两项没有单独开关，只要套论文排版就总是生效。
+    let apply_page_number = layout.is_some_and(|value| value.page_number_footer);
     // 读取整个 zip 进内存
     let zip_bytes = std::fs::read(path).map_err(|e| AppError::io("读取 docx 文件失败", e))?;
 
@@ -950,7 +970,7 @@ fn rewrite_docx_parts(
     }
     drop(archive);
 
-    let footer_rel_id = apply_page_layout.then(|| footer_relationship_id(&entries));
+    let footer_rel_id = apply_page_number.then(|| footer_relationship_id(&entries));
 
     // 改写目标条目
     for (name, data, _) in &mut entries {
@@ -978,27 +998,27 @@ fn rewrite_docx_parts(
             let xml = String::from_utf8_lossy(data).into_owned();
             let xml = patch_document_page_layout(
                 &xml,
-                footer_rel_id.as_deref().unwrap_or("rIdFooter1"),
+                footer_rel_id.as_deref(),
                 layout.expect("apply_page_layout 蕴含 layout 存在"),
             );
             let patched =
                 patch_list_paragraphs(&xml, layout.expect("apply_page_layout 蕴含 layout 存在"));
             *data = patched.into_bytes();
-        } else if apply_page_layout && name == "word/_rels/document.xml.rels" {
+        } else if apply_page_number && name == "word/_rels/document.xml.rels" {
             let xml = String::from_utf8_lossy(data).into_owned();
             let patched = patch_document_relationships(
                 &xml,
                 footer_rel_id.as_deref().unwrap_or("rIdFooter1"),
             );
             *data = patched.into_bytes();
-        } else if apply_page_layout && name == "[Content_Types].xml" {
+        } else if apply_page_number && name == "[Content_Types].xml" {
             let xml = String::from_utf8_lossy(data).into_owned();
             let patched = patch_content_types(&xml);
             *data = patched.into_bytes();
         }
     }
 
-    if apply_page_layout
+    if apply_page_number
         && !entries
             .iter()
             .any(|(name, _, _)| name == "word/footer1.xml")
@@ -1102,7 +1122,14 @@ fn body_section_start(xml: &str) -> Option<usize> {
     found
 }
 
-fn patch_document_page_layout(xml: &str, footer_rel_id: &str, layout: &AcademicLayout) -> String {
+/// `footer_rel_id` 为 `None` 时表示 `layout.page_number_footer` 关闭：只套用
+/// 纸张/页边距，不插入页码页脚引用（那两项没有单独开关，只要套论文排版就
+/// 总是生效）。
+fn patch_document_page_layout(
+    xml: &str,
+    footer_rel_id: Option<&str>,
+    layout: &AcademicLayout,
+) -> String {
     let (page_width, page_height) = layout.paper.dimensions_twips();
     let margin = layout.margin();
     let page_size = format!(r#"<w:pgSz w:w="{page_width}" w:h="{page_height}"/>"#);
@@ -1111,8 +1138,9 @@ fn patch_document_page_layout(xml: &str, footer_rel_id: &str, layout: &AcademicL
     let page_margins = format!(
         r#"<w:pgMar w:top="{margin}" w:right="{margin}" w:bottom="{margin}" w:left="{margin}" w:header="708" w:footer="708" w:gutter="0"/>"#
     );
-    let footer_reference =
-        format!(r#"<w:footerReference w:type="default" r:id="{footer_rel_id}"/>"#);
+    let footer_reference = footer_rel_id
+        .map(|id| format!(r#"<w:footerReference w:type="default" r:id="{id}"/>"#))
+        .unwrap_or_default();
 
     let Some(section_start) = body_section_start(xml) else {
         return xml.to_owned();
@@ -1138,12 +1166,16 @@ fn patch_document_page_layout(xml: &str, footer_rel_id: &str, layout: &AcademicL
     let section = &xml[section_start..section_end];
     // sectPr 的 OOXML 顺序要求 footerReference 位于 pgSz/pgMar 之前，
     // 页面属性则应位于 footnotePr 等尾部属性之前。
-    let section = replace_or_insert_section_child(
-        section,
-        "footerReference",
-        &footer_reference,
-        "</w:sectPr>",
-    );
+    let section = if footer_rel_id.is_some() {
+        replace_or_insert_section_child(
+            section,
+            "footerReference",
+            &footer_reference,
+            "</w:sectPr>",
+        )
+    } else {
+        section.to_owned()
+    };
     let section = replace_or_insert_section_child(&section, "pgSz", &page_size, "</w:sectPr>");
     let section = replace_or_insert_section_child(&section, "pgMar", &page_margins, "</w:sectPr>");
     format!(
@@ -1457,7 +1489,58 @@ pub fn patch_academic_styles_xml(xml: &str, layout: &AcademicLayout) -> String {
         )
     });
 
-    patch_table_style(&xml)
+    let xml = if layout.three_line_table {
+        patch_table_style(&xml)
+    } else {
+        xml
+    };
+    if layout.code_block_bordered {
+        patch_code_block_border(&xml)
+    } else {
+        xml
+    }
+}
+
+/// 给代码块的 SourceCode 段落样式加一圈细边框，对应 layout.code_block_bordered。
+///
+/// pBdr 在 OOXML 的 w:pPr 子元素顺序里必须排在 wordWrap 之前；SourceCode 样式
+/// 目前唯一已有的子元素就是 wordWrap。`replace_or_insert_container_child` 帮不
+/// 上忙——它只在"容器本身不存在、需要新建"时支持指定插入位置，pPr 这里已经
+/// 存在，会直接走"追加到已有容器末尾"的分支，把顺序写反，所以这里手写一个
+/// 只服务于这一个场景的插入逻辑。
+fn patch_code_block_border(xml: &str) -> String {
+    const BORDER: &str = r#"<w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:space="4" w:color="000000"/></w:pBdr>"#;
+    patch_style_block_by_id(xml, "SourceCode", |block| {
+        let Some(ppr_start) = find_word_tag_start(block, "<w:pPr") else {
+            // 没有 pPr 就整个新建一个，插在样式块末尾——这个样式目前没有其它
+            // 顺序敏感的顶层子元素，新建一个 pPr 放哪儿都不影响其它属性。
+            let insert_at = block.rfind("</w:style>").unwrap_or(block.len());
+            let ppr = format!("<w:pPr>{BORDER}</w:pPr>");
+            return format!("{}{}{}", &block[..insert_at], ppr, &block[insert_at..]);
+        };
+        let Some(open_end_rel) = block[ppr_start..].find('>') else {
+            return block.to_owned();
+        };
+        let open_end = ppr_start + open_end_rel;
+        if block.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
+            // 自闭合的 <w:pPr/>，先展开成一对标签再放边框进去。
+            let expanded = format!("<w:pPr>{BORDER}</w:pPr>");
+            return format!(
+                "{}{}{}",
+                &block[..ppr_start],
+                expanded,
+                &block[open_end + 1..]
+            );
+        }
+        // 已有内容的 pPr：插到 wordWrap 之前；wordWrap 不存在就退到 pPr 末尾
+        // （对应 OOXML 顺序里 pBdr 之后、wordWrap 之前可能出现的其它属性都不在
+        // 这个样式的已知形态里，末尾兜底不会产生实际的顺序问题）。
+        let insert_at = find_word_tag_start(&block[open_end + 1..], "<w:wordWrap")
+            .map(|relative| open_end + 1 + relative)
+            .or_else(|| block.find("</w:pPr>"))
+            .unwrap_or(block.len());
+        format!("{}{}{}", &block[..insert_at], BORDER, &block[insert_at..])
+    })
 }
 
 /// 对指定 styleId 的 XML 块执行一次局部改写；不存在时保持原样。
@@ -2196,7 +2279,7 @@ mod tests {
 
         let document =
             r#"<w:document><w:body><w:sectPr><w:footnotePr /></w:sectPr></w:body></w:document>"#;
-        let page = patch_document_page_layout(document, "rIdFooter1", &layout);
+        let page = patch_document_page_layout(document, Some("rIdFooter1"), &layout);
         // Letter = 12240 x 15840 缇；20mm = 1134 缇
         assert!(page.contains(r#"<w:pgSz w:w="12240" w:h="15840"/>"#));
         assert!(page.contains(r#"w:top="1134""#));
@@ -2220,11 +2303,77 @@ mod tests {
         assert!(patched.contains(r#"<w:sz w:val="22"/>"#));
     }
 
+    /// 真实 pandoc 输出里 SourceCode 是段落样式（见 patch_code_block_border 的
+    /// 文档注释），FIXTURE_ACADEMIC_STYLES 里那份是字符样式、没有 pPr——只够测
+    /// 字体替换，不够测边框插入的位置正确性，所以这里单独构造一份贴近真实
+    /// 结构的样式片段。
+    const FIXTURE_SOURCE_CODE_STYLE: &str = r#"<w:style w:type="paragraph" w:customStyle="1" w:styleId="SourceCode"><w:name w:val="Source Code"/><w:basedOn w:val="Normal"/><w:link w:val="VerbatimChar"/><w:pPr><w:wordWrap w:val="off"/></w:pPr></w:style>"#;
+
+    #[test]
+    fn code_block_border_is_off_by_default_and_on_when_enabled() {
+        let off = patch_academic_styles_xml(
+            FIXTURE_SOURCE_CODE_STYLE,
+            &AcademicLayout {
+                code_block_bordered: false,
+                ..AcademicLayout::default()
+            },
+        );
+        assert!(!off.contains("w:pBdr"), "默认不应该给代码块加框");
+
+        let on = patch_academic_styles_xml(
+            FIXTURE_SOURCE_CODE_STYLE,
+            &AcademicLayout {
+                code_block_bordered: true,
+                ..AcademicLayout::default()
+            },
+        );
+        let border_at = on.find("<w:pBdr>").expect("开启后应插入 pBdr");
+        let word_wrap_at = on.find("<w:wordWrap").expect("wordWrap 应该还在");
+        assert!(
+            border_at < word_wrap_at,
+            "pBdr 必须排在 wordWrap 之前，顺序错了 Word 可能要求修复文档"
+        );
+    }
+
+    #[test]
+    fn three_line_table_can_be_turned_off_independently() {
+        // 关掉三线表时，Table 样式应该保持原样——之前这个字段完全没被读取，
+        // 不管开关状态都会加边框；这条测试锁死"关了就真的不加"。
+        let patched = patch_academic_styles_xml(
+            FIXTURE_ACADEMIC_STYLES,
+            &AcademicLayout {
+                three_line_table: false,
+                ..AcademicLayout::default()
+            },
+        );
+        assert!(
+            !patched.contains("tblBorders"),
+            "关闭三线表后不应该出现三线表边框"
+        );
+    }
+
+    #[test]
+    fn page_number_footer_toggle_only_controls_the_footer_reference() {
+        let document = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:sectPr><w:footnotePr /></w:sectPr></w:body></w:document>"#;
+        let layout = AcademicLayout::default();
+
+        let without_footer = patch_document_page_layout(document, None, &layout);
+        assert!(
+            !without_footer.contains("footerReference"),
+            "关闭页码后不应该插入 footerReference"
+        );
+        // 纸张和页边距没有单独开关，页码开关不应该影响它们。
+        assert!(without_footer.contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
+
+        let with_footer = patch_document_page_layout(document, Some("rIdFooter1"), &layout);
+        assert!(with_footer.contains(r#"<w:footerReference w:type="default" r:id="rIdFooter1"/>"#));
+    }
+
     #[test]
     fn default_document_gets_a4_margins_and_page_number_reference() {
         let document = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:sectPr><w:footnotePr /></w:sectPr></w:body></w:document>"#;
         let patched =
-            patch_document_page_layout(document, "rIdFooter1", &AcademicLayout::default());
+            patch_document_page_layout(document, Some("rIdFooter1"), &AcademicLayout::default());
         assert!(patched.contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
         assert!(patched.contains(
             r#"<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>"#
@@ -2273,7 +2422,7 @@ mod tests {
             r#"</w:body></w:document>"#
         );
         let patched =
-            patch_document_page_layout(document, "rIdFooter1", &AcademicLayout::default());
+            patch_document_page_layout(document, Some("rIdFooter1"), &AcademicLayout::default());
 
         let paragraph_end = patched.find("</w:pPr>").expect("段落属性应保留");
         assert!(patched[..paragraph_end].contains(r#"<w:pgSz w:w="1" w:h="2"/>"#));
@@ -2520,6 +2669,76 @@ mod tests {
             .unwrap();
         let types = String::from_utf8_lossy(&types_buf);
         assert!(types.contains(r#"PartName="/word/footer1.xml""#));
+    }
+
+    /// 用户明确要求的组合："自定义模板 + 论文排版参数"必须一起生效，不是
+    /// 二选一。之前的实现里 `reference_doc.is_some()` 会整个跳过论文排版补丁，
+    /// 只做字体规范化；这条测试锁死新行为：即使走的是自定义模板，补丁也要
+    /// 落到输出的 styles.xml/document.xml 上。
+    #[test]
+    fn academic_layout_applies_on_top_of_a_custom_reference_doc() {
+        let pandoc = match find_pandoc_full(None) {
+            Some(path) => path,
+            None => {
+                eprintln!("skip: pandoc not found");
+                return;
+            }
+        };
+        let dir = tempfile::tempdir().expect("创建临时目录失败");
+
+        // 拿 pandoc 自己的默认模板充当"自定义模板"——只是为了有一个真实、
+        // 结构合法的 reference.docx 可用，不代表它真的是内置模板。
+        let custom_template = dir.path().join("custom-reference.docx");
+        let mut extract = make_command(&pandoc);
+        extract.args(["--print-default-data-file", "reference.docx"]);
+        let extracted = command_output(extract, PANDOC_JOB_TIMEOUT, "读取模板失败")
+            .expect("提取参考模板应成功");
+        std::fs::write(&custom_template, extracted.stdout).expect("写入自定义模板失败");
+
+        let out = dir.path().join("with-custom-template.docx");
+        let options = PandocExportOptions {
+            reference_doc: Some(custom_template),
+            extra_args: Vec::new(),
+            table_of_contents: false,
+            number_sections: false,
+        };
+        let post = DocxPostProcessing {
+            normalize_fonts: false,
+            apply_academic_layout: true,
+            layout: AcademicLayout::default(),
+        };
+        run_export_docx_atomic(
+            &pandoc,
+            "# 标题\n\n正文段落。\n",
+            None,
+            &out,
+            &options,
+            &post,
+        )
+        .expect("带自定义模板的导出应成功");
+
+        let bytes = std::fs::read(&out).unwrap();
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut styles_buf = Vec::new();
+        archive
+            .by_name("word/styles.xml")
+            .unwrap()
+            .read_to_end(&mut styles_buf)
+            .unwrap();
+        let styles = String::from_utf8_lossy(&styles_buf);
+        // 论文排版的行距补丁应该出现——证明没有因为设了 reference_doc 就被跳过。
+        assert!(styles
+            .contains(r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#));
+
+        let mut document_buf = Vec::new();
+        archive
+            .by_name("word/document.xml")
+            .unwrap()
+            .read_to_end(&mut document_buf)
+            .unwrap();
+        let document = String::from_utf8_lossy(&document_buf);
+        // 页面设置（A4 + 页边距）同样应该应用到自定义模板生成的输出上。
+        assert!(document.contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
     }
 
     #[test]
