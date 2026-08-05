@@ -65,8 +65,14 @@ impl PaperSize {
 }
 
 /// 论文排版的可调参数。默认值即当前内置模板的排版。
+///
+/// `#[serde(default)]` 是整个结构体级别的，和 `AppSettings` 保持一致，不能退化
+/// 成给个别字段单独标注：少了它，老版本写在磁盘上的 settings.json 因为缺少任何
+/// 一个新增字段就会整份反序列化失败，触发「设置损坏」隔离逻辑，把收藏夹、最近
+/// 文件、主题等全部无关数据一起清空重置。这不是假设——加 `code_block_bordered`
+/// 时漏了它，真实用户设置被清过一次。见 `missing_fields_fall_back_to_defaults`。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct AcademicLayout {
     /// 正文字号，磅。默认 12（小四）。
     pub body_font_pt: f32,
@@ -93,13 +99,6 @@ pub struct AcademicLayout {
     /// 用户导出结果的观感，所以默认值必须是 false 才能让黄金哈希测试
     /// （见 pandoc.rs 的 academic_styles_output_is_unchanged_for_default_layout）
     /// 继续证明"默认排版下的重构不改变输出"。
-    ///
-    /// `#[serde(default)]` 是必须的：没有这个标注，老版本写在磁盘上的
-    /// settings.json 里没有这个字段，反序列化会直接失败，整份设置（含
-    /// 收藏夹、最近文件、主题等所有跟这次改动毫无关系的数据）都会被判定
-    /// 为损坏，被 quarantine 机制整体清空重置为默认值——这不是假设，
-    /// 是这次改动实际造成过一次真实的用户数据丢失后才补上的。
-    #[serde(default)]
     pub code_block_bordered: bool,
 }
 
@@ -248,6 +247,35 @@ mod tests {
     #[test]
     fn default_layout_is_valid() {
         assert!(AcademicLayout::default().is_valid());
+    }
+
+    /// 逐个删掉每一个字段，确认都能退回默认值而不是整份解析失败。
+    ///
+    /// 这道防线针对的是一次真实的用户数据丢失：新增字段时漏了 `serde(default)`，
+    /// 老 settings.json 反序列化失败 → 被判定成设置损坏 → 收藏夹/最近文件/主题
+    /// 全被清空重置。逐字段遍历而不是只测某一个字段，是因为只测一个的话，下次
+    /// 有人新增字段照样会漏，测试却依旧全绿。
+    #[test]
+    fn missing_fields_fall_back_to_defaults() {
+        let full = serde_json::to_value(AcademicLayout::default()).unwrap();
+        let object = full.as_object().unwrap();
+        assert!(object.len() >= 12, "字段数明显变少，先确认序列化没出问题");
+
+        for key in object.keys() {
+            let mut partial = object.clone();
+            partial.remove(key);
+            let parsed =
+                serde_json::from_value::<AcademicLayout>(serde_json::Value::Object(partial));
+            assert!(
+                parsed.is_ok(),
+                "缺少字段 `{key}` 时解析失败了：这会让整份用户设置被当成损坏并清空"
+            );
+            assert_eq!(
+                parsed.unwrap(),
+                AcademicLayout::default(),
+                "缺少字段 `{key}` 时应当只有该字段退回默认值"
+            );
+        }
     }
 
     /// 锁死 PaperSize 的 JSON 表示——TS 那边的 `PaperSize` 联合类型字面量是照抄

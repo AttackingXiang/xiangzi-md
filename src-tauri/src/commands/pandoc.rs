@@ -970,7 +970,7 @@ fn rewrite_docx_parts(
     }
     drop(archive);
 
-    let footer_rel_id = apply_page_number.then(|| footer_relationship_id(&entries));
+    let footer_plan = apply_page_number.then(|| plan_footer(&entries));
 
     // 改写目标条目
     for (name, data, _) in &mut entries {
@@ -998,33 +998,29 @@ fn rewrite_docx_parts(
             let xml = String::from_utf8_lossy(data).into_owned();
             let xml = patch_document_page_layout(
                 &xml,
-                footer_rel_id.as_deref(),
+                footer_plan.as_ref().map(|plan| plan.rel_id.as_str()),
                 layout.expect("apply_page_layout 蕴含 layout 存在"),
             );
             let patched =
                 patch_list_paragraphs(&xml, layout.expect("apply_page_layout 蕴含 layout 存在"));
             *data = patched.into_bytes();
-        } else if apply_page_number && name == "word/_rels/document.xml.rels" {
+        } else if let (Some(plan), "word/_rels/document.xml.rels") =
+            (footer_plan.as_ref(), name.as_str())
+        {
             let xml = String::from_utf8_lossy(data).into_owned();
-            let patched = patch_document_relationships(
-                &xml,
-                footer_rel_id.as_deref().unwrap_or("rIdFooter1"),
-            );
+            let patched = patch_document_relationships(&xml, &plan.rel_id, plan.target());
             *data = patched.into_bytes();
-        } else if apply_page_number && name == "[Content_Types].xml" {
+        } else if let (Some(plan), "[Content_Types].xml") = (footer_plan.as_ref(), name.as_str()) {
             let xml = String::from_utf8_lossy(data).into_owned();
-            let patched = patch_content_types(&xml);
+            let patched = patch_content_types(&xml, &plan.part_name);
             *data = patched.into_bytes();
         }
     }
 
-    if apply_page_number
-        && !entries
-            .iter()
-            .any(|(name, _, _)| name == "word/footer1.xml")
-    {
+    // plan_footer 挑的是空闲部件名，所以这里一定是新增而不是覆盖已有页脚。
+    if let Some(plan) = &footer_plan {
         entries.push((
-            "word/footer1.xml".into(),
+            plan.part_name.clone(),
             DEFAULT_FOOTER_XML.as_bytes().to_vec(),
             zip::CompressionMethod::Deflated,
         ));
@@ -1066,33 +1062,49 @@ const DEFAULT_FOOTER_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standal
   </w:p>
 </w:ftr>"#;
 
-/// 返回内置模板使用的页脚关系 ID；已有 footer1.xml 时复用原关系。
-fn footer_relationship_id(entries: &[(String, Vec<u8>, zip::CompressionMethod)]) -> String {
-    let Some((_, rels, _)) = entries
-        .iter()
-        .find(|(name, _, _)| name == "word/_rels/document.xml.rels")
-    else {
-        return "rIdFooter1".into();
-    };
-    let rels = String::from_utf8_lossy(rels);
-    if let Some(id) = relationship_id_for_target(&rels, "footer1.xml") {
-        return id;
-    }
-
-    for index in 1..=99 {
-        let candidate = format!("rIdFooter{index}");
-        if !rels.contains(&format!(r#"Id="{candidate}""#)) {
-            return candidate;
-        }
-    }
-    "rIdFooter1".into()
+/// 页码页脚要写进哪个部件、用哪个关系 ID。
+struct FooterPlan {
+    /// zip 内的部件路径，例如 `word/footer1.xml`。
+    part_name: String,
+    /// `word/_rels/document.xml.rels` 里的关系 ID。
+    rel_id: String,
 }
 
-fn relationship_id_for_target(xml: &str, target: &str) -> Option<String> {
-    let needle = format!(r#"Target="{target}""#);
-    let target_start = xml.find(&needle)?;
-    let relation_start = xml[..target_start].rfind("<Relationship")?;
-    extract_attr(&xml[relation_start..target_start + needle.len()], "Id").map(str::to_owned)
+impl FooterPlan {
+    /// 关系里的 `Target` 是相对 `word/` 的文件名。
+    fn target(&self) -> &str {
+        self.part_name
+            .strip_prefix("word/")
+            .unwrap_or(&self.part_name)
+    }
+}
+
+/// 为页码页脚挑一个不冲突的部件名和关系 ID。
+///
+/// 刻意不复用模板自带的 footer：模板里的页脚是模板作者的内容（常放单位名称、
+/// logo），直接覆盖会毁掉它；而反过来复用它的关系 ID，等于用户勾了「居中页码」
+/// 却什么都没发生。所以另起一个空闲部件名，让这个开关始终说到做到，模板原有
+/// 的页脚部件仍原样留在包里。
+///
+/// pandoc 内置模板不带页脚，这里会照旧选中 `word/footer1.xml` + `rIdFooter1`，
+/// 所以默认导出的产物一个字节都不变。
+fn plan_footer(entries: &[(String, Vec<u8>, zip::CompressionMethod)]) -> FooterPlan {
+    let part_name = (1..=99)
+        .map(|index| format!("word/footer{index}.xml"))
+        .find(|candidate| !entries.iter().any(|(name, _, _)| name == candidate))
+        .unwrap_or_else(|| "word/footer1.xml".into());
+
+    let rels = entries
+        .iter()
+        .find(|(name, _, _)| name == "word/_rels/document.xml.rels")
+        .map(|(_, data, _)| String::from_utf8_lossy(data).into_owned())
+        .unwrap_or_default();
+    let rel_id = (1..=99)
+        .map(|index| format!("rIdFooter{index}"))
+        .find(|candidate| !rels.contains(&format!(r#"Id="{candidate}""#)))
+        .unwrap_or_else(|| "rIdFooter1".into());
+
+    FooterPlan { part_name, rel_id }
 }
 
 /// 为文档增加 A4 页面、约 2.5 cm 页边距和默认页码页脚。
@@ -1255,12 +1267,15 @@ fn replace_or_insert_section_child(
     )
 }
 
-fn patch_document_relationships(xml: &str, footer_rel_id: &str) -> String {
-    if relationship_id_for_target(xml, "footer1.xml").is_some() {
+/// 为页脚部件登记一条关系。`target` 是相对 `word/` 的文件名。
+fn patch_document_relationships(xml: &str, footer_rel_id: &str, target: &str) -> String {
+    // 按关系 ID 判重而不是按 Target：模板自带的页脚有它自己的 Target，我们写的
+    // 是另一个部件，两者本来就应该共存。
+    if xml.contains(&format!(r#"Id="{footer_rel_id}""#)) {
         return xml.to_owned();
     }
     let relationship = format!(
-        r#"<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Id="{footer_rel_id}" Target="footer1.xml"/>"#
+        r#"<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Id="{footer_rel_id}" Target="{target}"/>"#
     );
     let Some(insert_at) = xml.rfind("</Relationships>") else {
         return xml.to_owned();
@@ -1268,18 +1283,22 @@ fn patch_document_relationships(xml: &str, footer_rel_id: &str) -> String {
     format!("{}{}{}", &xml[..insert_at], relationship, &xml[insert_at..])
 }
 
-fn patch_content_types(xml: &str) -> String {
-    if xml.contains(r#"PartName="/word/footer1.xml""#) {
+/// 为页脚部件登记 content type。`part_name` 是 zip 内路径，如 `word/footer1.xml`。
+fn patch_content_types(xml: &str, part_name: &str) -> String {
+    let part = format!("/{part_name}");
+    if xml.contains(&format!(r#"PartName="{part}""#)) {
         return xml.to_owned();
     }
-    const FOOTER_OVERRIDE: &str = r#"<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>"#;
+    let footer_override = format!(
+        r#"<Override PartName="{part}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>"#
+    );
     let Some(insert_at) = xml.rfind("</Types>") else {
         return xml.to_owned();
     };
     format!(
         "{}{}{}",
         &xml[..insert_at],
-        FOOTER_OVERRIDE,
+        footer_override,
         &xml[insert_at..]
     )
 }
@@ -1512,9 +1531,13 @@ fn patch_code_block_border(xml: &str) -> String {
     const BORDER: &str = r#"<w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:space="4" w:color="000000"/></w:pBdr>"#;
     patch_style_block_by_id(xml, "SourceCode", |block| {
         let Some(ppr_start) = find_word_tag_start(block, "<w:pPr") else {
-            // 没有 pPr 就整个新建一个，插在样式块末尾——这个样式目前没有其它
-            // 顺序敏感的顶层子元素，新建一个 pPr 放哪儿都不影响其它属性。
-            let insert_at = block.rfind("</w:style>").unwrap_or(block.len());
+            // 没有 pPr 就新建一个。位置不能随便放：w:style 的子元素顺序里 pPr
+            // 必须排在 rPr 之前，而自定义模板里的 SourceCode 完全可能是「只有
+            // rPr、没有 pPr」的形态（内置模板带 wordWrap 所以有 pPr，走不到
+            // 这个分支）。插在 rPr 前面，没有 rPr 才退回样式块末尾。
+            let insert_at = find_word_tag_start(block, "<w:rPr")
+                .or_else(|| block.rfind("</w:style>"))
+                .unwrap_or(block.len());
             let ppr = format!("<w:pPr>{BORDER}</w:pPr>");
             return format!("{}{}{}", &block[..insert_at], ppr, &block[insert_at..]);
         };
@@ -2335,6 +2358,25 @@ mod tests {
         );
     }
 
+    /// 自定义模板里的 SourceCode 可能压根没有 pPr，只有 rPr——现在允许
+    /// "自定义模板 + 标准格式"组合，这份 styles.xml 一样会被打补丁，所以新建的
+    /// pPr 必须插在 rPr 之前，否则 w:style 子元素顺序违规，Word 会提示修复文档。
+    #[test]
+    fn code_block_border_keeps_style_child_order_without_an_existing_ppr() {
+        const NO_PPR: &str = r#"<w:style w:type="paragraph" w:styleId="SourceCode"><w:name w:val="Source Code"/><w:basedOn w:val="BodyText"/><w:rPr><w:rFonts w:ascii="Consolas"/></w:rPr></w:style>"#;
+        let patched = patch_academic_styles_xml(
+            NO_PPR,
+            &AcademicLayout {
+                code_block_bordered: true,
+                ..AcademicLayout::default()
+            },
+        );
+        let ppr_at = patched.find("<w:pPr>").expect("应当新建 pPr");
+        let rpr_at = patched.find("<w:rPr>").expect("原有 rPr 应该还在");
+        assert!(ppr_at < rpr_at, "OOXML 要求 w:style 里 pPr 排在 rPr 之前");
+        assert!(patched.contains("<w:pBdr>"), "边框应当落在新建的 pPr 里");
+    }
+
     #[test]
     fn three_line_table_can_be_turned_off_independently() {
         // 关掉三线表时，Table 样式应该保持原样——之前这个字段完全没被读取，
@@ -2369,6 +2411,52 @@ mod tests {
         assert!(with_footer.contains(r#"<w:footerReference w:type="default" r:id="rIdFooter1"/>"#));
     }
 
+    fn zip_entry(name: &str, body: &str) -> (String, Vec<u8>, zip::CompressionMethod) {
+        (
+            name.to_owned(),
+            body.as_bytes().to_vec(),
+            zip::CompressionMethod::Deflated,
+        )
+    }
+
+    /// 模板自带页脚时，页码要另起一个部件，不能复用模板那一个。
+    ///
+    /// 复用它的关系 ID 会让「居中页码」勾了却毫无效果（sectPr 指回模板自己的
+    /// 页脚），而直接覆盖那个部件又会毁掉模板作者放在页脚里的内容。
+    #[test]
+    fn page_number_footer_does_not_hijack_a_template_owned_footer() {
+        let rels = r#"<Relationships><Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>"#;
+        let entries = vec![
+            zip_entry("word/_rels/document.xml.rels", rels),
+            zip_entry("word/footer1.xml", "<w:ftr>模板自己的页脚</w:ftr>"),
+        ];
+
+        let plan = plan_footer(&entries);
+        assert_eq!(plan.part_name, "word/footer2.xml", "不应写回模板的页脚部件");
+        assert_eq!(plan.target(), "footer2.xml");
+        assert_ne!(plan.rel_id, "rId7", "不应复用模板页脚的关系 ID");
+
+        // 新关系和模板原有关系共存，content type 也得给新部件补上。
+        let patched_rels = patch_document_relationships(rels, &plan.rel_id, plan.target());
+        assert!(patched_rels.contains(r#"Id="rId7""#));
+        assert!(patched_rels.contains(r#"Target="footer2.xml""#));
+        let types = patch_content_types(r#"<Types></Types>"#, &plan.part_name);
+        assert!(types.contains(r#"PartName="/word/footer2.xml""#));
+    }
+
+    /// 内置模板不带页脚，取值必须还是 footer1/rIdFooter1——默认导出的产物
+    /// 不能因为上面那条「避让模板页脚」的逻辑而改变。
+    #[test]
+    fn footer_plan_keeps_the_builtin_names_when_no_footer_exists() {
+        let entries = vec![zip_entry(
+            "word/_rels/document.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Target="styles.xml"/></Relationships>"#,
+        )];
+        let plan = plan_footer(&entries);
+        assert_eq!(plan.part_name, "word/footer1.xml");
+        assert_eq!(plan.rel_id, "rIdFooter1");
+    }
+
     #[test]
     fn default_document_gets_a4_margins_and_page_number_reference() {
         let document = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:sectPr><w:footnotePr /></w:sectPr></w:body></w:document>"#;
@@ -2384,14 +2472,14 @@ mod tests {
 
         let rels =
             r#"<Relationships><Relationship Id="rId1" Target="styles.xml"/></Relationships>"#;
-        let rels = patch_document_relationships(rels, "rIdFooter1");
+        let rels = patch_document_relationships(rels, "rIdFooter1", "footer1.xml");
         assert!(rels.contains(
             r#"Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer""#
         ));
         assert!(rels.contains(r#"Target="footer1.xml""#));
 
         let types = r#"<Types></Types>"#;
-        let types = patch_content_types(types);
+        let types = patch_content_types(types, "word/footer1.xml");
         assert!(types.contains(r#"PartName="/word/footer1.xml""#));
         assert!(DEFAULT_FOOTER_XML.contains("PAGE"));
     }
