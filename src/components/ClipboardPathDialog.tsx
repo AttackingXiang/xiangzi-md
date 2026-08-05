@@ -1,5 +1,4 @@
 import { FileText, FolderOpen } from 'lucide-react'
-import { useEffect } from 'react'
 import { t } from '../lib/i18n'
 import { useModalFocus } from '../hooks/useModalFocus'
 
@@ -13,15 +12,7 @@ interface Props {
 }
 
 export default function ClipboardPathDialog({ path, kind, onOpen, onClose }: Props): JSX.Element {
-  const dialogRef = useModalFocus<HTMLDivElement>()
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onClose])
+  const dialogRef = useModalFocus<HTMLDivElement>(true, onClose)
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>

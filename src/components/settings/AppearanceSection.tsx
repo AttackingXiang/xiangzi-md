@@ -9,7 +9,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { desktop } from '../../platform'
 import type { InstalledTheme } from '../../platform/contracts'
 import type { AppSettings } from '../../types'
@@ -129,7 +129,8 @@ export default function AppearanceSection({
   const [themeManagerOpen, setThemeManagerOpen] = useState(false)
   const [removingThemeId, setRemovingThemeId] = useState<string | null>(null)
   const [themeActionError, setThemeActionError] = useState<string | null>(null)
-  const themeManagerDialogRef = useModalFocus<HTMLElement>(themeManagerOpen)
+  const closeThemeManager = useCallback(() => setThemeManagerOpen(false), [])
+  const themeManagerDialogRef = useModalFocus<HTMLElement>(themeManagerOpen, closeThemeManager)
 
   useEffect(() => {
     let cancelled = false
@@ -158,15 +159,6 @@ export default function AppearanceSection({
       cancelled = true
     }
   }, [en, settings.customCssPath])
-
-  useEffect(() => {
-    if (!themeManagerOpen) return
-    const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setThemeManagerOpen(false)
-    }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [themeManagerOpen])
 
   const installedTheme = installedThemes.find((theme) => theme.cssPath === settings.customCssPath)
   const themeValue = installedTheme
