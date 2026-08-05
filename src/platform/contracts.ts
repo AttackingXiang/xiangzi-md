@@ -180,6 +180,52 @@ export interface AppSettings {
   pandocNormalizeFonts: boolean
   /** Apply the built-in academic Word layout. Ignored when a custom reference.docx is set. */
   pandocAcademicLayout: boolean
+  /** The layout values that pandocAcademicLayout applies. Kept separate so
+   * turning the switch off does not lose values the user already tuned. */
+  academicLayout: AcademicLayout
+}
+
+/** Mirrors src-tauri/src/domain/academic_layout.rs — see that file for the unit conversions. */
+export type PaperSize = 'a4' | 'letter'
+
+/** 论文排版的可调参数；默认值即内置模板原有的排版。 */
+export interface AcademicLayout {
+  /** 正文字号，磅。默认 12（小四）。 */
+  bodyFontPt: number
+  /** 正文行距倍数。默认 1.5。 */
+  bodyLineHeight: number
+  /** 首行缩进，以正文字号的字符数计。默认 2。 */
+  firstLineIndentChars: number
+  /** 四周页边距，毫米。默认 25。 */
+  marginMm: number
+  paper: PaperSize
+  /** 题名字号，磅。默认 18（小二）。 */
+  titleFontPt: number
+  /** 一至六级标题字号，磅。长度固定为 6。 */
+  headingFontPt: [number, number, number, number, number, number]
+  /** 图表题注字号，磅。默认 10.5（五号）。 */
+  captionFontPt: number
+  /** 参考文献字号，磅。默认 10.5（五号）。 */
+  bibliographyFontPt: number
+  /** 表格使用三线表边框。 */
+  threeLineTable: boolean
+  /** 页脚居中显示页码。 */
+  pageNumberFooter: boolean
+}
+
+/** 与 domain::academic_layout::AcademicLayout::default() 保持一致。 */
+export const DEFAULT_ACADEMIC_LAYOUT: AcademicLayout = {
+  bodyFontPt: 12,
+  bodyLineHeight: 1.5,
+  firstLineIndentChars: 2,
+  marginMm: 25,
+  paper: 'a4',
+  titleFontPt: 18,
+  headingFontPt: [16, 14, 12, 12, 12, 12],
+  captionFontPt: 10.5,
+  bibliographyFontPt: 10.5,
+  threeLineTable: true,
+  pageNumberFooter: true,
 }
 
 export interface OpenedFile {
@@ -383,6 +429,10 @@ export interface DesktopPort {
     suggestedName: string,
   ): Promise<{ path: string } | null>
   importDocx(mediaSubdir: string): Promise<{ markdownPath: string } | null>
+  /** Export the document with a layout the user may not have saved yet, and open it with the
+   * OS default app — lets the settings page's "preview in Word" button show values still being
+   * dragged on a slider without writing them to disk first. */
+  previewAcademicDocx(markdown: string, layout: AcademicLayout): Promise<void>
   pickPandocExecutable(): Promise<{ path: string } | null>
   pickWordTemplate(): Promise<{ path: string } | null>
   savePandocDefaultTemplate(): Promise<{ path: string } | null>

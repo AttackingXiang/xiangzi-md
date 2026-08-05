@@ -13,6 +13,7 @@ import type {
   SearchResponse,
   UpdaterPort,
 } from './contracts'
+import { DEFAULT_ACADEMIC_LAYOUT } from './contracts'
 
 const PREVIEW_ROOT = '/browser-preview'
 const SAMPLE_PATH = `${PREVIEW_ROOT}/渲染示例.md`
@@ -222,6 +223,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     pandocNumberSections: false,
     pandocNormalizeFonts: true,
     pandocAcademicLayout: true,
+    academicLayout: DEFAULT_ACADEMIC_LAYOUT,
   }
 }
 
@@ -421,6 +423,7 @@ export const browserDesktopAdapter: DesktopPort = {
   pandocStatus: async () => null,
   exportDocx: async () => null,
   importDocx: async () => null,
+  previewAcademicDocx: async () => undefined,
   pickPandocExecutable: async () => null,
   pickWordTemplate: async () => null,
   savePandocDefaultTemplate: async () => null,

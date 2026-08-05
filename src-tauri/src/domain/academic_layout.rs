@@ -237,6 +237,18 @@ mod tests {
         assert!(AcademicLayout::default().is_valid());
     }
 
+    /// 锁死 PaperSize 的 JSON 表示——TS 那边的 `PaperSize` 联合类型字面量是照抄
+    /// 这两个字符串写的，`rename_all` 换了写法或者有人手滑改成别的 rename
+    /// 都不会在 Rust 侧编译报错，只会在前端悄悄收到一个它不认识的值。
+    #[test]
+    fn paper_size_serializes_to_the_strings_the_frontend_expects() {
+        assert_eq!(serde_json::to_string(&PaperSize::A4).unwrap(), "\"a4\"");
+        assert_eq!(
+            serde_json::to_string(&PaperSize::Letter).unwrap(),
+            "\"letter\""
+        );
+    }
+
     #[test]
     fn sanitize_pulls_out_of_range_values_back() {
         let mut layout = AcademicLayout {

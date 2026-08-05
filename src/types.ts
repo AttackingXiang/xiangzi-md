@@ -1,6 +1,7 @@
 import type { FileVersion, OpenedFile } from './platform/contracts'
 
 export type {
+  AcademicLayout,
   AppSettings,
   Draft,
   DraftSummary,
@@ -9,6 +10,7 @@ export type {
   FileVersion,
   FolderSearchMode,
   Folder,
+  PaperSize,
   RecentDoc,
   SearchResult,
   SearchFocusEffect,

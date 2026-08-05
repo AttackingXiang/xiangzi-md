@@ -383,6 +383,7 @@ export const tauriDesktopAdapter: DesktopPort = {
     if (!docxPath) return null
     return invoke<{ markdownPath: string }>('import_docx', { docxPath, mediaSubdir })
   },
+  previewAcademicDocx: (markdown, layout) => invoke('preview_academic_docx', { markdown, layout }),
   pickPandocExecutable: async () => {
     const path = await open({ multiple: false })
     return path ? { path } : null
