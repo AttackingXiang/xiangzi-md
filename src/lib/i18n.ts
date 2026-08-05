@@ -178,7 +178,8 @@ const EN: Record<string, string> = {
   窗口控制: 'Window controls',
   关闭窗口: 'Close window',
   最小化窗口: 'Minimize window',
-  最大化或还原窗口: 'Maximize or restore window',
+  最大化窗口: 'Maximize window',
+  还原窗口: 'Restore window',
   '开启后，已保存过的文档在停止输入约 1 秒后自动写回磁盘。':
     'When on, saved documents are written to disk ~1s after you stop typing.',
   '自定义主题 CSS': 'Custom theme CSS',
@@ -217,6 +218,8 @@ const EN: Record<string, string> = {
   文件名和内容: 'File name and content',
   仅搜索内容: 'Content only',
   仅搜索文件名: 'File name only',
+  '输入关键词开始搜索当前文件夹。': 'Type to search the current folder.',
+  '没有找到匹配的内容。': 'No matches found.',
   '在文件夹中搜索…': 'Search in folder…',
   '搜索中…': 'Searching…',
   个文件: ' files',
@@ -485,6 +488,11 @@ let lang: Lang = 'zh'
 
 export function setLang(l: Lang): void {
   lang = l
+  // `<html lang>` 不是装饰：读屏软件按它决定用哪种语言朗读，浏览器也按它在
+  // 简中/繁中/日文之间挑选汉字字形。index.html 里写死的 zh-CN 必须跟着切换。
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = l === 'en' ? 'en' : 'zh-CN'
+  }
 }
 
 export function getLang(): Lang {
