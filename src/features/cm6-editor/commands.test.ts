@@ -12,6 +12,9 @@ import { history } from '@codemirror/commands'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createCm6Commands,
+  pendingTextColor,
+  planPendingColorInput,
+  setPendingTextColor,
   insertCodeFence,
   insertLink,
   insertTable,
@@ -432,5 +435,66 @@ describe('CM6 Markdown commands', () => {
     expect(commands.redo()).toBe(true)
     expect(state.doc.toString()).toBe('ab')
     expect(focus).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('planPendingColorInput', () => {
+  const color = '#ff0000'
+  const opening = `<font color="${color}">`
+  const closing = '</font>'
+
+  /** Arms a pending color at `caret`, then applies `text` there as many times as given. */
+  function type(doc: string, caret: number, keys: string[]): string {
+    let state = EditorState.create({
+      doc,
+      selection: EditorSelection.create([EditorSelection.cursor(caret)]),
+      extensions: [markdownExtension, pendingTextColor],
+    })
+    state = state.update({
+      effects: setPendingTextColor.of({ color, spanFrom: null }),
+    }).state
+    for (const key of keys) {
+      const at = state.selection.main.from
+      const plan = planPendingColorInput(state, at, at, key)
+      if (!plan) throw new Error('expected the pending color to handle this input')
+      state = state.update(plan).state
+    }
+    return state.doc.toString()
+  }
+
+  it('keeps consecutive keystrokes inside a single font span', () => {
+    // 一次一个字符地敲，产出的必须是一对标签而不是每个字符一对。
+    expect(type('', 0, ['a', 'b', 'c'])).toBe(`${opening}abc${closing}`)
+  })
+
+  it('extends the span without rescanning the document prefix', () => {
+    // spanFrom 记着开标签位置，所以前面有多少无关文本都不影响续写判定。
+    const prefix = `${opening}old${closing} filler `
+    const doc = type(prefix, prefix.length, ['x', 'y'])
+    expect(doc).toBe(`${prefix}${opening}xy${closing}`)
+  })
+
+  it('drops the pending color instead of colouring a fence opener', () => {
+    const state = EditorState.create({
+      doc: '',
+      selection: EditorSelection.create([EditorSelection.cursor(0)]),
+      extensions: [markdownExtension, pendingTextColor],
+    })
+    const armed = state.update({ effects: setPendingTextColor.of({ color, spanFrom: null }) }).state
+    const plan = planPendingColorInput(armed, 0, 0, '`')
+    expect(plan?.changes).toBeUndefined()
+    expect(armed.update(plan!).state.field(pendingTextColor)).toBeNull()
+  })
+
+  it('hands input back to CodeMirror while an IME composition is active', () => {
+    const state = EditorState.create({
+      doc: '',
+      selection: EditorSelection.create([EditorSelection.cursor(0)]),
+      extensions: [markdownExtension, pendingTextColor],
+    })
+    const armed = state.update({ effects: setPendingTextColor.of({ color, spanFrom: null }) }).state
+    const plan = planPendingColorInput(armed, 0, 0, '\u4e2d', true)
+    expect(plan?.changes).toBeUndefined()
+    expect(armed.update(plan!).state.field(pendingTextColor)).toBeNull()
   })
 })

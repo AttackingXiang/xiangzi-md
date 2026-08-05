@@ -22,8 +22,22 @@ type LineKind = 'blockquote' | 'bullet' | 'ordered' | 'task'
 type MarkdownSyntaxNode = ReturnType<typeof syntaxTree>['topNode']
 
 /** Color selected at an empty caret, waiting for the first real text input. */
-export const setPendingTextColor = StateEffect.define<string | null>()
-export const pendingTextColor = StateField.define<string | null>({
+export interface PendingTextColor {
+  color: string
+  /**
+   * Document offset of the `<font …>` this pending color already opened, or
+   * null before the first keystroke.
+   *
+   * Remembering the position is what keeps typing O(1). Rediscovering the open
+   * tag by scanning backwards from the caret means materializing the whole
+   * document prefix as a string on every single keystroke, which on a large
+   * note allocates and scans hundreds of kilobytes per character typed.
+   */
+  spanFrom: number | null
+}
+
+export const setPendingTextColor = StateEffect.define<PendingTextColor | null>()
+export const pendingTextColor = StateField.define<PendingTextColor | null>({
   create: () => null,
   update(value, transaction) {
     for (const effect of transaction.effects) {
@@ -40,6 +54,64 @@ export const pendingTextColor = StateField.define<string | null>({
     return value
   },
 })
+
+/**
+ * 决定"待写入颜色"状态下的一次输入该怎么落到文档里。
+ *
+ * 返回 null 表示这次输入与本机制无关，交回 CM6 原生处理；返回只带 effects 的
+ * spec 表示放弃待写入的颜色（并且仍然让 CM6 自己插入字符）；返回带 changes 的
+ * spec 表示由本机制接管插入。
+ */
+export function planPendingColorInput(
+  state: EditorState,
+  from: number,
+  to: number,
+  text: string,
+  composing = false,
+): {
+  changes?: ChangeSpec
+  selection?: EditorSelection
+  effects: StateEffect<unknown>
+  userEvent?: string
+} | null {
+  const pending = state.field(pendingTextColor, false)
+  if (!pending || !text) return null
+  const cancel = { effects: setPendingTextColor.of(null) }
+  if (composing) return cancel
+
+  const line = state.doc.lineAt(from)
+  const linePrefix = line.text.slice(0, from - line.from)
+  const prospectiveLine = `${linePrefix}${text}`
+  // 别把颜色标签写到代码围栏或缩进代码块的开头——那会让整段代码继承颜色。
+  const startsFence =
+    /^\s{0,3}`/.test(prospectiveLine) && /^\s{0,3}`{1,3}(?:$|[^`])/.test(prospectiveLine)
+  const startsIndentedText = linePrefix.trim() === '' && /^\s/.test(text)
+  if (selectionTouchesCodeBlock(state) || startsFence || startsIndentedText) return cancel
+
+  // Keep consecutive keystrokes in one semantic span. Browser input events
+  // commonly arrive one character at a time; replacing the closing tag on
+  // the next event avoids producing one `<font>` pair per character.
+  //
+  // 续写与否只看 StateField 里记着的 span 起点，不回头扫描文档——见
+  // PendingTextColor.spanFrom 的注释。
+  const opening = `<font color="${pending.color}">`
+  const closing = '</font>'
+  const canExtend =
+    pending.spanFrom !== null &&
+    from >= pending.spanFrom + opening.length + closing.length &&
+    state.sliceDoc(from - closing.length, from) === closing
+  const insert = canExtend ? `${text}${closing}` : `${opening}${text}${closing}`
+  const replaceFrom = canExtend ? from - closing.length : from
+  return {
+    changes: { from: replaceFrom, to, insert },
+    selection: selection(replaceFrom + insert.length),
+    effects: setPendingTextColor.of({
+      color: pending.color,
+      spanFrom: canExtend ? pending.spanFrom : from,
+    }),
+    userEvent: 'input.type',
+  }
+}
 
 const INLINE_MARK_SYNTAX: Record<InlineMark, { node: string; delimiter: string }> = {
   '**': { node: 'StrongEmphasis', delimiter: 'EmphasisMark' },
@@ -677,7 +749,13 @@ export const setTextColor =
       if (selectionTouchesCodeBlock(target.state)) return false
       const normalized = color?.trim() ?? null
       if (normalized && !/^#[\da-f]{6}$/i.test(normalized)) return false
-      target.dispatch(target.state.update({ effects: setPendingTextColor.of(normalized) }))
+      target.dispatch(
+        target.state.update({
+          effects: setPendingTextColor.of(
+            normalized ? { color: normalized, spanFrom: null } : null,
+          ),
+        }),
+      )
       return true
     }
     return applyPlan((state) => textColorPlan(state, color))(target)
