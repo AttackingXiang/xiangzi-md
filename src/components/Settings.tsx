@@ -43,6 +43,9 @@ interface Props {
   customCssError?: boolean
   backgroundImageError?: boolean
   initialSection?: SettingsSection
+  /** 当前打开的 Markdown 文档，供 Word/Pandoc 页的论文排版预览使用真实内容；
+   * 不是 Markdown 或没有打开文件时为 null。 */
+  activeDocument?: { name: string; markdown: string } | null
   onChange: (patch: Partial<AppSettings>) => void
   onClose: () => void
 }
@@ -53,6 +56,7 @@ export default function Settings({
   customCssError = false,
   backgroundImageError = false,
   initialSection = 'appearance',
+  activeDocument = null,
   onChange,
   onClose,
 }: Props): JSX.Element {
@@ -147,7 +151,12 @@ export default function Settings({
               <AttachmentsSection settings={settings} onChange={onChange} en={en} />
             )}
             {section === 'word' && (
-              <PandocSettingsPage settings={settings} onChange={onChange} en={en} />
+              <PandocSettingsPage
+                settings={settings}
+                onChange={onChange}
+                en={en}
+                activeDocument={activeDocument}
+              />
             )}
             {section === 'shortcuts' && (
               <Shortcuts

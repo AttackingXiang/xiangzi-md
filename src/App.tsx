@@ -1699,6 +1699,11 @@ export default function App(): JSX.Element {
             customCssError={customCssError}
             backgroundImageError={backgroundImageError}
             initialSection={settingsSection}
+            activeDocument={
+              activeTab && !isTextKind
+                ? { name: activeTab.name, markdown: activeTab.content }
+                : null
+            }
             onChange={(patch) => {
               // 改「默认展开层级」时，按当前标签树重算折叠集合，让新层级立刻生效。
               const effective =

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { desktop } from '../../platform'
 import type { AppSettings } from '../../types'
+import AcademicLayoutSection from './AcademicLayoutSection'
 import { SettingsPage, SettingsCard, SettingRow, ToggleRow } from './primitives'
 
 interface PandocStatus {
@@ -12,10 +13,12 @@ export default function PandocSettingsPage({
   settings,
   onChange,
   en,
+  activeDocument,
 }: {
   settings: AppSettings
   onChange: (patch: Partial<AppSettings>) => void
   en: boolean
+  activeDocument: { name: string; markdown: string } | null
 }): JSX.Element {
   const [pandocStatus, setPandocStatus] = useState<PandocStatus | null | undefined>(undefined)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -211,6 +214,15 @@ export default function PandocSettingsPage({
           }
           checked={settings.pandocAcademicLayout}
           onChange={(pandocAcademicLayout) => onChange({ pandocAcademicLayout })}
+        />
+      </SettingsCard>
+
+      <SettingsCard title={en ? 'Academic layout parameters' : '论文排版参数'}>
+        <AcademicLayoutSection
+          settings={settings}
+          onChange={onChange}
+          en={en}
+          activeDocument={activeDocument}
         />
       </SettingsCard>
 

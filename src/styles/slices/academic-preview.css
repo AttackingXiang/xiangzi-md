@@ -5,6 +5,18 @@
  * 跟着暗色主题走反而失真，且和「在 Word 中预览」按钮打开的真实文档不一致。
  */
 
+.academic-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 8px;
+}
+
+.academic-preview-header .settings-hint {
+  margin: 0;
+}
+
 .academic-preview {
   max-height: 460px;
   overflow: auto;
