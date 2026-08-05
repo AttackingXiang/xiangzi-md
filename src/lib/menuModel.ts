@@ -3,9 +3,23 @@ import type { DesktopPlatform } from './platform'
 import type { ShortcutAction } from './shortcuts'
 
 /**
- * 应用菜单结构，读自 shared/menu.json —— macOS 原生菜单栏和 Windows 应用内菜单
- * 的唯一来源。这个模块只负责解析和过滤；两侧各自的行为绑定留在各自的实现里，
- * 因为它们本来就不同（macOS 的编辑菜单必须用原生角色才能接上 WebView 响应链）。
+ * 应用菜单结构，读自 shared/menu.json —— macOS 原生菜单栏
+ * （src-tauri/src/infrastructure/menu.rs）和 Windows 应用内菜单
+ * （src/components/TitleBarMenu.tsx）的唯一来源。
+ *
+ * 本模块只负责解析和按平台过滤；行为绑定留在两侧各自的实现里，因为它们本来
+ * 就不同——macOS 的编辑菜单必须用原生角色才能接上 WebView 的响应链。
+ *
+ * JSON 里的条目形状（说明写在这里而不是 JSON 的 $comment 里：那段注释会被
+ * 原样打进前端产物，白占体积）：
+ *
+ * - `action`    点击后派发 id；加速键由 `shortcut` 引用 shared/shortcuts.json，
+ *               或用 `accelerator` 写死（不进用户可改的快捷键表）。
+ * - `submenu`   嵌套。
+ * - `separator` 分隔线；平台过滤后多余的会被 menuItemsFor 收掉。
+ * - `native`    交给平台原生角色处理。
+ *
+ * 任何条目都可带 `platforms`；省略表示全平台。
  */
 
 /** 交给平台原生处理的菜单角色。 */

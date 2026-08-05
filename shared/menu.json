@@ -1,21 +1,4 @@
 {
-  "$comment": [
-    "应用菜单的唯一定义。macOS 用它建原生菜单栏（src-tauri/src/infrastructure/menu.rs），",
-    "Windows/Linux 用它建应用内菜单（src/components/TitleBarMenu.tsx）。",
-    "以前两边各写一份，已经漂移出可见差异：导出在 macOS 是子菜单、在 Windows 是平铺，",
-    "标签文案不同，「复制为纯文本」只有 Windows 有，缩放快捷键只有 macOS 显示。",
-    "",
-    "item.kind:",
-    "  action    —— 点击后派发 id；accelerator 由 shortcut 字段引用 shared/shortcuts.json，",
-    "               或用 accelerator 字段写死（不进用户可改的快捷键表）。",
-    "  submenu   —— 嵌套。",
-    "  separator —— 分隔线。",
-    "  native    —— 交给平台原生角色处理。macOS 上这些必须是真的原生菜单项，",
-    "               否则撤销/剪切/粘贴接不上 WebView 的响应链；Windows 侧在",
-    "               TitleBarMenu 里映射到对应的 JS 命令。",
-    "",
-    "platforms: 省略表示全平台；否则只在列出的平台出现。"
-  ],
   "menus": [
     {
       "id": "app",
