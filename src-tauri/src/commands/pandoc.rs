@@ -407,15 +407,24 @@ pub async fn export_pandoc_default_template(
     })?;
     let output_path_for_task = output_path.clone();
 
+    let normalize_fonts = settings.pandoc_normalize_fonts;
     crate::commands::blocking(move || {
-        run_export_default_template(&pandoc_path, Path::new(&output_path_for_task))
+        run_export_default_template(
+            &pandoc_path,
+            Path::new(&output_path_for_task),
+            normalize_fonts,
+        )
     })
     .await?;
 
     Ok(ExportDocxResult { path: output_path })
 }
 
-fn run_export_default_template(pandoc_path: &Path, output_path: &Path) -> AppResult<()> {
+fn run_export_default_template(
+    pandoc_path: &Path,
+    output_path: &Path,
+    normalize_fonts: bool,
+) -> AppResult<()> {
     let mut command = make_command(pandoc_path);
     command.args(["--print-default-data-file", "reference.docx"]);
     let result = command_output(command, PANDOC_JOB_TIMEOUT, "读取 Pandoc 默认模板")?;
@@ -429,7 +438,8 @@ fn run_export_default_template(pandoc_path: &Path, output_path: &Path) -> AppRes
         ));
     }
     std::fs::write(output_path, result.stdout)
-        .map_err(|error| AppError::io("写入默认 Word 模板失败", error))
+        .map_err(|error| AppError::io("写入默认 Word 模板失败", error))?;
+    patch_builtin_default_template(output_path, normalize_fonts)
 }
 
 /// 把 Markdown 文本（通过 stdin）用 pandoc 转换为 docx，然后后处理字体。
@@ -531,7 +541,9 @@ fn run_export_docx_atomic(
     let temporary_string = temporary.to_string_lossy().into_owned();
 
     run_export_docx(pandoc_path, markdown, doc_dir, &temporary_string, options)?;
-    if normalize_fonts {
+    if options.reference_doc.is_none() {
+        patch_builtin_default_template(&temporary, normalize_fonts)?;
+    } else if normalize_fonts {
         normalize_docx_fonts(&temporary)?;
     }
     temporary
@@ -776,6 +788,24 @@ fn make_command(program: &Path) -> std::process::Command {
 /// 因为 pandoc 版本之间的 reference-doc 格式有差异，且不想携带额外资源文件。
 /// 直接改 zip 内容，对最终产物无条件保证字体正确。
 pub fn normalize_docx_fonts(path: &Path) -> AppResult<()> {
+    rewrite_docx_parts(path, false, true, false)
+}
+
+/// 为内置 Pandoc 默认模板应用论文排版样式。
+///
+/// 只在没有选择自定义 reference.docx 时调用。这样用户自己的 Word 模板
+/// 仍然只受原有“规范中文字体”开关影响，不会被论文排版规则覆盖。
+fn patch_builtin_default_template(path: &Path, normalize_fonts: bool) -> AppResult<()> {
+    rewrite_docx_parts(path, true, normalize_fonts, true)
+}
+
+/// 读取并改写 docx 中的样式、主题、页面设置和内置页脚 XML。
+fn rewrite_docx_parts(
+    path: &Path,
+    apply_academic_styles: bool,
+    normalize_fonts: bool,
+    apply_page_layout: bool,
+) -> AppResult<()> {
     // 读取整个 zip 进内存
     let zip_bytes = std::fs::read(path).map_err(|e| AppError::io("读取 docx 文件失败", e))?;
 
@@ -798,17 +828,56 @@ pub fn normalize_docx_fonts(path: &Path) -> AppResult<()> {
     }
     drop(archive);
 
+    let footer_rel_id = apply_page_layout.then(|| footer_relationship_id(&entries));
+
     // 改写目标条目
     for (name, data, _) in &mut entries {
         if name == "word/styles.xml" {
             let xml = String::from_utf8_lossy(data).into_owned();
-            let patched = patch_styles_xml(&xml);
+            let xml = if apply_academic_styles {
+                patch_academic_styles_xml(&xml)
+            } else {
+                xml
+            };
+            let patched = if normalize_fonts {
+                patch_styles_xml(&xml)
+            } else {
+                xml
+            };
             *data = patched.into_bytes();
-        } else if name == "word/theme/theme1.xml" {
+        } else if normalize_fonts && name == "word/theme/theme1.xml" {
             let xml = String::from_utf8_lossy(data).into_owned();
             let patched = patch_theme_xml(&xml);
             *data = patched.into_bytes();
+        } else if apply_page_layout && name == "word/document.xml" {
+            let xml = String::from_utf8_lossy(data).into_owned();
+            let patched =
+                patch_document_page_layout(&xml, footer_rel_id.as_deref().unwrap_or("rIdFooter1"));
+            *data = patched.into_bytes();
+        } else if apply_page_layout && name == "word/_rels/document.xml.rels" {
+            let xml = String::from_utf8_lossy(data).into_owned();
+            let patched = patch_document_relationships(
+                &xml,
+                footer_rel_id.as_deref().unwrap_or("rIdFooter1"),
+            );
+            *data = patched.into_bytes();
+        } else if apply_page_layout && name == "[Content_Types].xml" {
+            let xml = String::from_utf8_lossy(data).into_owned();
+            let patched = patch_content_types(&xml);
+            *data = patched.into_bytes();
         }
+    }
+
+    if apply_page_layout
+        && !entries
+            .iter()
+            .any(|(name, _, _)| name == "word/footer1.xml")
+    {
+        entries.push((
+            "word/footer1.xml".into(),
+            DEFAULT_FOOTER_XML.as_bytes().to_vec(),
+            zip::CompressionMethod::Deflated,
+        ));
     }
 
     // 写回原路径
@@ -835,7 +904,561 @@ pub fn normalize_docx_fonts(path: &Path) -> AppResult<()> {
     Ok(())
 }
 
+const DEFAULT_FOOTER_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+    <w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+    <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+    <w:r><w:t>1</w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  </w:p>
+</w:ftr>"#;
+
+/// 返回内置模板使用的页脚关系 ID；已有 footer1.xml 时复用原关系。
+fn footer_relationship_id(entries: &[(String, Vec<u8>, zip::CompressionMethod)]) -> String {
+    let Some((_, rels, _)) = entries
+        .iter()
+        .find(|(name, _, _)| name == "word/_rels/document.xml.rels")
+    else {
+        return "rIdFooter1".into();
+    };
+    let rels = String::from_utf8_lossy(rels);
+    if let Some(id) = relationship_id_for_target(&rels, "footer1.xml") {
+        return id;
+    }
+
+    for index in 1..=99 {
+        let candidate = format!("rIdFooter{index}");
+        if !rels.contains(&format!(r#"Id="{candidate}""#)) {
+            return candidate;
+        }
+    }
+    "rIdFooter1".into()
+}
+
+fn relationship_id_for_target(xml: &str, target: &str) -> Option<String> {
+    let needle = format!(r#"Target="{target}""#);
+    let target_start = xml.find(&needle)?;
+    let relation_start = xml[..target_start].rfind("<Relationship")?;
+    extract_attr(&xml[relation_start..target_start + needle.len()], "Id").map(str::to_owned)
+}
+
+/// 为文档增加 A4 页面、约 2.5 cm 页边距和默认页码页脚。
+fn patch_document_page_layout(xml: &str, footer_rel_id: &str) -> String {
+    const PAGE_SIZE: &str = r#"<w:pgSz w:w="11906" w:h="16838"/>"#;
+    const PAGE_MARGINS: &str = r#"<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>"#;
+    let footer_reference =
+        format!(r#"<w:footerReference w:type="default" r:id="{footer_rel_id}"/>"#);
+
+    let Some(section_start) = xml.find("<w:sectPr") else {
+        return xml.to_owned();
+    };
+    let Some(section_open_end_rel) = xml[section_start..].find('>') else {
+        return xml.to_owned();
+    };
+    let section_open_end = section_start + section_open_end_rel;
+    if xml.as_bytes().get(section_open_end.saturating_sub(1)) == Some(&b'/') {
+        let replacement =
+            format!("<w:sectPr>{footer_reference}{PAGE_SIZE}{PAGE_MARGINS}</w:sectPr>");
+        return format!(
+            "{}{}{}",
+            &xml[..section_start],
+            replacement,
+            &xml[section_open_end + 1..]
+        );
+    }
+    let Some(section_close_rel) = xml[section_open_end + 1..].find("</w:sectPr>") else {
+        return xml.to_owned();
+    };
+    let section_end = section_open_end + 1 + section_close_rel + "</w:sectPr>".len();
+    let section = &xml[section_start..section_end];
+    // sectPr 的 OOXML 顺序要求 footerReference 位于 pgSz/pgMar 之前，
+    // 页面属性则应位于 footnotePr 等尾部属性之前。
+    let section = replace_or_insert_section_child(
+        section,
+        "footerReference",
+        &footer_reference,
+        "</w:sectPr>",
+    );
+    let section = replace_or_insert_section_child(&section, "pgSz", PAGE_SIZE, "</w:sectPr>");
+    let section = replace_or_insert_section_child(&section, "pgMar", PAGE_MARGINS, "</w:sectPr>");
+    format!(
+        "{}{}{}",
+        &xml[..section_start],
+        section,
+        &xml[section_end..]
+    )
+}
+
+fn replace_or_insert_section_child(
+    section: &str,
+    tag_name: &str,
+    replacement: &str,
+    close: &str,
+) -> String {
+    if find_word_tag_start(section, &format!("<w:{tag_name}")).is_some() {
+        return replace_or_insert_self_closing_child(section, tag_name, replacement, close);
+    }
+    let insert_at = [
+        "<w:footnotePr",
+        "<w:endnotePr",
+        "<w:pgNumType",
+        "<w:formProt",
+        "<w:textDirection",
+        "<w:bidi",
+        "<w:rtlGutter",
+        "<w:docGrid",
+        close,
+    ]
+    .iter()
+    .filter_map(|needle| section.find(needle))
+    .min()
+    .unwrap_or(section.len());
+    format!(
+        "{}{}{}",
+        &section[..insert_at],
+        replacement,
+        &section[insert_at..]
+    )
+}
+
+fn patch_document_relationships(xml: &str, footer_rel_id: &str) -> String {
+    if relationship_id_for_target(xml, "footer1.xml").is_some() {
+        return xml.to_owned();
+    }
+    let relationship = format!(
+        r#"<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Id="{footer_rel_id}" Target="footer1.xml"/>"#
+    );
+    let Some(insert_at) = xml.rfind("</Relationships>") else {
+        return xml.to_owned();
+    };
+    format!("{}{}{}", &xml[..insert_at], relationship, &xml[insert_at..])
+}
+
+fn patch_content_types(xml: &str) -> String {
+    if xml.contains(r#"PartName="/word/footer1.xml""#) {
+        return xml.to_owned();
+    }
+    const FOOTER_OVERRIDE: &str = r#"<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>"#;
+    let Some(insert_at) = xml.rfind("</Types>") else {
+        return xml.to_owned();
+    };
+    format!(
+        "{}{}{}",
+        &xml[..insert_at],
+        FOOTER_OVERRIDE,
+        &xml[insert_at..]
+    )
+}
+
 // ── styles.xml 改写 ──────────────────────────────────────────────────────────
+
+/// 为内置 reference.docx 增加一套中文论文常用的排版样式。
+///
+/// 这里只处理论文直接使用的样式：题名、作者信息、摘要、正文标题、题注、
+/// 参考文献和默认表格线。代码、引用、脚注、目录等其他 Pandoc 样式保持原样。
+pub fn patch_academic_styles_xml(xml: &str) -> String {
+    let mut xml = xml.to_owned();
+
+    // 普通正文：宋体小四（字体由 normalize_docx_fonts 按开关决定），1.5 倍行距，
+    // 首行缩进两个汉字符。标题和题注会显式清除这个缩进。
+    for style_id in ["BodyText", "FirstParagraph"] {
+        xml = patch_style_block_by_id(&xml, style_id, |block| {
+            patch_paragraph_style(
+                block,
+                Some(r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#),
+                Some(r#"<w:ind w:firstLine="480"/>"#),
+                None,
+                Some(24),
+                None,
+                None,
+            )
+        });
+    }
+
+    // Compact 是列表和表格单元格常用的父样式。明确清除正文首行缩进，
+    // 并保留其原有的紧凑单倍行距，避免正文规则向这些非正文结构传播。
+    xml = patch_style_block_by_id(&xml, "Compact", |block| {
+        patch_paragraph_style(
+            block,
+            Some(r#"<w:spacing w:before="36" w:after="36" w:line="240" w:lineRule="auto"/>"#),
+            Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+            None,
+            None,
+            None,
+            None,
+        )
+    });
+    // BlockText 已经有左右缩进，但需要显式保留原来的单倍行距。
+    xml = patch_style_block_by_id(&xml, "BlockText", |block| {
+        patch_paragraph_style(
+            block,
+            Some(r#"<w:spacing w:before="100" w:after="100" w:line="240" w:lineRule="auto"/>"#),
+            Some(r#"<w:ind w:firstLine="0" w:left="480" w:right="480"/>"#),
+            None,
+            None,
+            None,
+            None,
+        )
+    });
+
+    // 题名、作者、日期和副标题居中；题名使用小二号量级（18pt）。
+    xml = patch_style_block_by_id(&xml, "Title", |block| {
+        patch_paragraph_style(
+            block,
+            Some(r#"<w:spacing w:before="0" w:after="160" w:line="240" w:lineRule="auto"/>"#),
+            Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+            Some(r#"<w:jc w:val="center"/>"#),
+            Some(36),
+            Some(true),
+            None,
+        )
+    });
+    xml = patch_style_block_by_id(&xml, "TitleChar", |block| {
+        patch_run_style(block, Some(36), Some(true), None)
+    });
+    for style_id in ["Subtitle", "Author", "Date"] {
+        xml = patch_style_block_by_id(&xml, style_id, |block| {
+            patch_paragraph_style(
+                block,
+                Some(r#"<w:spacing w:before="0" w:after="80" w:line="240" w:lineRule="auto"/>"#),
+                Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                Some(r#"<w:jc w:val="center"/>"#),
+                Some(24),
+                None,
+                None,
+            )
+        });
+    }
+    xml = patch_style_block_by_id(&xml, "SubtitleChar", |block| {
+        patch_run_style(block, Some(24), None, None)
+    });
+
+    // 摘要标题加粗居中，摘要正文使用小四号并保持段落间距。
+    xml = patch_style_block_by_id(&xml, "AbstractTitle", |block| {
+        patch_paragraph_style(
+            block,
+            Some(r#"<w:spacing w:before="240" w:after="80" w:line="240" w:lineRule="auto"/>"#),
+            Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+            Some(r#"<w:jc w:val="center"/>"#),
+            Some(24),
+            Some(true),
+            None,
+        )
+    });
+    xml = patch_style_block_by_id(&xml, "Abstract", |block| {
+        patch_paragraph_style(
+            block,
+            Some(r#"<w:spacing w:before="0" w:after="120" w:line="360" w:lineRule="auto"/>"#),
+            Some(r#"<w:ind w:firstLine="480"/>"#),
+            None,
+            Some(24),
+            None,
+            None,
+        )
+    });
+
+    // 正文标题统一黑色、加粗并左对齐，保留 Pandoc 的 1–6 级标题结构。
+    for (style_id, size, before, after) in [
+        ("Heading1", 32, 240, 120),
+        ("Heading2", 28, 180, 80),
+        ("Heading3", 24, 120, 60),
+        ("Heading4", 24, 120, 60),
+        ("Heading5", 24, 120, 60),
+        ("Heading6", 24, 120, 60),
+    ] {
+        xml = patch_style_block_by_id(&xml, style_id, |block| {
+            let block = patch_paragraph_style(
+                block,
+                Some(&format!(
+                    r#"<w:spacing w:before="{before}" w:after="{after}" w:line="360" w:lineRule="auto"/>"#
+                )),
+                Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                Some(r#"<w:jc w:val="left"/>"#),
+                Some(size),
+                Some(true),
+                None,
+            );
+            replace_or_insert_color_in_rpr(&block, "000000")
+        });
+        let char_style_id = format!("{style_id}Char");
+        xml = patch_style_block_by_id(&xml, &char_style_id, |block| {
+            let block = patch_run_style(block, Some(size), Some(true), None);
+            replace_or_insert_color_in_rpr(&block, "000000")
+        });
+    }
+
+    // 表题、图题和其他题注使用五号、居中、非斜体；表题位于表上方，图题位于图下方
+    // 的位置由 Pandoc/Word 的题注段落顺序决定。
+    for style_id in ["Caption", "TableCaption", "ImageCaption"] {
+        xml = patch_style_block_by_id(&xml, style_id, |block| {
+            patch_paragraph_style(
+                block,
+                Some(r#"<w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/>"#),
+                Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                Some(r#"<w:jc w:val="center"/>"#),
+                Some(21),
+                None,
+                Some(false),
+            )
+        });
+    }
+
+    // 参考文献使用五号、单倍行距，并采用两个汉字符的悬挂缩进。
+    xml = patch_style_block_by_id(&xml, "Bibliography", |block| {
+        patch_paragraph_style(
+            block,
+            Some(r#"<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>"#),
+            Some(r#"<w:ind w:left="480" w:hanging="480"/>"#),
+            Some(r#"<w:jc w:val="left"/>"#),
+            Some(21),
+            None,
+            None,
+        )
+    });
+
+    patch_table_style(&xml)
+}
+
+/// 对指定 styleId 的 XML 块执行一次局部改写；不存在时保持原样。
+fn patch_style_block_by_id<F>(xml: &str, style_id: &str, patch: F) -> String
+where
+    F: FnOnce(&str) -> String,
+{
+    let needle = format!(r#"w:styleId="{style_id}""#);
+    let Some(style_attr_start) = xml.find(&needle) else {
+        return xml.to_owned();
+    };
+    let Some(style_start) = xml[..style_attr_start].rfind("<w:style ") else {
+        return xml.to_owned();
+    };
+    let rest = &xml[style_start..];
+    let Some(style_end_rel) = rest.find("</w:style>") else {
+        return xml.to_owned();
+    };
+    let style_end = style_end_rel + "</w:style>".len();
+    let patched = patch(&rest[..style_end]);
+    format!("{}{}{}", &xml[..style_start], patched, &rest[style_end..])
+}
+
+/// 改写段落样式的段落属性和运行属性。
+fn patch_paragraph_style(
+    block: &str,
+    spacing: Option<&str>,
+    indent: Option<&str>,
+    alignment: Option<&str>,
+    size: Option<u32>,
+    bold: Option<bool>,
+    italic: Option<bool>,
+) -> String {
+    let mut block = block.to_owned();
+    if let Some(spacing) = spacing {
+        block = replace_or_insert_ppr_child(&block, "spacing", spacing);
+    }
+    if let Some(indent) = indent {
+        block = replace_or_insert_ppr_child(&block, "ind", indent);
+    }
+    if let Some(alignment) = alignment {
+        block = replace_or_insert_ppr_child(&block, "jc", alignment);
+    }
+    patch_run_style(&block, size, bold, italic)
+}
+
+/// 改写运行属性中的字号、粗体和斜体；未指定的属性保持原样。
+fn patch_run_style(
+    block: &str,
+    size: Option<u32>,
+    bold: Option<bool>,
+    italic: Option<bool>,
+) -> String {
+    let mut block = block.to_owned();
+    if let Some(size) = size {
+        let size_tag = format!(r#"<w:sz w:val="{size}"/>"#);
+        let size_cs_tag = format!(r#"<w:szCs w:val="{size}"/>"#);
+        block = replace_or_insert_rpr_child(&block, "sz", &size_tag);
+        block = replace_or_insert_rpr_child(&block, "szCs", &size_cs_tag);
+    }
+    if let Some(bold) = bold {
+        let tag = if bold {
+            r#"<w:b/>"#
+        } else {
+            r#"<w:b w:val="0"/>"#
+        };
+        block = replace_or_insert_rpr_child(&block, "b", tag);
+    }
+    if let Some(italic) = italic {
+        let tag = if italic {
+            r#"<w:i/>"#
+        } else {
+            r#"<w:i w:val="0"/>"#
+        };
+        block = replace_or_insert_rpr_child(&block, "i", tag);
+    }
+    block
+}
+
+/// 在样式的 w:pPr 中替换或插入一个自闭合子元素。
+fn replace_or_insert_ppr_child(block: &str, tag_name: &str, replacement: &str) -> String {
+    replace_or_insert_style_child(block, "pPr", tag_name, replacement, true)
+}
+
+/// 在样式的 w:rPr 中替换或插入一个自闭合子元素。
+fn replace_or_insert_rpr_child(block: &str, tag_name: &str, replacement: &str) -> String {
+    replace_or_insert_style_child(block, "rPr", tag_name, replacement, false)
+}
+
+fn replace_or_insert_style_child(
+    block: &str,
+    container_name: &str,
+    tag_name: &str,
+    replacement: &str,
+    insert_ppr_before_rpr: bool,
+) -> String {
+    let open = format!("<w:{container_name}");
+    let close = format!("</w:{container_name}>");
+    if let Some(container_start) = block.find(&open) {
+        let Some(open_end_rel) = block[container_start..].find('>') else {
+            return block.to_owned();
+        };
+        let open_end = container_start + open_end_rel;
+        if block.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
+            let replacement_container =
+                format!("<w:{container_name}>{replacement}</w:{container_name}>",);
+            let end = open_end + 1;
+            return format!(
+                "{}{}{}",
+                &block[..container_start],
+                replacement_container,
+                &block[end..]
+            );
+        }
+        let Some(close_rel) = block[open_end + 1..].find(&close) else {
+            return block.to_owned();
+        };
+        let container_end = open_end + 1 + close_rel + close.len();
+        let container = &block[container_start..container_end];
+        let patched_container =
+            replace_or_insert_self_closing_child(container, tag_name, replacement, &close);
+        return format!(
+            "{}{}{}",
+            &block[..container_start],
+            patched_container,
+            &block[container_end..]
+        );
+    }
+
+    let insert_at = if insert_ppr_before_rpr {
+        block
+            .find("<w:rPr")
+            .unwrap_or_else(|| block.find("</w:style>").unwrap_or(block.len()))
+    } else {
+        block.find("</w:style>").unwrap_or(block.len())
+    };
+    let container = format!("<w:{container_name}>{replacement}</w:{container_name}>");
+    format!(
+        "{}{}{}",
+        &block[..insert_at],
+        container,
+        &block[insert_at..]
+    )
+}
+
+fn replace_or_insert_self_closing_child(
+    container: &str,
+    tag_name: &str,
+    replacement: &str,
+    close: &str,
+) -> String {
+    let needle = format!("<w:{tag_name}");
+    if let Some(tag_start) = find_word_tag_start(container, &needle) {
+        let Some(tag_end_rel) = container[tag_start..].find("/>") else {
+            return container.to_owned();
+        };
+        let tag_end = tag_start + tag_end_rel + 2;
+        return format!(
+            "{}{}{}",
+            &container[..tag_start],
+            replacement,
+            &container[tag_end..]
+        );
+    }
+    let insert_at = container.rfind(close).unwrap_or(container.len());
+    format!(
+        "{}{}{}",
+        &container[..insert_at],
+        replacement,
+        &container[insert_at..]
+    )
+}
+
+/// 查找完整的 w:xxx 标签，避免把 w:sz 当成 w:szCs 的前缀。
+fn find_word_tag_start(xml: &str, needle: &str) -> Option<usize> {
+    let mut offset = 0;
+    while let Some(relative) = xml[offset..].find(needle) {
+        let start = offset + relative;
+        let next = xml.as_bytes().get(start + needle.len()).copied();
+        if matches!(next, Some(b' ' | b'/' | b'>')) {
+            return Some(start);
+        }
+        offset = start + needle.len();
+    }
+    None
+}
+
+fn patch_table_style(xml: &str) -> String {
+    const BORDERS: &str = r#"<w:tblBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="000000"/><w:bottom w:val="single" w:sz="8" w:space="0" w:color="000000"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>"#;
+    patch_style_block_by_id(xml, "Table", |block| {
+        let Some(tbl_pr_start) = block.find("<w:tblPr") else {
+            return block.to_owned();
+        };
+        let Some(tbl_pr_open_end_rel) = block[tbl_pr_start..].find('>') else {
+            return block.to_owned();
+        };
+        let tbl_pr_open_end = tbl_pr_start + tbl_pr_open_end_rel;
+        if block.as_bytes().get(tbl_pr_open_end.saturating_sub(1)) == Some(&b'/') {
+            let replacement = format!("<w:tblPr>{BORDERS}</w:tblPr>");
+            return format!(
+                "{}{}{}",
+                &block[..tbl_pr_start],
+                replacement,
+                &block[tbl_pr_open_end + 1..]
+            );
+        }
+        let Some(tbl_pr_close_rel) = block[tbl_pr_open_end + 1..].find("</w:tblPr>") else {
+            return block.to_owned();
+        };
+        let tbl_pr_end = tbl_pr_open_end + 1 + tbl_pr_close_rel + "</w:tblPr>".len();
+        let tbl_pr = &block[tbl_pr_start..tbl_pr_end];
+        let patched_tbl_pr = if let Some(border_start) = tbl_pr.find("<w:tblBorders") {
+            let Some(border_end_rel) = tbl_pr[border_start..].find("</w:tblBorders>") else {
+                return block.to_owned();
+            };
+            let border_end = border_start + border_end_rel + "</w:tblBorders>".len();
+            format!(
+                "{}{}{}",
+                &tbl_pr[..border_start],
+                BORDERS,
+                &tbl_pr[border_end..]
+            )
+        } else {
+            let insert_at = tbl_pr.rfind("</w:tblPr>").unwrap_or(tbl_pr.len());
+            format!(
+                "{}{}{}",
+                &tbl_pr[..insert_at],
+                BORDERS,
+                &tbl_pr[insert_at..]
+            )
+        };
+        format!(
+            "{}{}{}",
+            &block[..tbl_pr_start],
+            patched_tbl_pr,
+            &block[tbl_pr_end..]
+        )
+    })
+}
 
 /// 根据 styleId 判断字体分类。
 enum FontClass {
@@ -1140,6 +1763,30 @@ mod tests {
   </w:style>
 </w:styles>"#;
 
+    const FIXTURE_ACADEMIC_STYLES: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:styleId="Title">
+    <w:pPr><w:jc w:val="left"/></w:pPr>
+    <w:rPr><w:sz w:val="56"/><w:szCs w:val="56"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Normal"><w:pPr /><w:rPr /></w:style>
+  <w:style w:type="paragraph" w:styleId="BodyText">
+    <w:pPr><w:spacing w:before="180" w:after="180"/></w:pPr>
+    <w:rPr />
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1">
+    <w:pPr><w:spacing w:before="360" w:after="80"/></w:pPr>
+    <w:rPr><w:sz w:val="40"/><w:color w:val="0F4761"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Bibliography"><w:pPr /></w:style>
+  <w:style w:type="character" w:styleId="SourceCode">
+    <w:rPr><w:sz w:val="22"/></w:rPr>
+  </w:style>
+  <w:style w:type="table" w:styleId="Table">
+    <w:tblPr><w:tblInd w:w="0" w:type="dxa"/></w:tblPr>
+  </w:style>
+</w:styles>"#;
+
     const FIXTURE_THEME: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
   <a:themeElements>
@@ -1221,6 +1868,49 @@ mod tests {
         let dd_end = patched.find("</w:docDefaults>").unwrap() + "</w:docDefaults>".len();
         let dd = &patched[dd_start..dd_end];
         assert!(dd.contains("宋体"), "docDefaults 应含宋体，实际：\n{dd}");
+    }
+
+    #[test]
+    fn academic_styles_patch_paper_styles_only() {
+        let patched = patch_academic_styles_xml(FIXTURE_ACADEMIC_STYLES);
+        assert!(patched.contains(r#"<w:sz w:val="36"/>"#));
+        assert!(patched
+            .contains(r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#));
+        assert!(patched.contains(r#"<w:ind w:left="480" w:hanging="480"/>"#));
+        assert!(patched.contains(r#"<w:color w:val="000000"/>"#));
+        assert!(
+            patched.contains(r#"<w:top w:val="single" w:sz="8" w:space="0" w:color="000000"/>"#)
+        );
+
+        // 代码等非论文排版样式不应被这一步改写。
+        assert!(patched.contains(r#"w:styleId="SourceCode"#));
+        assert!(patched.contains(r#"<w:sz w:val="22"/>"#));
+    }
+
+    #[test]
+    fn default_document_gets_a4_margins_and_page_number_reference() {
+        let document = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:sectPr><w:footnotePr /></w:sectPr></w:body></w:document>"#;
+        let patched = patch_document_page_layout(document, "rIdFooter1");
+        assert!(patched.contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
+        assert!(patched.contains(
+            r#"<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>"#
+        ));
+        assert!(patched.contains(r#"<w:footerReference w:type="default" r:id="rIdFooter1"/>"#));
+        assert!(patched.find("footerReference").unwrap() < patched.find("pgSz").unwrap());
+        assert!(patched.find("pgSz").unwrap() < patched.find("pgMar").unwrap());
+
+        let rels =
+            r#"<Relationships><Relationship Id="rId1" Target="styles.xml"/></Relationships>"#;
+        let rels = patch_document_relationships(rels, "rIdFooter1");
+        assert!(rels.contains(
+            r#"Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer""#
+        ));
+        assert!(rels.contains(r#"Target="footer1.xml""#));
+
+        let types = r#"<Types></Types>"#;
+        let types = patch_content_types(types);
+        assert!(types.contains(r#"PartName="/word/footer1.xml""#));
+        assert!(DEFAULT_FOOTER_XML.contains("PAGE"));
     }
 
     #[test]
@@ -1355,13 +2045,68 @@ mod tests {
         assert!(styles.contains("宋体"), "styles.xml 应含宋体");
         assert!(styles.contains("黑体"), "styles.xml 应含黑体");
         assert!(!styles.contains("asciiTheme="), "不应含 asciiTheme=");
+        assert!(styles.contains(
+            r#"<w:spacing w:before="240" w:after="120" w:line="360" w:lineRule="auto"/>"#
+        ));
+        assert!(styles.contains(r#"<w:top w:val="single" w:sz="8" w:space="0" w:color="000000"/>"#));
         let heading_start = styles.find("w:styleId=\"Heading1\"").unwrap();
         let heading_end = heading_start
             + styles[heading_start..].find("</w:style>").unwrap()
             + "</w:style>".len();
         let heading = &styles[heading_start..heading_end];
         assert!(heading.contains(r#"<w:color w:val="000000"/>"#));
+        assert!(heading.contains(r#"<w:sz w:val="32"/>"#));
         assert!(!heading.contains("themeColor"));
+
+        let source_code_start = styles.find("w:styleId=\"VerbatimChar\"").unwrap();
+        let source_code_end = source_code_start
+            + styles[source_code_start..].find("</w:style>").unwrap()
+            + "</w:style>".len();
+        let source_code = &styles[source_code_start..source_code_end];
+        assert!(
+            source_code.contains("Consolas"),
+            "代码样式应继续使用 Consolas"
+        );
+
+        let mut document_buf = Vec::new();
+        archive
+            .by_name("word/document.xml")
+            .unwrap()
+            .read_to_end(&mut document_buf)
+            .unwrap();
+        let document = String::from_utf8_lossy(&document_buf);
+        assert!(document.contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
+        assert!(document.contains(
+            r#"<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>"#
+        ));
+        assert!(document.contains(r#"<w:footerReference w:type="default" r:id="rIdFooter1"/>"#));
+
+        let mut rels_buf = Vec::new();
+        archive
+            .by_name("word/_rels/document.xml.rels")
+            .unwrap()
+            .read_to_end(&mut rels_buf)
+            .unwrap();
+        let rels = String::from_utf8_lossy(&rels_buf);
+        assert!(rels.contains(r#"Target="footer1.xml""#));
+
+        let mut footer_buf = Vec::new();
+        archive
+            .by_name("word/footer1.xml")
+            .unwrap()
+            .read_to_end(&mut footer_buf)
+            .unwrap();
+        let footer = String::from_utf8_lossy(&footer_buf);
+        assert!(footer.contains("PAGE"));
+
+        let mut types_buf = Vec::new();
+        archive
+            .by_name("[Content_Types].xml")
+            .unwrap()
+            .read_to_end(&mut types_buf)
+            .unwrap();
+        let types = String::from_utf8_lossy(&types_buf);
+        assert!(types.contains(r#"PartName="/word/footer1.xml""#));
     }
 
     #[test]
@@ -1375,11 +2120,29 @@ mod tests {
         };
         let dir = tempfile::tempdir().expect("创建临时目录失败");
         let output = dir.path().join("reference.docx");
-        run_export_default_template(&pandoc, &output).expect("默认模板应能导出");
+        run_export_default_template(&pandoc, &output, true).expect("默认模板应能导出");
 
         let bytes = std::fs::read(output).expect("默认模板应可读");
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).expect("模板应为有效 docx");
-        assert!(archive.by_name("word/styles.xml").is_ok());
+        let mut styles_buf = Vec::new();
+        archive
+            .by_name("word/styles.xml")
+            .expect("模板应包含 styles.xml")
+            .read_to_end(&mut styles_buf)
+            .expect("读取 styles.xml 失败");
+        let styles = String::from_utf8_lossy(&styles_buf);
+        assert!(styles.contains(r#"<w:sz w:val="36"/>"#));
+        assert!(styles.contains(r#"<w:top w:val="single" w:sz="8" w:space="0" w:color="000000"/>"#));
+
+        let mut document_buf = Vec::new();
+        archive
+            .by_name("word/document.xml")
+            .expect("模板应包含 document.xml")
+            .read_to_end(&mut document_buf)
+            .expect("读取 document.xml 失败");
+        let document = String::from_utf8_lossy(&document_buf);
+        assert!(document.contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
+        assert!(document.contains(r#"<w:footerReference w:type="default" r:id="rIdFooter1"/>"#));
     }
 
     #[test]
