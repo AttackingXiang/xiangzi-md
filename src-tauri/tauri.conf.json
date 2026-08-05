@@ -37,10 +37,22 @@
     "category": "Productivity",
     "fileAssociations": [
       {
-        "ext": ["md", "markdown", "mdown", "mkd", "mdx", "txt"],
+        "ext": ["md", "markdown", "mdown", "mkd"],
         "name": "Markdown Document",
         "description": "Markdown Document",
         "role": "Editor"
+      },
+      {
+        "ext": ["mdx"],
+        "name": "MDX Document",
+        "description": "MDX Document",
+        "role": "Editor"
+      },
+      {
+        "ext": ["txt"],
+        "name": "Plain Text Document",
+        "description": "Plain Text Document",
+        "role": "Viewer"
       }
     ],
     "icon": [
