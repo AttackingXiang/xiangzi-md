@@ -851,8 +851,9 @@ fn rewrite_docx_parts(
             *data = patched.into_bytes();
         } else if apply_page_layout && name == "word/document.xml" {
             let xml = String::from_utf8_lossy(data).into_owned();
-            let patched =
+            let xml =
                 patch_document_page_layout(&xml, footer_rel_id.as_deref().unwrap_or("rIdFooter1"));
+            let patched = patch_list_paragraphs(&xml);
             *data = patched.into_bytes();
         } else if apply_page_layout && name == "word/_rels/document.xml.rels" {
             let xml = String::from_utf8_lossy(data).into_owned();
@@ -989,6 +990,83 @@ fn patch_document_page_layout(xml: &str, footer_rel_id: &str) -> String {
         &xml[..section_start],
         section,
         &xml[section_end..]
+    )
+}
+
+/// 列表段落使用 Compact 样式，但其行距应与正文统一为 1.5 倍；
+/// 直接写入含 w:numPr 的段落，避免同时改变表格单元格的紧凑行距。
+fn patch_list_paragraphs(xml: &str) -> String {
+    const LIST_SPACING: &str =
+        r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#;
+    let mut result = String::with_capacity(xml.len() + 256);
+    let mut rest = xml;
+
+    while let Some(relative_start) = find_word_tag_start(rest, "<w:p") {
+        result.push_str(&rest[..relative_start]);
+        rest = &rest[relative_start..];
+        let Some(relative_end) = rest.find("</w:p>") else {
+            result.push_str(rest);
+            return result;
+        };
+        let paragraph_end = relative_end + "</w:p>".len();
+        let paragraph = &rest[..paragraph_end];
+        let patched = if paragraph.contains("<w:numPr") {
+            replace_or_insert_paragraph_ppr_child(paragraph, "spacing", LIST_SPACING)
+        } else {
+            paragraph.to_owned()
+        };
+        result.push_str(&patched);
+        rest = &rest[paragraph_end..];
+    }
+
+    result.push_str(rest);
+    result
+}
+
+fn replace_or_insert_paragraph_ppr_child(
+    paragraph: &str,
+    tag_name: &str,
+    replacement: &str,
+) -> String {
+    let open = "<w:pPr";
+    let close = "</w:pPr>";
+    if let Some(ppr_start) = paragraph.find(open) {
+        let Some(open_end_rel) = paragraph[ppr_start..].find('>') else {
+            return paragraph.to_owned();
+        };
+        let open_end = ppr_start + open_end_rel;
+        if paragraph.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
+            let ppr = format!("<w:pPr>{replacement}</w:pPr>");
+            return format!(
+                "{}{}{}",
+                &paragraph[..ppr_start],
+                ppr,
+                &paragraph[open_end + 1..]
+            );
+        }
+        let Some(close_rel) = paragraph[open_end + 1..].find(close) else {
+            return paragraph.to_owned();
+        };
+        let ppr_end = open_end + 1 + close_rel + close.len();
+        let ppr = &paragraph[ppr_start..ppr_end];
+        let patched_ppr = replace_or_insert_self_closing_child(ppr, tag_name, replacement, close);
+        return format!(
+            "{}{}{}",
+            &paragraph[..ppr_start],
+            patched_ppr,
+            &paragraph[ppr_end..]
+        );
+    }
+
+    let insert_at = find_word_tag_start(paragraph, "<w:r")
+        .or_else(|| paragraph.find("</w:p>"))
+        .unwrap_or(paragraph.len());
+    let ppr = format!("<w:pPr>{replacement}</w:pPr>");
+    format!(
+        "{}{}{}",
+        &paragraph[..insert_at],
+        ppr,
+        &paragraph[insert_at..]
     )
 }
 
@@ -1914,6 +1992,22 @@ mod tests {
     }
 
     #[test]
+    fn list_paragraphs_get_body_line_spacing_without_changing_table_cells() {
+        let document = r#"<w:document><w:body><w:p><w:pPr><w:pStyle w:val="Compact"/><w:numPr><w:numId w:val="1001"/></w:numPr><w:spacing w:line="240"/></w:pPr><w:r><w:t>列表</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:pPr><w:pStyle w:val="Compact"/><w:spacing w:line="240"/></w:pPr><w:r><w:t>表格</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#;
+        let patched = patch_list_paragraphs(document);
+        let list_start = patched.find("<w:numPr").unwrap();
+        let list_end = patched[list_start..].find("</w:p>").unwrap() + list_start;
+        let list = &patched[..list_end];
+        assert!(list
+            .contains(r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#));
+
+        let table_start = patched.find("<w:t>表格").unwrap();
+        let table_container_start = patched.find("<w:tbl").unwrap();
+        let table_cell = &patched[table_container_start..table_start];
+        assert!(!table_cell.contains(r#"w:line="360""#));
+    }
+
+    #[test]
     fn theme_xml_gets_correct_fonts() {
         let patched = patch_theme_xml(FIXTURE_THEME);
         assert!(
@@ -2016,7 +2110,7 @@ mod tests {
             }
         };
 
-        let md = "# 标题一\n\n正文 **加粗** `code`\n\n```\ncode block\n```\n";
+        let md = "# 标题一\n\n正文 **加粗** `code`\n\n- 列表一\n- 列表二\n\n```\ncode block\n```\n";
         let dir = tempfile::tempdir().expect("创建临时目录失败");
         let out = dir.path().join("test_out.docx");
         std::fs::write(&out, b"previous export").expect("创建已有目标文件失败");
@@ -2080,6 +2174,8 @@ mod tests {
             r#"<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>"#
         ));
         assert!(document.contains(r#"<w:footerReference w:type="default" r:id="rIdFooter1"/>"#));
+        assert!(document
+            .contains(r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#));
 
         let mut rels_buf = Vec::new();
         archive
