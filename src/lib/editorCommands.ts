@@ -5,6 +5,8 @@ import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
 import { fencedCodeContentRange } from '../features/cm6-editor/codeBlockPreview'
 import { computeCm6ToolbarState } from '../features/cm6-editor/toolbarState'
 import { linkPromptBridge } from './linkPromptBridge'
+import { readClipboard } from './clipboardRead'
+import { markdownFromClipboardHtml } from './markdownPaste'
 import { tableCellCommandBridge, type TableCellInlineFormat } from './tableCellCommandBridge'
 import { withClipboardFormat } from './copyPreferences'
 
@@ -111,6 +113,40 @@ export const editorCmd = {
   redo: (): void => void activeCm6Commands.redo(),
 }
 
+/**
+ * 从剪贴板粘贴到当前编辑目标。
+ *
+ * `document.execCommand('paste')` 在 WebKit 和 Chromium 里都禁止网页内容调用，
+ * 所以菜单和右键菜单的「粘贴」以前是彻底无效的（只有 ⌘V/Ctrl+V 能用，因为那条
+ * 走的是 WebView 原生路径）。这里改成主动读剪贴板再自己写进文档。
+ */
+export async function pasteFromClipboard(): Promise<boolean> {
+  const clipboard = await readClipboard()
+  if (!clipboard) return false
+
+  // 有 HTML 就还原成 Markdown，和 ⌘V 走的 richPaste 是同一个转换器，
+  // 这样两条路径粘出来的结果一致。
+  const markdown = clipboard.html ? markdownFromClipboardHtml(clipboard.html) : null
+  const rich = markdown ?? clipboard.text
+  if (!rich) return false
+
+  // 表格单元格是 contenteditable。insertText 与 paste 不同，至今仍受支持，
+  // 并且和用户直接输入走同一条 DOM 插入路径（单元格里不该出现块级 Markdown，
+  // 所以这里用纯文本）。
+  if (tableCellCommandBridge.isFocused()) {
+    return clipboard.text ? document.execCommand('insertText', false, clipboard.text) : false
+  }
+
+  const view = cm6ActiveViewBridge.get()
+  if (!view || view.state.readOnly) return false
+  view.dispatch(view.state.replaceSelection(rich), {
+    userEvent: 'input.paste',
+    scrollIntoView: true,
+  })
+  view.focus()
+  return true
+}
+
 export const clipboardCmd = {
   copy: (): void => {
     document.execCommand('copy')
@@ -124,9 +160,7 @@ export const clipboardCmd = {
   cut: (): void => {
     document.execCommand('cut')
   },
-  paste: (): void => {
-    document.execCommand('paste')
-  },
+  paste: (): void => void pasteFromClipboard(),
   selectAll: (): void => {
     if (tableCellCommandBridge.selectAll()) return
     const view = cm6ActiveViewBridge.get()
