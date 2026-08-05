@@ -292,6 +292,7 @@ export interface DesktopPort {
   openFolderPath(root: string): Promise<Folder | null>
   openParentFolder(root: string): Promise<Folder | null>
   openContainingFolder(filePath: string): Promise<Folder | null>
+  readClipboardText(): Promise<string>
   openFile(): Promise<OpenedFile | null>
   readFile(path: string): Promise<OpenedFile>
   watchPaths(

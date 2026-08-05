@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
+import { readText, writeHtml, writeImage } from '@tauri-apps/plugin-clipboard-manager'
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { watch } from '@tauri-apps/plugin-fs'
@@ -15,6 +15,7 @@ const { imageFromBytesMock } = vi.hoisted(() => ({ imageFromBytesMock: vi.fn() }
 
 vi.mock('@tauri-apps/api/image', () => ({ Image: { fromBytes: imageFromBytesMock } }))
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
+  readText: vi.fn(),
   writeHtml: vi.fn(),
   writeImage: vi.fn(),
 }))
@@ -32,6 +33,7 @@ const invokeMock = vi.mocked(invoke)
 const listenMock = vi.mocked(listen)
 const writeHtmlMock = vi.mocked(writeHtml)
 const writeImageMock = vi.mocked(writeImage)
+const readTextMock = vi.mocked(readText)
 const getCurrentMock = vi.mocked(getCurrent)
 const onOpenUrlMock = vi.mocked(onOpenUrl)
 const openMock = vi.mocked(open)
@@ -47,6 +49,7 @@ describe('tauriDesktopAdapter', () => {
     imageFromBytesMock.mockReset()
     writeHtmlMock.mockReset()
     writeImageMock.mockReset()
+    readTextMock.mockReset()
     getCurrentMock.mockReset()
     onOpenUrlMock.mockReset()
     getCurrentMock.mockResolvedValue(null)
@@ -64,6 +67,13 @@ describe('tauriDesktopAdapter', () => {
 
     await expect(tauriDesktopAdapter.readFile(file.path)).resolves.toEqual(file)
     expect(invokeMock).toHaveBeenCalledWith('read_file', { path: file.path })
+  })
+
+  it('reads plain text from the system clipboard through the plugin contract', async () => {
+    readTextMock.mockResolvedValueOnce('/notes/a.md')
+
+    await expect(tauriDesktopAdapter.readClipboardText()).resolves.toBe('/notes/a.md')
+    expect(readTextMock).toHaveBeenCalledOnce()
   })
 
   it('watches paths with debounce while ignoring read-access feedback events', async () => {

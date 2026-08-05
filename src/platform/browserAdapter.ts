@@ -277,6 +277,7 @@ export const browserDesktopAdapter: DesktopPort = {
   openFolderPath: async (root) => (root === PREVIEW_ROOT ? previewFolder() : null),
   openParentFolder: async () => previewFolder(),
   openContainingFolder: async () => previewFolder(),
+  readClipboardText: async () => '',
   openFile: async () => requireFile(SAMPLE_PATH),
   readFile: async (path) => requireFile(path),
   watchPaths: async () => () => undefined,

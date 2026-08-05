@@ -16,6 +16,8 @@ interface Props {
   onOpenPinnedTag: (tag: string) => void
   draftCount?: number
   onOpenDrafts?: () => void
+  clipboardPathPrompt?: { path: string; kind: 'file' | 'folder' } | null
+  onOpenClipboardPath?: () => void
 }
 
 /**
@@ -46,6 +48,8 @@ export default function Welcome({
   onOpenPinnedTag,
   draftCount = 0,
   onOpenDrafts,
+  clipboardPathPrompt = null,
+  onOpenClipboardPath,
 }: Props): JSX.Element {
   return (
     <div className="welcome">
@@ -73,6 +77,29 @@ export default function Welcome({
             </button>
           </div>
         </div>
+
+        {clipboardPathPrompt && onOpenClipboardPath && (
+          <div className="clipboard-path-banner" role="status">
+            <div className="clipboard-path-banner-info">
+              {clipboardPathPrompt.kind === 'file' ? (
+                <FileText size={18} />
+              ) : (
+                <FolderOpen size={18} />
+              )}
+              <div className="clipboard-path-banner-copy">
+                <strong>
+                  {clipboardPathPrompt.kind === 'file'
+                    ? t('检测到可打开的文件')
+                    : t('检测到可打开的文件夹')}
+                </strong>
+                <span title={clipboardPathPrompt.path}>{clipboardPathPrompt.path}</span>
+              </div>
+            </div>
+            <button className="primary-btn" onClick={onOpenClipboardPath}>
+              {clipboardPathPrompt.kind === 'file' ? t('打开文件') : t('打开文件夹')}
+            </button>
+          </div>
+        )}
 
         {draftCount > 0 && onOpenDrafts && (
           <button className="draft-recovery-banner" onClick={onOpenDrafts}>

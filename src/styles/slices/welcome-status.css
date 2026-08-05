@@ -58,6 +58,59 @@
   margin-bottom: 0;
 }
 
+.clipboard-path-banner {
+  width: 100%;
+  min-width: 0;
+  margin: 18px 0 28px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+}
+
+.clipboard-path-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--accent-text);
+}
+
+.clipboard-path-banner-info > svg {
+  flex: 0 0 auto;
+}
+
+.clipboard-path-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.clipboard-path-banner-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clipboard-path-banner-copy span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-path-banner .primary-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .draft-recovery-banner {
   width: 100%;
   margin: -18px 0 28px;
@@ -270,6 +323,16 @@
 @media (max-width: 520px) {
   .welcome-actions {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .clipboard-path-banner {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .clipboard-path-banner .primary-btn {
+    width: 100%;
   }
 }
 

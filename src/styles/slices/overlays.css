@@ -295,6 +295,47 @@
   margin-top: 16px;
 }
 
+/* ---------- 剪切板路径提示 ---------- */
+.clipboard-path-dialog {
+  width: 520px;
+}
+
+.clipboard-path-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.clipboard-path-message svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+  margin-top: 1px;
+}
+
+.clipboard-path-value {
+  margin-top: 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.clipboard-path-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
 /* ---------- 导出完成 ---------- */
 .export-complete-dialog {
   width: 520px;

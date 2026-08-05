@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Image } from '@tauri-apps/api/image'
-import { writeHtml, writeImage, writeText } from '@tauri-apps/plugin-clipboard-manager'
+import { readText, writeHtml, writeImage, writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link'
 import { ask, message, open, save } from '@tauri-apps/plugin-dialog'
 import { watch } from '@tauri-apps/plugin-fs'
@@ -137,6 +137,7 @@ export const tauriDesktopAdapter: DesktopPort = {
     return invoke<Folder | null>('open_folder_path', { root: parent })
   },
   openContainingFolder: (filePath) => invoke<Folder | null>('open_containing_folder', { filePath }),
+  readClipboardText: () => readText(),
   openFile: async () => {
     const path = await open({
       multiple: false,

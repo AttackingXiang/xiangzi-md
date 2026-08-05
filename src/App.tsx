@@ -42,6 +42,7 @@ const TableGridPicker = lazy(() => import('./components/TableGridPicker'))
 const InputDialog = lazy(() => import('./components/InputDialog'))
 const UnsavedChangesDialog = lazy(() => import('./components/UnsavedChangesDialog'))
 const ExternalChangeDialog = lazy(() => import('./components/ExternalChangeDialog'))
+const ClipboardPathDialog = lazy(() => import('./components/ClipboardPathDialog'))
 const DraftRecoveryDialog = lazy(() => import('./components/DraftRecoveryDialog'))
 const ExportCompleteDialog = lazy(() => import('./components/ExportCompleteDialog'))
 const SearchPanel = lazy(() => import('./components/SearchPanel'))
@@ -66,6 +67,7 @@ import type { CloseDecision, CloseReason } from './components/UnsavedChangesDial
 import { t, tf } from './lib/i18n'
 import { ErrorCode } from './lib/errorCodes'
 import { baseName, dirName } from './lib/path'
+import { clipboardPath } from './lib/clipboardPath'
 import { revealLocationKey } from './lib/platform'
 import { replaceMovedPath } from './lib/treeDrag'
 import type { SortContext } from './lib/fileTreeSort'
@@ -465,6 +467,15 @@ export default function App(): JSX.Element {
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [outlineVisible, setOutlineVisible] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
+  const [clipboardPathPrompt, setClipboardPathPrompt] = useState<{
+    path: string
+    kind: 'file' | 'folder'
+  } | null>(null)
+  const [clipboardPathDialog, setClipboardPathDialog] = useState<{
+    path: string
+    kind: 'file' | 'folder'
+  } | null>(null)
+  const clipboardProbeRef = useRef(0)
   const [propertyAddRequest, setPropertyAddRequest] = useState<{
     tabId: string
     nonce: number
@@ -490,10 +501,6 @@ export default function App(): JSX.Element {
     [activeId, captureActiveScroll, setActiveId],
   )
 
-  const showWelcome = useCallback((): void => {
-    captureActiveScroll()
-    setActiveId(null)
-  }, [captureActiveScroll, setActiveId])
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null)
   // 提为 useCallback 保持引用稳定，配合 Sidebar 的 memo() 避免每次击键都重渲染 Sidebar
   const openSidebarSettings = useCallback(() => setSettingsSection('appearance'), [])
@@ -673,6 +680,61 @@ export default function App(): JSX.Element {
     },
     [pushRecentFolder],
   )
+
+  const inspectClipboardPath = useCallback(async (): Promise<void> => {
+    const requestId = ++clipboardProbeRef.current
+    setClipboardPathPrompt(null)
+    setClipboardPathDialog(null)
+
+    let rawText: string
+    try {
+      rawText = await desktop.readClipboardText()
+    } catch {
+      // Clipboard access is best-effort. The start page remains fully usable
+      // when the OS denies access or the clipboard currently holds non-text.
+      return
+    }
+
+    const path = clipboardPath(rawText)
+    if (!path || requestId !== clipboardProbeRef.current) return
+
+    let kind: 'file' | 'folder' | null = null
+    try {
+      await desktop.readFile(path)
+      kind = 'file'
+    } catch {
+      // It may be a folder, or a file type the editor cannot open.
+    }
+
+    if (!kind) {
+      try {
+        const folderResult = await desktop.openFolderPath(path)
+        if (folderResult) kind = 'folder'
+      } catch {
+        // Ignore invalid, inaccessible, and non-local paths.
+      }
+    }
+
+    if (kind && requestId === clipboardProbeRef.current) {
+      setClipboardPathPrompt({ path, kind })
+      setClipboardPathDialog({ path, kind })
+    }
+  }, [])
+
+  const showWelcome = useCallback((): void => {
+    captureActiveScroll()
+    setActiveId(null)
+    void inspectClipboardPath()
+  }, [captureActiveScroll, inspectClipboardPath, setActiveId])
+
+  const openClipboardPath = useCallback((): void => {
+    const prompt = clipboardPathPrompt
+    setClipboardPathPrompt(null)
+    setClipboardPathDialog(null)
+    if (!prompt) return
+    if (prompt.kind === 'file') void openPath(prompt.path, baseName(prompt.path))
+    else void openFolderByPath(prompt.path)
+  }, [clipboardPathPrompt, openFolderByPath, openPath])
 
   const openParentFolder = useCallback(
     async (root: string) => {
@@ -1524,6 +1586,8 @@ export default function App(): JSX.Element {
                 onOpenPinnedTag={openTreeTag}
                 draftCount={draftSummaries.length}
                 onOpenDrafts={() => setDraftRecoveryOpen(true)}
+                clipboardPathPrompt={clipboardPathPrompt}
+                onOpenClipboardPath={openClipboardPath}
               />
             )}
 
@@ -1693,6 +1757,17 @@ export default function App(): JSX.Element {
             confirmText={inputDialog.confirmText}
             onSubmit={inputDialog.onSubmit}
             onClose={() => setInputDialog(null)}
+          />
+        </Suspense>
+      )}
+
+      {clipboardPathDialog && (
+        <Suspense fallback={null}>
+          <ClipboardPathDialog
+            path={clipboardPathDialog.path}
+            kind={clipboardPathDialog.kind}
+            onOpen={openClipboardPath}
+            onClose={() => setClipboardPathDialog(null)}
           />
         </Suspense>
       )}
