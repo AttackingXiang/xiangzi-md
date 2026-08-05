@@ -99,7 +99,7 @@ test('materializes editor-only classes as portable semantic HTML', async ({ page
       <div class="cm-line xmd-cm-code-line">const value = 1</div>
       <div class="cm-line xmd-cm-code-fence-line"></div>
     `
-    materializePortableClipboard(root)
+    materializePortableClipboard(root, { copyTextColor: false, copyHighlightColor: false })
     return root.innerHTML
   })
 

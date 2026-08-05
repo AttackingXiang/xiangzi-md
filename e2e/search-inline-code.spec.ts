@@ -36,9 +36,17 @@ test('search matches remain visible inside rendered inline code', async ({ page 
     .toBe('needle')
   const activeMatch = inlineCode.locator('.xmd-cm-active-search-match')
   await expect(activeMatch).toHaveText('needle')
-  const selectionColor = await page
-    .locator('.cm-selectionBackground')
+  const selectedSearchMatchColor = await page
+    .locator('.xmd-cm-editor')
     .first()
-    .evaluate((element) => getComputedStyle(element).backgroundColor)
-  await expect(activeMatch).toHaveCSS('background-color', selectionColor)
+    .evaluate((editor) => {
+      const probe = document.createElement('span')
+      probe.className = 'cm-searchMatch-selected'
+      probe.textContent = 'probe'
+      editor.append(probe)
+      const color = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return color
+    })
+  await expect(activeMatch).toHaveCSS('background-color', selectedSearchMatchColor)
 })
