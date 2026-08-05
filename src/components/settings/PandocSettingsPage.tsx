@@ -202,6 +202,16 @@ export default function PandocSettingsPage({
           checked={settings.pandocNormalizeFonts}
           onChange={(pandocNormalizeFonts) => onChange({ pandocNormalizeFonts })}
         />
+        <ToggleRow
+          label={en ? 'Academic paper layout' : '论文排版'}
+          description={
+            en
+              ? 'A4 pages with 2.5cm margins, a centered page-number footer, 1.5 line spacing, first-line indent, and three-line tables. Ignored when a custom template is selected.'
+              : 'A4 页面、2.5cm 页边距、居中页码页脚、1.5 倍行距、首行缩进两字与三线表；选择了自定义模板时本项不生效。'
+          }
+          checked={settings.pandocAcademicLayout}
+          onChange={(pandocAcademicLayout) => onChange({ pandocAcademicLayout })}
+        />
       </SettingsCard>
 
       <SettingsCard title={en ? 'Import behavior' : '导入行为'}>

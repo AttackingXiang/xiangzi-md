@@ -36,6 +36,9 @@ fn legacy_settings_receive_current_defaults() {
     assert!(settings.show_sidebar_search_button);
     assert!(settings.show_sidebar_tags_button);
     assert!(!settings.show_sidebar_sort_button);
+    // 老配置文件里没有这个键，必须落到「开启」的默认值上，
+    // 否则升级会悄悄改变所有人的导出排版。
+    assert!(settings.pandoc_academic_layout);
     assert_eq!(settings.clipboard_format, "rich");
     assert!(!settings.copy_text_color);
     assert!(!settings.copy_highlight_color);

@@ -198,6 +198,10 @@ pub struct AppSettings {
     pub pandoc_number_sections: bool,
     /// 是否执行项目既有的宋体/黑体及黑色标题规范化
     pub pandoc_normalize_fonts: bool,
+    /// 是否给内置模板套用论文排版（A4 页面、2.5cm 页边距、页码页脚、
+    /// 1.5 倍行距与首行缩进、三线表）。选了自定义 reference.docx 时本项无效——
+    /// 用户自己的 Word 模板永远不会被论文规则覆盖。
+    pub pandoc_academic_layout: bool,
 }
 
 impl Default for AppSettings {
@@ -333,6 +337,7 @@ impl Default for AppSettings {
             pandoc_toc: false,
             pandoc_number_sections: false,
             pandoc_normalize_fonts: true,
+            pandoc_academic_layout: true,
         }
     }
 }
@@ -416,6 +421,7 @@ pub struct SettingsPatch {
     pub pandoc_toc: Option<bool>,
     pub pandoc_number_sections: Option<bool>,
     pub pandoc_normalize_fonts: Option<bool>,
+    pub pandoc_academic_layout: Option<bool>,
 }
 
 impl SettingsPatch {

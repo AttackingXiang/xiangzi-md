@@ -332,6 +332,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(pandoc_toc);
     replace_if_some!(pandoc_number_sections);
     replace_if_some!(pandoc_normalize_fonts);
+    replace_if_some!(pandoc_academic_layout);
 }
 
 #[cfg(test)]

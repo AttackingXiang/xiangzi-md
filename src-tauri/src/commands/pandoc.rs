@@ -408,11 +408,13 @@ pub async fn export_pandoc_default_template(
     let output_path_for_task = output_path.clone();
 
     let normalize_fonts = settings.pandoc_normalize_fonts;
+    let academic_layout = settings.pandoc_academic_layout;
     crate::commands::blocking(move || {
         run_export_default_template(
             &pandoc_path,
             Path::new(&output_path_for_task),
             normalize_fonts,
+            academic_layout,
         )
     })
     .await?;
@@ -424,6 +426,7 @@ fn run_export_default_template(
     pandoc_path: &Path,
     output_path: &Path,
     normalize_fonts: bool,
+    academic_layout: bool,
 ) -> AppResult<()> {
     let mut command = make_command(pandoc_path);
     command.args(["--print-default-data-file", "reference.docx"]);
@@ -439,7 +442,14 @@ fn run_export_default_template(
     }
     std::fs::write(output_path, result.stdout)
         .map_err(|error| AppError::io("写入默认 Word 模板失败", error))?;
-    patch_builtin_default_template(output_path, normalize_fonts)
+    // 导出的模板要和实际导出结果长得一样，所以跟着同一个开关走。
+    if academic_layout {
+        patch_builtin_default_template(output_path, normalize_fonts)
+    } else if normalize_fonts {
+        normalize_docx_fonts(output_path)
+    } else {
+        Ok(())
+    }
 }
 
 /// 把 Markdown 文本（通过 stdin）用 pandoc 转换为 docx，然后后处理字体。
@@ -498,6 +508,7 @@ pub async fn export_docx(
         number_sections: settings.pandoc_number_sections,
     };
     let normalize_fonts = settings.pandoc_normalize_fonts;
+    let academic_layout = settings.pandoc_academic_layout;
 
     // 在 spawn_blocking 里执行 Pandoc、字体后处理和最终原子替换，避免阻塞
     // Tauri 异步运行时，也避免失败时把半成品留在用户选择的目标路径。
@@ -514,6 +525,7 @@ pub async fn export_docx(
             Path::new(&output_path2),
             &options,
             normalize_fonts,
+            academic_layout,
         )
     })
     .await?;
@@ -528,6 +540,7 @@ fn run_export_docx_atomic(
     output_path: &Path,
     options: &PandocExportOptions,
     normalize_fonts: bool,
+    academic_layout: bool,
 ) -> AppResult<()> {
     let parent = output_path
         .parent()
@@ -541,7 +554,8 @@ fn run_export_docx_atomic(
     let temporary_string = temporary.to_string_lossy().into_owned();
 
     run_export_docx(pandoc_path, markdown, doc_dir, &temporary_string, options)?;
-    if options.reference_doc.is_none() {
+    // 论文排版只作用于内置模板；选了自定义 reference.docx 就只按开关做字体规范化。
+    if options.reference_doc.is_none() && academic_layout {
         patch_builtin_default_template(&temporary, normalize_fonts)?;
     } else if normalize_fonts {
         normalize_docx_fonts(&temporary)?;
@@ -947,13 +961,39 @@ fn relationship_id_for_target(xml: &str, target: &str) -> Option<String> {
 }
 
 /// 为文档增加 A4 页面、约 2.5 cm 页边距和默认页码页脚。
+/// 定位文档级（body 末尾的那一个）`w:sectPr`。
+///
+/// 不能直接取第一个：文档里有分节符时，靠前的 `w:sectPr` 是段落级的
+/// （包在 `w:pPr` 里），页面设置写到那上面只会改到其中一节。文档级的那个
+/// 永远是 body 的最后一个子元素，所以从后往前找。
+fn body_section_start(xml: &str) -> Option<usize> {
+    let body_end = xml.rfind("</w:body>").unwrap_or(xml.len());
+    let mut offset = 0;
+    let mut found = None;
+    while let Some(relative) = find_word_tag_start(&xml[offset..], "<w:sectPr") {
+        let start = offset + relative;
+        if start >= body_end {
+            break;
+        }
+        // 段落级的 sectPr 一定位于某个 w:pPr 内部，文档级的不是。
+        let enclosing_paragraph_properties = xml[..start]
+            .rfind("<w:pPr")
+            .is_some_and(|ppr| xml[ppr..start].find("</w:pPr>").is_none());
+        if !enclosing_paragraph_properties {
+            found = Some(start);
+        }
+        offset = start + "<w:sectPr".len();
+    }
+    found
+}
+
 fn patch_document_page_layout(xml: &str, footer_rel_id: &str) -> String {
     const PAGE_SIZE: &str = r#"<w:pgSz w:w="11906" w:h="16838"/>"#;
     const PAGE_MARGINS: &str = r#"<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>"#;
     let footer_reference =
         format!(r#"<w:footerReference w:type="default" r:id="{footer_rel_id}"/>"#);
 
-    let Some(section_start) = xml.find("<w:sectPr") else {
+    let Some(section_start) = body_section_start(xml) else {
         return xml.to_owned();
     };
     let Some(section_open_end_rel) = xml[section_start..].find('>') else {
@@ -1146,12 +1186,14 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
         xml = patch_style_block_by_id(&xml, style_id, |block| {
             patch_paragraph_style(
                 block,
-                Some(r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#),
-                Some(r#"<w:ind w:firstLine="480"/>"#),
-                None,
-                Some(24),
-                None,
-                None,
+                &ParagraphStyle {
+                    spacing: Some(
+                        r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#,
+                    ),
+                    indent: Some(r#"<w:ind w:firstLine="480"/>"#),
+                    size: Some(24),
+                    ..ParagraphStyle::default()
+                },
             )
         });
     }
@@ -1161,24 +1203,26 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
     xml = patch_style_block_by_id(&xml, "Compact", |block| {
         patch_paragraph_style(
             block,
-            Some(r#"<w:spacing w:before="36" w:after="36" w:line="240" w:lineRule="auto"/>"#),
-            Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
-            None,
-            None,
-            None,
-            None,
+            &ParagraphStyle {
+                spacing: Some(
+                    r#"<w:spacing w:before="36" w:after="36" w:line="240" w:lineRule="auto"/>"#,
+                ),
+                indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                ..ParagraphStyle::default()
+            },
         )
     });
     // BlockText 已经有左右缩进，但需要显式保留原来的单倍行距。
     xml = patch_style_block_by_id(&xml, "BlockText", |block| {
         patch_paragraph_style(
             block,
-            Some(r#"<w:spacing w:before="100" w:after="100" w:line="240" w:lineRule="auto"/>"#),
-            Some(r#"<w:ind w:firstLine="0" w:left="480" w:right="480"/>"#),
-            None,
-            None,
-            None,
-            None,
+            &ParagraphStyle {
+                spacing: Some(
+                    r#"<w:spacing w:before="100" w:after="100" w:line="240" w:lineRule="auto"/>"#,
+                ),
+                indent: Some(r#"<w:ind w:firstLine="0" w:left="480" w:right="480"/>"#),
+                ..ParagraphStyle::default()
+            },
         )
     });
 
@@ -1186,12 +1230,16 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
     xml = patch_style_block_by_id(&xml, "Title", |block| {
         patch_paragraph_style(
             block,
-            Some(r#"<w:spacing w:before="0" w:after="160" w:line="240" w:lineRule="auto"/>"#),
-            Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
-            Some(r#"<w:jc w:val="center"/>"#),
-            Some(36),
-            Some(true),
-            None,
+            &ParagraphStyle {
+                spacing: Some(
+                    r#"<w:spacing w:before="0" w:after="160" w:line="240" w:lineRule="auto"/>"#,
+                ),
+                indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                alignment: Some(r#"<w:jc w:val="center"/>"#),
+                size: Some(36),
+                bold: Some(true),
+                ..ParagraphStyle::default()
+            },
         )
     });
     xml = patch_style_block_by_id(&xml, "TitleChar", |block| {
@@ -1201,12 +1249,15 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
         xml = patch_style_block_by_id(&xml, style_id, |block| {
             patch_paragraph_style(
                 block,
-                Some(r#"<w:spacing w:before="0" w:after="80" w:line="240" w:lineRule="auto"/>"#),
-                Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
-                Some(r#"<w:jc w:val="center"/>"#),
-                Some(24),
-                None,
-                None,
+                &ParagraphStyle {
+                    spacing: Some(
+                        r#"<w:spacing w:before="0" w:after="80" w:line="240" w:lineRule="auto"/>"#,
+                    ),
+                    indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                    alignment: Some(r#"<w:jc w:val="center"/>"#),
+                    size: Some(24),
+                    ..ParagraphStyle::default()
+                },
             )
         });
     }
@@ -1218,23 +1269,29 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
     xml = patch_style_block_by_id(&xml, "AbstractTitle", |block| {
         patch_paragraph_style(
             block,
-            Some(r#"<w:spacing w:before="240" w:after="80" w:line="240" w:lineRule="auto"/>"#),
-            Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
-            Some(r#"<w:jc w:val="center"/>"#),
-            Some(24),
-            Some(true),
-            None,
+            &ParagraphStyle {
+                spacing: Some(
+                    r#"<w:spacing w:before="240" w:after="80" w:line="240" w:lineRule="auto"/>"#,
+                ),
+                indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                alignment: Some(r#"<w:jc w:val="center"/>"#),
+                size: Some(24),
+                bold: Some(true),
+                ..ParagraphStyle::default()
+            },
         )
     });
     xml = patch_style_block_by_id(&xml, "Abstract", |block| {
         patch_paragraph_style(
             block,
-            Some(r#"<w:spacing w:before="0" w:after="120" w:line="360" w:lineRule="auto"/>"#),
-            Some(r#"<w:ind w:firstLine="480"/>"#),
-            None,
-            Some(24),
-            None,
-            None,
+            &ParagraphStyle {
+                spacing: Some(
+                    r#"<w:spacing w:before="0" w:after="120" w:line="360" w:lineRule="auto"/>"#,
+                ),
+                indent: Some(r#"<w:ind w:firstLine="480"/>"#),
+                size: Some(24),
+                ..ParagraphStyle::default()
+            },
         )
     });
 
@@ -1247,17 +1304,20 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
         ("Heading5", 24, 120, 60),
         ("Heading6", 24, 120, 60),
     ] {
+        let spacing = format!(
+            r#"<w:spacing w:before="{before}" w:after="{after}" w:line="360" w:lineRule="auto"/>"#
+        );
         xml = patch_style_block_by_id(&xml, style_id, |block| {
             let block = patch_paragraph_style(
                 block,
-                Some(&format!(
-                    r#"<w:spacing w:before="{before}" w:after="{after}" w:line="360" w:lineRule="auto"/>"#
-                )),
-                Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
-                Some(r#"<w:jc w:val="left"/>"#),
-                Some(size),
-                Some(true),
-                None,
+                &ParagraphStyle {
+                    spacing: Some(&spacing),
+                    indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                    alignment: Some(r#"<w:jc w:val="left"/>"#),
+                    size: Some(size),
+                    bold: Some(true),
+                    ..ParagraphStyle::default()
+                },
             );
             replace_or_insert_color_in_rpr(&block, "000000")
         });
@@ -1274,12 +1334,16 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
         xml = patch_style_block_by_id(&xml, style_id, |block| {
             patch_paragraph_style(
                 block,
-                Some(r#"<w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/>"#),
-                Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
-                Some(r#"<w:jc w:val="center"/>"#),
-                Some(21),
-                None,
-                Some(false),
+                &ParagraphStyle {
+                    spacing: Some(
+                        r#"<w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/>"#,
+                    ),
+                    indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
+                    alignment: Some(r#"<w:jc w:val="center"/>"#),
+                    size: Some(21),
+                    italic: Some(false),
+                    ..ParagraphStyle::default()
+                },
             )
         });
     }
@@ -1288,12 +1352,15 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
     xml = patch_style_block_by_id(&xml, "Bibliography", |block| {
         patch_paragraph_style(
             block,
-            Some(r#"<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>"#),
-            Some(r#"<w:ind w:left="480" w:hanging="480"/>"#),
-            Some(r#"<w:jc w:val="left"/>"#),
-            Some(21),
-            None,
-            None,
+            &ParagraphStyle {
+                spacing: Some(
+                    r#"<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>"#,
+                ),
+                indent: Some(r#"<w:ind w:left="480" w:hanging="480"/>"#),
+                alignment: Some(r#"<w:jc w:val="left"/>"#),
+                size: Some(21),
+                ..ParagraphStyle::default()
+            },
         )
     });
 
@@ -1322,26 +1389,33 @@ where
 }
 
 /// 改写段落样式的段落属性和运行属性。
-fn patch_paragraph_style(
-    block: &str,
-    spacing: Option<&str>,
-    indent: Option<&str>,
-    alignment: Option<&str>,
+/// 一个段落样式要改写的属性；`None` 表示保持原样。
+///
+/// 用具名字段而不是一串位置参数：调用处清一色是
+/// `None, Some(24), None, None`，读的人根本看不出哪个 None 是对齐、哪个是斜体，
+/// 而且加一个属性就要把每个调用点都改一遍。
+#[derive(Default)]
+struct ParagraphStyle<'a> {
+    spacing: Option<&'a str>,
+    indent: Option<&'a str>,
+    alignment: Option<&'a str>,
     size: Option<u32>,
     bold: Option<bool>,
     italic: Option<bool>,
-) -> String {
+}
+
+fn patch_paragraph_style(block: &str, style: &ParagraphStyle) -> String {
     let mut block = block.to_owned();
-    if let Some(spacing) = spacing {
+    if let Some(spacing) = style.spacing {
         block = replace_or_insert_ppr_child(&block, "spacing", spacing);
     }
-    if let Some(indent) = indent {
+    if let Some(indent) = style.indent {
         block = replace_or_insert_ppr_child(&block, "ind", indent);
     }
-    if let Some(alignment) = alignment {
+    if let Some(alignment) = style.alignment {
         block = replace_or_insert_ppr_child(&block, "jc", alignment);
     }
-    patch_run_style(&block, size, bold, italic)
+    patch_run_style(&block, style.size, style.bold, style.italic)
 }
 
 /// 改写运行属性中的字号、粗体和斜体；未指定的属性保持原样。
@@ -1451,10 +1525,9 @@ fn replace_or_insert_self_closing_child(
 ) -> String {
     let needle = format!("<w:{tag_name}");
     if let Some(tag_start) = find_word_tag_start(container, &needle) {
-        let Some(tag_end_rel) = container[tag_start..].find("/>") else {
+        let Some(tag_end) = element_end(container, tag_start, tag_name) else {
             return container.to_owned();
         };
-        let tag_end = tag_start + tag_end_rel + 2;
         return format!(
             "{}{}{}",
             &container[..tag_start],
@@ -1469,6 +1542,23 @@ fn replace_or_insert_self_closing_child(
         replacement,
         &container[insert_at..]
     )
+}
+
+/// 返回从 `start` 开始的这个元素在 XML 里的结束偏移（开区间右端）。
+///
+/// 这些位置本该都是自闭合标签，但不能靠 `find("/>")` 去找结尾：真遇到
+/// `<w:ind ...></w:ind>` 这种写法时，它会一路匹配到后面某个无关标签的 `/>`，
+/// 把中间整段 XML 一起替换掉。所以先只在本标签的 `>` 之内判断是不是自闭合，
+/// 不是的话再去找配对的结束标签。
+fn element_end(xml: &str, start: usize, tag_name: &str) -> Option<usize> {
+    let open_end_rel = xml[start..].find('>')?;
+    let open_end = start + open_end_rel;
+    if xml.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
+        return Some(open_end + 1);
+    }
+    let close = format!("</w:{tag_name}>");
+    let close_rel = xml[open_end + 1..].find(&close)?;
+    Some(open_end + 1 + close_rel + close.len())
 }
 
 /// 查找完整的 w:xxx 标签，避免把 w:sz 当成 w:szCs 的前缀。
@@ -2008,6 +2098,41 @@ mod tests {
     }
 
     #[test]
+    fn page_layout_targets_the_document_section_not_a_paragraph_one() {
+        // 段落级 sectPr（包在 w:pPr 里）代表分节符，页面设置必须落到 body 末尾那一个。
+        let document = concat!(
+            r#"<w:document><w:body>"#,
+            r#"<w:p><w:pPr><w:sectPr><w:pgSz w:w="1" w:h="2"/></w:sectPr></w:pPr></w:p>"#,
+            r#"<w:sectPr><w:pgSz w:w="3" w:h="4"/></w:sectPr>"#,
+            r#"</w:body></w:document>"#
+        );
+        let patched = patch_document_page_layout(document, "rIdFooter1");
+
+        let paragraph_end = patched.find("</w:pPr>").expect("段落属性应保留");
+        assert!(patched[..paragraph_end].contains(r#"<w:pgSz w:w="1" w:h="2"/>"#));
+        assert!(!patched[..paragraph_end].contains("footerReference"));
+        assert!(patched[paragraph_end..].contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
+        assert!(patched[paragraph_end..].contains("footerReference"));
+    }
+
+    #[test]
+    fn replacing_a_non_self_closing_child_does_not_swallow_later_xml() {
+        // 早先用 find("/>") 定位结尾，遇到成对写法会一路吃到后面无关标签的 "/>"。
+        let container = r#"<w:pPr><w:ind w:firstLine="1"></w:ind><w:jc w:val="left"/></w:pPr>"#;
+        let patched = replace_or_insert_self_closing_child(
+            container,
+            "ind",
+            r#"<w:ind w:firstLine="480"/>"#,
+            "</w:pPr>",
+        );
+
+        assert_eq!(
+            patched,
+            r#"<w:pPr><w:ind w:firstLine="480"/><w:jc w:val="left"/></w:pPr>"#
+        );
+    }
+
+    #[test]
     fn theme_xml_gets_correct_fonts() {
         let patched = patch_theme_xml(FIXTURE_THEME);
         assert!(
@@ -2077,6 +2202,7 @@ mod tests {
             &output,
             &options,
             false,
+            false,
         )
         .expect_err("不存在的 Pandoc 应导出失败");
 
@@ -2122,7 +2248,7 @@ mod tests {
             table_of_contents: false,
             number_sections: false,
         };
-        run_export_docx_atomic(&pandoc, md, None, &out, &options, true)
+        run_export_docx_atomic(&pandoc, md, None, &out, &options, true, true)
             .expect("export_docx 应成功");
         assert!(out.exists(), "docx 文件应存在");
 
@@ -2216,7 +2342,7 @@ mod tests {
         };
         let dir = tempfile::tempdir().expect("创建临时目录失败");
         let output = dir.path().join("reference.docx");
-        run_export_default_template(&pandoc, &output, true).expect("默认模板应能导出");
+        run_export_default_template(&pandoc, &output, true, true).expect("默认模板应能导出");
 
         let bytes = std::fs::read(output).expect("默认模板应可读");
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).expect("模板应为有效 docx");
