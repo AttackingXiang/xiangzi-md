@@ -56,6 +56,7 @@ pub fn run() {
             commands::workspace::open_folder_path,
             commands::workspace::open_containing_folder,
             commands::workspace::read_file,
+            commands::workspace::stat_path,
             commands::workspace::read_binary_file,
             commands::workspace::write_file,
             commands::workspace::write_binary_file,

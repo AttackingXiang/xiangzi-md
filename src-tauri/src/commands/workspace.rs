@@ -4,7 +4,7 @@ use crate::{
         error::AppResult,
         models::{
             FileNode, FileVersion, Folder, ListedFilesResponse, NamedPath, OpenedFile, PathResult,
-            WriteResult,
+            PathStat, WriteResult,
         },
     },
     infrastructure::{settings::SettingsStore, workspace},
@@ -36,6 +36,32 @@ pub async fn open_containing_folder(
 #[tauri::command]
 pub async fn read_file(app: AppHandle, path: String) -> AppResult<OpenedFile> {
     blocking(move || workspace::read_file(&app, &PathBuf::from(path))).await
+}
+
+/// 只做一次 metadata 调用，不读内容也不展开目录。作用域外或不存在的路径统一
+/// 报告成"不存在"，不额外泄露"存在但无权访问"这一位信息。
+#[tauri::command]
+pub async fn stat_path(app: AppHandle, path: String) -> AppResult<PathStat> {
+    blocking(move || {
+        let path = PathBuf::from(path);
+        if workspace::ensure_allowed(&app, &path).is_err() {
+            return Ok(PathStat {
+                exists: false,
+                is_dir: false,
+            });
+        }
+        Ok(match std::fs::metadata(&path) {
+            Ok(metadata) => PathStat {
+                exists: true,
+                is_dir: metadata.is_dir(),
+            },
+            Err(_) => PathStat {
+                exists: false,
+                is_dir: false,
+            },
+        })
+    })
+    .await
 }
 
 #[tauri::command]

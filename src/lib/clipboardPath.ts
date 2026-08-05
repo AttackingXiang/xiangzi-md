@@ -5,7 +5,12 @@
  * file URL. Keep this parser deliberately conservative: a URL or a paragraph
  * of text must never turn into a path-open prompt.
  */
-export function clipboardPath(text: string): string | null {
+import { currentDesktopPlatform, type DesktopPlatform } from './platform'
+
+export function clipboardPath(
+  text: string,
+  platform: DesktopPlatform = currentDesktopPlatform(),
+): string | null {
   const lines = text
     .trim()
     .split(/\r?\n/u)
@@ -25,7 +30,7 @@ export function clipboardPath(text: string): string | null {
   }
   if (!value) return null
 
-  if (/^file:/iu.test(value)) return fileUrlPath(value)
+  if (/^file:/iu.test(value)) return fileUrlPath(value, platform)
 
   // Accept POSIX, Windows drive, and Windows UNC paths. Relative paths and
   // ordinary schemes (https:, mailto:, etc.) are intentionally excluded.
@@ -35,15 +40,18 @@ export function clipboardPath(text: string): string | null {
   return null
 }
 
-function fileUrlPath(value: string): string | null {
+function fileUrlPath(value: string, platform: DesktopPlatform): string | null {
   try {
     const url = new URL(value)
     if (url.protocol.toLowerCase() !== 'file:') return null
     const pathname = decodeURIComponent(url.pathname)
     if (!pathname) return null
 
-    // file://server/share/... is a UNC path. localhost is the local machine.
+    // file://server/share/... is a UNC path, which only Windows can open.
+    // Emitting the `\\server\share` form elsewhere just produces a path that
+    // is guaranteed to fail the existence probe.
     if (url.hostname && url.hostname.toLowerCase() !== 'localhost') {
+      if (platform !== 'windows') return null
       return `\\\\${url.hostname}${pathname.replace(/\//gu, '\\')}`
     }
 

@@ -8,9 +8,16 @@ describe('clipboardPath', () => {
     expect(clipboardPath('\\\\server\\share\\Notes')).toBe('\\\\server\\share\\Notes')
   })
 
-  it('decodes local and network file URLs', () => {
+  it('decodes local file URLs', () => {
     expect(clipboardPath('file:///Users/me/My%20Notes/a.md')).toBe('/Users/me/My Notes/a.md')
-    expect(clipboardPath('file://server/share/My%20Notes')).toBe('\\\\server\\share\\My Notes')
+  })
+
+  it('only turns a network file URL into a UNC path on Windows', () => {
+    expect(clipboardPath('file://server/share/My%20Notes', 'windows')).toBe(
+      '\\\\server\\share\\My Notes',
+    )
+    expect(clipboardPath('file://server/share/My%20Notes', 'macos')).toBeNull()
+    expect(clipboardPath('file://server/share/My%20Notes', 'linux')).toBeNull()
   })
 
   it('allows surrounding quotes and trailing newlines', () => {

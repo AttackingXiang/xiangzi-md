@@ -69,6 +69,15 @@ pub struct PathResult {
     pub path: String,
 }
 
+/// 路径存在性探测结果。用来回答"这是文件还是目录"而不产生读取副作用——
+/// 用 read_file / open_folder_path 去试探会把整个文件读进内存、把整棵目录树扫一遍。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathStat {
+    pub exists: bool,
+    pub is_dir: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchMatch {
