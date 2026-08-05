@@ -13,6 +13,7 @@ import {
   searchMountedEditor,
   subscribeEditorAvailability,
 } from '../lib/searchBridge'
+import { findNavigationBridge } from '../lib/findNavigationBridge'
 import { t } from '../lib/i18n'
 
 interface Props {
@@ -108,6 +109,15 @@ export default function FindBar({
     if (!find) return
     searchPrev()
   }
+
+  // 全局 ⌘G / F3 通过这个桥推进匹配，不需要焦点回到查找框。
+  useEffect(() => {
+    findNavigationBridge.setHandler((direction) => {
+      if (direction === 'next') goNext()
+      else goPrev()
+    })
+    return () => findNavigationBridge.setHandler(null)
+  })
 
   return (
     <div className="findbar">

@@ -57,6 +57,22 @@
       "defaultBinding": "Mod+Shift+F"
     },
     {
+      "id": "find-next",
+      "category": "navigation",
+      "labelZh": "下一个匹配",
+      "labelEn": "Find Next",
+      "defaultBinding": "F3",
+      "macDefaultBinding": "Mod+G"
+    },
+    {
+      "id": "find-previous",
+      "category": "navigation",
+      "labelZh": "上一个匹配",
+      "labelEn": "Find Previous",
+      "defaultBinding": "Shift+F3",
+      "macDefaultBinding": "Mod+Shift+G"
+    },
+    {
       "id": "select-all",
       "category": "navigation",
       "labelZh": "全选文章",

@@ -22,6 +22,8 @@ export interface RequestBridge<Args extends unknown[]> {
   setHandler(this: void, handler: RequestHandler<Args> | null): void
   /** Fires a request. Silently dropped if no handler is registered (warns in dev). */
   request(this: void, ...args: Args): void
+  /** Whether an owner is currently mounted. Lets callers pick a fallback instead of dropping. */
+  hasHandler(this: void): boolean
   /** Clears the handler. For tests only — production code unregisters via setHandler(null). */
   reset(this: void): void
 }
@@ -48,6 +50,9 @@ export function createRequestBridge<Args extends unknown[]>(name: string): Reque
         )
       }
       handler = next
+    },
+    hasHandler(): boolean {
+      return handler !== null
     },
     request(...args: Args): void {
       if (!handler) {

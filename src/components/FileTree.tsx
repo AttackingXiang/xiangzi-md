@@ -5,6 +5,7 @@ import type { FileNode } from '../types'
 import { canDropTreeItem } from '../lib/treeDrag'
 import { sortNodes, type SortContext } from '../lib/fileTreeSort'
 import { t } from '../lib/i18n'
+import { isTypeaheadKey, nextTypeaheadIndex, pushTypeaheadChar } from '../lib/treeTypeahead'
 import { FocusedPathContext } from './fileTreeFocusContext'
 
 interface Props {
@@ -318,6 +319,25 @@ const TreeNode = memo(function TreeNode({
     row.parentElement?.querySelector<HTMLElement>('ul[role="group"] .tree-row') ?? null
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    // 首字母跳转：长目录里比反复按方向键快得多，是 tree 控件的标准行为。
+    if (isTypeaheadKey(e)) {
+      const container = e.currentTarget.closest<HTMLElement>('[role="tree"]')
+      const rows = container
+        ? Array.from(container.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+        : []
+      if (rows.length === 0) return
+      const query = pushTypeaheadChar(e.key)
+      const target = nextTypeaheadIndex(
+        rows.map((row) => row.dataset.treeName ?? ''),
+        rows.indexOf(e.currentTarget),
+        query,
+      )
+      if (target !== null) {
+        e.preventDefault()
+        rows[target]?.focus()
+      }
+      return
+    }
     switch (e.key) {
       case 'ArrowDown':
       case 'ArrowUp':
@@ -389,6 +409,7 @@ const TreeNode = memo(function TreeNode({
           className={`tree-row dir${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
           style={indent}
           data-tree-path={node.path}
+          data-tree-name={node.name}
           role="treeitem"
           aria-level={depth + 1}
           aria-selected={isActive}
@@ -455,6 +476,7 @@ const TreeNode = memo(function TreeNode({
         className={`tree-row file${node.openable ? '' : ' unsupported'}${isActive ? ' active' : ''}${isRevealed ? ' reveal-flash' : ''}${isDragging ? ' dragging' : ''}`}
         style={indent}
         data-tree-path={node.path}
+        data-tree-name={node.name}
         role="treeitem"
         aria-level={depth + 1}
         tabIndex={isRovingTabStop ? 0 : -1}

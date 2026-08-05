@@ -11,6 +11,8 @@ export type ShortcutAction =
   | 'close-tab'
   | 'find'
   | 'search-in-folder'
+  | 'find-next'
+  | 'find-previous'
   | 'select-all'
   | 'command-palette'
   | 'toggle-sidebar'

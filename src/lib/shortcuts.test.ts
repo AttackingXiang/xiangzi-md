@@ -158,6 +158,8 @@ describe('shared shortcut registry', () => {
       'close-tab': true,
       find: true,
       'search-in-folder': true,
+      'find-next': true,
+      'find-previous': true,
       'select-all': true,
       'command-palette': true,
       'toggle-sidebar': true,

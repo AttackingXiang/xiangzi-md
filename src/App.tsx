@@ -1362,6 +1362,8 @@ export default function App(): JSX.Element {
                   root={folder.root}
                   reloadKey={searchReloadKey}
                   focusRequest={searchFocusRequest}
+                  initialMode={settings.folderSearchMode}
+                  onModeChange={(folderSearchMode) => void saveSettings({ folderSearchMode })}
                   onOpenResult={openSearchResult}
                   onOpenFile={(path) => void openPath(path, baseName(path))}
                   onBack={() => setSearchView(false)}

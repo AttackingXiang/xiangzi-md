@@ -151,6 +151,8 @@ pub struct AppSettings {
     pub show_selection_toolbar: bool,
     /// 搜索命中正文时用于定位焦点的动画预设。
     pub search_focus_effect: String,
+    /// 文件夹搜索的范围：all / content / filename。
+    pub folder_search_mode: String,
     pub text_color_presets: Vec<String>,
     pub default_text_color: String,
     pub highlight_color_presets: Vec<String>,
@@ -293,6 +295,7 @@ impl Default for AppSettings {
             show_toolbar: false,
             show_selection_toolbar: false,
             search_focus_effect: "sparkle".into(),
+            folder_search_mode: "all".into(),
             text_color_presets: [
                 "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#2563eb", "#4f46e5",
                 "#9333ea", "#db2777", "#64748b",
@@ -389,6 +392,7 @@ pub struct SettingsPatch {
     pub show_toolbar: Option<bool>,
     pub show_selection_toolbar: Option<bool>,
     pub search_focus_effect: Option<String>,
+    pub folder_search_mode: Option<String>,
     pub text_color_presets: Option<Vec<String>>,
     pub default_text_color: Option<String>,
     pub highlight_color_presets: Option<Vec<String>>,

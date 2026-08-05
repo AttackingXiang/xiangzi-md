@@ -103,6 +103,12 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
         settings.search_focus_effect = "sparkle".into();
     }
     if !matches!(
+        settings.folder_search_mode.as_str(),
+        "all" | "content" | "filename"
+    ) {
+        settings.folder_search_mode = "all".into();
+    }
+    if !matches!(
         settings.table_auto_width.as_str(),
         "distribute" | "fit" | "equal"
     ) {
@@ -215,6 +221,10 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
         || !matches!(
             settings.search_focus_effect.as_str(),
             "off" | "sparkle" | "ring" | "confetti" | "shatter"
+        )
+        || !matches!(
+            settings.folder_search_mode.as_str(),
+            "all" | "content" | "filename"
         )
         || !matches!(
             settings.table_auto_width.as_str(),

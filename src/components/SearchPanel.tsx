@@ -7,6 +7,9 @@ import { t, getLang } from '../lib/i18n'
 
 interface Props {
   root: string
+  /** 上次使用的搜索范围，来自设置。 */
+  initialMode: FolderSearchMode
+  onModeChange: (mode: FolderSearchMode) => void
   /** 文件树变化或已打开文件保存后变化，用于清理旧搜索结果。 */
   reloadKey: string
   /** Incremented when the folder-search shortcut should return focus here. */
@@ -43,6 +46,8 @@ function highlight(text: string, query: string): JSX.Element {
 
 export default function SearchPanel({
   root,
+  initialMode,
+  onModeChange,
   reloadKey,
   focusRequest = 0,
   onOpenResult,
@@ -50,7 +55,7 @@ export default function SearchPanel({
   onBack,
 }: Props): JSX.Element {
   const [query, setQuery] = useState('')
-  const [mode, setMode] = useState<FolderSearchMode>('all')
+  const [mode, setMode] = useState<FolderSearchMode>(initialMode)
   const [results, setResults] = useState<SearchResult[]>([])
   const [searchMeta, setSearchMeta] = useState<{
     scannedFiles: number
@@ -183,7 +188,11 @@ export default function SearchPanel({
           id="folder-search-scope"
           className="search-scope"
           value={mode}
-          onChange={(e) => setMode(e.target.value as FolderSearchMode)}
+          onChange={(e) => {
+            const next = e.target.value as FolderSearchMode
+            setMode(next)
+            onModeChange(next)
+          }}
         >
           <option value="all">{t('文件名和内容')}</option>
           <option value="content">{t('仅搜索内容')}</option>

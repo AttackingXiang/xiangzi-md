@@ -12,6 +12,7 @@ import { desktop } from '../platform'
 import type { Folder, Tab } from '../types'
 import { shouldOpenFolderSearchFromTarget, useAppShortcuts } from './useAppShortcuts'
 import { clipboardCmd, editorCmd } from '../lib/editorCommands'
+import { findNavigationBridge } from '../lib/findNavigationBridge'
 import { t } from '../lib/i18n'
 import type { ShortcutAction } from '../lib/shortcuts'
 
@@ -199,6 +200,18 @@ export function useAppCommands(options: AppCommandOptions): {
         case 'close-tab':
           if (id) void closeTab(id)
           break
+        case 'find-next':
+        case 'find-previous': {
+          // 查找栏没开时先开——用户按 ⌘G 的意图就是"继续找"，
+          // 让他先按一次 ⌘F 是多余的。
+          const direction = action === 'find-next' ? 'next' : 'previous'
+          if (findNavigationBridge.hasHandler()) findNavigationBridge.request(direction)
+          else {
+            requestFindFocus()
+            setShowFind(true)
+          }
+          break
+        }
         case 'find':
           if (shouldOpenFolderSearchFromTarget(target ?? null)) {
             setShowFind(false)

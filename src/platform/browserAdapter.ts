@@ -166,6 +166,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     showToolbar: true,
     showSelectionToolbar: true,
     searchFocusEffect: 'sparkle',
+    folderSearchMode: 'all',
     textColorPresets: [
       '#dc2626',
       '#ea580c',

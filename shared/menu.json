@@ -19,296 +19,542 @@
   "menus": [
     {
       "id": "app",
-      "label": { "zh": "Xiangzi MD", "en": "Xiangzi MD" },
+      "label": {
+        "zh": "Xiangzi MD",
+        "en": "Xiangzi MD"
+      },
       "items": [
         {
           "kind": "native",
           "role": "about",
-          "label": { "zh": "关于 Xiangzi MD", "en": "About Xiangzi MD" }
+          "label": {
+            "zh": "关于 Xiangzi MD",
+            "en": "About Xiangzi MD"
+          }
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "open-settings",
-          "label": { "zh": "设置…", "en": "Settings…" },
+          "label": {
+            "zh": "设置…",
+            "en": "Settings…"
+          },
           "shortcut": "open-settings"
         },
         {
           "kind": "action",
           "id": "check-updates",
-          "label": { "zh": "检查更新…", "en": "Check for Updates…" }
+          "label": {
+            "zh": "检查更新…",
+            "en": "Check for Updates…"
+          }
         },
-        { "kind": "separator", "platforms": ["macos"] },
+        {
+          "kind": "separator",
+          "platforms": ["macos"]
+        },
         {
           "kind": "native",
           "role": "hide",
-          "label": { "zh": "隐藏", "en": "Hide" },
+          "label": {
+            "zh": "隐藏",
+            "en": "Hide"
+          },
           "platforms": ["macos"]
         },
         {
           "kind": "native",
           "role": "hideOthers",
-          "label": { "zh": "隐藏其他", "en": "Hide Others" },
+          "label": {
+            "zh": "隐藏其他",
+            "en": "Hide Others"
+          },
           "platforms": ["macos"]
         },
         {
           "kind": "native",
           "role": "showAll",
-          "label": { "zh": "全部显示", "en": "Show All" },
+          "label": {
+            "zh": "全部显示",
+            "en": "Show All"
+          },
           "platforms": ["macos"]
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "quit",
-          "label": { "zh": "退出 Xiangzi MD", "en": "Quit Xiangzi MD" },
+          "label": {
+            "zh": "退出 Xiangzi MD",
+            "en": "Quit Xiangzi MD"
+          },
           "accelerator": "Mod+Q"
         }
       ]
     },
     {
       "id": "file",
-      "label": { "zh": "文件", "en": "File" },
+      "label": {
+        "zh": "文件",
+        "en": "File"
+      },
       "items": [
         {
           "kind": "action",
           "id": "new-file",
-          "label": { "zh": "新建文件", "en": "New File" },
+          "label": {
+            "zh": "新建文件",
+            "en": "New File"
+          },
           "shortcut": "new-file"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "open-file",
-          "label": { "zh": "打开文件…", "en": "Open File…" },
+          "label": {
+            "zh": "打开文件…",
+            "en": "Open File…"
+          },
           "shortcut": "open-file"
         },
         {
           "kind": "action",
           "id": "open-folder",
-          "label": { "zh": "打开文件夹…", "en": "Open Folder…" },
+          "label": {
+            "zh": "打开文件夹…",
+            "en": "Open Folder…"
+          },
           "shortcut": "open-folder"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "save",
-          "label": { "zh": "保存", "en": "Save" },
+          "label": {
+            "zh": "保存",
+            "en": "Save"
+          },
           "shortcut": "save"
         },
         {
           "kind": "action",
           "id": "save-as",
-          "label": { "zh": "另存为…", "en": "Save As…" },
+          "label": {
+            "zh": "另存为…",
+            "en": "Save As…"
+          },
           "shortcut": "save-as"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "add-property",
-          "label": { "zh": "添加属性…", "en": "Add Property…" }
+          "label": {
+            "zh": "添加属性…",
+            "en": "Add Property…"
+          }
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "submenu",
-          "label": { "zh": "导出", "en": "Export" },
+          "label": {
+            "zh": "导出",
+            "en": "Export"
+          },
           "items": [
-            { "kind": "action", "id": "export-html", "label": { "zh": "HTML…", "en": "HTML…" } },
-            { "kind": "action", "id": "export-pdf", "label": { "zh": "PDF…", "en": "PDF…" } },
-            { "kind": "action", "id": "export-image", "label": { "zh": "图片…", "en": "Image…" } },
+            {
+              "kind": "action",
+              "id": "export-html",
+              "label": {
+                "zh": "HTML…",
+                "en": "HTML…"
+              }
+            },
+            {
+              "kind": "action",
+              "id": "export-pdf",
+              "label": {
+                "zh": "PDF…",
+                "en": "PDF…"
+              }
+            },
+            {
+              "kind": "action",
+              "id": "export-image",
+              "label": {
+                "zh": "图片…",
+                "en": "Image…"
+              }
+            },
             {
               "kind": "action",
               "id": "export-docx",
-              "label": { "zh": "Word 文档…", "en": "Word Document…" }
+              "label": {
+                "zh": "Word 文档…",
+                "en": "Word Document…"
+              }
             }
           ]
         },
         {
           "kind": "action",
           "id": "import-docx",
-          "label": { "zh": "导入 Word 文档…", "en": "Import Word Document…" }
+          "label": {
+            "zh": "导入 Word 文档…",
+            "en": "Import Word Document…"
+          }
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "close-tab",
-          "label": { "zh": "关闭标签页", "en": "Close Tab" },
+          "label": {
+            "zh": "关闭标签页",
+            "en": "Close Tab"
+          },
           "shortcut": "close-tab"
         }
       ]
     },
     {
       "id": "edit",
-      "label": { "zh": "编辑", "en": "Edit" },
+      "label": {
+        "zh": "编辑",
+        "en": "Edit"
+      },
       "items": [
-        { "kind": "native", "role": "undo", "label": { "zh": "撤销", "en": "Undo" } },
-        { "kind": "native", "role": "redo", "label": { "zh": "重做", "en": "Redo" } },
-        { "kind": "separator" },
-        { "kind": "native", "role": "cut", "label": { "zh": "剪切", "en": "Cut" } },
-        { "kind": "native", "role": "copy", "label": { "zh": "复制", "en": "Copy" } },
+        {
+          "kind": "native",
+          "role": "undo",
+          "label": {
+            "zh": "撤销",
+            "en": "Undo"
+          }
+        },
+        {
+          "kind": "native",
+          "role": "redo",
+          "label": {
+            "zh": "重做",
+            "en": "Redo"
+          }
+        },
+        {
+          "kind": "separator"
+        },
+        {
+          "kind": "native",
+          "role": "cut",
+          "label": {
+            "zh": "剪切",
+            "en": "Cut"
+          }
+        },
+        {
+          "kind": "native",
+          "role": "copy",
+          "label": {
+            "zh": "复制",
+            "en": "Copy"
+          }
+        },
         {
           "kind": "action",
           "id": "copy-as-plain-text",
-          "label": { "zh": "复制为纯文本", "en": "Copy as Plain Text" }
+          "label": {
+            "zh": "复制为纯文本",
+            "en": "Copy as Plain Text"
+          }
         },
-        { "kind": "native", "role": "paste", "label": { "zh": "粘贴", "en": "Paste" } },
+        {
+          "kind": "native",
+          "role": "paste",
+          "label": {
+            "zh": "粘贴",
+            "en": "Paste"
+          }
+        },
         {
           "kind": "action",
           "id": "select-all",
-          "label": { "zh": "全选", "en": "Select All" },
+          "label": {
+            "zh": "全选",
+            "en": "Select All"
+          },
           "shortcut": "select-all"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "find",
-          "label": { "zh": "查找", "en": "Find" },
+          "label": {
+            "zh": "查找",
+            "en": "Find"
+          },
           "shortcut": "find"
         },
         {
           "kind": "action",
           "id": "search-in-folder",
-          "label": { "zh": "在文件夹中搜索", "en": "Search in Folder" },
+          "label": {
+            "zh": "在文件夹中搜索",
+            "en": "Search in Folder"
+          },
           "shortcut": "search-in-folder"
+        },
+        {
+          "kind": "action",
+          "id": "find-next",
+          "label": {
+            "zh": "下一个匹配",
+            "en": "Find Next"
+          },
+          "shortcut": "find-next"
+        },
+        {
+          "kind": "action",
+          "id": "find-previous",
+          "label": {
+            "zh": "上一个匹配",
+            "en": "Find Previous"
+          },
+          "shortcut": "find-previous"
         }
       ]
     },
     {
       "id": "view",
-      "label": { "zh": "视图", "en": "View" },
+      "label": {
+        "zh": "视图",
+        "en": "View"
+      },
       "items": [
         {
           "kind": "action",
           "id": "toggle-sidebar",
-          "label": { "zh": "切换侧边栏", "en": "Toggle Sidebar" },
+          "label": {
+            "zh": "切换侧边栏",
+            "en": "Toggle Sidebar"
+          },
           "shortcut": "toggle-sidebar"
         },
         {
           "kind": "action",
           "id": "toggle-outline",
-          "label": { "zh": "大纲", "en": "Outline" },
+          "label": {
+            "zh": "大纲",
+            "en": "Outline"
+          },
           "shortcut": "toggle-outline"
         },
         {
           "kind": "action",
           "id": "toggle-source",
-          "label": { "zh": "切换源码模式", "en": "Toggle Source Mode" },
+          "label": {
+            "zh": "切换源码模式",
+            "en": "Toggle Source Mode"
+          },
           "shortcut": "toggle-source"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "toggle-focus",
-          "label": { "zh": "专注模式", "en": "Focus Mode" },
+          "label": {
+            "zh": "专注模式",
+            "en": "Focus Mode"
+          },
           "shortcut": "toggle-focus"
         },
         {
           "kind": "action",
           "id": "toggle-typewriter",
-          "label": { "zh": "打字机模式", "en": "Typewriter Mode" },
+          "label": {
+            "zh": "打字机模式",
+            "en": "Typewriter Mode"
+          },
           "shortcut": "toggle-typewriter"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "command-palette",
-          "label": { "zh": "命令面板", "en": "Command Palette" },
+          "label": {
+            "zh": "命令面板",
+            "en": "Command Palette"
+          },
           "shortcut": "command-palette"
         },
         {
           "kind": "action",
           "id": "show-shortcuts",
-          "label": { "zh": "快捷键", "en": "Shortcuts" },
+          "label": {
+            "zh": "快捷键",
+            "en": "Shortcuts"
+          },
           "shortcut": "show-shortcuts"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "zoom-reset",
-          "label": { "zh": "实际大小", "en": "Actual Size" },
+          "label": {
+            "zh": "实际大小",
+            "en": "Actual Size"
+          },
           "accelerator": "Mod+Shift+0"
         },
         {
           "kind": "action",
           "id": "zoom-in",
-          "label": { "zh": "放大", "en": "Zoom In" },
+          "label": {
+            "zh": "放大",
+            "en": "Zoom In"
+          },
           "accelerator": "Mod++"
         },
         {
           "kind": "action",
           "id": "zoom-out",
-          "label": { "zh": "缩小", "en": "Zoom Out" },
+          "label": {
+            "zh": "缩小",
+            "en": "Zoom Out"
+          },
           "accelerator": "Mod+-"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "native",
           "role": "fullscreen",
-          "label": { "zh": "切换全屏", "en": "Toggle Full Screen" }
+          "label": {
+            "zh": "切换全屏",
+            "en": "Toggle Full Screen"
+          }
         }
       ]
     },
     {
       "id": "tools",
-      "label": { "zh": "工具", "en": "Tools" },
+      "label": {
+        "zh": "工具",
+        "en": "Tools"
+      },
       "items": [
         {
           "kind": "action",
           "id": "toggle-toolbar",
-          "label": { "zh": "顶部工具栏", "en": "Top Toolbar" },
+          "label": {
+            "zh": "顶部工具栏",
+            "en": "Top Toolbar"
+          },
           "shortcut": "toggle-toolbar"
         },
         {
           "kind": "action",
           "id": "toggle-selection-toolbar",
-          "label": { "zh": "选中文本工具栏", "en": "Selection Toolbar" },
+          "label": {
+            "zh": "选中文本工具栏",
+            "en": "Selection Toolbar"
+          },
           "shortcut": "toggle-selection-toolbar"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "paragraph",
-          "label": { "zh": "正文", "en": "Paragraph" },
+          "label": {
+            "zh": "正文",
+            "en": "Paragraph"
+          },
           "shortcut": "paragraph"
         },
         {
           "kind": "submenu",
-          "label": { "zh": "标题", "en": "Heading" },
+          "label": {
+            "zh": "标题",
+            "en": "Heading"
+          },
           "items": [
             {
               "kind": "action",
               "id": "heading-1",
-              "label": { "zh": "标题 1", "en": "Heading 1" },
+              "label": {
+                "zh": "标题 1",
+                "en": "Heading 1"
+              },
               "shortcut": "heading-1"
             },
             {
               "kind": "action",
               "id": "heading-2",
-              "label": { "zh": "标题 2", "en": "Heading 2" },
+              "label": {
+                "zh": "标题 2",
+                "en": "Heading 2"
+              },
               "shortcut": "heading-2"
             },
             {
               "kind": "action",
               "id": "heading-3",
-              "label": { "zh": "标题 3", "en": "Heading 3" },
+              "label": {
+                "zh": "标题 3",
+                "en": "Heading 3"
+              },
               "shortcut": "heading-3"
             },
             {
               "kind": "action",
               "id": "heading-4",
-              "label": { "zh": "标题 4", "en": "Heading 4" },
+              "label": {
+                "zh": "标题 4",
+                "en": "Heading 4"
+              },
               "shortcut": "heading-4"
             },
             {
               "kind": "action",
               "id": "heading-5",
-              "label": { "zh": "标题 5", "en": "Heading 5" },
+              "label": {
+                "zh": "标题 5",
+                "en": "Heading 5"
+              },
               "shortcut": "heading-5"
             },
             {
               "kind": "action",
               "id": "heading-6",
-              "label": { "zh": "标题 6", "en": "Heading 6" },
+              "label": {
+                "zh": "标题 6",
+                "en": "Heading 6"
+              },
               "shortcut": "heading-6"
             }
           ]
@@ -316,83 +562,130 @@
         {
           "kind": "action",
           "id": "promote-heading",
-          "label": { "zh": "升级标题", "en": "Promote Heading" },
+          "label": {
+            "zh": "升级标题",
+            "en": "Promote Heading"
+          },
           "shortcut": "promote-heading"
         },
         {
           "kind": "action",
           "id": "demote-heading",
-          "label": { "zh": "降级标题", "en": "Demote Heading" },
+          "label": {
+            "zh": "降级标题",
+            "en": "Demote Heading"
+          },
           "shortcut": "demote-heading"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "bold",
-          "label": { "zh": "加粗", "en": "Bold" },
+          "label": {
+            "zh": "加粗",
+            "en": "Bold"
+          },
           "shortcut": "bold"
         },
         {
           "kind": "action",
           "id": "italic",
-          "label": { "zh": "斜体", "en": "Italic" },
+          "label": {
+            "zh": "斜体",
+            "en": "Italic"
+          },
           "shortcut": "italic"
         },
         {
           "kind": "action",
           "id": "strike",
-          "label": { "zh": "删除线", "en": "Strikethrough" },
+          "label": {
+            "zh": "删除线",
+            "en": "Strikethrough"
+          },
           "shortcut": "strike"
         },
         {
           "kind": "action",
           "id": "inline-code",
-          "label": { "zh": "行内代码", "en": "Inline Code" },
+          "label": {
+            "zh": "行内代码",
+            "en": "Inline Code"
+          },
           "shortcut": "inline-code"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "quote",
-          "label": { "zh": "引用", "en": "Quote" },
+          "label": {
+            "zh": "引用",
+            "en": "Quote"
+          },
           "shortcut": "quote"
         },
         {
           "kind": "action",
           "id": "code-block",
-          "label": { "zh": "代码块", "en": "Code Block" },
+          "label": {
+            "zh": "代码块",
+            "en": "Code Block"
+          },
           "shortcut": "code-block"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "bullet-list",
-          "label": { "zh": "无序列表", "en": "Bullet List" },
+          "label": {
+            "zh": "无序列表",
+            "en": "Bullet List"
+          },
           "shortcut": "bullet-list"
         },
         {
           "kind": "action",
           "id": "ordered-list",
-          "label": { "zh": "有序列表", "en": "Ordered List" },
+          "label": {
+            "zh": "有序列表",
+            "en": "Ordered List"
+          },
           "shortcut": "ordered-list"
         },
         {
           "kind": "action",
           "id": "task-list",
-          "label": { "zh": "任务列表", "en": "Task List" },
+          "label": {
+            "zh": "任务列表",
+            "en": "Task List"
+          },
           "shortcut": "task-list"
         },
-        { "kind": "separator" },
+        {
+          "kind": "separator"
+        },
         {
           "kind": "action",
           "id": "insert-table",
-          "label": { "zh": "插入表格", "en": "Insert Table" },
+          "label": {
+            "zh": "插入表格",
+            "en": "Insert Table"
+          },
           "shortcut": "insert-table"
         },
         {
           "kind": "action",
           "id": "insert-link",
-          "label": { "zh": "插入链接", "en": "Insert Link" },
+          "label": {
+            "zh": "插入链接",
+            "en": "Insert Link"
+          },
           "shortcut": "insert-link"
         }
       ]

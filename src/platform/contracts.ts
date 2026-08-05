@@ -128,6 +128,8 @@ export interface AppSettings {
   showSelectionToolbar: boolean
   /** Animation used to draw attention to the active search result in the document. */
   searchFocusEffect: SearchFocusEffect
+  /** Last used folder-search scope, restored when the panel reopens. */
+  folderSearchMode: FolderSearchMode
   textColorPresets: string[]
   defaultTextColor: string
   highlightColorPresets: string[]
