@@ -1,0 +1,292 @@
+{
+  "shortcuts": [
+    {
+      "id": "new-file",
+      "category": "file",
+      "labelZh": "新建文件",
+      "labelEn": "New File",
+      "defaultBinding": "Mod+N"
+    },
+    {
+      "id": "open-file",
+      "category": "file",
+      "labelZh": "打开文件",
+      "labelEn": "Open File",
+      "defaultBinding": "Mod+O"
+    },
+    {
+      "id": "open-folder",
+      "category": "file",
+      "labelZh": "打开文件夹",
+      "labelEn": "Open Folder",
+      "defaultBinding": "Mod+Shift+O"
+    },
+    {
+      "id": "save",
+      "category": "file",
+      "labelZh": "保存",
+      "labelEn": "Save",
+      "defaultBinding": "Mod+S"
+    },
+    {
+      "id": "save-as",
+      "category": "file",
+      "labelZh": "另存为",
+      "labelEn": "Save As",
+      "defaultBinding": "Mod+Shift+S"
+    },
+    {
+      "id": "close-tab",
+      "category": "file",
+      "labelZh": "关闭标签页",
+      "labelEn": "Close Tab",
+      "defaultBinding": "Mod+W"
+    },
+    {
+      "id": "find",
+      "category": "navigation",
+      "labelZh": "查找",
+      "labelEn": "Find",
+      "defaultBinding": "Mod+F"
+    },
+    {
+      "id": "search-in-folder",
+      "category": "navigation",
+      "labelZh": "在文件夹中搜索",
+      "labelEn": "Search in Folder",
+      "defaultBinding": "Mod+Shift+F"
+    },
+    {
+      "id": "select-all",
+      "category": "navigation",
+      "labelZh": "全选文章",
+      "labelEn": "Select All Document",
+      "defaultBinding": "Mod+A"
+    },
+    {
+      "id": "command-palette",
+      "category": "navigation",
+      "labelZh": "命令面板",
+      "labelEn": "Command Palette",
+      "defaultBinding": "Mod+Shift+P"
+    },
+    {
+      "id": "toggle-sidebar",
+      "category": "navigation",
+      "labelZh": "切换侧边栏",
+      "labelEn": "Toggle Sidebar",
+      "defaultBinding": "Mod+Shift+L"
+    },
+    {
+      "id": "toggle-outline",
+      "category": "navigation",
+      "labelZh": "切换大纲",
+      "labelEn": "Toggle Outline",
+      "defaultBinding": "Mod+Shift+1",
+      "macDefaultBinding": "Mod+Control+1"
+    },
+    {
+      "id": "toggle-source",
+      "category": "navigation",
+      "labelZh": "源码 / 所见即所得",
+      "labelEn": "Source / WYSIWYG",
+      "defaultBinding": "Mod+/"
+    },
+    {
+      "id": "toggle-focus",
+      "category": "navigation",
+      "labelZh": "专注模式",
+      "labelEn": "Focus Mode",
+      "defaultBinding": "F8"
+    },
+    {
+      "id": "toggle-typewriter",
+      "category": "navigation",
+      "labelZh": "打字机模式",
+      "labelEn": "Typewriter Mode",
+      "defaultBinding": "F9"
+    },
+    {
+      "id": "toggle-selection-toolbar",
+      "category": "navigation",
+      "labelZh": "切换选中文本快捷工具栏",
+      "labelEn": "Toggle Selection Toolbar",
+      "defaultBinding": "Mod+Alt+Shift+T"
+    },
+    {
+      "id": "toggle-toolbar",
+      "category": "navigation",
+      "labelZh": "切换顶部工具栏",
+      "labelEn": "Toggle Top Toolbar",
+      "defaultBinding": "Mod+Alt+Shift+B"
+    },
+    {
+      "id": "toggle-reading",
+      "category": "navigation",
+      "labelZh": "阅读模式",
+      "labelEn": "Reading Mode",
+      "defaultBinding": "Mod+Alt+Shift+R"
+    },
+    {
+      "id": "open-settings",
+      "category": "navigation",
+      "labelZh": "设置",
+      "labelEn": "Settings",
+      "defaultBinding": "Mod+,"
+    },
+    {
+      "id": "show-shortcuts",
+      "category": "navigation",
+      "labelZh": "快捷键设置",
+      "labelEn": "Keyboard Shortcuts",
+      "defaultBinding": "Mod+Shift+/"
+    },
+    {
+      "id": "heading-1",
+      "category": "format",
+      "labelZh": "一级标题",
+      "labelEn": "Heading 1",
+      "defaultBinding": "Mod+1"
+    },
+    {
+      "id": "heading-2",
+      "category": "format",
+      "labelZh": "二级标题",
+      "labelEn": "Heading 2",
+      "defaultBinding": "Mod+2"
+    },
+    {
+      "id": "heading-3",
+      "category": "format",
+      "labelZh": "三级标题",
+      "labelEn": "Heading 3",
+      "defaultBinding": "Mod+3"
+    },
+    {
+      "id": "heading-4",
+      "category": "format",
+      "labelZh": "四级标题",
+      "labelEn": "Heading 4",
+      "defaultBinding": "Mod+4"
+    },
+    {
+      "id": "heading-5",
+      "category": "format",
+      "labelZh": "五级标题",
+      "labelEn": "Heading 5",
+      "defaultBinding": "Mod+5"
+    },
+    {
+      "id": "heading-6",
+      "category": "format",
+      "labelZh": "六级标题",
+      "labelEn": "Heading 6",
+      "defaultBinding": "Mod+6"
+    },
+    {
+      "id": "paragraph",
+      "category": "format",
+      "labelZh": "设为正文",
+      "labelEn": "Paragraph",
+      "defaultBinding": "Mod+0"
+    },
+    {
+      "id": "promote-heading",
+      "category": "format",
+      "labelZh": "升级标题",
+      "labelEn": "Promote Heading",
+      "defaultBinding": "Mod+="
+    },
+    {
+      "id": "demote-heading",
+      "category": "format",
+      "labelZh": "降级标题",
+      "labelEn": "Demote Heading",
+      "defaultBinding": "Mod+-"
+    },
+    {
+      "id": "bold",
+      "category": "format",
+      "labelZh": "加粗",
+      "labelEn": "Bold",
+      "defaultBinding": "Mod+B"
+    },
+    {
+      "id": "italic",
+      "category": "format",
+      "labelZh": "斜体",
+      "labelEn": "Italic",
+      "defaultBinding": "Mod+I"
+    },
+    {
+      "id": "strike",
+      "category": "format",
+      "labelZh": "删除线",
+      "labelEn": "Strikethrough",
+      "defaultBinding": "Alt+Shift+5",
+      "macDefaultBinding": "Control+Shift+`"
+    },
+    {
+      "id": "inline-code",
+      "category": "format",
+      "labelZh": "行内代码",
+      "labelEn": "Inline Code",
+      "defaultBinding": "Mod+Shift+`"
+    },
+    {
+      "id": "insert-link",
+      "category": "format",
+      "labelZh": "插入链接",
+      "labelEn": "Insert Link",
+      "defaultBinding": "Mod+K"
+    },
+    {
+      "id": "quote",
+      "category": "format",
+      "labelZh": "引用",
+      "labelEn": "Quote",
+      "defaultBinding": "Mod+Shift+Q",
+      "macDefaultBinding": "Mod+Alt+Q"
+    },
+    {
+      "id": "code-block",
+      "category": "format",
+      "labelZh": "代码块",
+      "labelEn": "Code Block",
+      "defaultBinding": "Mod+Shift+K",
+      "macDefaultBinding": "Mod+Alt+C"
+    },
+    {
+      "id": "bullet-list",
+      "category": "format",
+      "labelZh": "无序列表",
+      "labelEn": "Bullet List",
+      "defaultBinding": "Mod+Shift+]",
+      "macDefaultBinding": "Mod+Alt+U"
+    },
+    {
+      "id": "insert-table",
+      "category": "format",
+      "labelZh": "插入表格",
+      "labelEn": "Insert Table",
+      "defaultBinding": "Mod+T",
+      "macDefaultBinding": "Mod+Alt+T"
+    },
+    {
+      "id": "ordered-list",
+      "category": "format",
+      "labelZh": "有序列表",
+      "labelEn": "Ordered List",
+      "defaultBinding": "Mod+Shift+[",
+      "macDefaultBinding": "Mod+Alt+O"
+    },
+    {
+      "id": "task-list",
+      "category": "format",
+      "labelZh": "任务列表",
+      "labelEn": "Task List",
+      "defaultBinding": "Mod+Shift+9",
+      "macDefaultBinding": "Mod+Alt+X"
+    }
+  ]
+}

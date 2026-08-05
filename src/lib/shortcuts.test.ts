@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ShortcutAction } from './shortcuts'
 import {
   SHORTCUT_DEFINITIONS,
   effectiveShortcut,
@@ -141,5 +142,58 @@ describe('shortcutFromKeyboardEvent', () => {
       expect(binding).not.toBeNull()
       expect(isSafeShortcut(binding!)).toBe(true)
     }
+  })
+})
+
+describe('shared shortcut registry', () => {
+  it('keeps the ShortcutAction union in step with shared/shortcuts.json', () => {
+    // 定义现在是 JSON 数据，联合类型仍然手写。这张表把两者绑在一起：漏写联合成员
+    // 编译不过，JSON 里多写或少写一个 id 则这条断言失败。
+    const declared: Record<ShortcutAction, true> = {
+      'new-file': true,
+      'open-file': true,
+      'open-folder': true,
+      save: true,
+      'save-as': true,
+      'close-tab': true,
+      find: true,
+      'search-in-folder': true,
+      'select-all': true,
+      'command-palette': true,
+      'toggle-sidebar': true,
+      'toggle-outline': true,
+      'toggle-source': true,
+      'toggle-focus': true,
+      'toggle-typewriter': true,
+      'toggle-selection-toolbar': true,
+      'toggle-toolbar': true,
+      'toggle-reading': true,
+      'open-settings': true,
+      'show-shortcuts': true,
+      'heading-1': true,
+      'heading-2': true,
+      'heading-3': true,
+      'heading-4': true,
+      'heading-5': true,
+      'heading-6': true,
+      paragraph: true,
+      'promote-heading': true,
+      'demote-heading': true,
+      bold: true,
+      italic: true,
+      strike: true,
+      'inline-code': true,
+      'insert-link': true,
+      quote: true,
+      'code-block': true,
+      'insert-table': true,
+      'bullet-list': true,
+      'ordered-list': true,
+      'task-list': true,
+    }
+
+    expect([...SHORTCUT_DEFINITIONS.map((definition) => definition.id)].sort()).toEqual(
+      Object.keys(declared).sort(),
+    )
   })
 })

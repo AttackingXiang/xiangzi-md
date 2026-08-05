@@ -21,6 +21,3 @@ export function emitCopyFeedback(format: CopyFeedbackFormat): void {
 }
 
 export const subscribeCopyFeedback = bridge.subscribe
-
-/** For tests only. */
-export const resetCopyFeedback = bridge.reset

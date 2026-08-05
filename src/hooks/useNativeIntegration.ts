@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 import { classifyExternalLink } from '../lib/externalLinks'
 import { tabsAreClean } from '../lib/documentState'
+import { clipboardCmd } from '../lib/editorCommands'
 import { t } from '../lib/i18n'
 import { isShortcutAction, type ShortcutAction } from '../lib/shortcuts'
 import { desktop } from '../platform'
@@ -48,7 +49,10 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
           dispatchShortcut(action)
           return
         }
-        if (action === 'add-property') onAddProperty()
+        // 复制为纯文本此前只有 Windows 的应用内菜单有；菜单模型统一后
+        // macOS 原生菜单也会派发它。
+        if (action === 'copy-as-plain-text') clipboardCmd.copyAsPlainText()
+        else if (action === 'add-property') onAddProperty()
         else if (action === 'export-html') void exportHTML()
         else if (action === 'export-pdf') void exportPDF()
         else if (action === 'export-image') void exportImage()

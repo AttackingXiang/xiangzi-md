@@ -1,36 +1,147 @@
 use crate::{domain::error::AppError, infrastructure::lifecycle::LifecycleState};
+use serde::Deserialize;
 use std::collections::BTreeMap;
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, Submenu, SubmenuBuilder},
     AppHandle, Emitter, Manager,
 };
 
-fn tr<'a>(language: &str, zh: &'a str, en: &'a str) -> &'a str {
-    if language == "en" {
-        en
-    } else {
-        zh
+/// 菜单结构与快捷键默认值都读自仓库根的 shared/*.json —— 与
+/// src/components/TitleBarMenu.tsx 同一份数据。以前两侧各写一份，已经漂移出
+/// 可见差异（导出在这边是子菜单、那边是平铺，标签文案不同，「复制为纯文本」
+/// 只有那边有，缩放加速键只有这边显示）。
+///
+/// include_str! 在编译期读入，cargo 会跟踪这两个文件，改了会自动重新编译。
+const MENU_JSON: &str = include_str!("../../../shared/menu.json");
+const SHORTCUTS_JSON: &str = include_str!("../../../shared/shortcuts.json");
+
+#[derive(Deserialize)]
+struct MenuModel {
+    menus: Vec<ModelSubmenu>,
+}
+
+#[derive(Deserialize)]
+struct ModelSubmenu {
+    id: String,
+    label: Label,
+    items: Vec<ModelItem>,
+}
+
+#[derive(Deserialize, Clone)]
+struct Label {
+    zh: String,
+    en: String,
+}
+
+impl Label {
+    fn get(&self, language: &str) -> &str {
+        if language == "en" {
+            &self.en
+        } else {
+            &self.zh
+        }
     }
 }
 
-fn action(
-    app: &AppHandle,
-    id: &str,
-    label: &str,
-    accelerator: Option<String>,
-) -> tauri::Result<MenuItem<tauri::Wry>> {
-    MenuItem::with_id(app, id, label, true, accelerator.as_deref())
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum ModelItem {
+    Separator {
+        #[serde(default)]
+        platforms: Option<Vec<String>>,
+    },
+    Action {
+        id: String,
+        label: Label,
+        #[serde(default)]
+        shortcut: Option<String>,
+        #[serde(default)]
+        accelerator: Option<String>,
+        #[serde(default)]
+        platforms: Option<Vec<String>>,
+    },
+    Submenu {
+        label: Label,
+        items: Vec<ModelItem>,
+        #[serde(default)]
+        platforms: Option<Vec<String>>,
+    },
+    Native {
+        role: String,
+        label: Label,
+        #[serde(default)]
+        platforms: Option<Vec<String>>,
+    },
 }
 
-fn accelerator(
-    shortcuts: &BTreeMap<String, String>,
-    id: &str,
-    default_binding: &str,
-) -> Option<String> {
-    let binding = shortcuts
-        .get(id)
-        .map(String::as_str)
-        .unwrap_or(default_binding);
+impl ModelItem {
+    fn platforms(&self) -> Option<&Vec<String>> {
+        match self {
+            ModelItem::Separator { platforms }
+            | ModelItem::Action { platforms, .. }
+            | ModelItem::Submenu { platforms, .. }
+            | ModelItem::Native { platforms, .. } => platforms.as_ref(),
+        }
+    }
+
+    fn applies_here(&self) -> bool {
+        match self.platforms() {
+            None => true,
+            Some(list) => list.iter().any(|name| name == current_platform()),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct ShortcutModel {
+    shortcuts: Vec<ShortcutDefinition>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ShortcutDefinition {
+    id: String,
+    default_binding: String,
+    #[serde(default)]
+    mac_default_binding: Option<String>,
+}
+
+fn current_platform() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    }
+}
+
+fn model() -> Result<MenuModel, AppError> {
+    serde_json::from_str(MENU_JSON)
+        .map_err(|error| AppError::new("menu_model_invalid", error.to_string()))
+}
+
+fn shortcut_defaults() -> Result<BTreeMap<String, String>, AppError> {
+    let parsed: ShortcutModel = serde_json::from_str(SHORTCUTS_JSON)
+        .map_err(|error| AppError::new("shortcut_model_invalid", error.to_string()))?;
+    Ok(parsed
+        .shortcuts
+        .into_iter()
+        .map(|definition| {
+            let binding = if cfg!(target_os = "macos") {
+                definition
+                    .mac_default_binding
+                    .unwrap_or(definition.default_binding)
+            } else {
+                definition.default_binding
+            };
+            (definition.id, binding)
+        })
+        .collect())
+}
+
+/// 把内部的 `Mod+Shift+X` 记法转成 Tauri 的加速键语法。
+fn to_accelerator(binding: &str) -> Option<String> {
     if binding.is_empty() {
         return None;
     }
@@ -47,463 +158,98 @@ fn accelerator(
     )
 }
 
-fn platform_default(mac: &'static str, other: &'static str) -> &'static str {
-    if cfg!(target_os = "macos") {
-        mac
-    } else {
-        other
+/// 用户自定义优先，其次是 shared/shortcuts.json 里的默认值。
+fn accelerator_for(
+    item_shortcut: Option<&str>,
+    item_accelerator: Option<&str>,
+    user_shortcuts: &BTreeMap<String, String>,
+    defaults: &BTreeMap<String, String>,
+) -> Option<String> {
+    if let Some(id) = item_shortcut {
+        let binding = user_shortcuts
+            .get(id)
+            .or_else(|| defaults.get(id))
+            .map(String::as_str)
+            .unwrap_or("");
+        return to_accelerator(binding);
     }
+    item_accelerator.and_then(to_accelerator)
 }
 
-fn app_menu(
+fn build_submenu(
     app: &AppHandle,
+    title: &str,
+    items: &[ModelItem],
     language: &str,
-    shortcuts: &BTreeMap<String, String>,
+    user_shortcuts: &BTreeMap<String, String>,
+    defaults: &BTreeMap<String, String>,
 ) -> tauri::Result<Submenu<tauri::Wry>> {
-    let settings = action(
-        app,
-        "open-settings",
-        tr(language, "设置…", "Settings…"),
-        accelerator(shortcuts, "open-settings", "Mod+,"),
-    )?;
-    let updates = MenuItem::with_id(
-        app,
-        "check-updates",
-        tr(language, "检查更新…", "Check for Updates…"),
-        true,
-        None::<&str>,
-    )?;
-    let quit = action(
-        app,
-        "quit",
-        tr(language, "退出 Xiangzi MD", "Quit Xiangzi MD"),
-        Some("CmdOrCtrl+Q".into()),
-    )?;
+    let mut builder = SubmenuBuilder::new(app, title);
+    // 平台过滤会留下开头/结尾/连续的分隔线，这里边构建边收拾。
+    let mut separator_pending = false;
+    let mut has_content = false;
 
-    SubmenuBuilder::new(app, "Xiangzi MD")
-        .about_with_text(
-            tr(language, "关于 Xiangzi MD", "About Xiangzi MD"),
-            Some(AboutMetadata::default()),
-        )
-        .separator()
-        .item(&settings)
-        .item(&updates)
-        .separator()
-        .hide_with_text(tr(language, "隐藏", "Hide"))
-        .hide_others_with_text(tr(language, "隐藏其他", "Hide Others"))
-        .show_all_with_text(tr(language, "全部显示", "Show All"))
-        .separator()
-        .item(&quit)
-        .build()
-}
+    for item in items.iter().filter(|item| item.applies_here()) {
+        if matches!(item, ModelItem::Separator { .. }) {
+            separator_pending = has_content;
+            continue;
+        }
+        if separator_pending {
+            builder = builder.separator();
+            separator_pending = false;
+        }
+        has_content = true;
 
-fn file_menu(
-    app: &AppHandle,
-    language: &str,
-    shortcuts: &BTreeMap<String, String>,
-) -> tauri::Result<Submenu<tauri::Wry>> {
-    let new_file = action(
-        app,
-        "new-file",
-        tr(language, "新建文件", "New File"),
-        accelerator(shortcuts, "new-file", "Mod+N"),
-    )?;
-    let open_file = action(
-        app,
-        "open-file",
-        tr(language, "打开文件…", "Open File…"),
-        accelerator(shortcuts, "open-file", "Mod+O"),
-    )?;
-    let open_folder = action(
-        app,
-        "open-folder",
-        tr(language, "打开文件夹…", "Open Folder…"),
-        accelerator(shortcuts, "open-folder", "Mod+Shift+O"),
-    )?;
-    let save = action(
-        app,
-        "save",
-        tr(language, "保存", "Save"),
-        accelerator(shortcuts, "save", "Mod+S"),
-    )?;
-    let save_as = action(
-        app,
-        "save-as",
-        tr(language, "另存为…", "Save As…"),
-        accelerator(shortcuts, "save-as", "Mod+Shift+S"),
-    )?;
-    let add_property = action(
-        app,
-        "add-property",
-        tr(language, "添加属性…", "Add Property…"),
-        None,
-    )?;
-    let export_html = action(app, "export-html", "HTML…", None)?;
-    let export_pdf = action(app, "export-pdf", "PDF…", None)?;
-    let export_image = action(app, "export-image", tr(language, "图片…", "Image…"), None)?;
-    let export_docx = action(
-        app,
-        "export-docx",
-        tr(language, "Word 文档…", "Word Document…"),
-        None,
-    )?;
-    let export = SubmenuBuilder::new(app, tr(language, "导出", "Export"))
-        .item(&export_html)
-        .item(&export_pdf)
-        .item(&export_image)
-        .item(&export_docx)
-        .build()?;
-    let import_docx = action(
-        app,
-        "import-docx",
-        tr(language, "导入 Word 文档…", "Import Word Document…"),
-        None,
-    )?;
-    let close_tab = action(
-        app,
-        "close-tab",
-        tr(language, "关闭标签页", "Close Tab"),
-        accelerator(shortcuts, "close-tab", "Mod+W"),
-    )?;
-
-    SubmenuBuilder::new(app, tr(language, "文件", "File"))
-        .item(&new_file)
-        .separator()
-        .item(&open_file)
-        .item(&open_folder)
-        .separator()
-        .item(&save)
-        .item(&save_as)
-        .separator()
-        .item(&add_property)
-        .separator()
-        .item(&export)
-        .item(&import_docx)
-        .separator()
-        .item(&close_tab)
-        .build()
-}
-
-fn edit_menu(
-    app: &AppHandle,
-    language: &str,
-    shortcuts: &BTreeMap<String, String>,
-) -> tauri::Result<Submenu<tauri::Wry>> {
-    let find = action(
-        app,
-        "find",
-        tr(language, "查找", "Find"),
-        accelerator(shortcuts, "find", "Mod+F"),
-    )?;
-    let search = action(
-        app,
-        "search-in-folder",
-        tr(language, "在文件夹中搜索", "Search in Folder"),
-        accelerator(shortcuts, "search-in-folder", "Mod+Shift+F"),
-    )?;
-    let select_all = action(
-        app,
-        "select-all",
-        tr(language, "全选", "Select All"),
-        accelerator(shortcuts, "select-all", "Mod+A"),
-    )?;
-
-    SubmenuBuilder::new(app, tr(language, "编辑", "Edit"))
-        .undo_with_text(tr(language, "撤销", "Undo"))
-        .redo_with_text(tr(language, "重做", "Redo"))
-        .separator()
-        .cut_with_text(tr(language, "剪切", "Cut"))
-        .copy_with_text(tr(language, "复制", "Copy"))
-        .paste_with_text(tr(language, "粘贴", "Paste"))
-        .item(&select_all)
-        .separator()
-        .item(&find)
-        .item(&search)
-        .build()
-}
-
-fn view_menu(
-    app: &AppHandle,
-    language: &str,
-    shortcuts: &BTreeMap<String, String>,
-) -> tauri::Result<Submenu<tauri::Wry>> {
-    let entries = [
-        (
-            "toggle-sidebar",
-            "切换侧边栏",
-            "Toggle Sidebar",
-            "CmdOrCtrl+Shift+L",
-        ),
-        (
-            "toggle-outline",
-            "大纲",
-            "Outline",
-            platform_default("CmdOrCtrl+Ctrl+1", "CmdOrCtrl+Shift+1"),
-        ),
-        (
-            "toggle-source",
-            "切换源码模式",
-            "Toggle Source Mode",
-            "CmdOrCtrl+/",
-        ),
-        ("toggle-focus", "专注模式", "Focus Mode", "F8"),
-        ("toggle-typewriter", "打字机模式", "Typewriter Mode", "F9"),
-        (
-            "command-palette",
-            "命令面板",
-            "Command Palette",
-            "CmdOrCtrl+Shift+P",
-        ),
-        ("show-shortcuts", "快捷键", "Shortcuts", "CmdOrCtrl+Shift+/"),
-    ];
-    let items = entries
-        .into_iter()
-        .map(|(id, zh, en, default_binding)| {
-            action(
-                app,
+        builder = match item {
+            ModelItem::Separator { .. } => unreachable!("separators are handled above"),
+            ModelItem::Action {
                 id,
-                tr(language, zh, en),
-                accelerator(shortcuts, id, &default_binding.replace("CmdOrCtrl", "Mod")),
-            )
-        })
-        .collect::<tauri::Result<Vec<_>>>()?;
-    let zoom_reset = action(
-        app,
-        "zoom-reset",
-        tr(language, "实际大小", "Actual Size"),
-        Some("CmdOrCtrl+Shift+0".into()),
-    )?;
-    let zoom_in = action(
-        app,
-        "zoom-in",
-        tr(language, "放大", "Zoom In"),
-        Some("CmdOrCtrl++".into()),
-    )?;
-    let zoom_out = action(
-        app,
-        "zoom-out",
-        tr(language, "缩小", "Zoom Out"),
-        Some("CmdOrCtrl+-".into()),
-    )?;
-    SubmenuBuilder::new(app, tr(language, "视图", "View"))
-        .item(&items[0])
-        .item(&items[1])
-        .item(&items[2])
-        .separator()
-        .item(&items[3])
-        .item(&items[4])
-        .separator()
-        .item(&items[5])
-        .item(&items[6])
-        .separator()
-        .item(&zoom_reset)
-        .item(&zoom_in)
-        .item(&zoom_out)
-        .separator()
-        .fullscreen_with_text(tr(language, "切换全屏", "Toggle Full Screen"))
-        .build()
-}
+                label,
+                shortcut,
+                accelerator,
+                ..
+            } => {
+                let accel = accelerator_for(
+                    shortcut.as_deref(),
+                    accelerator.as_deref(),
+                    user_shortcuts,
+                    defaults,
+                );
+                let entry =
+                    MenuItem::with_id(app, id, label.get(language), true, accel.as_deref())?;
+                builder.item(&entry)
+            }
+            ModelItem::Submenu { label, items, .. } => {
+                let nested = build_submenu(
+                    app,
+                    label.get(language),
+                    items,
+                    language,
+                    user_shortcuts,
+                    defaults,
+                )?;
+                builder.item(&nested)
+            }
+            ModelItem::Native { role, label, .. } => {
+                let text = label.get(language);
+                match role.as_str() {
+                    "about" => builder.about_with_text(text, Some(AboutMetadata::default())),
+                    "hide" => builder.hide_with_text(text),
+                    "hideOthers" => builder.hide_others_with_text(text),
+                    "showAll" => builder.show_all_with_text(text),
+                    "undo" => builder.undo_with_text(text),
+                    "redo" => builder.redo_with_text(text),
+                    "cut" => builder.cut_with_text(text),
+                    "copy" => builder.copy_with_text(text),
+                    "paste" => builder.paste_with_text(text),
+                    "fullscreen" => builder.fullscreen_with_text(text),
+                    _ => builder,
+                }
+            }
+        };
+    }
 
-fn tools_menu(
-    app: &AppHandle,
-    language: &str,
-    shortcuts: &BTreeMap<String, String>,
-) -> tauri::Result<Submenu<tauri::Wry>> {
-    let toggle_toolbar = action(
-        app,
-        "toggle-toolbar",
-        tr(language, "顶部工具栏", "Top Toolbar"),
-        accelerator(shortcuts, "toggle-toolbar", "Mod+Alt+Shift+B"),
-    )?;
-    let toggle_selection_toolbar = action(
-        app,
-        "toggle-selection-toolbar",
-        tr(language, "选中文本工具栏", "Selection Toolbar"),
-        accelerator(shortcuts, "toggle-selection-toolbar", "Mod+Alt+Shift+T"),
-    )?;
-    let paragraph = action(
-        app,
-        "paragraph",
-        tr(language, "正文", "Paragraph"),
-        accelerator(shortcuts, "paragraph", "Mod+0"),
-    )?;
-
-    let heading_1 = action(
-        app,
-        "heading-1",
-        tr(language, "标题 1", "Heading 1"),
-        accelerator(shortcuts, "heading-1", "Mod+1"),
-    )?;
-    let heading_2 = action(
-        app,
-        "heading-2",
-        tr(language, "标题 2", "Heading 2"),
-        accelerator(shortcuts, "heading-2", "Mod+2"),
-    )?;
-    let heading_3 = action(
-        app,
-        "heading-3",
-        tr(language, "标题 3", "Heading 3"),
-        accelerator(shortcuts, "heading-3", "Mod+3"),
-    )?;
-    let heading_4 = action(
-        app,
-        "heading-4",
-        tr(language, "标题 4", "Heading 4"),
-        accelerator(shortcuts, "heading-4", "Mod+4"),
-    )?;
-    let heading_5 = action(
-        app,
-        "heading-5",
-        tr(language, "标题 5", "Heading 5"),
-        accelerator(shortcuts, "heading-5", "Mod+5"),
-    )?;
-    let heading_6 = action(
-        app,
-        "heading-6",
-        tr(language, "标题 6", "Heading 6"),
-        accelerator(shortcuts, "heading-6", "Mod+6"),
-    )?;
-    let heading = SubmenuBuilder::new(app, tr(language, "标题", "Heading"))
-        .item(&heading_1)
-        .item(&heading_2)
-        .item(&heading_3)
-        .item(&heading_4)
-        .item(&heading_5)
-        .item(&heading_6)
-        .build()?;
-
-    let promote_heading = action(
-        app,
-        "promote-heading",
-        tr(language, "升级标题", "Promote Heading"),
-        accelerator(shortcuts, "promote-heading", "Mod+="),
-    )?;
-    let demote_heading = action(
-        app,
-        "demote-heading",
-        tr(language, "降级标题", "Demote Heading"),
-        accelerator(shortcuts, "demote-heading", "Mod+-"),
-    )?;
-    let bold = action(
-        app,
-        "bold",
-        tr(language, "加粗", "Bold"),
-        accelerator(shortcuts, "bold", "Mod+B"),
-    )?;
-    let italic = action(
-        app,
-        "italic",
-        tr(language, "斜体", "Italic"),
-        accelerator(shortcuts, "italic", "Mod+I"),
-    )?;
-    let strike = action(
-        app,
-        "strike",
-        tr(language, "删除线", "Strikethrough"),
-        accelerator(
-            shortcuts,
-            "strike",
-            platform_default("Control+Shift+`", "Alt+Shift+5"),
-        ),
-    )?;
-    let inline_code = action(
-        app,
-        "inline-code",
-        tr(language, "行内代码", "Inline Code"),
-        accelerator(shortcuts, "inline-code", "Mod+Shift+`"),
-    )?;
-    let quote = action(
-        app,
-        "quote",
-        tr(language, "引用", "Quote"),
-        accelerator(
-            shortcuts,
-            "quote",
-            platform_default("Mod+Alt+Q", "Mod+Shift+Q"),
-        ),
-    )?;
-    let code_block = action(
-        app,
-        "code-block",
-        tr(language, "代码块", "Code Block"),
-        accelerator(
-            shortcuts,
-            "code-block",
-            platform_default("Mod+Alt+C", "Mod+Shift+K"),
-        ),
-    )?;
-    let bullet_list = action(
-        app,
-        "bullet-list",
-        tr(language, "无序列表", "Bullet List"),
-        accelerator(
-            shortcuts,
-            "bullet-list",
-            platform_default("Mod+Alt+U", "Mod+Shift+]"),
-        ),
-    )?;
-    let ordered_list = action(
-        app,
-        "ordered-list",
-        tr(language, "有序列表", "Ordered List"),
-        accelerator(
-            shortcuts,
-            "ordered-list",
-            platform_default("Mod+Alt+O", "Mod+Shift+["),
-        ),
-    )?;
-    let task_list = action(
-        app,
-        "task-list",
-        tr(language, "任务列表", "Task List"),
-        accelerator(
-            shortcuts,
-            "task-list",
-            platform_default("Mod+Alt+X", "Mod+Shift+9"),
-        ),
-    )?;
-    let insert_table = action(
-        app,
-        "insert-table",
-        tr(language, "插入表格", "Insert Table"),
-        accelerator(
-            shortcuts,
-            "insert-table",
-            platform_default("Mod+Alt+T", "Mod+T"),
-        ),
-    )?;
-    let insert_link = action(
-        app,
-        "insert-link",
-        tr(language, "插入链接", "Insert Link"),
-        accelerator(shortcuts, "insert-link", "Mod+K"),
-    )?;
-
-    SubmenuBuilder::new(app, tr(language, "工具", "Tools"))
-        .item(&toggle_toolbar)
-        .item(&toggle_selection_toolbar)
-        .separator()
-        .item(&paragraph)
-        .item(&heading)
-        .item(&promote_heading)
-        .item(&demote_heading)
-        .separator()
-        .item(&bold)
-        .item(&italic)
-        .item(&strike)
-        .item(&inline_code)
-        .separator()
-        .item(&quote)
-        .item(&code_block)
-        .separator()
-        .item(&bullet_list)
-        .item(&ordered_list)
-        .item(&task_list)
-        .separator()
-        .item(&insert_table)
-        .item(&insert_link)
-        .build()
+    builder.build()
 }
 
 pub fn install(
@@ -511,20 +257,39 @@ pub fn install(
     language: &str,
     shortcuts: &BTreeMap<String, String>,
 ) -> Result<(), AppError> {
-    let install = || -> tauri::Result<()> {
-        let application = app_menu(app, language, shortcuts)?;
-        let file = file_menu(app, language, shortcuts)?;
-        let edit = edit_menu(app, language, shortcuts)?;
-        let view = view_menu(app, language, shortcuts)?;
-        let tools = tools_menu(app, language, shortcuts)?;
+    let model = model()?;
+    let defaults = shortcut_defaults()?;
+
+    let build = || -> tauri::Result<()> {
+        let submenus = model
+            .menus
+            .iter()
+            .map(|submenu| {
+                // 顶层菜单标题：应用菜单在 macOS 上由系统替换成应用名，
+                // 其余按语言取。
+                let title = if submenu.id == "app" {
+                    "Xiangzi MD"
+                } else {
+                    submenu.label.get(language)
+                };
+                build_submenu(app, title, &submenu.items, language, shortcuts, &defaults)
+            })
+            .collect::<tauri::Result<Vec<_>>>()?;
         // No "Window" submenu: the app is single-window, so minimize/zoom there
         // duplicated the traffic-light controls without adding anything.
-        let menu = Menu::with_items(app, &[&application, &file, &edit, &view, &tools])?;
+        let refs = submenus.iter().collect::<Vec<_>>();
+        let menu = Menu::with_items(
+            app,
+            &refs
+                .iter()
+                .map(|submenu| *submenu as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+                .collect::<Vec<_>>(),
+        )?;
         app.set_menu(menu)?;
         Ok(())
     };
 
-    install().map_err(|error| AppError::new("menu_install_failed", error.to_string()))
+    build().map_err(|error| AppError::new("menu_install_failed", error.to_string()))
 }
 
 pub fn handle_event(app: &AppHandle, id: &str) {
@@ -548,5 +313,76 @@ pub fn handle_event(app: &AppHandle, id: &str) {
         action => {
             let _ = window.emit("menu-action", action);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_menu_model_parses() {
+        let model = model().expect("shared/menu.json 应能解析");
+        let ids: Vec<&str> = model.menus.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["app", "file", "edit", "view", "tools"]);
+    }
+
+    #[test]
+    fn every_referenced_shortcut_exists() {
+        // 模型里写错一个 shortcut id，菜单会静默地不显示加速键。
+        let model = model().expect("菜单模型应能解析");
+        let defaults = shortcut_defaults().expect("快捷键表应能解析");
+
+        fn walk<'a>(items: &'a [ModelItem], out: &mut Vec<&'a str>) {
+            for item in items {
+                match item {
+                    ModelItem::Action {
+                        shortcut: Some(id), ..
+                    } => out.push(id),
+                    ModelItem::Submenu { items, .. } => walk(items, out),
+                    _ => {}
+                }
+            }
+        }
+        let mut referenced = Vec::new();
+        for submenu in &model.menus {
+            walk(&submenu.items, &mut referenced);
+        }
+        assert!(!referenced.is_empty());
+        for id in referenced {
+            assert!(
+                defaults.contains_key(id),
+                "shared/menu.json 引用了未定义的快捷键 {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn bindings_translate_to_tauri_accelerators() {
+        assert_eq!(
+            to_accelerator("Mod+Shift+S").as_deref(),
+            Some("CmdOrCtrl+Shift+S")
+        );
+        assert_eq!(
+            to_accelerator("Control+Shift+`").as_deref(),
+            Some("Ctrl+Shift+`")
+        );
+        assert_eq!(to_accelerator(""), None);
+    }
+
+    #[test]
+    fn user_shortcuts_win_over_defaults() {
+        let defaults = shortcut_defaults().expect("快捷键表应能解析");
+        let mut user = BTreeMap::new();
+        user.insert("save".to_owned(), "Mod+Alt+S".to_owned());
+
+        assert_eq!(
+            accelerator_for(Some("save"), None, &user, &defaults).as_deref(),
+            Some("CmdOrCtrl+Alt+S")
+        );
+        assert_eq!(
+            accelerator_for(Some("save"), None, &BTreeMap::new(), &defaults).as_deref(),
+            Some("CmdOrCtrl+S")
+        );
     }
 }
