@@ -66,19 +66,22 @@ export default function SearchPanel({
     inputRef.current?.focus()
   }, [focusRequest])
 
+  // 查询条件本身变了，旧结果立刻作废，先清空避免展示不匹配的内容。
+  // reloadKey 变化不走这里：那只是文件落盘后的后台重新校验，清空会让列表闪一下白。
+  useEffect(() => {
+    setResults([])
+    setSearchMeta({ scannedFiles: 0, totalMatches: 0, truncated: false })
+  }, [mode, query, root])
+
   // 防抖搜索
   useEffect(() => {
     const id = ++reqId.current
     setError(null)
     if (!query.trim()) {
-      setResults([])
-      setSearchMeta({ scannedFiles: 0, totalMatches: 0, truncated: false })
       setLoading(false)
       void desktop.cancelSearch()
       return
     }
-    setResults([])
-    setSearchMeta({ scannedFiles: 0, totalMatches: 0, truncated: false })
     setLoading(true)
     const timer = setTimeout(() => {
       void desktop
