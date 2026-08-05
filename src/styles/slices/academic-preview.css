@@ -1,0 +1,146 @@
+/* ---------- 论文排版实时预览 ----------
+ * 结构规则写在这里；随参数变化的值（字号/行距/缩进/页边距/纸张宽度）
+ * 由 academicPreviewCssVars() 算成 --ap-* 自定义属性，内联挂在 .academic-preview-page
+ * 上。纸张固定用白底黑字，不跟随应用的暗色主题——Word 文档本身就是白纸黑字，
+ * 跟着暗色主题走反而失真，且和「在 Word 中预览」按钮打开的真实文档不一致。
+ */
+
+.academic-preview {
+  max-height: 460px;
+  overflow: auto;
+  padding: 20px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.academic-preview-page {
+  box-sizing: border-box;
+  width: var(--ap-page-width);
+  max-width: 100%;
+  margin: 0 auto;
+  padding: var(--ap-margin);
+  background: #ffffff;
+  color: #1a1a1a;
+  font-size: var(--ap-body-size);
+  line-height: var(--ap-line-height);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+}
+
+.academic-preview-page :is(p, li, blockquote) {
+  margin: 0 0 8px;
+}
+
+.academic-preview-page :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 700;
+  margin: 16px 0 8px;
+}
+
+.ap-title {
+  text-align: center;
+  font-size: var(--ap-title-size);
+  font-weight: 700;
+  margin: 0 0 14px;
+}
+
+.ap-heading-1 {
+  font-size: var(--ap-h1-size);
+}
+.ap-heading-2 {
+  font-size: var(--ap-h2-size);
+}
+.ap-heading-3 {
+  font-size: var(--ap-h3-size);
+}
+.ap-heading-4 {
+  font-size: var(--ap-h4-size);
+}
+.ap-heading-5 {
+  font-size: var(--ap-h5-size);
+}
+.ap-heading-6 {
+  font-size: var(--ap-h6-size);
+}
+
+.ap-first-paragraph {
+  text-indent: 0;
+}
+
+.ap-body {
+  text-indent: var(--ap-indent);
+}
+
+.ap-blockquote {
+  padding: 2px 16px;
+  border-left: 3px solid #999;
+  color: #444;
+}
+
+.ap-list {
+  margin: 0 0 8px;
+  padding-left: 2em;
+}
+
+.ap-list li {
+  margin-bottom: 2px;
+}
+
+.ap-table {
+  width: 100%;
+  margin: 4px 0 2px;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.ap-table th,
+.ap-table td {
+  padding: 4px 10px;
+  text-align: left;
+}
+
+/* 三线表：仅表格顶/底与表头下沿三条横线，无竖线、无表体横线——中文学术论文
+   表格的通行样式，对应 layout.threeLineTable。 */
+.academic-preview-page.ap-three-line .ap-table {
+  border-top: 1.5px solid #000;
+  border-bottom: 1.5px solid #000;
+}
+.academic-preview-page.ap-three-line .ap-table thead th {
+  border-bottom: 1px solid #000;
+}
+
+/* 关掉三线表时退回常规网格线，近似 pandoc 默认表格的浅灰网格。 */
+.academic-preview-page:not(.ap-three-line) .ap-table th,
+.academic-preview-page:not(.ap-three-line) .ap-table td {
+  border: 1px solid #ccc;
+}
+
+.ap-caption {
+  text-align: center;
+  font-size: var(--ap-caption-size);
+  color: #555;
+  margin: 2px 0 10px;
+}
+
+.ap-bibliography {
+  font-size: var(--ap-bib-size);
+  margin: 0 0 4px 2em;
+  text-indent: -2em;
+}
+
+.ap-image-placeholder {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px dashed #999;
+  border-radius: 4px;
+  color: #666;
+  font-size: 0.85em;
+}
+
+.academic-preview-footer {
+  margin-top: 18px;
+  padding-top: 8px;
+  border-top: 1px dashed #ccc;
+  text-align: center;
+  color: #888;
+  font-size: 0.8em;
+}
