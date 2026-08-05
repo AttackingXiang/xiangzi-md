@@ -51,6 +51,7 @@ import {
   bracketMatching,
 } from '@codemirror/language'
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
+import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
 import { contextMenuSelection } from '../features/cm6-editor/contextMenuSelection'
 import { activeSearchMatchHighlight } from '../features/cm6-editor/searchMatchHighlight'
 import { codeMirrorTheme } from '../lib/codeTheme'
@@ -210,6 +211,8 @@ export default function TextEditor({
       languageCompartment.current.of([]),
       readOnlyCompartment.current.of(EditorState.readOnly.of(readOnly)),
       EditorView.updateListener.of((update: ViewUpdate) => {
+        // 与 Markdown 编辑器一致：拿到焦点时成为命令目标。
+        if (update.focusChanged && update.view.hasFocus) cm6ActiveViewBridge.activate(update.view)
         if (update.docChanged) {
           const raw = wrapText(envelopeRef.current, update.state.doc.toString())
           onChangeRef.current(raw)
@@ -244,6 +247,10 @@ export default function TextEditor({
     textEditorBridge.set(() => {
       openSearchPanel(view)
     })
+    // 注册为「当前活动编辑器」，否则菜单和右键菜单里的复制/粘贴/全选够不到
+    // 纯文本编辑器——它们都通过 cm6ActiveViewBridge 找目标（⌘C/⌘V 走的是
+    // WebView 原生路径，所以一直是好的，这个缺口只在菜单入口上暴露）。
+    const unregisterActiveView = cm6ActiveViewBridge.register(view)
 
     // 恢复选区（越界时忽略）与滚动位置
     if (initialState?.selection) {
@@ -268,6 +275,7 @@ export default function TextEditor({
       // 编辑通过 updateListener 在 docChanged 时同步回写，无未提交草稿需补交；
       // 这里只注销搜索桥并销毁视图。
       textEditorBridge.set(null)
+      unregisterActiveView()
       viewRef.current = null
       view.destroy()
     }

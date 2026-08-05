@@ -214,6 +214,14 @@
   outline: none;
 }
 
+/* 去掉 outline 后要留个替代指示：焦点可以离开输入框去到结果列表再回来，
+   没有指示时用户不知道打字会落到哪里。用下边框加重而不是描边，保持面板的简洁。 */
+.palette-input:focus-visible {
+  border-bottom-color: var(--accent);
+  border-bottom-width: 2px;
+  padding-bottom: 0;
+}
+
 .palette-list {
   max-height: 50vh;
   overflow-y: auto;
@@ -396,4 +404,43 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
+}
+
+/* ---------- 懒加载占位 ---------- */
+.loading-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 120px;
+}
+
+.loading-backdrop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--text-muted) 30%, transparent);
+  border-top-color: var(--accent);
+  animation: loading-spin 0.7s linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 关掉动效时不要留一个静止的缺口圆环，那看着像渲染坏了。 */
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation: none;
+    border-top-color: color-mix(in srgb, var(--text-muted) 30%, transparent);
+    opacity: 0.6;
+  }
 }

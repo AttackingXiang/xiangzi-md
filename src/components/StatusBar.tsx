@@ -1,9 +1,10 @@
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { BookOpen, Code2, Eye } from 'lucide-react'
 import type { Tab } from '../types'
 import type { TextCursorInfo } from './TextEditor'
 import { t } from '../lib/i18n'
 import { shortcutHint } from '../lib/shortcuts'
+import { documentCursorBridge, type DocumentCursor } from '../lib/documentCursorBridge'
 
 /** 文本文件的状态栏信息（Markdown 文档为 null） */
 export interface TextStatus {
@@ -47,11 +48,47 @@ const StatusBar = memo(function StatusBar({
   onToggleSource,
 }: Props): JSX.Element {
   const isText = textStatus !== null
-  // App 每次击键都会重渲染，字数统计只在内容变化时重算；文本文件不做字数统计
+  // App 每次击键都会重渲染，字数统计只在内容变化时重算；文本文件不做词数统计
+  // （大 JSON/日志上这个正则不便宜），但字符数是白拿的。
   const content = tab?.content ?? ''
   const wordCount = useMemo(() => (isText ? 0 : countWords(content)), [content, isText])
   const charCount = content.length
+
+  // Markdown 的光标位置走桥订阅，只让状态栏重渲染——见 documentCursorBridge。
+  const [markdownCursor, setMarkdownCursor] = useState<DocumentCursor | null>(null)
+  useEffect(
+    () => (isText ? undefined : documentCursorBridge.subscribe(setMarkdownCursor)),
+    [isText],
+  )
+
   const cursor = textStatus?.info ?? null
+  const position = isText
+    ? cursor && {
+        line: cursor.line,
+        col: cursor.col,
+        selections: cursor.selections,
+        selected: cursor.selected,
+      }
+    : markdownCursor
+  // 行列号/多光标/已选字符数：两个编辑器共用同一段展示。
+  const positionInfo = position && (
+    <>
+      <span>
+        {t('行')} {position.line}, {t('列')} {position.col}
+      </span>
+      {position.selections > 1 && (
+        <span>
+          {position.selections} {t('个光标')}
+        </span>
+      )}
+      {position.selected > 0 && (
+        <span>
+          {t('已选')} {position.selected}
+        </span>
+      )}
+    </>
+  )
+
   return (
     <div className="statusbar">
       <span className="status-left">
@@ -60,31 +97,21 @@ const StatusBar = memo(function StatusBar({
       <span className="status-right">
         {tab && isText && (
           <>
-            {cursor && (
-              <span>
-                {t('行')} {cursor.line}, {t('列')} {cursor.col}
-              </span>
-            )}
-            {cursor && cursor.selections > 1 && (
-              <span>
-                {cursor.selections} {t('个光标')}
-              </span>
-            )}
-            {cursor && cursor.selected > 0 && (
-              <span>
-                {t('已选')} {cursor.selected}
-              </span>
-            )}
+            {positionInfo}
             <span>{textStatus?.language}</span>
             {cursor && (
               <span>{cursor.eol === '\r\n' ? 'CRLF' : cursor.eol === '\r' ? 'CR' : 'LF'}</span>
             )}
+            <span>
+              {charCount} {t('字符')}
+            </span>
             {autoSave && <span>{t('自动保存')}</span>}
             {tab.dirty && <span className="status-dirty">●&nbsp;{t('未保存')}</span>}
           </>
         )}
         {tab && !isText && (
           <>
+            {positionInfo}
             <span>
               {wordCount} {t('字')}
             </span>

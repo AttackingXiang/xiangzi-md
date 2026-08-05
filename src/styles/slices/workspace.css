@@ -492,6 +492,12 @@
   background: transparent;
 }
 
+/* 源码模式的文本域。它铺满整个编辑区，描边会显得很重，
+   所以焦点用左侧一条强调色竖线表示。 */
+.source-editor:focus-visible {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .source-editor {
   flex: 1;
   border: none;

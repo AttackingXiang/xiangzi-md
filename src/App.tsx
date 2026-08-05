@@ -60,6 +60,7 @@ import FindBar from './components/FindBar'
 // and a chunk boundary there is the one place the delay would actually be felt.
 import ContextMenu, { type ContextMenuState, type MenuItem } from './components/ContextMenu'
 import ExportProgressToast from './components/ExportProgressToast'
+import { ModalFallback, PanelFallback } from './components/LoadingFallback'
 import ExternalChangeBanner from './components/ExternalChangeBanner'
 import ExternalReloadToast from './components/ExternalReloadToast'
 import CopyFeedbackToast from './components/CopyFeedbackToast'
@@ -1295,7 +1296,7 @@ export default function App(): JSX.Element {
                   onRootContext={openRootContext}
                 />
                 {/* 标签树常驻左侧；点某个标签后，它的文档在中间“结果列”展示。 */}
-                <Suspense fallback={null}>
+                <Suspense fallback={<PanelFallback />}>
                   <TagOverviewSidebar
                     tree={tagTree}
                     pinnedTags={settings.pinnedTags ?? []}
@@ -1356,7 +1357,7 @@ export default function App(): JSX.Element {
         {(searchView && folder) || tagNavigation.selectedTag ? (
           <div className="results-wrap" style={{ width: resultsWidth, minWidth: resultsWidth }}>
             {searchView && folder ? (
-              <Suspense fallback={null}>
+              <Suspense fallback={<PanelFallback />}>
                 <SearchPanel
                   root={folder.root}
                   reloadKey={searchReloadKey}
@@ -1367,7 +1368,7 @@ export default function App(): JSX.Element {
                 />
               </Suspense>
             ) : (
-              <Suspense fallback={null}>
+              <Suspense fallback={<PanelFallback />}>
                 <RelatedDocumentsSidebar
                   tag={
                     tagIndex.tagLabels[tagNavigation.selectedTag ?? ''] ??
@@ -1688,7 +1689,7 @@ export default function App(): JSX.Element {
       </div>
 
       {settingsSection && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<ModalFallback />}>
           <Settings
             key={settingsSection}
             settings={settings}
@@ -1722,7 +1723,7 @@ export default function App(): JSX.Element {
       )}
 
       {showPalette && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<ModalFallback />}>
           <CommandPalette
             commands={paletteCommands}
             files={paletteFiles}
@@ -1733,7 +1734,7 @@ export default function App(): JSX.Element {
       )}
 
       {zoomSrc && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<ModalFallback />}>
           <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />
         </Suspense>
       )}

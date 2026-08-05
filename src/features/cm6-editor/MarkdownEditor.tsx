@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { createCm6Editor } from './controller'
 import { imageInsertion } from './imageInsertion'
 import { typewriterScrolling } from './writingModes'
+import { documentCursorBridge } from '../../lib/documentCursorBridge'
 import { setupRichClipboard } from '../../lib/richClipboard'
 import { t } from '../../lib/i18n'
 import type { Cm6EditorController } from './types'
@@ -174,6 +175,9 @@ export function MarkdownEditor({
   if (!selectionToolbarExtensionRef.current) {
     selectionToolbarExtensionRef.current = [
       EditorView.updateListener.of((update) => {
+        if (update.selectionSet || update.docChanged || update.focusChanged) {
+          documentCursorBridge.publish(update.state)
+        }
         if (
           update.selectionSet ||
           update.docChanged ||

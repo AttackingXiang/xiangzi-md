@@ -372,6 +372,14 @@
   font-size: 13px;
 }
 
+/* 结果行现在可以用方向键聚焦，焦点会离开输入框再回来，需要看得见。
+   描边加在外层容器上，免得输入框内缩一圈把布局挤动。 */
+.search-input-wrap:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
 .search-scope-wrap {
   display: flex;
   align-items: center;
