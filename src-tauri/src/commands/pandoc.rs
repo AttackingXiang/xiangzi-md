@@ -1072,7 +1072,13 @@ fn patch_list_paragraphs(xml: &str, layout: &AcademicLayout) -> String {
         let paragraph_end = relative_end + "</w:p>".len();
         let paragraph = &rest[..paragraph_end];
         let patched = if paragraph.contains("<w:numPr") {
-            replace_or_insert_paragraph_ppr_child(paragraph, "spacing", &list_spacing)
+            replace_or_insert_container_child(
+                paragraph,
+                "pPr",
+                "spacing",
+                &list_spacing,
+                &["<w:r", "</w:p>"],
+            )
         } else {
             paragraph.to_owned()
         };
@@ -1082,53 +1088,6 @@ fn patch_list_paragraphs(xml: &str, layout: &AcademicLayout) -> String {
 
     result.push_str(rest);
     result
-}
-
-fn replace_or_insert_paragraph_ppr_child(
-    paragraph: &str,
-    tag_name: &str,
-    replacement: &str,
-) -> String {
-    let open = "<w:pPr";
-    let close = "</w:pPr>";
-    if let Some(ppr_start) = paragraph.find(open) {
-        let Some(open_end_rel) = paragraph[ppr_start..].find('>') else {
-            return paragraph.to_owned();
-        };
-        let open_end = ppr_start + open_end_rel;
-        if paragraph.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
-            let ppr = format!("<w:pPr>{replacement}</w:pPr>");
-            return format!(
-                "{}{}{}",
-                &paragraph[..ppr_start],
-                ppr,
-                &paragraph[open_end + 1..]
-            );
-        }
-        let Some(close_rel) = paragraph[open_end + 1..].find(close) else {
-            return paragraph.to_owned();
-        };
-        let ppr_end = open_end + 1 + close_rel + close.len();
-        let ppr = &paragraph[ppr_start..ppr_end];
-        let patched_ppr = replace_or_insert_self_closing_child(ppr, tag_name, replacement, close);
-        return format!(
-            "{}{}{}",
-            &paragraph[..ppr_start],
-            patched_ppr,
-            &paragraph[ppr_end..]
-        );
-    }
-
-    let insert_at = find_word_tag_start(paragraph, "<w:r")
-        .or_else(|| paragraph.find("</w:p>"))
-        .unwrap_or(paragraph.len());
-    let ppr = format!("<w:pPr>{replacement}</w:pPr>");
-    format!(
-        "{}{}{}",
-        &paragraph[..insert_at],
-        ppr,
-        &paragraph[insert_at..]
-    )
 }
 
 fn replace_or_insert_section_child(
@@ -1486,68 +1445,86 @@ fn patch_run_style(
 
 /// 在样式的 w:pPr 中替换或插入一个自闭合子元素。
 fn replace_or_insert_ppr_child(block: &str, tag_name: &str, replacement: &str) -> String {
-    replace_or_insert_style_child(block, "pPr", tag_name, replacement, true)
+    // pPr 必须排在 rPr 之前，所以先拿 rPr 当落点。
+    replace_or_insert_container_child(
+        block,
+        "pPr",
+        tag_name,
+        replacement,
+        &["<w:rPr", "</w:style>"],
+    )
 }
 
 /// 在样式的 w:rPr 中替换或插入一个自闭合子元素。
 fn replace_or_insert_rpr_child(block: &str, tag_name: &str, replacement: &str) -> String {
-    replace_or_insert_style_child(block, "rPr", tag_name, replacement, false)
+    replace_or_insert_container_child(block, "rPr", tag_name, replacement, &["</w:style>"])
 }
 
-fn replace_or_insert_style_child(
-    block: &str,
+/// 在 `host` 的 `<w:{container}>` 里替换或插入一个自闭合子元素；容器不存在时
+/// 连容器一起建出来，插在 `insert_before` 里第一个能找到的标签之前。
+///
+/// 样式块（容器 pPr/rPr，落点 `<w:rPr` 或 `</w:style>`）和正文段落
+/// （容器 pPr，落点 `<w:r` 或 `</w:p>`）原本是两个几乎逐行相同的函数，
+/// 合并成一个——差别只有容器名和落点候选。落点一律用 `find_word_tag_start`
+/// 匹配完整标签，免得 `<w:rPr` 命中 `<w:rPrChange`。
+fn replace_or_insert_container_child(
+    host: &str,
     container_name: &str,
     tag_name: &str,
     replacement: &str,
-    insert_ppr_before_rpr: bool,
+    insert_before: &[&str],
 ) -> String {
     let open = format!("<w:{container_name}");
     let close = format!("</w:{container_name}>");
-    if let Some(container_start) = block.find(&open) {
-        let Some(open_end_rel) = block[container_start..].find('>') else {
-            return block.to_owned();
+
+    if let Some(container_start) = find_word_tag_start(host, &open) {
+        let Some(open_end_rel) = host[container_start..].find('>') else {
+            return host.to_owned();
         };
         let open_end = container_start + open_end_rel;
-        if block.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
-            let replacement_container =
-                format!("<w:{container_name}>{replacement}</w:{container_name}>",);
-            let end = open_end + 1;
+        // `<w:pPr/>` 这种自闭合写法要先展开成一对标签才能塞子元素。
+        if host.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
+            let expanded = format!("<w:{container_name}>{replacement}</w:{container_name}>");
             return format!(
                 "{}{}{}",
-                &block[..container_start],
-                replacement_container,
-                &block[end..]
+                &host[..container_start],
+                expanded,
+                &host[open_end + 1..]
             );
         }
-        let Some(close_rel) = block[open_end + 1..].find(&close) else {
-            return block.to_owned();
+        let Some(close_rel) = host[open_end + 1..].find(&close) else {
+            return host.to_owned();
         };
         let container_end = open_end + 1 + close_rel + close.len();
-        let container = &block[container_start..container_end];
-        let patched_container =
-            replace_or_insert_self_closing_child(container, tag_name, replacement, &close);
+        let patched = replace_or_insert_self_closing_child(
+            &host[container_start..container_end],
+            tag_name,
+            replacement,
+            &close,
+        );
         return format!(
             "{}{}{}",
-            &block[..container_start],
-            patched_container,
-            &block[container_end..]
+            &host[..container_start],
+            patched,
+            &host[container_end..]
         );
     }
 
-    let insert_at = if insert_ppr_before_rpr {
-        block
-            .find("<w:rPr")
-            .unwrap_or_else(|| block.find("</w:style>").unwrap_or(block.len()))
-    } else {
-        block.find("</w:style>").unwrap_or(block.len())
-    };
+    // 落点候选有两种形态：`<w:rPr` 这类开标签前缀要按完整标签匹配（否则会命中
+    // `<w:rPrChange`），而 `</w:style>` 这类完整闭标签本身就已经界定清楚了，
+    // 再去检查它后面跟什么只会一个都匹配不上。
+    let insert_at = insert_before
+        .iter()
+        .find_map(|needle| {
+            if needle.starts_with("</") {
+                host.find(needle)
+            } else {
+                find_word_tag_start(host, needle)
+            }
+        })
+        .unwrap_or(host.len());
     let container = format!("<w:{container_name}>{replacement}</w:{container_name}>");
-    format!(
-        "{}{}{}",
-        &block[..insert_at],
-        container,
-        &block[insert_at..]
-    )
+    format!("{}{}{}", &host[..insert_at], container, &host[insert_at..])
 }
 
 fn replace_or_insert_self_closing_child(
