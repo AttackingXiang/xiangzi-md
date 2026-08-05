@@ -1,9 +1,10 @@
-import { Circle, Minus, Square, X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Circle, Copy, Minus, Square, X } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
 import TitleBarMenu from './TitleBarMenu'
 import { currentDesktopPlatform } from '../lib/platform'
 import { t } from '../lib/i18n'
-import { runWindowAction, startWindowDragging } from '../lib/windowActions'
+import { isTauriRuntime } from '../platform'
+import { runWindowAction, startWindowDragging, watchWindowMaximized } from '../lib/windowActions'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 
@@ -26,6 +27,24 @@ export default function TitleBar({
 }: Props): JSX.Element {
   const platform = currentDesktopPlatform()
   const isMac = platform === 'macos'
+  const [maximized, setMaximized] = useState(false)
+
+  // 只有非 mac 才自绘窗口控件；mac 用系统交通灯。
+  useEffect(() => {
+    if (isMac || !isTauriRuntime()) return undefined
+    let unwatch: (() => void) | null = null
+    let disposed = false
+    void watchWindowMaximized(setMaximized)
+      .then((stop) => {
+        if (disposed) stop()
+        else unwatch = stop
+      })
+      .catch(() => undefined)
+    return () => {
+      disposed = true
+      unwatch?.()
+    }
+  }, [isMac])
 
   return (
     <header
@@ -75,8 +94,11 @@ export default function TitleBar({
             <WindowButton label={t('最小化窗口')} onClick={() => runWindowAction('minimize')}>
               <Minus size={15} />
             </WindowButton>
-            <WindowButton label={t('最大化或还原窗口')} onClick={() => runWindowAction('maximize')}>
-              <Square size={12} />
+            <WindowButton
+              label={maximized ? t('还原窗口') : t('最大化窗口')}
+              onClick={() => runWindowAction('maximize')}
+            >
+              {maximized ? <Copy size={12} /> : <Square size={12} />}
             </WindowButton>
             <WindowButton
               kind="close"

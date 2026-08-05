@@ -13,7 +13,7 @@
 .xmd-cm-editor .cm-line.xmd-cm-code-line {
   box-sizing: border-box;
   color: var(--xmd-code-text, var(--code-block-text, var(--text)));
-  font-family: var(--xmd-font-code, var(--crepe-font-code, ui-monospace, monospace));
+  font-family: var(--xmd-font-code, var(--crepe-font-code, var(--font-mono)));
   font-size: inherit;
   line-height: inherit;
   max-width: 100%;
@@ -220,7 +220,7 @@
   box-sizing: border-box;
   color: var(--text-muted);
   cursor: text;
-  font-family: var(--xmd-font-code, var(--crepe-font-code, ui-monospace, monospace));
+  font-family: var(--xmd-font-code, var(--crepe-font-code, var(--font-mono)));
   font-size: 12px;
   height: 22px;
   line-height: 20px;
@@ -282,7 +282,7 @@
   color: var(--text);
   cursor: pointer;
   display: block;
-  font-family: var(--xmd-font-code, var(--crepe-font-code, ui-monospace, monospace));
+  font-family: var(--xmd-font-code, var(--crepe-font-code, var(--font-mono)));
   font-size: 12px;
   overflow: hidden;
   padding: 3px 7px;

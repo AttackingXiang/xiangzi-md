@@ -205,7 +205,7 @@
   border: var(--xmd-inline-code-border, 0 solid transparent);
   border-radius: var(--xmd-inline-code-radius, 4px);
   color: var(--xmd-inline-code-text);
-  font-family: var(--xmd-font-code, var(--crepe-font-code, ui-monospace, monospace));
+  font-family: var(--xmd-font-code, var(--crepe-font-code, var(--font-mono)));
   padding: 0.08em 0.28em;
 }
 

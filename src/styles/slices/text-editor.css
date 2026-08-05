@@ -64,7 +64,7 @@
 
 .text-editor-host .cm-editor {
   height: 100%;
-  font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
 }
 

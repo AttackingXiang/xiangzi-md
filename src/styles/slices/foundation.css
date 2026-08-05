@@ -1,4 +1,14 @@
 :root {
+  /* 字体栈。
+     等宽栈必须显式带上 CJK 回退：SF Mono / Menlo / Consolas / JetBrains Mono
+     都没有中日韩字形，缺回退时中文会掉到系统比例字体，代码块和路径里的中英混排
+     就会宽度不一、对不齐——在 Windows 上尤其明显，因为那里命中的是 Consolas。
+     （这个变量此前被 5 处引用却从未定义，unsaved.css 里没有兜底值，
+     等宽样式实际上完全没生效。） */
+  --font-mono:
+    ui-monospace, 'SF Mono', SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, 'Sarasa Mono SC',
+    'Noto Sans Mono CJK SC', NSimSun, monospace;
+
   /* 浅色（默认） */
   --bg: #ffffff;
   --bg-sidebar: #fafafa;
@@ -367,22 +377,41 @@
 }
 
 /* Auto-hide scrollbars: transparent by default, appear when hovering the container */
+/* 全局滚动条的唯一定义处。
+   这里原本是 6px、滑块透明、靠 `*:hover::-webkit-scrollbar-thumb` 才显形，
+   但 lightbox-patches.css 里有一份**未加作用域**的同名规则、且在本文件之后加载，
+   实际生效的一直是那一份。滚动条外观归 foundation 管，弹窗补丁文件不该越界，
+   所以把最终值收敛到这里，那边的全局块已删除。
+   `*:hover` 也一并去掉：它会匹配整条 hover 祖先链而不只是可滚动容器。 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 3px;
-}
-*:hover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
+  background: var(--border-strong);
+  border-radius: 6px;
+  /* 用透明边框把滑块收窄，同时保留 10px 的命中区域。 */
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted) !important;
+  background: var(--text-muted);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* macOS 的覆盖式滚动条本来就更细，跟随系统观感收窄一档。 */
+body.is-macos ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body.is-macos ::-webkit-scrollbar-thumb {
+  border-width: 2px;
 }
 
 html,
@@ -400,7 +429,8 @@ html {
 
 body {
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'PingFang TC',
+    'Microsoft JhengHei', 'Noto Sans CJK SC', sans-serif;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
 }

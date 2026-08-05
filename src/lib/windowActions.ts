@@ -34,6 +34,24 @@ export async function getWindowFullscreen(): Promise<boolean> {
   return getCurrentWindow().isFullscreen()
 }
 
+/**
+ * 订阅窗口最大化状态。用于让标题栏按钮在「最大化」和「还原」之间切换图标——
+ * 用户可能通过双击标题栏、系统快捷键或贴边吸附改变它，不只是点那个按钮。
+ */
+export async function watchWindowMaximized(
+  onChange: (maximized: boolean) => void,
+): Promise<() => void> {
+  const win = getCurrentWindow()
+  const publish = (): void => {
+    void win
+      .isMaximized()
+      .then(onChange)
+      .catch(() => undefined)
+  }
+  publish()
+  return win.onResized(publish)
+}
+
 export async function setWindowFullscreen(fullscreen: boolean): Promise<void> {
   await getCurrentWindow().setFullscreen(fullscreen)
 }

@@ -322,7 +322,7 @@
   border-radius: 8px;
   background: var(--bg-elevated);
   color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -378,7 +378,7 @@
   border-radius: 8px;
   background: var(--bg-sidebar);
   color: var(--text-2);
-  font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
   text-overflow: ellipsis;
