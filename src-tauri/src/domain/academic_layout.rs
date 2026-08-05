@@ -93,6 +93,13 @@ pub struct AcademicLayout {
     /// 用户导出结果的观感，所以默认值必须是 false 才能让黄金哈希测试
     /// （见 pandoc.rs 的 academic_styles_output_is_unchanged_for_default_layout）
     /// 继续证明"默认排版下的重构不改变输出"。
+    ///
+    /// `#[serde(default)]` 是必须的：没有这个标注，老版本写在磁盘上的
+    /// settings.json 里没有这个字段，反序列化会直接失败，整份设置（含
+    /// 收藏夹、最近文件、主题等所有跟这次改动毫无关系的数据）都会被判定
+    /// 为损坏，被 quarantine 机制整体清空重置为默认值——这不是假设，
+    /// 是这次改动实际造成过一次真实的用户数据丢失后才补上的。
+    #[serde(default)]
     pub code_block_bordered: bool,
 }
 
