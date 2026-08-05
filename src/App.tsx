@@ -1195,6 +1195,12 @@ export default function App(): JSX.Element {
                   folder={folder}
                   isFav={folder ? settings.favorites.includes(folder.root) : false}
                   canUndo={canUndo}
+                  showSidebarUndoButton={settings.showSidebarUndoButton}
+                  showSidebarFavoriteButton={settings.showSidebarFavoriteButton}
+                  showSidebarRefreshButton={settings.showSidebarRefreshButton}
+                  showSidebarSearchButton={settings.showSidebarSearchButton}
+                  showSidebarTagsButton={settings.showSidebarTagsButton}
+                  showSidebarSortButton={settings.showSidebarSortButton}
                   showOpenFolderButton={settings.showOpenFolderButton}
                   showSettingsButton={settings.showSettingsButton}
                   onUndo={undoLastOp}
@@ -1244,6 +1250,12 @@ export default function App(): JSX.Element {
                 onOpenFile={openPath}
                 onOpenSettings={openSidebarSettings}
                 onFileTreeSortChange={changeFileTreeSort}
+                showSidebarUndoButton={settings.showSidebarUndoButton}
+                showSidebarFavoriteButton={settings.showSidebarFavoriteButton}
+                showSidebarRefreshButton={settings.showSidebarRefreshButton}
+                showSidebarSearchButton={settings.showSidebarSearchButton}
+                showSidebarTagsButton={settings.showSidebarTagsButton}
+                showSidebarSortButton={settings.showSidebarSortButton}
                 showOpenFolderButton={settings.showOpenFolderButton}
                 showSettingsButton={settings.showSettingsButton}
                 onOpenSearch={openSidebarSearch}

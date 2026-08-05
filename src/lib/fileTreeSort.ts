@@ -1,6 +1,21 @@
 import type { FileNode, FileTreeSort } from '../types'
 import { recencyBlend } from './recency'
 
+export interface FileTreeSortOption {
+  value: FileTreeSort
+  labelZh: string
+  labelEn: string
+}
+
+/** 文件树排序的唯一选项来源；设置页与侧边栏快捷菜单共用，避免选项漂移。 */
+export const FILE_TREE_SORT_OPTIONS: readonly FileTreeSortOption[] = [
+  { value: 'default', labelZh: '名称（A→Z）', labelEn: 'Name (A→Z)' },
+  { value: 'nameDesc', labelZh: '名称（Z→A）', labelEn: 'Name (Z→A)' },
+  { value: 'modified', labelZh: '最近修改', labelEn: 'Recently modified' },
+  { value: 'opened', labelZh: '最近打开', labelEn: 'Recently opened' },
+  { value: 'smart', labelZh: '智能推荐', labelEn: 'Smart (recommended)' },
+]
+
 export interface SortContext {
   mode: FileTreeSort
   /** 置顶文件夹的绝对路径集合；同级里排在未置顶项之前。 */

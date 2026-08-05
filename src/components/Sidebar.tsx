@@ -29,6 +29,12 @@ interface Props {
   onOpenFile: (path: string, name?: string) => void
   onOpenSettings: () => void
   onFileTreeSortChange: (sort: FileTreeSort) => void
+  showSidebarUndoButton: boolean
+  showSidebarFavoriteButton: boolean
+  showSidebarRefreshButton: boolean
+  showSidebarSearchButton: boolean
+  showSidebarTagsButton: boolean
+  showSidebarSortButton: boolean
   /** 侧边栏顶部按钮显隐（默认隐藏，见控件设置） */
   showOpenFolderButton: boolean
   showSettingsButton: boolean
@@ -67,6 +73,12 @@ const Sidebar = memo(function Sidebar({
   onOpenFile,
   onOpenSettings,
   onFileTreeSortChange,
+  showSidebarUndoButton,
+  showSidebarFavoriteButton,
+  showSidebarRefreshButton,
+  showSidebarSearchButton,
+  showSidebarTagsButton,
+  showSidebarSortButton,
   showOpenFolderButton,
   showSettingsButton,
   onOpenSearch,
@@ -116,6 +128,12 @@ const Sidebar = memo(function Sidebar({
         onShowTags={onShowTags}
         onOpenFolder={onOpenFolder}
         onOpenSettings={onOpenSettings}
+        showSidebarUndoButton={showSidebarUndoButton}
+        showSidebarFavoriteButton={showSidebarFavoriteButton}
+        showSidebarRefreshButton={showSidebarRefreshButton}
+        showSidebarSearchButton={showSidebarSearchButton}
+        showSidebarTagsButton={showSidebarTagsButton}
+        showSidebarSortButton={showSidebarSortButton}
         fileTreeSort={sortContext.mode}
         onFileTreeSortChange={onFileTreeSortChange}
         onRootContext={onRootContext}

@@ -66,6 +66,64 @@ export default function ControlsSection({ settings, onChange, en }: SectionProps
       </SettingsCard>
       <SettingsCard title={en ? 'Sidebar header' : '侧边栏顶部'}>
         <ToggleRow
+          label={en ? 'Show undo button' : '显示撤销按钮'}
+          description={
+            en
+              ? 'Show the undo button when the sidebar has a reversible file operation.'
+              : '侧边栏存在可撤销的文件操作时，显示撤销按钮。'
+          }
+          checked={settings.showSidebarUndoButton}
+          onChange={(showSidebarUndoButton) => onChange({ showSidebarUndoButton })}
+        />
+        <ToggleRow
+          label={en ? 'Show favorite button' : '显示收藏按钮'}
+          description={
+            en
+              ? 'Show the button for adding the current folder to favorites.'
+              : '显示收藏当前文件夹的按钮。'
+          }
+          checked={settings.showSidebarFavoriteButton}
+          onChange={(showSidebarFavoriteButton) => onChange({ showSidebarFavoriteButton })}
+        />
+        <ToggleRow
+          label={en ? 'Show refresh button' : '显示刷新按钮'}
+          description={
+            en
+              ? 'Show the button for refreshing the workspace tree.'
+              : '显示刷新工作区文件树的按钮。'
+          }
+          checked={settings.showSidebarRefreshButton}
+          onChange={(showSidebarRefreshButton) => onChange({ showSidebarRefreshButton })}
+        />
+        <ToggleRow
+          label={en ? 'Show search button' : '显示搜索按钮'}
+          description={
+            en
+              ? 'Show the button for searching in the current folder.'
+              : '显示在当前文件夹中搜索的按钮。'
+          }
+          checked={settings.showSidebarSearchButton}
+          onChange={(showSidebarSearchButton) => onChange({ showSidebarSearchButton })}
+        />
+        <ToggleRow
+          label={en ? 'Show file-tree sort button' : '显示文件树排序按钮'}
+          description={
+            en
+              ? 'Show the compact sorting menu in the sidebar. Off by default.'
+              : '显示侧边栏中的紧凑排序菜单；默认关闭。'
+          }
+          checked={settings.showSidebarSortButton}
+          onChange={(showSidebarSortButton) => onChange({ showSidebarSortButton })}
+        />
+        <ToggleRow
+          label={en ? 'Show tag-management button' : '显示标签治理按钮'}
+          description={
+            en ? 'Show the button for managing workspace tags.' : '显示管理工作区标签的按钮。'
+          }
+          checked={settings.showSidebarTagsButton}
+          onChange={(showSidebarTagsButton) => onChange({ showSidebarTagsButton })}
+        />
+        <ToggleRow
           label={en ? 'Show open-folder button' : '显示打开文件夹按钮'}
           description={
             en

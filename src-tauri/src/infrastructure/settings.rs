@@ -310,6 +310,12 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(show_reading_mode_control);
     replace_if_some!(show_source_mode_control);
     replace_if_some!(show_reveal_button);
+    replace_if_some!(show_sidebar_undo_button);
+    replace_if_some!(show_sidebar_favorite_button);
+    replace_if_some!(show_sidebar_refresh_button);
+    replace_if_some!(show_sidebar_search_button);
+    replace_if_some!(show_sidebar_tags_button);
+    replace_if_some!(show_sidebar_sort_button);
     replace_if_some!(show_open_folder_button);
     replace_if_some!(show_settings_button);
     replace_if_some!(image_copy_mode);

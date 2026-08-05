@@ -29,6 +29,12 @@ fn legacy_settings_receive_current_defaults() {
     assert!(settings.show_reading_mode_control);
     assert!(settings.show_source_mode_control);
     assert!(settings.show_reveal_button);
+    assert!(settings.show_sidebar_undo_button);
+    assert!(settings.show_sidebar_favorite_button);
+    assert!(settings.show_sidebar_refresh_button);
+    assert!(settings.show_sidebar_search_button);
+    assert!(settings.show_sidebar_tags_button);
+    assert!(!settings.show_sidebar_sort_button);
     assert_eq!(settings.clipboard_format, "rich");
     assert!(!settings.copy_text_color);
     assert!(!settings.copy_highlight_color);

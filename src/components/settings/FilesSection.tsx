@@ -2,6 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { desktop } from '../../platform'
 import type { AppSettings } from '../../types'
+import { FILE_TREE_SORT_OPTIONS } from '../../lib/fileTreeSort'
 import { TEXT_FORMAT_GROUPS, isGroupEnabled, toggleGroup } from '../../lib/textFormats'
 import { SettingsPage, SettingsCard, SettingRow, ToggleRow } from './primitives'
 import type { SectionProps } from './types'
@@ -31,11 +32,11 @@ export default function FilesSection({ settings, onChange, en }: SectionProps): 
               })
             }
           >
-            <option value="default">{en ? 'Name (A→Z)' : '名称（A→Z）'}</option>
-            <option value="nameDesc">{en ? 'Name (Z→A)' : '名称（Z→A）'}</option>
-            <option value="modified">{en ? 'Recently modified' : '最近修改'}</option>
-            <option value="opened">{en ? 'Recently opened' : '最近打开'}</option>
-            <option value="smart">{en ? 'Smart (recommended)' : '智能推荐'}</option>
+            {FILE_TREE_SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {en ? option.labelEn : option.labelZh}
+              </option>
+            ))}
           </select>
         </SettingRow>
         {settings.fileTreeSort === 'smart' && (

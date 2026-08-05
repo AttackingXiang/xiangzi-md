@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { FileTreeSort, Folder as FolderType } from '../types'
+import { FILE_TREE_SORT_OPTIONS } from '../lib/fileTreeSort'
 import { t } from '../lib/i18n'
 
 interface Props {
@@ -29,18 +30,16 @@ interface Props {
   onOpenFolder: () => void
   onOpenSettings: () => void
   onRootContext: (x: number, y: number) => void
+  showSidebarUndoButton: boolean
+  showSidebarFavoriteButton: boolean
+  showSidebarRefreshButton: boolean
+  showSidebarSearchButton: boolean
+  showSidebarTagsButton: boolean
+  showSidebarSortButton: boolean
   /** 文件树快捷排序；标签面板复用头部时不传入。 */
   fileTreeSort?: FileTreeSort
   onFileTreeSortChange?: (sort: FileTreeSort) => void
 }
-
-const SORT_OPTIONS: readonly { value: FileTreeSort; label: string }[] = [
-  { value: 'default', label: '名称（A→Z）' },
-  { value: 'nameDesc', label: '名称（Z→A）' },
-  { value: 'modified', label: '最近修改' },
-  { value: 'opened', label: '最近打开' },
-  { value: 'smart', label: '智能推荐' },
-]
 
 /** 侧边栏顶部固定头部：当前文件夹名 + 操作按钮。文件树 / 标签面板都复用它，
  * 这样切到标签视图时"当前打开的文件夹"这一行不会消失。 */
@@ -58,6 +57,12 @@ export default function SidebarHeader({
   onOpenFolder,
   onOpenSettings,
   onRootContext,
+  showSidebarUndoButton,
+  showSidebarFavoriteButton,
+  showSidebarRefreshButton,
+  showSidebarSearchButton,
+  showSidebarTagsButton,
+  showSidebarSortButton,
   fileTreeSort,
   onFileTreeSortChange,
 }: Props): JSX.Element {
@@ -80,7 +85,10 @@ export default function SidebarHeader({
     }
   }, [sortMenuOpen])
 
-  const sortOptions = SORT_OPTIONS.map((option) => ({ ...option, label: t(option.label) }))
+  const sortOptions = FILE_TREE_SORT_OPTIONS.map((option) => ({
+    ...option,
+    label: t(option.labelZh),
+  }))
   const currentSortLabel =
     sortOptions.find((option) => option.value === fileTreeSort)?.label ?? t('名称（A→Z）')
 
@@ -102,12 +110,12 @@ export default function SidebarHeader({
         {folder ? folder.name : t('资源管理器')}
       </span>
       <div className="sidebar-actions">
-        {folder && canUndo && (
+        {folder && canUndo && showSidebarUndoButton && (
           <button className="icon-btn sm" title={t('撤销上次操作')} onClick={onUndo}>
             <RotateCcw size={15} />
           </button>
         )}
-        {folder && (
+        {folder && showSidebarFavoriteButton && (
           <button
             className={`icon-btn sm${isFav ? ' active' : ''}`}
             title={isFav ? t('取消收藏') : t('收藏此目录')}
@@ -116,17 +124,17 @@ export default function SidebarHeader({
             <Star size={15} fill={isFav ? 'currentColor' : 'none'} />
           </button>
         )}
-        {folder && (
+        {folder && showSidebarRefreshButton && (
           <button className="icon-btn sm" title={t('刷新')} onClick={onRefresh}>
             <RefreshCw size={15} />
           </button>
         )}
-        {folder && (
+        {folder && showSidebarSearchButton && (
           <button className="icon-btn sm" title={t('在文件夹中搜索')} onClick={onOpenSearch}>
             <Search size={15} />
           </button>
         )}
-        {folder && fileTreeSort && onFileTreeSortChange && (
+        {folder && showSidebarSortButton && fileTreeSort && onFileTreeSortChange && (
           <div className="sidebar-sort-control" ref={sortControlRef}>
             <button
               className={`icon-btn sm${sortMenuOpen ? ' active' : ''}`}
@@ -159,7 +167,7 @@ export default function SidebarHeader({
             )}
           </div>
         )}
-        {folder && (
+        {folder && showSidebarTagsButton && (
           <button className="icon-btn sm" title={t('标签治理')} onClick={onShowTags}>
             <Tags size={15} />
           </button>

@@ -137,6 +137,18 @@ export interface AppSettings {
   showReadingModeControl: boolean
   showSourceModeControl: boolean
   showRevealButton: boolean
+  /** 侧边栏顶部撤销按钮是否显示；仅在存在可撤销操作时出现。 */
+  showSidebarUndoButton: boolean
+  /** 侧边栏顶部收藏按钮是否显示。 */
+  showSidebarFavoriteButton: boolean
+  /** 侧边栏顶部刷新按钮是否显示。 */
+  showSidebarRefreshButton: boolean
+  /** 侧边栏顶部搜索按钮是否显示。 */
+  showSidebarSearchButton: boolean
+  /** 侧边栏顶部标签治理按钮是否显示。 */
+  showSidebarTagsButton: boolean
+  /** 侧边栏顶部文件树排序按钮是否显示；默认关闭。 */
+  showSidebarSortButton: boolean
   /** 侧边栏顶部"打开文件夹"按钮是否显示（默认隐藏，仍可用 Welcome 页/快捷键） */
   showOpenFolderButton: boolean
   /** 侧边栏顶部"设置"按钮是否显示（默认隐藏，仍可用 ⌘, / 命令面板） */
