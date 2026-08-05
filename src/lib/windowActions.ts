@@ -37,3 +37,21 @@ export async function getWindowFullscreen(): Promise<boolean> {
 export async function setWindowFullscreen(fullscreen: boolean): Promise<void> {
   await getCurrentWindow().setFullscreen(fullscreen)
 }
+
+/**
+ * 订阅原生窗口的全屏状态变化。
+ *
+ * native 全屏不会触发 DOM 的 `fullscreenchange`，所以用户通过绿灯按钮或
+ * ⌃⌘F 退出全屏时，只有窗口尺寸事件能反映出来；收到后重新查询真实状态。
+ */
+export async function watchWindowFullscreen(
+  onChange: (fullscreen: boolean) => void,
+): Promise<() => void> {
+  const win = getCurrentWindow()
+  return win.onResized(() => {
+    void win
+      .isFullscreen()
+      .then(onChange)
+      .catch(() => undefined)
+  })
+}

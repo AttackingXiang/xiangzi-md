@@ -25,6 +25,18 @@ function renderPreview(onClose = vi.fn()): { host: HTMLElement; root: Root } {
   return { host, root }
 }
 
+/**
+ * 从弹窗内部真实地按下 Escape。
+ *
+ * 不能用 `window.dispatchEvent`：那样事件只会命中 window 上的监听器。真实按键
+ * 从聚焦元素冒泡经过 document 再到 window，而 Escape 由模态栈在 document 的
+ * 捕获阶段分发（见 useModalFocus），只有从弹窗里派发才能走到那条路径上。
+ */
+function pressEscape(host: HTMLElement): void {
+  const dialog = host.querySelector('[role="dialog"]') ?? document.body
+  dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+}
+
 afterEach(() => {
   document.body.replaceChildren()
 })
@@ -52,15 +64,11 @@ describe('PreviewDialog', () => {
     const { host, root } = renderPreview(onClose)
     act(() => host.querySelector<HTMLButtonElement>('[title="最大化预览窗口"]')?.click())
 
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    })
+    act(() => pressEscape(host))
     expect(host.querySelector('.preview-backdrop')?.classList.contains('is-maximized')).toBe(false)
     expect(onClose).not.toHaveBeenCalled()
 
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    })
+    act(() => pressEscape(host))
     expect(onClose).toHaveBeenCalledOnce()
 
     act(() => root.unmount())

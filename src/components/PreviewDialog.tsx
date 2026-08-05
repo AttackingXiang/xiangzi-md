@@ -1,13 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-  type WheelEvent,
-} from 'react'
+import { useEffect, useRef, useState, type ReactNode, type WheelEvent } from 'react'
 import {
   Expand,
   Fullscreen,
@@ -21,9 +12,9 @@ import {
   X,
 } from 'lucide-react'
 import { useModalFocus } from '../hooks/useModalFocus'
-import { isTauriRuntime } from '../platform'
-import { getWindowFullscreen, setWindowFullscreen } from '../lib/windowActions'
-import { clampPreviewScale, fitPreviewScale, nextPreviewScale } from '../lib/lightboxZoom'
+import { usePreviewFullscreen } from '../hooks/usePreviewFullscreen'
+import { usePreviewPan } from '../hooks/usePreviewPan'
+import { usePreviewZoom, type PreviewSize } from '../hooks/usePreviewZoom'
 import { t } from '../lib/i18n'
 
 export type PreviewTool = 'select' | 'pan' | 'zoom'
@@ -35,17 +26,9 @@ interface Props {
   minScale: number
   maxScale: number
   initialTool: PreviewTool
-  baseSize?: { width: number; height: number } | null
+  baseSize?: PreviewSize | null
   contentClassName?: string
   doubleClickZoom?: boolean
-}
-
-interface DragState {
-  pointerId: number
-  clientX: number
-  clientY: number
-  scrollLeft: number
-  scrollTop: number
 }
 
 /** Shared, bounded preview surface for images, Mermaid diagrams, and tables. */
@@ -60,193 +43,45 @@ export default function PreviewDialog({
   contentClassName = '',
   doubleClickZoom = false,
 }: Props): JSX.Element {
-  const dialogRef = useModalFocus<HTMLElement>()
   const viewportRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const scaleRef = useRef(1)
-  const modeRef = useRef<'fit' | 'actual' | 'custom'>('fit')
-  const dragRef = useRef<DragState | null>(null)
-  const enteredSystemFullscreenRef = useRef(false)
-  const maximizedBeforeSystemRef = useRef(false)
-  const [measuredBaseSize, setMeasuredBaseSize] = useState<{
-    width: number
-    height: number
-  } | null>(null)
-  const [scale, setScale] = useState(1)
   const [tool, setTool] = useState<PreviewTool>(initialTool)
   const [spaceHeld, setSpaceHeld] = useState(false)
-  const [dragging, setDragging] = useState(false)
-  const [maximized, setMaximized] = useState(false)
-  const [systemFullscreen, setSystemFullscreen] = useState(false)
-  const baseSize = suppliedBaseSize ?? measuredBaseSize
 
-  const updateScale = useCallback(
-    (next: number, mode: 'fit' | 'actual' | 'custom') => {
-      const clamped = clampPreviewScale(next, minScale, maxScale)
-      scaleRef.current = clamped
-      modeRef.current = mode
-      setScale(clamped)
-    },
-    [maxScale, minScale],
+  const { scale, baseSize, scaleRef, modeRef, fit, actualSize, zoomTo, zoomStep } = usePreviewZoom({
+    viewportRef,
+    contentRef,
+    minScale,
+    maxScale,
+    suppliedBaseSize,
+    measureKey: children,
+  })
+  const { maximized, setMaximized, systemFullscreen, toggleSystemFullscreen, handleEscape } =
+    usePreviewFullscreen(onClose)
+
+  const panActive = tool === 'pan' || spaceHeld
+  const { dragging, onPointerDown, onPointerMove, endPointerDrag } = usePreviewPan(
+    viewportRef,
+    panActive,
   )
 
-  const measureContent = useCallback(() => {
-    if (suppliedBaseSize) return
-    const content = contentRef.current
-    if (!content) return
-    const width = Math.ceil(content.scrollWidth)
-    const height = Math.ceil(content.scrollHeight)
-    if (width <= 0 || height <= 0) return
-    setMeasuredBaseSize((current) =>
-      current?.width === width && current.height === height ? current : { width, height },
-    )
-  }, [suppliedBaseSize])
-
-  useLayoutEffect(() => {
-    measureContent()
-    const content = contentRef.current
-    if (!content || typeof ResizeObserver !== 'function') return undefined
-    const observer = new ResizeObserver(measureContent)
-    observer.observe(content)
-    return () => observer.disconnect()
-  }, [children, measureContent])
-
-  const fit = useCallback(() => {
-    const viewport = viewportRef.current
-    if (!viewport || !baseSize) return
-    updateScale(
-      fitPreviewScale(
-        baseSize.width,
-        baseSize.height,
-        Math.max(1, viewport.clientWidth - 48),
-        Math.max(1, viewport.clientHeight - 48),
-        minScale,
-        maxScale,
-      ),
-      'fit',
-    )
-    window.requestAnimationFrame(() => viewport.scrollTo({ left: 0, top: 0 }))
-  }, [baseSize, maxScale, minScale, updateScale])
+  // Escape 走模态栈分发，这样嵌在别的弹窗里时一次按键只关掉最内层。
+  const dialogRef = useModalFocus<HTMLElement>(true, handleEscape)
 
   useEffect(() => {
-    if (!baseSize) return
-    fit()
-  }, [baseSize, fit])
+    // 缩放/平移快捷键都是裸键位，落到输入控件里就会变成"打不出字"。
+    const typingInto = (target: EventTarget | null): boolean =>
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      (target instanceof HTMLElement && target.isContentEditable)
 
-  useEffect(() => {
-    const viewport = viewportRef.current
-    if (!viewport || typeof ResizeObserver !== 'function') return undefined
-    const observer = new ResizeObserver(() => {
-      if (modeRef.current === 'fit') fit()
-    })
-    observer.observe(viewport)
-    return () => observer.disconnect()
-  }, [fit])
-
-  const zoomTo = useCallback(
-    (next: number, clientX?: number, clientY?: number) => {
-      const viewport = viewportRef.current
-      const content = contentRef.current
-      const current = scaleRef.current
-      const clamped = clampPreviewScale(next, minScale, maxScale)
-      if (!viewport || !content || clamped === current) return
-
-      const viewportRect = viewport.getBoundingClientRect()
-      const contentRect = content.getBoundingClientRect()
-      const anchorX = clientX ?? viewportRect.left + viewportRect.width / 2
-      const anchorY = clientY ?? viewportRect.top + viewportRect.height / 2
-      const ratioX = contentRect.width > 0 ? (anchorX - contentRect.left) / contentRect.width : 0.5
-      const ratioY = contentRect.height > 0 ? (anchorY - contentRect.top) / contentRect.height : 0.5
-      updateScale(clamped, 'custom')
-      window.requestAnimationFrame(() => {
-        const nextRect = content.getBoundingClientRect()
-        viewport.scrollLeft += nextRect.left + ratioX * nextRect.width - anchorX
-        viewport.scrollTop += nextRect.top + ratioY * nextRect.height - anchorY
-      })
-    },
-    [maxScale, minScale, updateScale],
-  )
-
-  const actualSize = useCallback(() => {
-    updateScale(1, 'actual')
-    window.requestAnimationFrame(() => viewportRef.current?.scrollTo({ left: 0, top: 0 }))
-  }, [updateScale])
-
-  const zoomStep = useCallback(
-    (direction: 'in' | 'out', clientX?: number, clientY?: number) => {
-      zoomTo(nextPreviewScale(scaleRef.current, direction, minScale, maxScale), clientX, clientY)
-    },
-    [maxScale, minScale, zoomTo],
-  )
-
-  const leaveSystemFullscreen = useCallback(async () => {
-    const enteredByPreview = enteredSystemFullscreenRef.current
-    if (isTauriRuntime()) {
-      await setWindowFullscreen(false)
-    } else if (document.fullscreenElement && document.exitFullscreen) {
-      await document.exitFullscreen()
-    }
-    enteredSystemFullscreenRef.current = false
-    setSystemFullscreen(false)
-    if (enteredByPreview) setMaximized(maximizedBeforeSystemRef.current)
-  }, [])
-
-  const toggleSystemFullscreen = useCallback(async () => {
-    if (systemFullscreen) {
-      await leaveSystemFullscreen()
-      return
-    }
-    if (isTauriRuntime()) {
-      await setWindowFullscreen(true)
-    } else if (document.documentElement.requestFullscreen) {
-      await document.documentElement.requestFullscreen()
-    } else {
-      return
-    }
-    maximizedBeforeSystemRef.current = maximized
-    setMaximized(true)
-    enteredSystemFullscreenRef.current = true
-    setSystemFullscreen(true)
-  }, [leaveSystemFullscreen, maximized, systemFullscreen])
-
-  useEffect(() => {
-    if (!isTauriRuntime()) return
-    void getWindowFullscreen()
-      .then(setSystemFullscreen)
-      .catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    const onFullscreenChange = (): void => setSystemFullscreen(Boolean(document.fullscreenElement))
-    document.addEventListener('fullscreenchange', onFullscreenChange)
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
-  }, [])
-
-  useEffect(
-    () => () => {
-      if (!enteredSystemFullscreenRef.current) return
-      if (isTauriRuntime()) void setWindowFullscreen(false).catch(() => undefined)
-      else if (document.fullscreenElement && document.exitFullscreen) {
-        void document.exitFullscreen().catch(() => undefined)
-      }
-    },
-    [],
-  )
-
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (typingInto(event.target)) return
       if (event.code === 'Space' && !event.repeat) {
-        const target = event.target
-        if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
-          event.preventDefault()
-          setSpaceHeld(true)
-        }
+        event.preventDefault()
+        setSpaceHeld(true)
       }
-      if (event.key === 'Escape') {
-        if (systemFullscreen) void leaveSystemFullscreen().catch(() => undefined)
-        else if (maximized) setMaximized(false)
-        else onClose()
-      } else if (event.key === '+' || event.key === '=') zoomStep('in')
+      if (event.key === '+' || event.key === '=') zoomStep('in')
       else if (event.key === '-') zoomStep('out')
       else if (event.key === '0') fit()
       else if (event.key === '1') actualSize()
@@ -260,42 +95,7 @@ export default function PreviewDialog({
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [actualSize, fit, leaveSystemFullscreen, maximized, onClose, systemFullscreen, zoomStep])
-
-  const panActive = tool === 'pan' || spaceHeld
-
-  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (!panActive || event.button !== 0) return
-    const viewport = viewportRef.current
-    if (!viewport) return
-    event.preventDefault()
-    viewport.setPointerCapture(event.pointerId)
-    dragRef.current = {
-      pointerId: event.pointerId,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      scrollLeft: viewport.scrollLeft,
-      scrollTop: viewport.scrollTop,
-    }
-    setDragging(true)
-  }
-
-  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    const drag = dragRef.current
-    const viewport = viewportRef.current
-    if (!drag || !viewport || drag.pointerId !== event.pointerId) return
-    viewport.scrollLeft = drag.scrollLeft - (event.clientX - drag.clientX)
-    viewport.scrollTop = drag.scrollTop - (event.clientY - drag.clientY)
-  }
-
-  const endPointerDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (dragRef.current?.pointerId !== event.pointerId) return
-    dragRef.current = null
-    setDragging(false)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }
+  }, [actualSize, fit, zoomStep])
 
   const onViewportClick = (event: React.MouseEvent<HTMLDivElement>): void => {
     if (tool !== 'zoom' || dragging) return
