@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
 import { materializePortableClipboard, portableClipboardText } from './portableClipboard'
+import { DEFAULT_CLIPBOARD_FORMATTING } from './clipboardFormatting'
 
 function materialize(html: string): HTMLElement {
   const root = document.createElement('div')
   root.innerHTML = html
-  materializePortableClipboard(root)
+  materializePortableClipboard(root, DEFAULT_CLIPBOARD_FORMATTING)
   return root
 }
 
@@ -45,7 +46,7 @@ describe('materializePortableClipboard', () => {
     span.dataset.xmdSuffix = '](/docs)'
     span.textContent = 'text'
     root.append(span)
-    materializePortableClipboard(root)
+    materializePortableClipboard(root, DEFAULT_CLIPBOARD_FORMATTING)
     const anchor = root.querySelector('a')
     expect(anchor?.getAttribute('href')).toBe('/docs')
   })

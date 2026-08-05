@@ -539,7 +539,10 @@ function wholeMarkdownWrapper(): HTMLElement | null {
   const view = cm6ActiveViewBridge.get()
   if (!view) return null
   const wrapper = document.createElement('div')
-  wrapper.innerHTML = markdownToPortableHtml(view.state.doc.toString())
+  wrapper.innerHTML = markdownToPortableHtml(
+    view.state.doc.toString(),
+    clipboardFormattingOptions(),
+  )
   return wrapper
 }
 

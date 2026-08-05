@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { markdownToPortableHtml } from './markdownClipboard'
+import { DEFAULT_CLIPBOARD_FORMATTING } from './clipboardFormatting'
 
 describe('markdownToPortableHtml', () => {
   it('serializes a complete GFM document without relying on rendered DOM', () => {
-    const html = markdownToPortableHtml(`# Heading **bold** *italic* ~~deleted~~
+    const html = markdownToPortableHtml(
+      `# Heading **bold** *italic* ~~deleted~~
 
 [link](https://example.com) and ![alt](images/a.png)
 
@@ -22,7 +24,9 @@ const value = 1
 |---|---|
 | x | y |
 
----`)
+---`,
+      DEFAULT_CLIPBOARD_FORMATTING,
+    )
 
     expect(html).toContain('<h1')
     expect(html).toContain('<strong>bold</strong>')
@@ -44,7 +48,10 @@ const value = 1
   })
 
   it('escapes raw markup and rejects executable links', () => {
-    const html = markdownToPortableHtml('<script>alert(1)</script> [bad](javascript:alert(1))')
+    const html = markdownToPortableHtml(
+      '<script>alert(1)</script> [bad](javascript:alert(1))',
+      DEFAULT_CLIPBOARD_FORMATTING,
+    )
     expect(html).not.toContain('<script>')
     expect(html).not.toContain('href="javascript:')
   })
@@ -52,7 +59,7 @@ const value = 1
   it('omits inline color and highlighter tags by default, with opt-in rich formatting', () => {
     const source =
       '<font color="#dc2626">red</font> and <mark style="background-color:#fde047">marked</mark>'
-    const plainRichHtml = markdownToPortableHtml(source)
+    const plainRichHtml = markdownToPortableHtml(source, DEFAULT_CLIPBOARD_FORMATTING)
     expect(plainRichHtml).not.toContain('<font')
     expect(plainRichHtml).not.toContain('<mark')
     expect(plainRichHtml).toContain('red')
@@ -68,7 +75,7 @@ const value = 1
 
   it('handles multiline color and highlighter HTML blocks', () => {
     const source = '<font color="#dc2626">\nred\n</font>\n\n<mark>\nmarked\n</mark>'
-    const withoutFormatting = markdownToPortableHtml(source)
+    const withoutFormatting = markdownToPortableHtml(source, DEFAULT_CLIPBOARD_FORMATTING)
     expect(withoutFormatting).not.toContain('&lt;font')
     expect(withoutFormatting).not.toContain('&lt;mark')
     expect(withoutFormatting).toContain('red')
@@ -83,14 +90,17 @@ const value = 1
   })
 
   it('marks only Mermaid fences for clipboard image completion', () => {
-    const html = markdownToPortableHtml(`\`\`\`mermaid
+    const html = markdownToPortableHtml(
+      `\`\`\`mermaid
 flowchart LR
   A --> B
 \`\`\`
 
 \`\`\`ts
 const value = 1
-\`\`\``)
+\`\`\``,
+      DEFAULT_CLIPBOARD_FORMATTING,
+    )
 
     expect(html.match(/data-xmd-mermaid-block/g)).toHaveLength(1)
     expect(html).toContain('<code>flowchart LR')

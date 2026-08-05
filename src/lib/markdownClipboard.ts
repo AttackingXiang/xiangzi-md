@@ -1,10 +1,6 @@
 import type { SyntaxNode } from '@lezer/common'
 import { GFM, parser as markdownParser } from '@lezer/markdown'
-import {
-  DEFAULT_CLIPBOARD_FORMATTING,
-  safeClipboardColor,
-  type ClipboardFormattingOptions,
-} from './clipboardFormatting'
+import { safeClipboardColor, type ClipboardFormattingOptions } from './clipboardFormatting'
 
 const parser = markdownParser.configure([GFM])
 
@@ -302,7 +298,7 @@ function blockNode(source: string, node: SyntaxNode, options: ClipboardFormattin
 /** Synchronous full-document serializer used when CM6's live DOM is virtualized. */
 export function markdownToPortableHtml(
   source: string,
-  options: ClipboardFormattingOptions = DEFAULT_CLIPBOARD_FORMATTING,
+  options: ClipboardFormattingOptions,
 ): string {
   return blockNode(source, parser.parse(source).topNode, options)
 }

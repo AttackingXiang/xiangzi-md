@@ -1,8 +1,5 @@
 import { removeHiddenSource } from './hiddenSourceDom'
-import {
-  DEFAULT_CLIPBOARD_FORMATTING,
-  type ClipboardFormattingOptions,
-} from './clipboardFormatting'
+import { type ClipboardFormattingOptions } from './clipboardFormatting'
 
 const INLINE_SEMANTIC_ELEMENTS = [
   ['.xmd-cm-strong', 'strong'],
@@ -244,7 +241,7 @@ function stripEditorOnlySpans(root: HTMLElement): void {
 /** Convert CM6's class-driven preview DOM into compact, portable clipboard HTML. */
 export function materializePortableClipboard(
   root: HTMLElement,
-  options: ClipboardFormattingOptions = DEFAULT_CLIPBOARD_FORMATTING,
+  options: ClipboardFormattingOptions,
 ): void {
   // Must run before headings and paragraphs are materialized, otherwise
   // visually collapsed Markdown source becomes semantic clipboard text.
