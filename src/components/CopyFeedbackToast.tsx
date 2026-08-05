@@ -5,21 +5,21 @@ import type { CopyFeedbackFormat } from '../lib/copyFeedback'
 
 interface Props {
   format: CopyFeedbackFormat
-  sequence: number
   onCopyAlternate: () => void
   onClose: () => void
 }
 
 export default function CopyFeedbackToast({
   format,
-  sequence,
   onCopyAlternate,
   onClose,
 }: Props): JSX.Element {
+  // 连续复制两次要重新计时。调用方用 sequence 做 key，每次都是一个新实例，
+  // 所以这个 effect 只需要挂载时跑一次，不必再把 sequence 当依赖传进来。
   useEffect(() => {
     const timer = window.setTimeout(onClose, 4_500)
     return () => window.clearTimeout(timer)
-  }, [onClose, sequence])
+  }, [onClose])
 
   const label = format === 'rich' ? t('保留格式') : t('纯文本')
   const alternateLabel = format === 'rich' ? t('复制为纯文本') : t('复制为保留格式')

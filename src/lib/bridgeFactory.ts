@@ -39,6 +39,14 @@ export function createRequestBridge<Args extends unknown[]>(name: string): Reque
 
   return {
     setHandler(next: RequestHandler<Args> | null): void {
+      // 单槽位：第二个注册者会顶掉第一个，而它卸载时的 setHandler(null) 又会
+      // 把第一个一起清掉。真出现两个 owner 同时挂载时，症状是某个功能"偶尔失灵"，
+      // 很难往回追，所以在开发模式下直接喊出来。
+      if (import.meta.env.DEV && next && handler) {
+        console.warn(
+          `[${name}] setHandler() replaced a live handler — two owners are mounted at once`,
+        )
+      }
       handler = next
     },
     request(...args: Args): void {
@@ -102,6 +110,43 @@ export function createStateBridge<T>(
     reset(): void {
       listeners.clear()
       state = initial
+    },
+  }
+}
+
+type EventListener<T> = (payload: T) => void
+
+export interface EventBridge<T> {
+  /** Delivers one occurrence to every current subscriber. */
+  emit(this: void, payload: T): void
+  /** Adds a subscriber. Unlike a state bridge, nothing is replayed on subscribe. */
+  subscribe(this: void, listener: EventListener<T>): () => void
+  /** Drops all subscribers. For tests only. */
+  reset(this: void): void
+}
+
+/**
+ * Creates a multi-subscriber bridge for things that *happen* rather than things
+ * that *are* — a copy completing, a toast firing.
+ *
+ * Distinct from `createStateBridge` because there is no "current value": a state
+ * bridge replays its last value to every new subscriber, which for an occurrence
+ * means a remounting component re-fires an event that already happened.
+ */
+export function createEventBridge<T>(): EventBridge<T> {
+  const listeners = new Set<EventListener<T>>()
+
+  return {
+    emit(payload: T): void {
+      // Snapshot: a listener unsubscribing mid-notify must not skip a sibling.
+      for (const listener of [...listeners]) listener(payload)
+    },
+    subscribe(listener: EventListener<T>): () => void {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    reset(): void {
+      listeners.clear()
     },
   }
 }
