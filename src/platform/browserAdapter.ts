@@ -7,6 +7,7 @@ import type {
   DraftSummary,
   FileNode,
   FileVersion,
+  FolderSearchMode,
   Folder,
   OpenedFile,
   SearchResponse,
@@ -83,7 +84,7 @@ function openedFile(path: string, content: string): OpenedFile {
 
 export function createBrowserPreviewSettings(): AppSettings {
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     attachmentMode: 'subfolder',
     attachmentFolder: 'assets',
     imageMaxWidth: 800,
@@ -164,6 +165,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     allowRemoteImages: false,
     showToolbar: true,
     showSelectionToolbar: true,
+    searchFocusEffect: 'sparkle',
     textColorPresets: [
       '#dc2626',
       '#ea580c',
@@ -350,9 +352,11 @@ export const browserDesktopAdapter: DesktopPort = {
     path: sourcePath,
     name: sourcePath.split('/').pop() ?? sourcePath,
   }),
-  searchInFolder: async (_root, query): Promise<SearchResponse> => {
+  searchInFolder: async (_root, query, mode: FolderSearchMode): Promise<SearchResponse> => {
     const needle = query.toLowerCase()
     const items = Array.from(files.entries()).flatMap(([path, content]) => {
+      const name = path.split('/').pop() ?? path
+      const nameMatches = mode === 'content' ? 0 : name.toLowerCase().split(needle).length - 1
       const matches = content
         .split('\n')
         .map((text, index) => ({
@@ -360,8 +364,8 @@ export const browserDesktopAdapter: DesktopPort = {
           matchIndex: text.toLowerCase().indexOf(needle),
           text,
         }))
-        .filter((match) => match.matchIndex >= 0)
-      return matches.length ? [{ path, name: path.split('/').pop() ?? path, matches }] : []
+        .filter((match) => mode !== 'filename' && match.matchIndex >= 0)
+      return nameMatches || matches.length ? [{ path, name, nameMatches, matches }] : []
     })
     return {
       items,

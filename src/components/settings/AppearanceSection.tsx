@@ -15,6 +15,11 @@ import type { InstalledTheme } from '../../platform/contracts'
 import type { AppSettings } from '../../types'
 import { t } from '../../lib/i18n'
 import { THEME_GALLERY_URL } from '../../lib/themeMarketplace'
+import {
+  DEFAULT_SEARCH_FOCUS_EFFECT,
+  normalizeSearchFocusEffect,
+  SEARCH_FOCUS_EFFECT_PRESETS,
+} from '../../lib/searchFocusEffect'
 import { useModalFocus } from '../../hooks/useModalFocus'
 import { SettingsPage, SettingsCard, SettingRow } from './primitives'
 
@@ -187,6 +192,10 @@ export default function AppearanceSection({
     : settings.customCssPath
       ? ['#f8f5ed', '#d7cec0', '#4f6f73']
       : (selectedBuiltInTheme?.colors ?? BUILT_IN_THEMES[0].colors)
+  const searchFocusEffect = normalizeSearchFocusEffect(
+    settings.searchFocusEffect ?? DEFAULT_SEARCH_FOCUS_EFFECT,
+  )
+  const searchFocusPreset = SEARCH_FOCUS_EFFECT_PRESETS[searchFocusEffect]
 
   const removeInstalledTheme = async (theme: InstalledTheme): Promise<void> => {
     if (removingThemeId) return
@@ -482,6 +491,31 @@ export default function AppearanceSection({
             <option value="local">{en ? 'Local custom CSS' : '本地自定义 CSS'}</option>
           )}
         </select>
+      </SettingsCard>
+
+      <SettingsCard title={en ? 'Focus effects' : '焦点动画'}>
+        <p className="appearance-group-description">
+          {en
+            ? 'Choose how a search result is emphasized in the document. Effects are painted above the content and do not change layout.'
+            : '选择搜索命中内容的提示方式。动画绘制在正文上方，不改变正文布局。'}
+        </p>
+        <SettingRow label={en ? 'Search focus animation' : '搜索焦点动画'}>
+          <select
+            value={searchFocusEffect}
+            onChange={(event) =>
+              onChange({ searchFocusEffect: normalizeSearchFocusEffect(event.target.value) })
+            }
+          >
+            {Object.entries(SEARCH_FOCUS_EFFECT_PRESETS).map(([value, preset]) => (
+              <option key={value} value={value}>
+                {en ? preset.label.en : preset.label.zh}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
+        <p className="settings-hint">
+          {en ? searchFocusPreset.description.en : searchFocusPreset.description.zh}
+        </p>
       </SettingsCard>
 
       <SettingsCard title={en ? 'Background & custom styling' : '背景与自定义'}>

@@ -22,6 +22,7 @@ interface SeenDecoration {
   editing?: string
   style?: string
   headingNumber?: string
+  label?: string
 }
 
 function decorations(state: EditorState, from: number, to: number): SeenDecoration[] {
@@ -32,6 +33,7 @@ function decorations(state: EditorState, from: number, to: number): SeenDecorati
     (rangeFrom, rangeTo, value) => {
       const spec = value.spec as { class?: unknown; attributes?: Record<string, string> }
       const className = typeof spec.class === 'string' ? spec.class : undefined
+      const widget = (spec as { widget?: { label?: unknown } }).widget
       result.push({
         from: rangeFrom,
         to: rangeTo,
@@ -41,6 +43,7 @@ function decorations(state: EditorState, from: number, to: number): SeenDecorati
         editing: spec.attributes?.['data-xmd-editing'],
         style: spec.attributes?.style,
         headingNumber: spec.attributes?.['data-xmd-heading-number'],
+        label: typeof widget?.label === 'string' ? widget.label : undefined,
       })
     },
   )
@@ -641,6 +644,22 @@ describe('CM6 Markdown live preview: paragraphs, callouts and thematic breaks', 
 })
 
 describe('CM6 Markdown live preview: lists and quotes', () => {
+  it('renumbers visible ordered-list markers after an item is removed', () => {
+    const doc = '1. first\n3. third\n   7. nested\n   9. nested later\n4. fourth'
+    const state = createState(doc)
+    const labels = decorations(state, 0, doc.length)
+      .filter(({ label }) => label)
+      .map(({ from, label }) => ({ from, label }))
+
+    expect(labels).toEqual([
+      { from: 0, label: '1.' },
+      { from: doc.indexOf('3. third'), label: '2.' },
+      { from: doc.indexOf('   7. nested'), label: '7.' },
+      { from: doc.indexOf('   9. nested later'), label: '8.' },
+      { from: doc.indexOf('4. fourth'), label: '3.' },
+    ])
+  })
+
   it('renders list markers from AST and hides the bullet before task checkboxes', () => {
     const doc = '- first\n  - nested\n1. ordered\n- [ ] task'
     const state = createState(doc)

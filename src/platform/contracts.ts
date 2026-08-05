@@ -37,6 +37,9 @@ export interface FileNode {
 /** 文件树排序方式 */
 export type FileTreeSort = 'default' | 'nameDesc' | 'modified' | 'opened' | 'smart'
 
+/** Search-result focus animation preset painted above the editor content. */
+export type SearchFocusEffect = 'off' | 'sparkle' | 'ring' | 'confetti' | 'shatter'
+
 /** 单个文档的 frecency 记录：文件树/标签树「智能推荐」排序的原料。 */
 export interface RecentDoc {
   path: string
@@ -123,6 +126,8 @@ export interface AppSettings {
   allowRemoteImages: boolean
   showToolbar: boolean
   showSelectionToolbar: boolean
+  /** Animation used to draw attention to the active search result in the document. */
+  searchFocusEffect: SearchFocusEffect
   textColorPresets: string[]
   defaultTextColor: string
   highlightColorPresets: string[]
@@ -197,8 +202,11 @@ export interface WriteResult {
 export interface SearchResult {
   path: string
   name: string
+  nameMatches: number
   matches: Array<{ lineNumber: number; matchIndex: number; text: string }>
 }
+
+export type FolderSearchMode = 'all' | 'content' | 'filename'
 
 export interface SearchResponse {
   items: SearchResult[]
@@ -328,7 +336,7 @@ export interface DesktopPort {
   openExternal(url: string): Promise<void>
   openWithDefault(path: string): Promise<void>
   moveItem(sourcePath: string, targetDirPath: string): Promise<{ path: string; name: string }>
-  searchInFolder(root: string, query: string): Promise<SearchResponse>
+  searchInFolder(root: string, query: string, mode: FolderSearchMode): Promise<SearchResponse>
   cancelSearch(): Promise<void>
   saveAttachment(
     docDir: string,

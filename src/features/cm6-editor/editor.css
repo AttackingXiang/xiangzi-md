@@ -108,22 +108,38 @@
   background: var(--xmd-document-selection-bg) !important;
 }
 
+/* Keep every search result findable, while giving the currently selected
+   result a stronger but layout-neutral static cue. Motion lives in the
+   themeable focus-effect layer. */
+.xmd-cm-editor .cm-searchMatch,
+.xmd-cm-editor .xmd-cm-active-search-match {
+  background-color: color-mix(
+    in srgb,
+    var(--xmd-document-accent, var(--accent)) 16%,
+    transparent
+  ) !important;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.xmd-cm-editor .cm-searchMatch-selected,
+.xmd-cm-editor .xmd-cm-active-search-match,
+.xmd-cm-editor .xmd-cm-search-target {
+  background-color: color-mix(
+    in srgb,
+    var(--xmd-document-accent, var(--accent)) 36%,
+    transparent
+  ) !important;
+  box-shadow: inset 0 -2px 0 var(--xmd-document-accent, var(--accent));
+}
+
 /* Every native Range presentation (document line, code card or table cell)
    uses the same theme token. The coordinator owns this class, so nested
    contenteditable surfaces cannot fall back to WebKit's system-blue color. */
 .xmd-cm-editor .cm-editor.xmd-cm-native-selection .cm-content::selection,
 .xmd-cm-editor .cm-editor.xmd-cm-native-selection .cm-content *::selection {
   background-color: var(--xmd-document-selection-bg) !important;
-}
-
-/* The CM6 selection layer sits behind rendered inline surfaces. While the
-   find input owns focus, mirror only an exact inline-code search match into a
-   foreground mark so its active result remains visible. */
-.xmd-cm-editor .xmd-cm-active-search-match {
-  background: var(--xmd-document-selection-bg);
-  border-radius: 2px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
 }
 
 .xmd-cm-editor .cm-activeLine {
@@ -173,6 +189,7 @@
     .cm-selectionLayer,
     .cm-tooltip,
     .cm-panels,
+    .xmd-focus-effect-layer,
     .xmd-cm-code-preview-header,
     .xmd-cm-code-scrollbar,
     .xmd-cm-preview-copy,

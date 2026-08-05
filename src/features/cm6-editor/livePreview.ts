@@ -99,6 +99,45 @@ function headingNumbers(state: EditorState): ReadonlyMap<number, string> {
   return result
 }
 
+/**
+ * Ordered-list markers are source syntax, but the rendered list position is
+ * what users see. Keep the first item's explicit start number and delimiter,
+ * then derive following labels from their position so deleting an item does
+ * not leave a visual gap (for example, `1.`, `3.` becomes `1.`, `2.`).
+ *
+ * Cache by the immutable CM6 document for the same reason as heading numbers:
+ * viewport decoration builds may run repeatedly for one document state.
+ */
+const orderedListMarkerLabelsCache = new WeakMap<object, ReadonlyMap<number, string>>()
+
+function orderedListMarkerLabels(state: EditorState): ReadonlyMap<number, string> {
+  const document = state.doc as object
+  const cached = orderedListMarkerLabelsCache.get(document)
+  if (cached) return cached
+
+  const result = new Map<number, string>()
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (node.name !== 'OrderedList') return
+      const items = node.node.getChildren('ListItem')
+      const firstMarker = items[0]?.getChild('ListMark')
+      if (!firstMarker) return
+
+      const sourceMarker = state.doc.sliceString(firstMarker.from, firstMarker.to)
+      const start = Number.parseInt(sourceMarker, 10)
+      if (!Number.isSafeInteger(start)) return
+      const delimiter = sourceMarker.endsWith(')') ? ')' : '.'
+
+      items.forEach((item, index) => {
+        const marker = item.getChild('ListMark')
+        if (marker) result.set(marker.from, `${start + index}${delimiter}`)
+      })
+    },
+  })
+  orderedListMarkerLabelsCache.set(document, result)
+  return result
+}
+
 interface InlineHtmlOpeningTag {
   from: number
   to: number
@@ -256,6 +295,7 @@ export function buildLivePreviewDecorations(
   const ranges: Array<ReturnType<Decoration['range']>> = []
   const margin = Math.max(0, options.viewportMargin ?? 256)
   const revealed = computeRevealedRanges(state)
+  const orderedLabels = orderedListMarkerLabels(state)
 
   for (const visible of expandedVisibleRanges(state.doc.length, visibleRanges, margin)) {
     const quoteDepthByLine = new Map<number, number>()
@@ -316,7 +356,11 @@ export function buildLivePreviewDecorations(
           if (prefix) {
             const indentation = prefix.indentation.replace(/\t/g, '  ').length
             const depth = Math.max(0, Math.floor(indentation / 2))
-            const label = prefix.task ? '' : /^\d/.test(prefix.marker) ? prefix.marker : '•'
+            const label = prefix.task
+              ? ''
+              : /^\d/.test(prefix.marker)
+                ? (orderedLabels.get(node.from) ?? prefix.marker)
+                : '•'
             const hangingIndent = Number((depth * 1.35 + (prefix.task ? 1.36 : 1.75)).toFixed(2))
             ranges.push(
               Decoration.line({

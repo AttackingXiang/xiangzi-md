@@ -12,9 +12,11 @@ pub async fn search_in_folder(
     cancellation: State<'_, SearchCancellation>,
     root: String,
     query: String,
+    mode: String,
 ) -> AppResult<SearchResponse> {
     let token = cancellation.begin();
-    blocking(move || search::search_in_folder(&app, &PathBuf::from(root), &query, &token)).await
+    blocking(move || search::search_in_folder(&app, &PathBuf::from(root), &query, &mode, &token))
+        .await
 }
 
 #[tauri::command]

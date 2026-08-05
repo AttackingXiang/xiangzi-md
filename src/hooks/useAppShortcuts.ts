@@ -45,7 +45,7 @@ export function routeTableCellShortcut(
 
 export function useAppShortcuts(
   overrides: Record<string, string>,
-  dispatch: (action: ShortcutAction) => void,
+  dispatch: (action: ShortcutAction, target?: EventTarget | null) => void,
 ): void {
   useEffect(() => {
     const activeBindings = effectiveShortcutMap(overrides)
@@ -76,6 +76,19 @@ export function useAppShortcuts(
         }
         // Same reasoning as routeTableCellShortcut's native branch: only the
         // literal default combo has a browser/OS select-all to defer to.
+        if (action === 'select-all' && binding === 'Mod+A') {
+          const textControl = focusedTextControlForSelectAll(event.target)
+          if (textControl) {
+            // WKWebView can retarget a window-level key event to the editor
+            // surface even while the search input is the active element.
+            // Select explicitly so the editor cannot receive the browser's
+            // fallback selection, then consume the event.
+            event.preventDefault()
+            event.stopPropagation()
+            textControl.select()
+            return
+          }
+        }
         if (
           action === 'select-all' &&
           binding === 'Mod+A' &&
@@ -84,7 +97,7 @@ export function useAppShortcuts(
           return
         event.preventDefault()
         event.stopPropagation()
-        dispatch(action)
+        dispatch(action, event.target)
         return
       }
       // A changed shortcut must also disable its old binding before Milkdown or
@@ -102,16 +115,48 @@ export function useAppShortcuts(
 
 /** Native/embedded editors own Cmd/Ctrl+A; the app shortcut is only a fallback. */
 export function shouldDeferSelectAllToFocusedEditor(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false
-  if (target.closest('input, textarea')) return true
-  const editable = target.closest('[contenteditable="true"]')
+  const focused = selectAllFocusTarget(target)
+  if (!focused) return false
+  if (focused.closest('input, textarea')) return true
+  const editable = focused.closest('[contenteditable="true"]')
   if (!editable) return false
-  const markdownRoot = target.closest('.xmd-cm-editor.is-live-preview')
-  const markdownContent = target.closest(
+  const markdownRoot = focused.closest('.xmd-cm-editor.is-live-preview')
+  const markdownContent = focused.closest(
     '.xmd-cm-editor.is-live-preview .cm-content[contenteditable="true"]',
   )
   // The outer Markdown CM6 is routed through clipboardCmd so fenced-code
   // select-all can stay block-local. Nested table cells and other editors keep
   // their native selection scope.
   return !markdownRoot || editable !== markdownContent
+}
+
+/** File-tree focus should make Cmd/Ctrl+F open the folder search surface. */
+export function shouldOpenFolderSearchFromTarget(target: EventTarget | null): boolean {
+  return selectAllFocusTarget(target)?.closest('.sidebar-wrap, .search-panel') !== null
+}
+
+function selectAllFocusTarget(target: EventTarget | null): Element | null {
+  const active =
+    typeof document !== 'undefined' && document.activeElement instanceof Element
+      ? document.activeElement
+      : null
+  if (active && active !== document.body) return active
+  return target instanceof Element ? target : null
+}
+
+export function focusedTextControlForSelectAll(
+  target: EventTarget | null,
+): HTMLInputElement | HTMLTextAreaElement | null {
+  const active =
+    typeof document !== 'undefined' && document.activeElement instanceof Element
+      ? document.activeElement
+      : null
+  const candidates = [active, target instanceof Element ? target : null]
+  for (const candidate of candidates) {
+    const control = candidate?.closest('input, textarea')
+    if (control?.tagName === 'INPUT' || control?.tagName === 'TEXTAREA') {
+      return control as HTMLInputElement | HTMLTextAreaElement
+    }
+  }
+  return null
 }

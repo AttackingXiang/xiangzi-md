@@ -20,4 +20,19 @@ describe('editor chrome styles', () => {
     expect(workspace).toMatch(/\.findbar\s*\{[\s\S]*background: var\(--editor-chrome-bg\)/)
     expect(workspace).toMatch(/\.find-input\s*\{[\s\S]*?background: transparent/)
   })
+
+  it('exposes a themeable focus effect contract', () => {
+    const root = new URL('../styles/slices/', import.meta.url)
+    const contract = readFileSync(new URL('theme-contract.css', root), 'utf8')
+    const effects = readFileSync(new URL('focus-effects.css', root), 'utf8')
+
+    expect(contract).toContain('--xmd-focus-effect: sparkle')
+    expect(contract).toContain('--xmd-focus-animation: xmd-focus-sparkle')
+    expect(effects).toContain('.xmd-focus-effect-layer')
+    expect(effects).toContain('var(--xmd-focus-animation')
+    expect(effects).toContain(".xmd-focus-effect[data-effect='confetti']")
+    expect(effects).toContain("content: '🎉  ✦  🎊'")
+    expect(effects).toContain('@keyframes xmd-focus-confetti')
+    expect(effects).toContain('@keyframes xmd-focus-shatter')
+  })
 })

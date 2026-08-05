@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, FileText, Search } from 'lucide-react'
 import { desktop } from '../platform'
 import type { SearchResult } from '../types'
+import type { FolderSearchMode } from '../platform/contracts'
 import { t, getLang } from '../lib/i18n'
 
 interface Props {
   root: string
   /** 文件树变化或已打开文件保存后变化，用于清理旧搜索结果。 */
   reloadKey: string
+  /** Incremented when the folder-search shortcut should return focus here. */
+  focusRequest?: number
   onOpenResult: (path: string, query: string, lineNumber?: number, matchIndex?: number) => void
+  onOpenFile: (path: string) => void
   onBack: () => void
 }
 
@@ -37,8 +41,16 @@ function highlight(text: string, query: string): JSX.Element {
   return <>{parts}</>
 }
 
-export default function SearchPanel({ root, reloadKey, onOpenResult, onBack }: Props): JSX.Element {
+export default function SearchPanel({
+  root,
+  reloadKey,
+  focusRequest = 0,
+  onOpenResult,
+  onOpenFile,
+  onBack,
+}: Props): JSX.Element {
   const [query, setQuery] = useState('')
+  const [mode, setMode] = useState<FolderSearchMode>('all')
   const [results, setResults] = useState<SearchResult[]>([])
   const [searchMeta, setSearchMeta] = useState({
     scannedFiles: 0,
@@ -52,7 +64,7 @@ export default function SearchPanel({ root, reloadKey, onOpenResult, onBack }: P
 
   useEffect(() => {
     inputRef.current?.focus()
-  }, [])
+  }, [focusRequest])
 
   // 防抖搜索
   useEffect(() => {
@@ -70,7 +82,7 @@ export default function SearchPanel({ root, reloadKey, onOpenResult, onBack }: P
     setLoading(true)
     const timer = setTimeout(() => {
       void desktop
-        .searchInFolder(root, query)
+        .searchInFolder(root, query, mode)
         .then((response) => {
           if (id === reqId.current && !response.cancelled) {
             setResults(response.items)
@@ -97,7 +109,7 @@ export default function SearchPanel({ root, reloadKey, onOpenResult, onBack }: P
       if (reqId.current === id) reqId.current += 1
       void desktop.cancelSearch()
     }
-  }, [query, reloadKey, root])
+  }, [mode, query, reloadKey, root])
 
   return (
     <aside className="sidebar search-panel">
@@ -120,6 +132,20 @@ export default function SearchPanel({ root, reloadKey, onOpenResult, onBack }: P
         />
       </div>
 
+      <div className="search-scope-wrap">
+        <label htmlFor="folder-search-scope">{t('搜索范围')}</label>
+        <select
+          id="folder-search-scope"
+          className="search-scope"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as FolderSearchMode)}
+        >
+          <option value="all">{t('文件名和内容')}</option>
+          <option value="content">{t('仅搜索内容')}</option>
+          <option value="filename">{t('仅搜索文件名')}</option>
+        </select>
+      </div>
+
       <div className="search-meta">
         {error ??
           (loading
@@ -134,11 +160,16 @@ export default function SearchPanel({ root, reloadKey, onOpenResult, onBack }: P
       <div className="sidebar-body">
         {results.map((r) => (
           <div key={r.path} className="search-file">
-            <div className="search-file-head" title={r.path}>
+            <button
+              type="button"
+              className="search-file-head"
+              title={r.path}
+              onClick={() => onOpenFile(r.path)}
+            >
               <FileText size={14} />
-              <span className="search-file-name">{r.name}</span>
-              <span className="search-count">{r.matches.length}</span>
-            </div>
+              <span className="search-file-name">{highlight(r.name, query)}</span>
+              <span className="search-count">{r.matches.length + r.nameMatches}</span>
+            </button>
             {r.matches.map((m, i) => (
               <div
                 key={i}

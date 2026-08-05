@@ -15,7 +15,7 @@ import {
 import { pendingTextColor, setPendingTextColor } from './commands'
 import { contextMenuSelection } from './contextMenuSelection'
 import { richMarkdownPaste } from './richPaste'
-import { activeInlineSearchMatchHighlight } from './searchMatchHighlight'
+import { activeSearchMatchHighlight } from './searchMatchHighlight'
 import { selectionCoordinator } from './selection/selectionCoordinator'
 import { cm6ToolbarState, selectionTouchesCodeBlock } from './toolbarState'
 
@@ -58,7 +58,7 @@ export function createBaseExtensions(): Extension[] {
     markdown({ base: markdownLanguage, extensions: GFM, codeLanguages: languages }),
     history(),
     search({ top: true }),
-    activeInlineSearchMatchHighlight(),
+    activeSearchMatchHighlight(),
     drawSelection(),
     dropCursor(),
     bracketMatching(),

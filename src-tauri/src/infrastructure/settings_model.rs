@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 9;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 10;
 pub(crate) const MAX_RECENT_ITEMS: usize = 15;
 /// frecency 语料库上限：比展示用的 recent_files（15）大，保留更长的打开历史用于打分。
 pub(crate) const MAX_RECENT_DOCS: usize = 100;
@@ -149,6 +149,8 @@ pub struct AppSettings {
     pub allow_remote_images: bool,
     pub show_toolbar: bool,
     pub show_selection_toolbar: bool,
+    /// 搜索命中正文时用于定位焦点的动画预设。
+    pub search_focus_effect: String,
     pub text_color_presets: Vec<String>,
     pub default_text_color: String,
     pub highlight_color_presets: Vec<String>,
@@ -286,6 +288,7 @@ impl Default for AppSettings {
             allow_remote_images: false,
             show_toolbar: false,
             show_selection_toolbar: false,
+            search_focus_effect: "sparkle".into(),
             text_color_presets: [
                 "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#2563eb", "#4f46e5",
                 "#9333ea", "#db2777", "#64748b",
@@ -380,6 +383,7 @@ pub struct SettingsPatch {
     pub allow_remote_images: Option<bool>,
     pub show_toolbar: Option<bool>,
     pub show_selection_toolbar: Option<bool>,
+    pub search_focus_effect: Option<String>,
     pub text_color_presets: Option<Vec<String>>,
     pub default_text_color: Option<String>,
     pub highlight_color_presets: Option<Vec<String>>,

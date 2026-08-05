@@ -520,6 +520,8 @@ export default function App(): JSX.Element {
     [saveSettings],
   )
   const [showFind, setShowFind] = useState(false)
+  const [findFocusRequest, setFindFocusRequest] = useState(0)
+  const requestFindFocus = useCallback(() => setFindFocusRequest((value) => value + 1), [])
   const [findInitial, setFindInitial] = useState('')
   const [findLine, setFindLine] = useState<number | undefined>(undefined)
   const [findMatchIndex, setFindMatchIndex] = useState<number | undefined>(undefined)
@@ -532,6 +534,8 @@ export default function App(): JSX.Element {
     }
   }, [showFind, isTextKind])
   const [searchView, setSearchView] = useState(false)
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0)
+  const requestSearchFocus = useCallback(() => setSearchFocusRequest((value) => value + 1), [])
   const openSidebarSearch = useCallback(() => setSearchView(true), [setSearchView])
   const [showPalette, setShowPalette] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
@@ -1199,6 +1203,8 @@ export default function App(): JSX.Element {
     setSidebarVisible,
     setSearchView,
     setShowFind,
+    requestFindFocus,
+    requestSearchFocus,
     setOutlineVisible,
     setSourceMode,
     setFocusMode,
@@ -1358,7 +1364,9 @@ export default function App(): JSX.Element {
                 <SearchPanel
                   root={folder.root}
                   reloadKey={searchReloadKey}
+                  focusRequest={searchFocusRequest}
                   onOpenResult={openSearchResult}
+                  onOpenFile={(path) => void openPath(path, baseName(path))}
                   onBack={() => setSearchView(false)}
                 />
               </Suspense>
@@ -1409,6 +1417,7 @@ export default function App(): JSX.Element {
               initialQuery={findInitial}
               initialLine={findLine}
               initialMatchIndex={findMatchIndex}
+              focusRequest={findFocusRequest}
               onClose={() => {
                 setShowFind(false)
                 setFindInitial('')

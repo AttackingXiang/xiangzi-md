@@ -213,6 +213,10 @@ const EN: Record<string, string> = {
   // Search
   返回文件: 'Back to files',
   搜索: 'Search',
+  搜索范围: 'Search scope',
+  文件名和内容: 'File name and content',
+  仅搜索内容: 'Content only',
+  仅搜索文件名: 'File name only',
   '在文件夹中搜索…': 'Search in folder…',
   '搜索中…': 'Searching…',
   个文件: ' files',

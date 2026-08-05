@@ -299,6 +299,7 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(allow_remote_images);
     replace_if_some!(show_toolbar);
     replace_if_some!(show_selection_toolbar);
+    replace_if_some!(search_focus_effect);
     replace_if_some!(text_color_presets);
     replace_if_some!(default_text_color);
     replace_if_some!(highlight_color_presets);

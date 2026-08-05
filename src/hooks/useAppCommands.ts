@@ -10,7 +10,7 @@ import type { Command } from '../components/CommandPalette'
 import type { SettingsSection } from '../components/Settings'
 import { desktop } from '../platform'
 import type { Folder, Tab } from '../types'
-import { useAppShortcuts } from './useAppShortcuts'
+import { shouldOpenFolderSearchFromTarget, useAppShortcuts } from './useAppShortcuts'
 import { clipboardCmd, editorCmd } from '../lib/editorCommands'
 import { t } from '../lib/i18n'
 import type { ShortcutAction } from '../lib/shortcuts'
@@ -42,6 +42,8 @@ interface AppCommandOptions {
   setSidebarVisible: Dispatch<SetStateAction<boolean>>
   setSearchView: Dispatch<SetStateAction<boolean>>
   setShowFind: Dispatch<SetStateAction<boolean>>
+  requestFindFocus: () => void
+  requestSearchFocus: () => void
   setOutlineVisible: Dispatch<SetStateAction<boolean>>
   setSourceMode: Dispatch<SetStateAction<boolean>>
   setFocusMode: Dispatch<SetStateAction<boolean>>
@@ -79,6 +81,8 @@ export function useAppCommands(options: AppCommandOptions): {
     setSidebarVisible,
     setSearchView,
     setShowFind,
+    requestFindFocus,
+    requestSearchFocus,
     setOutlineVisible,
     setSourceMode,
     setFocusMode,
@@ -122,7 +126,14 @@ export function useAppCommands(options: AppCommandOptions): {
           setSearchView(true)
         },
       },
-      { id: 'find', label: t('查找 / 替换'), run: () => setShowFind(true) },
+      {
+        id: 'find',
+        label: t('查找 / 替换'),
+        run: () => {
+          requestFindFocus()
+          setShowFind(true)
+        },
+      },
       { id: 'outline', label: t('切换大纲'), run: () => setOutlineVisible((value) => !value) },
       { id: 'sidebar', label: t('切换侧边栏'), run: () => setSidebarVisible((value) => !value) },
       { id: 'source', label: t('切换源码模式'), run: () => setSourceMode((value) => !value) },
@@ -161,11 +172,12 @@ export function useAppCommands(options: AppCommandOptions): {
       setSidebarVisible,
       setSourceMode,
       setTypewriterMode,
+      requestFindFocus,
     ],
   )
 
   const dispatchShortcut = useCallback(
-    (action: ShortcutAction) => {
+    (action: ShortcutAction, target?: EventTarget | null) => {
       const id = stateRef.current.activeId
       const toggle = (setter: Dispatch<SetStateAction<boolean>>): void => setter((value) => !value)
       switch (action) {
@@ -188,6 +200,14 @@ export function useAppCommands(options: AppCommandOptions): {
           if (id) void closeTab(id)
           break
         case 'find':
+          if (shouldOpenFolderSearchFromTarget(target ?? null)) {
+            setShowFind(false)
+            setSidebarVisible(true)
+            setSearchView(true)
+            requestSearchFocus()
+            break
+          }
+          requestFindFocus()
           setShowFind(true)
           break
         case 'search-in-folder':
@@ -295,6 +315,8 @@ export function useAppCommands(options: AppCommandOptions): {
       setSettingsSection,
       setShowFind,
       setShowPalette,
+      requestFindFocus,
+      requestSearchFocus,
       setSidebarVisible,
       setSourceMode,
       setTypewriterMode,

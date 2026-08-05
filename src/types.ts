@@ -7,9 +7,11 @@ export type {
   FileNode,
   FileTreeSort,
   FileVersion,
+  FolderSearchMode,
   Folder,
   RecentDoc,
   SearchResult,
+  SearchFocusEffect,
 } from './platform/contracts'
 
 export interface OutlineItem {

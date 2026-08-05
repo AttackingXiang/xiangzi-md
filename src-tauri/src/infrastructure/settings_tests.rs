@@ -24,6 +24,7 @@ fn legacy_settings_receive_current_defaults() {
     assert_eq!(settings.background_opacity, 30);
     assert_eq!(settings.code_block_opacity, 30);
     assert!(!settings.code_block_line_wrapping);
+    assert_eq!(settings.search_focus_effect, "sparkle");
     assert!(settings.show_status_bar);
     assert!(settings.show_status_path);
     assert!(settings.show_reading_mode_control);

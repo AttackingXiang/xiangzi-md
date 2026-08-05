@@ -15,6 +15,7 @@ import type {
   DesktopPort,
   FileNode,
   FileVersion,
+  FolderSearchMode,
   Folder,
   InstalledTheme,
   OpenedFile,
@@ -239,7 +240,8 @@ export const tauriDesktopAdapter: DesktopPort = {
   openExternal: (url) => openUrl(url),
   openWithDefault: (path) => invoke('open_with_default', { path }),
   moveItem: (sourcePath, targetDirPath) => invoke('move_item', { sourcePath, targetDirPath }),
-  searchInFolder: (root, query) => invoke<SearchResponse>('search_in_folder', { root, query }),
+  searchInFolder: (root, query, mode: FolderSearchMode) =>
+    invoke<SearchResponse>('search_in_folder', { root, query, mode }),
   cancelSearch: () => invoke('cancel_search'),
   saveAttachment: (docDir, docName, vaultRoot, fileName, data) =>
     invoke('save_attachment', data, {

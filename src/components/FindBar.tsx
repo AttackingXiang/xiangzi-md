@@ -21,6 +21,8 @@ interface Props {
   initialLine?: number
   /** Zero-based query occurrence returned by the folder search command. */
   initialMatchIndex?: number
+  /** Incremented whenever the global find command should return focus here. */
+  focusRequest?: number
   onClose: () => void
 }
 
@@ -33,6 +35,7 @@ export default function FindBar({
   initialQuery = '',
   initialLine,
   initialMatchIndex,
+  focusRequest = 0,
   onClose,
 }: Props): JSX.Element {
   const [find, setFind] = useState(initialQuery.trim())
@@ -47,6 +50,9 @@ export default function FindBar({
   useEffect(() => {
     inputRef.current?.focus()
     inputRef.current?.select()
+  }, [focusRequest])
+
+  useEffect(() => {
     return subscribeEditorAvailability(setEditorAvailable)
   }, [])
 

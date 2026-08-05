@@ -34,6 +34,7 @@ pub(super) fn migrate_settings(settings: &mut AppSettings, source_version: u32) 
             6 => migrate_v6_to_v7(settings),
             7 => migrate_v7_to_v8(settings),
             8 => migrate_v8_to_v9(settings),
+            9 => migrate_v9_to_v10(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -55,6 +56,8 @@ fn migrate_v4_to_v5(_settings: &mut AppSettings) {}
 fn migrate_v5_to_v6(_settings: &mut AppSettings) {}
 fn migrate_v6_to_v7(_settings: &mut AppSettings) {}
 fn migrate_v7_to_v8(_settings: &mut AppSettings) {}
+
+fn migrate_v9_to_v10(_settings: &mut AppSettings) {}
 
 /// v8→v9：把纯 MRU 的 recent_files 灌进 frecency 语料 recent_docs，让老用户升级后立即
 /// 有打分原料。open_count 一律 1，last_opened_nanos 按 MRU 次序递减造一个单调时间戳
@@ -92,6 +95,12 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     }
     if !matches!(settings.clipboard_format.as_str(), "rich" | "plain") {
         settings.clipboard_format = "rich".into();
+    }
+    if !matches!(
+        settings.search_focus_effect.as_str(),
+        "off" | "sparkle" | "ring" | "confetti" | "shatter"
+    ) {
+        settings.search_focus_effect = "sparkle".into();
     }
     if !matches!(
         settings.table_auto_width.as_str(),
@@ -203,6 +212,10 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
         )
         || !matches!(settings.editor_width.as_str(), "normal" | "wide" | "full")
         || !matches!(settings.clipboard_format.as_str(), "rich" | "plain")
+        || !matches!(
+            settings.search_focus_effect.as_str(),
+            "off" | "sparkle" | "ring" | "confetti" | "shatter"
+        )
         || !matches!(
             settings.table_auto_width.as_str(),
             "distribute" | "fit" | "equal"

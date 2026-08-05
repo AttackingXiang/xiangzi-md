@@ -83,6 +83,7 @@ pub struct SearchMatch {
 pub struct SearchResult {
     pub path: String,
     pub name: String,
+    pub name_matches: usize,
     pub matches: Vec<SearchMatch>,
 }
 

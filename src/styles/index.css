@@ -1,5 +1,6 @@
 @import './slices/foundation.css';
 @import './slices/theme-contract.css';
+@import './slices/focus-effects.css';
 @import './slices/titlebar.css';
 @import './slices/sidebar.css';
 @import './slices/workspace.css';

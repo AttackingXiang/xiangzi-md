@@ -12,6 +12,14 @@
   --xmd-document-secondary: var(--text-2);
   --xmd-document-accent: var(--accent);
   --xmd-document-selection-bg: color-mix(in srgb, var(--accent) 18%, transparent);
+  /* Search focus effect contract. Themes may replace these values and define
+     matching keyframes without changing the editor implementation. */
+  --xmd-focus-effect: sparkle;
+  --xmd-focus-animation: xmd-focus-sparkle;
+  --xmd-focus-duration: 860ms;
+  --xmd-focus-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --xmd-focus-color: var(--xmd-document-accent);
+  --xmd-focus-radius: 5px;
   --xmd-document-line-height: 1.75;
   --xmd-paragraph-spacing: 0.38em;
   --xmd-paragraph-separated-spacing: 0.12em;

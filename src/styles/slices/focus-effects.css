@@ -1,0 +1,210 @@
+/* ---------- Themeable focus effect layer ---------- */
+/*
+   Search focus effects are painted in a separate overlay so theme animations
+   never transform the document text itself or change editor layout.
+   Themes can override --xmd-focus-effect and --xmd-focus-animation, then add
+   their own keyframes without changing the editor/search implementation.
+*/
+.xmd-focus-effect-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.xmd-cm-editor .cm-scroller,
+.text-editor-host .cm-scroller {
+  position: relative;
+}
+
+.xmd-focus-effect {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--xmd-focus-color, var(--accent)) 52%, transparent);
+  border-radius: var(--xmd-focus-radius, 5px);
+  pointer-events: none;
+  animation-name: var(--xmd-focus-animation, xmd-focus-sparkle);
+  animation-duration: var(--xmd-focus-duration, 860ms);
+  animation-timing-function: var(--xmd-focus-easing, cubic-bezier(0.2, 0.8, 0.2, 1));
+  animation-iteration-count: 1;
+  animation-fill-mode: both;
+}
+
+.xmd-focus-effect::before,
+.xmd-focus-effect::after {
+  position: absolute;
+  pointer-events: none;
+  color: var(--xmd-focus-color, var(--accent));
+  opacity: 0;
+}
+
+.xmd-focus-effect[data-effect='sparkle']::before {
+  content: '✦';
+  right: -8px;
+  top: -15px;
+  font-size: 15px;
+  animation: xmd-focus-sparkle-star var(--xmd-focus-duration, 860ms)
+    var(--xmd-focus-easing, ease-out) both;
+}
+
+.xmd-focus-effect[data-effect='sparkle']::after {
+  content: '✧';
+  left: -9px;
+  bottom: -15px;
+  font-size: 13px;
+  animation: xmd-focus-sparkle-star var(--xmd-focus-duration, 860ms) 70ms
+    var(--xmd-focus-easing, ease-out) both;
+}
+
+.xmd-focus-effect[data-effect='confetti']::before {
+  content: '🎉  ✦  🎊';
+  left: 50%;
+  top: 50%;
+  white-space: nowrap;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: 2px;
+  animation: xmd-focus-confetti var(--xmd-focus-duration, 900ms) var(--xmd-focus-easing, ease-out)
+    both;
+}
+
+.xmd-focus-effect[data-effect='confetti'] {
+  border-width: 2px;
+  border-radius: 50%;
+}
+
+.xmd-focus-effect[data-effect='confetti']::after {
+  content: '✦  ·  ✧  ·  ✦';
+  left: 50%;
+  top: 50%;
+  white-space: nowrap;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: 5px;
+  animation: xmd-focus-confetti-burst var(--xmd-focus-duration, 900ms) 70ms
+    var(--xmd-focus-easing, ease-out) both;
+}
+
+.xmd-focus-effect[data-effect='shatter']::after {
+  content: '◆  ·  ◆';
+  left: 50%;
+  bottom: -17px;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 5px;
+  animation: xmd-focus-shatter var(--xmd-focus-duration, 900ms) var(--xmd-focus-easing, ease-out)
+    both;
+}
+
+@keyframes xmd-focus-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--xmd-focus-color, var(--accent)) 42%, transparent);
+  }
+
+  24% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+
+@keyframes xmd-focus-sparkle {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--xmd-focus-color, var(--accent)) 36%, transparent);
+  }
+
+  24% {
+    opacity: 1;
+    transform: scale(1.01);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--xmd-focus-color, var(--accent)) 18%, transparent);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.06);
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+
+@keyframes xmd-focus-sparkle-star {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-18deg) translateY(4px);
+  }
+
+  28% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg) translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.75) rotate(18deg) translateY(-7px);
+  }
+}
+
+@keyframes xmd-focus-confetti {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7) rotate(-5deg);
+  }
+
+  25% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -72%) scale(1.05) rotate(7deg);
+  }
+}
+
+@keyframes xmd-focus-confetti-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.45) rotate(-12deg);
+  }
+
+  28% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -115%) scale(1.2) rotate(10deg);
+  }
+}
+
+@keyframes xmd-focus-shatter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -2px) scale(0.8);
+  }
+
+  22% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.65) rotate(-8deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xmd-focus-effect,
+  .xmd-focus-effect::before,
+  .xmd-focus-effect::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+}

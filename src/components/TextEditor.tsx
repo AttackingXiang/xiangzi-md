@@ -52,6 +52,7 @@ import {
 } from '@codemirror/language'
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { contextMenuSelection } from '../features/cm6-editor/contextMenuSelection'
+import { activeSearchMatchHighlight } from '../features/cm6-editor/searchMatchHighlight'
 import { codeMirrorTheme } from '../lib/codeTheme'
 import { resolveTextLanguage, isStandardJsonFile, isFoldableFile } from '../lib/textLanguages'
 import { unwrapText, wrapText, type TextEnvelope, type Eol } from '../lib/textFidelity'
@@ -192,6 +193,7 @@ export default function TextEditor({
       contextMenuSelection(),
       highlightSelectionMatches(),
       search({ top: true }),
+      activeSearchMatchHighlight(),
       ...(getLang() === 'zh' ? [EditorState.phrases.of(SEARCH_PHRASES_ZH)] : []),
       keymap.of([
         ...closeBracketsKeymap,

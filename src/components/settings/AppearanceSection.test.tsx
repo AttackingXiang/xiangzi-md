@@ -69,13 +69,15 @@ describe('AppearanceSection theme actions', () => {
       Array.from(host.querySelectorAll('.settings-card > h3')).map((heading) =>
         heading.textContent?.trim(),
       ),
-    ).toEqual(['界面', '主题', '背景与自定义'])
+    ).toEqual(['界面', '主题', '焦点动画', '背景与自定义'])
 
     expect(host.querySelector('.theme-current-panel')).not.toBeNull()
     expect(host.querySelector('.theme-choice-grid')).toBeNull()
     expect(host.textContent).toContain('编辑区宽度')
     expect(host.textContent).toContain('主题深浅')
     expect(host.textContent).toContain('代码块不透明度')
+    expect(host.textContent).toContain('搜索焦点动画')
+    expect(host.textContent).toContain('完结撒花（夸张）')
 
     act(() => host.querySelector<HTMLButtonElement>('.theme-current-change')?.click())
     expect(host.querySelector('.theme-choice-grid')).not.toBeNull()

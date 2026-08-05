@@ -23,6 +23,31 @@ const MAX_MATCHES_PER_FILE: usize = 20;
 const MAX_FILE_BYTES: u64 = 5 * 1024 * 1024;
 const IGNORED_DIRECTORIES: &[&str] = &[".git", "node_modules", ".obsidian", ".vscode"];
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SearchMode {
+    All,
+    Content,
+    Filename,
+}
+
+impl SearchMode {
+    fn parse(value: &str) -> Self {
+        match value {
+            "content" => Self::Content,
+            "filename" => Self::Filename,
+            _ => Self::All,
+        }
+    }
+
+    fn includes_content(self) -> bool {
+        matches!(self, Self::All | Self::Content)
+    }
+
+    fn includes_filename(self) -> bool {
+        matches!(self, Self::All | Self::Filename)
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct SearchCancellation {
     generation: Arc<AtomicU64>,
@@ -67,6 +92,7 @@ pub fn search_in_folder(
     app: &AppHandle,
     root: &Path,
     query: &str,
+    mode: &str,
     cancellation: &SearchToken,
 ) -> AppResult<SearchResponse> {
     ensure_allowed(app, root)?;
@@ -82,6 +108,7 @@ pub fn search_in_folder(
         });
     }
     let needle = trimmed.to_lowercase();
+    let mode = SearchMode::parse(mode);
     let mut results = Vec::new();
     let mut file_count = 0usize;
     let mut match_count = 0usize;
@@ -123,6 +150,27 @@ pub fn search_in_folder(
             continue;
         }
         file_count += 1;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let name_matches = if mode.includes_filename() {
+            name.to_lowercase().match_indices(&needle).count()
+        } else {
+            0
+        };
+
+        if !mode.includes_content() {
+            if name_matches == 0 {
+                continue;
+            }
+            match_count += name_matches;
+            results.push(SearchResult {
+                path: entry.path().to_string_lossy().into_owned(),
+                name,
+                name_matches,
+                matches: Vec::new(),
+            });
+            continue;
+        }
+
         if entry
             .metadata()
             .is_ok_and(|metadata| metadata.len() > MAX_FILE_BYTES)
@@ -134,12 +182,13 @@ pub fn search_in_folder(
         };
         // Single allocation: lowercase the whole file once, then zip with original lines.
         let content_lower = content.to_lowercase();
-        if !content_lower.contains(&needle) {
+        if name_matches == 0 && !content_lower.contains(&needle) {
             continue;
         }
 
         let mut matches = Vec::new();
         let mut occurrence_index = 0usize;
+        match_count += name_matches;
         for (index, (line, lower_line)) in content.lines().zip(content_lower.lines()).enumerate() {
             if cancellation.is_cancelled() {
                 return Ok(SearchResponse {
@@ -169,10 +218,11 @@ pub fn search_in_folder(
             }
             occurrence_index += line_occurrences;
         }
-        if !matches.is_empty() {
+        if name_matches > 0 || !matches.is_empty() {
             results.push(SearchResult {
                 path: entry.path().to_string_lossy().into_owned(),
-                name: entry.file_name().to_string_lossy().into_owned(),
+                name,
+                name_matches,
                 matches,
             });
         }

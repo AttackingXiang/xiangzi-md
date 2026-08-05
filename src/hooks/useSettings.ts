@@ -3,6 +3,7 @@ import { desktop } from '../platform'
 import { setLang } from '../lib/i18n'
 import { bytesToBlobUrl } from '../lib/backgroundImage'
 import { applyThemeShade } from '../lib/themeShade'
+import { applySearchFocusEffect } from '../lib/searchFocusEffect'
 import type { AppSettings, RecentDoc } from '../types'
 
 /** frecency 语料库上限，与 Rust 端 MAX_RECENT_DOCS 保持一致。 */
@@ -195,6 +196,14 @@ export function useSettings() {
     const opacity = Math.min(100, Math.max(0, settings.codeBlockOpacity ?? 30))
     document.documentElement.style.setProperty('--code-block-opacity', `${opacity}%`)
   }, [settings?.codeBlockOpacity])
+
+  // Search focus is a setting-backed theme contract. The editor reads these
+  // variables when a match is selected, so changing the preset is immediate
+  // and does not require rebuilding any CodeMirror extensions.
+  useEffect(() => {
+    if (!settings) return
+    applySearchFocusEffect(settings.searchFocusEffect)
+  }, [settings?.searchFocusEffect])
 
   // ── 主题深浅 ────────────────────────────────────────────────────────────────
   useEffect(() => {
