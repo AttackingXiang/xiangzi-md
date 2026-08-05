@@ -5,6 +5,7 @@
 ///   因此先按平台候选路径逐个探测，最后才尝试 PATH。
 /// - normalize_docx_fonts 对 pandoc 生成的 docx 后处理，把 word/styles.xml
 ///   和 word/theme/theme1.xml 里的字体归一化为指定规范，不依赖 pandoc 版本。
+use crate::domain::academic_layout::AcademicLayout;
 use crate::domain::error::{AppError, AppResult};
 use crate::infrastructure::{settings::SettingsStore, workspace};
 use serde::Serialize;
@@ -444,7 +445,7 @@ fn run_export_default_template(
         .map_err(|error| AppError::io("写入默认 Word 模板失败", error))?;
     // 导出的模板要和实际导出结果长得一样，所以跟着同一个开关走。
     if academic_layout {
-        patch_builtin_default_template(output_path, normalize_fonts)
+        patch_builtin_default_template(output_path, normalize_fonts, &AcademicLayout::default())
     } else if normalize_fonts {
         normalize_docx_fonts(output_path)
     } else {
@@ -556,7 +557,7 @@ fn run_export_docx_atomic(
     run_export_docx(pandoc_path, markdown, doc_dir, &temporary_string, options)?;
     // 论文排版只作用于内置模板；选了自定义 reference.docx 就只按开关做字体规范化。
     if options.reference_doc.is_none() && academic_layout {
-        patch_builtin_default_template(&temporary, normalize_fonts)?;
+        patch_builtin_default_template(&temporary, normalize_fonts, &AcademicLayout::default())?;
     } else if normalize_fonts {
         normalize_docx_fonts(&temporary)?;
     }
@@ -802,24 +803,30 @@ fn make_command(program: &Path) -> std::process::Command {
 /// 因为 pandoc 版本之间的 reference-doc 格式有差异，且不想携带额外资源文件。
 /// 直接改 zip 内容，对最终产物无条件保证字体正确。
 pub fn normalize_docx_fonts(path: &Path) -> AppResult<()> {
-    rewrite_docx_parts(path, false, true, false)
+    rewrite_docx_parts(path, None, true)
 }
 
 /// 为内置 Pandoc 默认模板应用论文排版样式。
 ///
 /// 只在没有选择自定义 reference.docx 时调用。这样用户自己的 Word 模板
 /// 仍然只受原有“规范中文字体”开关影响，不会被论文排版规则覆盖。
-fn patch_builtin_default_template(path: &Path, normalize_fonts: bool) -> AppResult<()> {
-    rewrite_docx_parts(path, true, normalize_fonts, true)
+fn patch_builtin_default_template(
+    path: &Path,
+    normalize_fonts: bool,
+    layout: &AcademicLayout,
+) -> AppResult<()> {
+    rewrite_docx_parts(path, Some(layout), normalize_fonts)
 }
 
 /// 读取并改写 docx 中的样式、主题、页面设置和内置页脚 XML。
+/// `layout` 为 Some 时套用论文排版（样式 + 页面设置 + 页脚），None 时只做字体规范化。
 fn rewrite_docx_parts(
     path: &Path,
-    apply_academic_styles: bool,
+    layout: Option<&AcademicLayout>,
     normalize_fonts: bool,
-    apply_page_layout: bool,
 ) -> AppResult<()> {
+    let apply_academic_styles = layout.is_some();
+    let apply_page_layout = layout.is_some();
     // 读取整个 zip 进内存
     let zip_bytes = std::fs::read(path).map_err(|e| AppError::io("读取 docx 文件失败", e))?;
 
@@ -849,7 +856,10 @@ fn rewrite_docx_parts(
         if name == "word/styles.xml" {
             let xml = String::from_utf8_lossy(data).into_owned();
             let xml = if apply_academic_styles {
-                patch_academic_styles_xml(&xml)
+                patch_academic_styles_xml(
+                    &xml,
+                    layout.expect("apply_academic_styles 蕴含 layout 存在"),
+                )
             } else {
                 xml
             };
@@ -865,9 +875,13 @@ fn rewrite_docx_parts(
             *data = patched.into_bytes();
         } else if apply_page_layout && name == "word/document.xml" {
             let xml = String::from_utf8_lossy(data).into_owned();
-            let xml =
-                patch_document_page_layout(&xml, footer_rel_id.as_deref().unwrap_or("rIdFooter1"));
-            let patched = patch_list_paragraphs(&xml);
+            let xml = patch_document_page_layout(
+                &xml,
+                footer_rel_id.as_deref().unwrap_or("rIdFooter1"),
+                layout.expect("apply_page_layout 蕴含 layout 存在"),
+            );
+            let patched =
+                patch_list_paragraphs(&xml, layout.expect("apply_page_layout 蕴含 layout 存在"));
             *data = patched.into_bytes();
         } else if apply_page_layout && name == "word/_rels/document.xml.rels" {
             let xml = String::from_utf8_lossy(data).into_owned();
@@ -987,9 +1001,15 @@ fn body_section_start(xml: &str) -> Option<usize> {
     found
 }
 
-fn patch_document_page_layout(xml: &str, footer_rel_id: &str) -> String {
-    const PAGE_SIZE: &str = r#"<w:pgSz w:w="11906" w:h="16838"/>"#;
-    const PAGE_MARGINS: &str = r#"<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>"#;
+fn patch_document_page_layout(xml: &str, footer_rel_id: &str, layout: &AcademicLayout) -> String {
+    let (page_width, page_height) = layout.paper.dimensions_twips();
+    let margin = layout.margin();
+    let page_size = format!(r#"<w:pgSz w:w="{page_width}" w:h="{page_height}"/>"#);
+    // header/footer 距边 708 缇（约 1.25cm）是 Word 的默认距离，跟着页边距走
+    // 反而会让页眉页脚贴到正文，所以保持固定。
+    let page_margins = format!(
+        r#"<w:pgMar w:top="{margin}" w:right="{margin}" w:bottom="{margin}" w:left="{margin}" w:header="708" w:footer="708" w:gutter="0"/>"#
+    );
     let footer_reference =
         format!(r#"<w:footerReference w:type="default" r:id="{footer_rel_id}"/>"#);
 
@@ -1002,7 +1022,7 @@ fn patch_document_page_layout(xml: &str, footer_rel_id: &str) -> String {
     let section_open_end = section_start + section_open_end_rel;
     if xml.as_bytes().get(section_open_end.saturating_sub(1)) == Some(&b'/') {
         let replacement =
-            format!("<w:sectPr>{footer_reference}{PAGE_SIZE}{PAGE_MARGINS}</w:sectPr>");
+            format!("<w:sectPr>{footer_reference}{page_size}{page_margins}</w:sectPr>");
         return format!(
             "{}{}{}",
             &xml[..section_start],
@@ -1023,8 +1043,8 @@ fn patch_document_page_layout(xml: &str, footer_rel_id: &str) -> String {
         &footer_reference,
         "</w:sectPr>",
     );
-    let section = replace_or_insert_section_child(&section, "pgSz", PAGE_SIZE, "</w:sectPr>");
-    let section = replace_or_insert_section_child(&section, "pgMar", PAGE_MARGINS, "</w:sectPr>");
+    let section = replace_or_insert_section_child(&section, "pgSz", &page_size, "</w:sectPr>");
+    let section = replace_or_insert_section_child(&section, "pgMar", &page_margins, "</w:sectPr>");
     format!(
         "{}{}{}",
         &xml[..section_start],
@@ -1035,9 +1055,10 @@ fn patch_document_page_layout(xml: &str, footer_rel_id: &str) -> String {
 
 /// 列表段落使用 Compact 样式，但其行距应与正文统一为 1.5 倍；
 /// 直接写入含 w:numPr 的段落，避免同时改变表格单元格的紧凑行距。
-fn patch_list_paragraphs(xml: &str) -> String {
-    const LIST_SPACING: &str =
-        r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#;
+fn patch_list_paragraphs(xml: &str, layout: &AcademicLayout) -> String {
+    let body_line = layout.body_line();
+    let list_spacing =
+        format!(r#"<w:spacing w:before="0" w:after="0" w:line="{body_line}" w:lineRule="auto"/>"#);
     let mut result = String::with_capacity(xml.len() + 256);
     let mut rest = xml;
 
@@ -1051,7 +1072,7 @@ fn patch_list_paragraphs(xml: &str) -> String {
         let paragraph_end = relative_end + "</w:p>".len();
         let paragraph = &rest[..paragraph_end];
         let patched = if paragraph.contains("<w:numPr") {
-            replace_or_insert_paragraph_ppr_child(paragraph, "spacing", LIST_SPACING)
+            replace_or_insert_paragraph_ppr_child(paragraph, "spacing", &list_spacing)
         } else {
             paragraph.to_owned()
         };
@@ -1177,8 +1198,22 @@ fn patch_content_types(xml: &str) -> String {
 ///
 /// 这里只处理论文直接使用的样式：题名、作者信息、摘要、正文标题、题注、
 /// 参考文献和默认表格线。代码、引用、脚注、目录等其他 Pandoc 样式保持原样。
-pub fn patch_academic_styles_xml(xml: &str) -> String {
+pub fn patch_academic_styles_xml(xml: &str, layout: &AcademicLayout) -> String {
     let mut xml = xml.to_owned();
+
+    // 由排版参数导出的几段属性值。取值和单位换算见 domain::academic_layout；
+    // 这里一律用数字插值，不做字符串拼接式的"找位置再塞进去"——参数一旦来自
+    // 用户设置，拼接就是让非法值溜进 XML 的地方。
+    let body_line = layout.body_line();
+    let body_spacing =
+        format!(r#"<w:spacing w:before="0" w:after="0" w:line="{body_line}" w:lineRule="auto"/>"#);
+    let abstract_spacing = format!(
+        r#"<w:spacing w:before="0" w:after="120" w:line="{body_line}" w:lineRule="auto"/>"#
+    );
+    let body_indent = format!(r#"<w:ind w:firstLine="{}"/>"#, layout.first_line_indent());
+    let bibliography_hanging = layout.bibliography_hanging();
+    let bibliography_indent =
+        format!(r#"<w:ind w:left="{bibliography_hanging}" w:hanging="{bibliography_hanging}"/>"#);
 
     // 普通正文：宋体小四（字体由 normalize_docx_fonts 按开关决定），1.5 倍行距，
     // 首行缩进两个汉字符。标题和题注会显式清除这个缩进。
@@ -1187,11 +1222,9 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
             patch_paragraph_style(
                 block,
                 &ParagraphStyle {
-                    spacing: Some(
-                        r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#,
-                    ),
-                    indent: Some(r#"<w:ind w:firstLine="480"/>"#),
-                    size: Some(24),
+                    spacing: Some(&body_spacing),
+                    indent: Some(&body_indent),
+                    size: Some(layout.body_size()),
                     ..ParagraphStyle::default()
                 },
             )
@@ -1236,14 +1269,14 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
                 ),
                 indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
                 alignment: Some(r#"<w:jc w:val="center"/>"#),
-                size: Some(36),
+                size: Some(layout.title_size()),
                 bold: Some(true),
                 ..ParagraphStyle::default()
             },
         )
     });
     xml = patch_style_block_by_id(&xml, "TitleChar", |block| {
-        patch_run_style(block, Some(36), Some(true), None)
+        patch_run_style(block, Some(layout.title_size()), Some(true), None)
     });
     for style_id in ["Subtitle", "Author", "Date"] {
         xml = patch_style_block_by_id(&xml, style_id, |block| {
@@ -1255,14 +1288,14 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
                     ),
                     indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
                     alignment: Some(r#"<w:jc w:val="center"/>"#),
-                    size: Some(24),
+                    size: Some(layout.body_size()),
                     ..ParagraphStyle::default()
                 },
             )
         });
     }
     xml = patch_style_block_by_id(&xml, "SubtitleChar", |block| {
-        patch_run_style(block, Some(24), None, None)
+        patch_run_style(block, Some(layout.body_size()), None, None)
     });
 
     // 摘要标题加粗居中，摘要正文使用小四号并保持段落间距。
@@ -1275,7 +1308,7 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
                 ),
                 indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
                 alignment: Some(r#"<w:jc w:val="center"/>"#),
-                size: Some(24),
+                size: Some(layout.body_size()),
                 bold: Some(true),
                 ..ParagraphStyle::default()
             },
@@ -1285,27 +1318,27 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
         patch_paragraph_style(
             block,
             &ParagraphStyle {
-                spacing: Some(
-                    r#"<w:spacing w:before="0" w:after="120" w:line="360" w:lineRule="auto"/>"#,
-                ),
-                indent: Some(r#"<w:ind w:firstLine="480"/>"#),
-                size: Some(24),
+                spacing: Some(&abstract_spacing),
+                indent: Some(&body_indent),
+                size: Some(layout.body_size()),
                 ..ParagraphStyle::default()
             },
         )
     });
 
     // 正文标题统一黑色、加粗并左对齐，保留 Pandoc 的 1–6 级标题结构。
-    for (style_id, size, before, after) in [
-        ("Heading1", 32, 240, 120),
-        ("Heading2", 28, 180, 80),
-        ("Heading3", 24, 120, 60),
-        ("Heading4", 24, 120, 60),
-        ("Heading5", 24, 120, 60),
-        ("Heading6", 24, 120, 60),
+    for (level, style_id, before, after) in [
+        (1, "Heading1", 240, 120),
+        (2, "Heading2", 180, 80),
+        (3, "Heading3", 120, 60),
+        (4, "Heading4", 120, 60),
+        (5, "Heading5", 120, 60),
+        (6, "Heading6", 120, 60),
     ] {
+        let size = layout.heading_size(level);
+        let body_line = layout.body_line();
         let spacing = format!(
-            r#"<w:spacing w:before="{before}" w:after="{after}" w:line="360" w:lineRule="auto"/>"#
+            r#"<w:spacing w:before="{before}" w:after="{after}" w:line="{body_line}" w:lineRule="auto"/>"#
         );
         xml = patch_style_block_by_id(&xml, style_id, |block| {
             let block = patch_paragraph_style(
@@ -1340,7 +1373,7 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
                     ),
                     indent: Some(r#"<w:ind w:firstLine="0" w:left="0" w:right="0"/>"#),
                     alignment: Some(r#"<w:jc w:val="center"/>"#),
-                    size: Some(21),
+                    size: Some(layout.caption_size()),
                     italic: Some(false),
                     ..ParagraphStyle::default()
                 },
@@ -1356,9 +1389,9 @@ pub fn patch_academic_styles_xml(xml: &str) -> String {
                 spacing: Some(
                     r#"<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>"#,
                 ),
-                indent: Some(r#"<w:ind w:left="480" w:hanging="480"/>"#),
+                indent: Some(&bibliography_indent),
                 alignment: Some(r#"<w:jc w:val="left"/>"#),
-                size: Some(21),
+                size: Some(layout.bibliography_size()),
                 ..ParagraphStyle::default()
             },
         )
@@ -1890,6 +1923,7 @@ fn replace_typeface_attr(tag: &str, value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::academic_layout::PaperSize;
 
     #[cfg(unix)]
     #[test]
@@ -1904,6 +1938,9 @@ mod tests {
     // ── 纯字符串 fixture 测试（不依赖 pandoc）─────────────────────────────────
 
     /// 模拟 pandoc 生成的最小 styles.xml
+    /// 见 academic_styles_output_is_unchanged_for_default_layout。
+    const GOLDEN_ACADEMIC_STYLES_HASH: u64 = 2663708543885300001;
+
     const FIXTURE_STYLES: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:docDefaults>
@@ -2038,9 +2075,59 @@ mod tests {
         assert!(dd.contains("宋体"), "docDefaults 应含宋体，实际：\n{dd}");
     }
 
+    /// 排版重构的验收基准：默认参数下产出的 XML 必须与重构前逐字节一致。
+    /// 哈希变了就说明改动泄漏到了输出上——这一步只允许换实现，不允许换结果。
+    #[test]
+    fn academic_styles_output_is_unchanged_for_default_layout() {
+        use std::hash::{Hash, Hasher};
+        let patched =
+            patch_academic_styles_xml(FIXTURE_ACADEMIC_STYLES, &AcademicLayout::default());
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        patched.hash(&mut hasher);
+        assert_eq!(
+            hasher.finish(),
+            GOLDEN_ACADEMIC_STYLES_HASH,
+            "默认排版的输出发生了变化"
+        );
+    }
+
+    /// 与上面的黄金哈希互为补充：那条保证默认值不变，这条保证参数不是摆设。
+    /// 少了它，把 layout 接错线（比如漏传、传了但没用）也测不出来。
+    #[test]
+    fn layout_values_reach_the_generated_xml() {
+        let layout = AcademicLayout {
+            body_font_pt: 10.5,
+            body_line_height: 2.0,
+            first_line_indent_chars: 4.0,
+            margin_mm: 20.0,
+            paper: PaperSize::Letter,
+            title_font_pt: 22.0,
+            ..AcademicLayout::default()
+        };
+
+        let styles = patch_academic_styles_xml(FIXTURE_ACADEMIC_STYLES, &layout);
+        // 10.5pt -> 21 半磅；2.0 倍 -> w:line="480"；4 个 10.5pt 字符 -> 840 缇
+        assert!(styles.contains(r#"<w:sz w:val="21"/>"#));
+        assert!(styles.contains(r#"w:line="480""#));
+        assert!(styles.contains(r#"<w:ind w:firstLine="840"/>"#));
+        assert!(
+            styles.contains(r#"<w:sz w:val="44"/>"#),
+            "题名 22pt 应写作 44 半磅"
+        );
+        assert!(!styles.contains(r#"w:line="360""#), "不应残留默认行距");
+
+        let document =
+            r#"<w:document><w:body><w:sectPr><w:footnotePr /></w:sectPr></w:body></w:document>"#;
+        let page = patch_document_page_layout(document, "rIdFooter1", &layout);
+        // Letter = 12240 x 15840 缇；20mm = 1134 缇
+        assert!(page.contains(r#"<w:pgSz w:w="12240" w:h="15840"/>"#));
+        assert!(page.contains(r#"w:top="1134""#));
+    }
+
     #[test]
     fn academic_styles_patch_paper_styles_only() {
-        let patched = patch_academic_styles_xml(FIXTURE_ACADEMIC_STYLES);
+        let patched =
+            patch_academic_styles_xml(FIXTURE_ACADEMIC_STYLES, &AcademicLayout::default());
         assert!(patched.contains(r#"<w:sz w:val="36"/>"#));
         assert!(patched
             .contains(r#"<w:spacing w:before="0" w:after="0" w:line="360" w:lineRule="auto"/>"#));
@@ -2058,7 +2145,8 @@ mod tests {
     #[test]
     fn default_document_gets_a4_margins_and_page_number_reference() {
         let document = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:sectPr><w:footnotePr /></w:sectPr></w:body></w:document>"#;
-        let patched = patch_document_page_layout(document, "rIdFooter1");
+        let patched =
+            patch_document_page_layout(document, "rIdFooter1", &AcademicLayout::default());
         assert!(patched.contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
         assert!(patched.contains(
             r#"<w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/>"#
@@ -2084,7 +2172,7 @@ mod tests {
     #[test]
     fn list_paragraphs_get_body_line_spacing_without_changing_table_cells() {
         let document = r#"<w:document><w:body><w:p><w:pPr><w:pStyle w:val="Compact"/><w:numPr><w:numId w:val="1001"/></w:numPr><w:spacing w:line="240"/></w:pPr><w:r><w:t>列表</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:pPr><w:pStyle w:val="Compact"/><w:spacing w:line="240"/></w:pPr><w:r><w:t>表格</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#;
-        let patched = patch_list_paragraphs(document);
+        let patched = patch_list_paragraphs(document, &AcademicLayout::default());
         let list_start = patched.find("<w:numPr").unwrap();
         let list_end = patched[list_start..].find("</w:p>").unwrap() + list_start;
         let list = &patched[..list_end];
@@ -2106,7 +2194,8 @@ mod tests {
             r#"<w:sectPr><w:pgSz w:w="3" w:h="4"/></w:sectPr>"#,
             r#"</w:body></w:document>"#
         );
-        let patched = patch_document_page_layout(document, "rIdFooter1");
+        let patched =
+            patch_document_page_layout(document, "rIdFooter1", &AcademicLayout::default());
 
         let paragraph_end = patched.find("</w:pPr>").expect("段落属性应保留");
         assert!(patched[..paragraph_end].contains(r#"<w:pgSz w:w="1" w:h="2"/>"#));
