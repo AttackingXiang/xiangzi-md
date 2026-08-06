@@ -4,6 +4,7 @@ import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 import { stripExtension } from '../lib/path'
 import { shortcutHint } from '../lib/shortcuts'
+import HoverScrollbars from './HoverScrollbars'
 
 interface Props {
   tabs: Tab[]
@@ -242,20 +243,23 @@ const TabBar = memo(function TabBar({
       )}
 
       {/* ── 滚动区（normal tabs） ──────────────────────────────────────── */}
-      <div className="tabs" ref={tabsRef}>
-        {normalTabs.map((tab, localIdx) =>
-          renderTab(tab, {
-            draggable: true,
-            onDragStart: () => setDragIndex(localIdx),
-            onDragOver: (e: React.DragEvent) => handleDragOver(e, localIdx),
-            onDrop: (e: React.DragEvent) => handleDrop(e, localIdx),
-            onDragEnd: () => {
-              setDragIndex(null)
-              setDropTarget(null)
-            },
-            'data-drag-idx': localIdx,
-          }),
-        )}
+      <div className="scrollbar-host tabs-scrollbar-host">
+        <div className="tabs" ref={tabsRef}>
+          {normalTabs.map((tab, localIdx) =>
+            renderTab(tab, {
+              draggable: true,
+              onDragStart: () => setDragIndex(localIdx),
+              onDragOver: (e: React.DragEvent) => handleDragOver(e, localIdx),
+              onDrop: (e: React.DragEvent) => handleDrop(e, localIdx),
+              onDragEnd: () => {
+                setDragIndex(null)
+                setDropTarget(null)
+              },
+              'data-drag-idx': localIdx,
+            }),
+          )}
+        </div>
+        <HoverScrollbars targetRef={tabsRef} axes="horizontal" />
       </div>
 
       {/* ── 溢出列表按钮 ──────────────────────────────────────────────── */}

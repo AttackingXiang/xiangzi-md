@@ -1,0 +1,120 @@
+/* macOS overlay scrollbars only become visible after a real scroll gesture.
+   These lightweight app-owned scrollbars can appear on pointer hover instead. */
+.scrollbar-host {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sidebar-scrollbar-host {
+  display: flex;
+  flex: 1 1 0;
+  height: 0;
+  flex-direction: column;
+}
+
+.tabs-scrollbar-host {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+}
+
+/* Tab 项本身高度很紧凑，横向滚动条只占底部窄槽，避免盖住文字和关闭按钮。 */
+.tabs-scrollbar-host > .hover-scrollbars {
+  inset: auto 0 0;
+  height: 6px;
+}
+
+.tabs-scrollbar-host .hover-scrollbar-track-horizontal {
+  right: 2px;
+  bottom: 1px;
+  left: 2px;
+  height: 4px;
+}
+
+.scrollbar-host > .sidebar-body,
+.scrollbar-host > .tabs {
+  scrollbar-width: none;
+}
+
+.scrollbar-host > .sidebar-body::-webkit-scrollbar,
+.scrollbar-host > .tabs::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.hover-scrollbars {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.scrollbar-host:hover > .hover-scrollbars,
+.scrollbar-host:focus-within > .hover-scrollbars {
+  /* 透明覆盖层不能拦截滚轮/触摸板事件，只有实际轨道在下面单独接收指针。 */
+  pointer-events: none;
+  opacity: 1;
+}
+
+.hover-scrollbar-track {
+  position: absolute;
+  border-radius: 6px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.scrollbar-host:hover > .hover-scrollbars .hover-scrollbar-track,
+.scrollbar-host:focus-within > .hover-scrollbars .hover-scrollbar-track {
+  pointer-events: auto;
+}
+
+.hover-scrollbar-track-vertical {
+  top: 2px;
+  right: 2px;
+  bottom: 2px;
+  width: 8px;
+}
+
+.hover-scrollbar-track-horizontal {
+  right: 2px;
+  bottom: 2px;
+  left: 2px;
+  height: 8px;
+}
+
+.hover-scrollbars.has-horizontal .hover-scrollbar-track-vertical {
+  bottom: 12px;
+}
+
+.hover-scrollbars.has-vertical .hover-scrollbar-track-horizontal {
+  right: 12px;
+}
+
+.hover-scrollbar-thumb {
+  position: absolute;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-muted) 65%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bg) 30%, transparent);
+  cursor: default;
+}
+
+.hover-scrollbar-track-vertical .hover-scrollbar-thumb {
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+.hover-scrollbar-track-horizontal .hover-scrollbar-thumb {
+  top: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.hover-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

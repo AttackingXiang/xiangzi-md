@@ -32,10 +32,6 @@
   align-items: center;
 }
 
-.tabs::-webkit-scrollbar {
-  height: 0;
-}
-
 .tab {
   display: flex;
   align-items: center;

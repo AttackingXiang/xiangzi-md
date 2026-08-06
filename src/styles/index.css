@@ -4,6 +4,7 @@
 @import './slices/titlebar.css';
 @import './slices/sidebar.css';
 @import './slices/workspace.css';
+@import './slices/scrollbars.css';
 @import './slices/welcome-status.css';
 @import './slices/settings-shell.css';
 @import './slices/settings-content.css';
