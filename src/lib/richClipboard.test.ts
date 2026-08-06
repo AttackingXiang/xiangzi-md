@@ -15,6 +15,9 @@ const mermaidPreview = vi.hoisted(() => ({ renderMermaidForExport: vi.fn() }))
 // markup, so stub the renderer instead of pulling the real library into tests.
 vi.mock('./mermaidPreview', () => mermaidPreview)
 
+import type { EditorView } from '@codemirror/view'
+import { cm6ActiveViewBridge } from '../features/cm6-editor/activeViewBridge'
+import { markdownFromClipboardHtml } from './markdownPaste'
 import {
   CLIPBOARD_CHROME_SELECTOR,
   cleanClipboardFragment,
@@ -755,5 +758,95 @@ describe('setupRichClipboard', () => {
 
     expect(event.defaultPrevented).toBe(false)
     expect(clipboardData.getData('text/html')).toBe('')
+  })
+})
+
+describe('局部复制携带 Markdown 原文', () => {
+  /** 装一个够用的假 CM6 view：只需要 richClipboard 实际读到的那几个字段。 */
+  function stubCm6View(
+    root: HTMLElement,
+    doc: string,
+    ranges: { from: number; to: number }[],
+    hasFocus = true,
+  ): void {
+    const dom = document.createElement('div')
+    root.append(dom)
+    const view = {
+      dom,
+      hasFocus,
+      state: {
+        doc: { length: doc.length, toString: () => doc },
+        sliceDoc: (from: number, to: number) => doc.slice(from, to),
+        selection: {
+          ranges: ranges.map((range) => ({ ...range, empty: range.from === range.to })),
+        },
+      },
+    }
+    activeDisposers.push(cm6ActiveViewBridge.register(view as unknown as EditorView))
+  }
+
+  function copiedHtml(target: HTMLElement): string {
+    const clipboardData = new DataTransfer()
+    dispatchCopy(target, clipboardData)
+    return clipboardData.getData('text/html')
+  }
+
+  it('把选区原文嵌进剪贴板 HTML，让内部粘贴无损还原', () => {
+    const markdown = 'plain <font color="#000000">MS_XZ_MESSAGE</font> tail'
+    const root = mountRoot('<p><span style="color:#000000">MS_XZ_MESSAGE</span></p>')
+    stubCm6View(root, markdown, [{ from: 6, to: 46 }])
+    setup(root)
+    selectContents(root.querySelector('p') as HTMLElement)
+
+    const html = copiedHtml(root)
+    expect(markdownFromClipboardHtml(html)).toBe(markdown.slice(6, 46))
+  })
+
+  /** 没有原文标记时会走 HTML → Markdown 转换，把渲染出来的黑色写回 <font>。
+   * 这条锁死修复的实际收益：同样的选区，带上原文后不再产生 <font>。 */
+  it('避免了黑色文字被重新转换成 <font> 标签', () => {
+    const root = mountRoot('<p><span style="color:#000000">MS_XZ_MESSAGE</span></p>')
+    // 选区是文档的真子集，确保走的是局部复制这条新补的路，而不是整篇复制。
+    stubCm6View(root, '前文 MS_XZ_MESSAGE 后文', [{ from: 3, to: 16 }])
+    setup(root)
+    selectContents(root.querySelector('p') as HTMLElement)
+
+    const pasted = markdownFromClipboardHtml(copiedHtml(root))
+    expect(pasted).toBe('MS_XZ_MESSAGE')
+    expect(pasted).not.toContain('<font')
+    expect(pasted).not.toContain('\\_')
+  })
+
+  it('焦点不在编辑器时不附带原文，避免粘出无关的旧选区内容', () => {
+    const root = mountRoot('<p>rendered text</p>')
+    // 旧选区必须是文档的真子集：整篇选中会走 snapshotFromWholeMarkdown，
+    // 那条路本来就无条件带原文，测不到这里要验的 hasFocus 守卫。
+    stubCm6View(root, '完全不相干的旧选区，后面还有别的内容', [{ from: 0, to: 9 }], false)
+    setup(root)
+    selectContents(root.querySelector('p') as HTMLElement)
+
+    const pasted = markdownFromClipboardHtml(copiedHtml(root))
+    expect(pasted).toBe('rendered text')
+  })
+
+  it('多光标选区退回原有的 HTML 转换路径', () => {
+    const root = mountRoot('<p>rendered text</p>')
+    stubCm6View(root, 'abcdefghij klmnopqrs', [
+      { from: 0, to: 3 },
+      { from: 5, to: 8 },
+    ])
+    setup(root)
+    selectContents(root.querySelector('p') as HTMLElement)
+
+    expect(markdownFromClipboardHtml(copiedHtml(root))).toBe('rendered text')
+  })
+
+  it('光标未选中任何内容时不附带原文', () => {
+    const root = mountRoot('<p>rendered text</p>')
+    stubCm6View(root, 'some document', [{ from: 4, to: 4 }])
+    setup(root)
+    selectContents(root.querySelector('p') as HTMLElement)
+
+    expect(markdownFromClipboardHtml(copiedHtml(root))).toBe('rendered text')
   })
 })

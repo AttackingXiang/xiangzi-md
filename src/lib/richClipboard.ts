@@ -524,7 +524,40 @@ function snapshotFromSelection(root: HTMLElement, allowTextOnly = false): Clipbo
     }
   }
 
-  return prepareSnapshot(wrapper, originals, selection?.toString() ?? '', singleImage)
+  // 选中单张图片时用户要的是图片本身，不是那行 ![](…) 源码——保持既有行为。
+  const markdownSource =
+    singleImage || explicitlySelected.length > 0 ? undefined : cm6SelectionMarkdown(root)
+  return prepareSnapshot(
+    wrapper,
+    originals,
+    selection?.toString() ?? '',
+    singleImage,
+    undefined,
+    markdownSource,
+  )
+}
+
+/**
+ * 局部复制时，选区对应的 Markdown 原文；取不到就返回 undefined，退回原来的
+ * 「HTML → Markdown 转换」路径。
+ *
+ * 带上原文之后，应用内部的复制粘贴变成恒等操作：不会把渲染出来的颜色重新写成
+ * `<font>`、不会给 `_` 加转义、也不会重排列表序号和表格对齐。整篇复制早就是这么
+ * 做的（snapshotFromWholeMarkdown），这里只是把同一条路补给选区。
+ *
+ * 只影响我们自己的粘贴——外部应用拿到的仍是原样 HTML，标记藏在包裹层属性里。
+ */
+function cm6SelectionMarkdown(root: HTMLElement): string | undefined {
+  const view = cm6ActiveViewBridge.get()
+  // hasFocus 是这里最关键的守卫：焦点在预览面板/阅读模式/侧边栏时，CM6 里留着
+  // 的是上一次的旧选区，照它取原文会粘出和选中内容毫不相干的文字。
+  if (!view || !view.hasFocus || !root.contains(view.dom)) return undefined
+  const ranges = view.state.selection.ranges
+  // 多光标/矩形选区拼出来的原文和 DOM 选区不是同一回事，交回原有路径更稳妥。
+  if (ranges.length !== 1) return undefined
+  const range = ranges[0]
+  if (!range || range.empty) return undefined
+  return view.state.sliceDoc(range.from, range.to)
 }
 
 function wholeCm6DocumentSelected(root: HTMLElement): boolean {
