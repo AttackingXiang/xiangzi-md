@@ -1,9 +1,9 @@
 import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
-import { memo, useCallback, useRef, useState, type RefObject } from 'react'
+import { memo, Suspense, useCallback, useRef, useState, type RefObject } from 'react'
 import FileTree from './FileTree'
 import { FocusedPathContext } from './fileTreeFocusContext'
 import SidebarHeader from './SidebarHeader'
-import HoverScrollbars from './HoverScrollbars'
+import HoverScrollbars from './LazyHoverScrollbars'
 import type { FileNode, FileTreeSort, Folder as FolderType } from '../types'
 import type { SortContext } from '../lib/fileTreeSort'
 import type { SidebarControls } from '../lib/sidebarControls'
@@ -203,7 +203,9 @@ const Sidebar = memo(function Sidebar({
             </div>
           )}
         </div>
-        <HoverScrollbars targetRef={bodyRef} />
+        <Suspense fallback={null}>
+          <HoverScrollbars targetRef={bodyRef} />
+        </Suspense>
       </div>
     </aside>
   )

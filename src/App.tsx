@@ -54,8 +54,8 @@ const DocumentPropertyPanel = lazy(() => import('./features/tags/components/Docu
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
 import TitleBar from './components/TitleBar'
-import Outline from './components/Outline'
-import FindBar from './components/FindBar'
+const Outline = lazy(() => import('./components/Outline'))
+const FindBar = lazy(() => import('./components/FindBar'))
 // ContextMenu stays eager on purpose: right-click expects the menu on the very next frame,
 // and a chunk boundary there is the one place the delay would actually be felt.
 import ContextMenu, { type ContextMenuState, type MenuItem } from './components/ContextMenu'
@@ -1412,18 +1412,20 @@ export default function App(): JSX.Element {
           />
 
           {showFind && !isTextKind && (
-            <FindBar
-              initialQuery={findInitial}
-              initialLine={findLine}
-              initialMatchIndex={findMatchIndex}
-              focusRequest={findFocusRequest}
-              onClose={() => {
-                setShowFind(false)
-                setFindInitial('')
-                setFindLine(undefined)
-                setFindMatchIndex(undefined)
-              }}
-            />
+            <Suspense fallback={null}>
+              <FindBar
+                initialQuery={findInitial}
+                initialLine={findLine}
+                initialMatchIndex={findMatchIndex}
+                focusRequest={findFocusRequest}
+                onClose={() => {
+                  setShowFind(false)
+                  setFindInitial('')
+                  setFindLine(undefined)
+                  setFindMatchIndex(undefined)
+                }}
+              />
+            </Suspense>
           )}
 
           {settings.showToolbar && !isTextKind && !sourceMode && !readingMode && activeTab && (
@@ -1614,16 +1616,18 @@ export default function App(): JSX.Element {
             {outlineVisible && activeTab && !isTextKind && (
               <>
                 <div className="resize-handle" onMouseDown={startOutlineResize} />
-                <Outline
-                  documentId={activeTab.id}
-                  items={outline}
-                  activeIndex={activeOutlineIndex}
-                  onSelect={scrollToHeading}
-                  onReorder={reorderSection}
-                  onClose={closeOutline}
-                  readOnly={readingMode}
-                  width={outlineWidth}
-                />
+                <Suspense fallback={null}>
+                  <Outline
+                    documentId={activeTab.id}
+                    items={outline}
+                    activeIndex={activeOutlineIndex}
+                    onSelect={scrollToHeading}
+                    onReorder={reorderSection}
+                    onClose={closeOutline}
+                    readOnly={readingMode}
+                    width={outlineWidth}
+                  />
+                </Suspense>
               </>
             )}
 

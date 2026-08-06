@@ -1,10 +1,10 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, Suspense, useEffect, useRef, useState } from 'react'
 import { ChevronDown, List, MapPin, PanelLeft, Pin, Plus, X } from 'lucide-react'
 import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 import { stripExtension } from '../lib/path'
 import { shortcutHint } from '../lib/shortcuts'
-import HoverScrollbars from './HoverScrollbars'
+import HoverScrollbars from './LazyHoverScrollbars'
 
 interface Props {
   tabs: Tab[]
@@ -259,7 +259,9 @@ const TabBar = memo(function TabBar({
             }),
           )}
         </div>
-        <HoverScrollbars targetRef={tabsRef} axes="horizontal" />
+        <Suspense fallback={null}>
+          <HoverScrollbars targetRef={tabsRef} axes="horizontal" />
+        </Suspense>
       </div>
 
       {/* ── 溢出列表按钮 ──────────────────────────────────────────────── */}
