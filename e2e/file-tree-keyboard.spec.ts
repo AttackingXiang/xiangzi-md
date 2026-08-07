@@ -18,12 +18,13 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
  * fixture *does* let us pin down about those code paths.
  */
 
-/** Opens the workspace folder from the Welcome screen's empty-sidebar state
- * and waits for the ARIA tree to render its first (only, at this point) row. */
+/** Opens the workspace folder from the Welcome screen and waits for the ARIA
+ * tree to render its first (only, at this point) row. Opening a folder also
+ * makes the persisted sidebar visible for the workspace. */
 async function openFileTree(page: Page): Promise<void> {
   await page.goto('/')
   await expect(page.locator('body')).toHaveClass(/is-browser-preview/)
-  await page.locator('.sidebar-empty').getByRole('button', { name: '打开文件夹' }).click()
+  await page.locator('.welcome').getByRole('button', { name: '打开文件夹', exact: true }).click()
   await expect(page.getByRole('tree', { name: '文件树' })).toBeVisible()
   await expect(page.getByRole('treeitem', { name: '渲染示例.md' })).toBeVisible()
 }

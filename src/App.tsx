@@ -711,20 +711,22 @@ export default function App(): JSX.Element {
   const openFolder = useCallback(async () => {
     const result = await desktop.openFolder()
     if (result) {
+      setSidebarVisible(true)
       setFolder(result)
       pushRecentFolder(result.root)
     }
-  }, [pushRecentFolder])
+  }, [pushRecentFolder, setSidebarVisible])
 
   const chooseFolderFrom = useCallback(
     async (initialPath: string) => {
       const result = await desktop.openFolder(initialPath)
       if (result) {
+        setSidebarVisible(true)
         setFolder(result)
         pushRecentFolder(result.root)
       }
     },
-    [pushRecentFolder],
+    [pushRecentFolder, setSidebarVisible],
   )
 
   const openFolderByPath = useCallback(
@@ -738,13 +740,14 @@ export default function App(): JSX.Element {
         return
       }
       if (result) {
+        setSidebarVisible(true)
         setFolder(result)
         pushRecentFolder(result.root)
       } else {
         void desktop.notify(t('文件夹不存在：\n') + root)
       }
     },
-    [pushRecentFolder],
+    [pushRecentFolder, setSidebarVisible],
   )
 
   const inspectClipboardPath = useCallback(async (): Promise<void> => {
