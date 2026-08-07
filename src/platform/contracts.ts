@@ -90,7 +90,7 @@ export interface AppSettings {
   shortcuts: Record<string, string>
   recentFiles: string[]
   recentFolders: string[]
-  /** frecency 打分语料库；recentFiles 是它按最近打开时间派生出的前 15 镜像 */
+  /** frecency 打分语料库；recentFiles 是它按最近打开时间派生出的最近文件列表（最多 100 条） */
   recentDocs: RecentDoc[]
   favorites: string[]
   /** 收藏中属于文件的路径；未列出的收藏按文件夹处理，以兼容旧设置。 */

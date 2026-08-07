@@ -4,7 +4,7 @@ type ScrollAxis = 'horizontal' | 'vertical'
 
 interface Props {
   targetRef: RefObject<HTMLElement | null>
-  axes?: 'both' | 'horizontal'
+  axes?: 'both' | 'horizontal' | 'vertical'
 }
 
 interface Metrics {
@@ -90,8 +90,8 @@ export default function HoverScrollbars({ targetRef, axes = 'both' }: Props): JS
 
   if (!metrics) return null
 
-  const hasHorizontal = metrics.scrollWidth > metrics.clientWidth
-  const hasVertical = axes === 'both' && metrics.scrollHeight > metrics.clientHeight
+  const hasHorizontal = axes !== 'vertical' && metrics.scrollWidth > metrics.clientWidth
+  const hasVertical = axes !== 'horizontal' && metrics.scrollHeight > metrics.clientHeight
   if (!hasHorizontal && !hasVertical) return null
 
   const scrollAxis = (

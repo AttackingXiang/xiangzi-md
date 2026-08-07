@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 12;
-pub(crate) const MAX_RECENT_ITEMS: usize = 15;
-/// frecency 语料库上限：比展示用的 recent_files（15）大，保留更长的打开历史用于打分。
+/// 最近文件和文件夹的持久化上限；前端列表在此范围内支持滚动查看。
+pub(crate) const MAX_RECENT_ITEMS: usize = 100;
+/// frecency 语料库上限：与展示用的 recent_files（100）一致，保留完整的打开历史用于打分。
 pub(crate) const MAX_RECENT_DOCS: usize = 100;
 pub(crate) const MAX_FAVORITES: usize = 32;
 pub(crate) const MAX_PINNED_FOLDERS: usize = 64;
@@ -112,7 +113,7 @@ pub struct AppSettings {
     pub shortcuts: BTreeMap<String, String>,
     pub recent_files: Vec<String>,
     pub recent_folders: Vec<String>,
-    /// frecency 打分语料库；recent_files 是它按最近打开时间派生出的前 15 镜像。
+    /// frecency 打分语料库；recent_files 是它按最近打开时间派生出的最近文件列表。
     pub recent_docs: Vec<RecentDoc>,
     pub favorites: Vec<String>,
     pub favorite_files: Vec<String>,

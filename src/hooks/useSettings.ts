@@ -8,8 +8,8 @@ import type { AppSettings, RecentDoc } from '../types'
 
 /** frecency 语料库上限，与 Rust 端 MAX_RECENT_DOCS 保持一致。 */
 const RECENT_DOCS_CAP = 100
-/** recentFiles 派生镜像长度（供 Welcome「最近文件」等旧消费者，纯近因语义）。 */
-const RECENT_FILES_MIRROR = 15
+/** 最近文件/文件夹的持久化上限；首页和「最近打开」面板都可滚动查看完整集合。 */
+const RECENT_ITEMS_CAP = 100
 /** 同一文件在此毫秒数内重复触发只刷新时间、不累加 openCount，避免切 tab 反复计数。 */
 const OPEN_COUNT_COOLDOWN_MS = 60_000
 
@@ -18,7 +18,7 @@ function isPathAtOrUnder(candidate: string, base: string): boolean {
   return candidate === base || candidate.startsWith(base + '/') || candidate.startsWith(base + '\\')
 }
 
-/** 按最近打开时间倒序截断到上限，并派生出 recentFiles 前若干镜像。 */
+/** 按最近打开时间倒序截断到上限，并派生出最近文件列表。 */
 function normalizeRecentDocs(docs: RecentDoc[]): {
   recentDocs: RecentDoc[]
   recentFiles: string[]
@@ -26,7 +26,7 @@ function normalizeRecentDocs(docs: RecentDoc[]): {
   const recentDocs = [...docs]
     .sort((a, b) => b.lastOpenedNanos - a.lastOpenedNanos)
     .slice(0, RECENT_DOCS_CAP)
-  const recentFiles = recentDocs.slice(0, RECENT_FILES_MIRROR).map((doc) => doc.path)
+  const recentFiles = recentDocs.slice(0, RECENT_ITEMS_CAP).map((doc) => doc.path)
   return { recentDocs, recentFiles }
 }
 
@@ -347,7 +347,10 @@ export function useSettings() {
   const pushRecentFolder = useCallback((p: string) => {
     setSettings((prev) => {
       if (!prev) return prev
-      const recentFolders = [p, ...prev.recentFolders.filter((x) => x !== p)].slice(0, 15)
+      const recentFolders = [p, ...prev.recentFolders.filter((x) => x !== p)].slice(
+        0,
+        RECENT_ITEMS_CAP,
+      )
       void desktop
         .setSettings({ recentFolders })
         .catch((error: unknown) => console.error('Recent folders persistence failed', error))

@@ -1,7 +1,9 @@
 import { FilePlus2, FolderOpen, FileText, Clock, Folder, RotateCcw, Tag } from 'lucide-react'
+import { Suspense, useRef } from 'react'
 import { t } from '../lib/i18n'
 import { baseName, dirName } from '../lib/path'
 import appIcon from '../../src-tauri/icons/icon.png'
+import HoverScrollbars from './LazyHoverScrollbars'
 
 interface Props {
   recentFiles: string[]
@@ -51,6 +53,9 @@ export default function Welcome({
   clipboardPathPrompt = null,
   onOpenClipboardPath,
 }: Props): JSX.Element {
+  const recentFilesRef = useRef<HTMLDivElement>(null)
+  const recentFoldersRef = useRef<HTMLDivElement>(null)
+
   return (
     <div className="welcome">
       <div className="welcome-inner">
@@ -136,19 +141,26 @@ export default function Welcome({
               <div className="recent-title">
                 <Clock size={14} /> {t('最近文件')}
               </div>
-              {recentFiles.slice(0, 8).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="recent-item"
-                  title={p}
-                  onClick={() => onOpenRecentFile(p)}
-                >
-                  <FileText size={14} />
-                  <span className="recent-name">{baseName(p)}</span>
-                  <span className="recent-dir">{parentDir(p)}</span>
-                </button>
-              ))}
+              <div className="scrollbar-host recent-list-scrollbar-host">
+                <div className="recent-list" ref={recentFilesRef}>
+                  {recentFiles.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className="recent-item"
+                      title={p}
+                      onClick={() => onOpenRecentFile(p)}
+                    >
+                      <FileText size={14} />
+                      <span className="recent-name">{baseName(p)}</span>
+                      <span className="recent-dir">{parentDir(p)}</span>
+                    </button>
+                  ))}
+                </div>
+                <Suspense fallback={null}>
+                  <HoverScrollbars targetRef={recentFilesRef} axes="vertical" />
+                </Suspense>
+              </div>
             </div>
           )}
 
@@ -157,19 +169,26 @@ export default function Welcome({
               <div className="recent-title">
                 <Folder size={14} /> {t('最近文件夹')}
               </div>
-              {recentFolders.slice(0, 8).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="recent-item"
-                  title={p}
-                  onClick={() => onOpenRecentFolder(p)}
-                >
-                  <Folder size={14} />
-                  <span className="recent-name">{baseName(p)}</span>
-                  <span className="recent-dir">{parentDir(p)}</span>
-                </button>
-              ))}
+              <div className="scrollbar-host recent-list-scrollbar-host">
+                <div className="recent-list" ref={recentFoldersRef}>
+                  {recentFolders.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className="recent-item"
+                      title={p}
+                      onClick={() => onOpenRecentFolder(p)}
+                    >
+                      <Folder size={14} />
+                      <span className="recent-name">{baseName(p)}</span>
+                      <span className="recent-dir">{parentDir(p)}</span>
+                    </button>
+                  ))}
+                </div>
+                <Suspense fallback={null}>
+                  <HoverScrollbars targetRef={recentFoldersRef} axes="vertical" />
+                </Suspense>
+              </div>
             </div>
           )}
         </div>
