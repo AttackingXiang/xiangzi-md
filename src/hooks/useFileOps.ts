@@ -250,6 +250,11 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
       // runtime tab id. Reuse that tab instead of creating a duplicate.
       const existingByPath = stateRef.current.tabs.find((tab) => tab.path === draft.path)
       if (existingByPath) {
+        if (existingByPath.dirty) {
+          setActiveId(existingByPath.id)
+          void desktop.notify(t('该文档已有未保存的修改，草稿未自动恢复，避免覆盖当前内容。'))
+          return
+        }
         setTabs((previous) =>
           previous.map((tab) =>
             tab.id === existingByPath.id ? applyRecoveredDraft(tab, draft.content) : tab,
@@ -263,6 +268,11 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         const file = await desktop.readFile(draft.path)
         const openedWhileReading = stateRef.current.tabs.find((tab) => tab.path === file.path)
         if (openedWhileReading) {
+          if (openedWhileReading.dirty) {
+            setActiveId(openedWhileReading.id)
+            void desktop.notify(t('该文档已有未保存的修改，草稿未自动恢复，避免覆盖当前内容。'))
+            return
+          }
           setTabs((previous) =>
             previous.map((tab) =>
               tab.id === openedWhileReading.id ? applyRecoveredDraft(tab, draft.content) : tab,

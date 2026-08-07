@@ -130,9 +130,11 @@ const EN: Record<string, string> = {
   删除全部草稿: 'Delete All Drafts',
   稍后处理: 'Later',
   '（空草稿）': '(Empty draft)',
-  '检测到未正常保存的编辑内容，恢复后会作为未保存的新标签打开。':
-    'Unsaved editing content was found. Recovered drafts open as new unsaved tabs.',
+  '检测到未正常保存的编辑内容，可在下方选择恢复或删除。':
+    'Unsaved editing content was found. Choose to recover or delete it below.',
   草稿恢复失败: 'Draft recovery failed',
+  '该文档已有未保存的修改，草稿未自动恢复，避免覆盖当前内容。':
+    'This document already has unsaved changes, so the draft was not applied automatically to avoid overwriting them.',
   '确定删除全部草稿吗？': 'Delete all drafts?',
   // StatusBar
   就绪: 'Ready',

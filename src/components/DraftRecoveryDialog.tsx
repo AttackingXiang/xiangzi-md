@@ -51,7 +51,7 @@ export default function DraftRecoveryDialog({
         <div className="modal-header draft-recovery-header">
           <div>
             <h2 id="draft-recovery-title">{t('恢复草稿')}</h2>
-            <p>{t('检测到未正常保存的编辑内容，恢复后会作为未保存的新标签打开。')}</p>
+            <p>{t('检测到未正常保存的编辑内容，可在下方选择恢复或删除。')}</p>
           </div>
           <button className="icon-btn sm" onClick={onClose} title={t('关闭')}>
             <X size={15} />
