@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Tab } from '../types'
 import {
+  applyRecoveredDraft,
   completePersistedTransform,
   completeSave,
   markExternalUnavailable,
@@ -55,6 +56,34 @@ describe('save completion', () => {
       content: 'saved',
       revision: 6,
       dirty: false,
+    })
+  })
+
+  it('applies a recovered snapshot without detaching the original file path', () => {
+    const current = {
+      ...tab('disk', 3),
+      savedContent: 'disk',
+      dirty: false,
+      recoverySourcePath: '/notes/a.md',
+    }
+    const result = applyRecoveredDraft(current, 'recovered edit')
+
+    expect(result).toMatchObject({
+      path: '/notes/a.md',
+      recoverySourcePath: null,
+      content: 'recovered edit',
+      savedContent: 'disk',
+      dirty: true,
+      revision: 4,
+    })
+  })
+
+  it('marks a recovered snapshot clean when it matches the current disk baseline', () => {
+    const current = { ...tab('disk', 3), savedContent: 'disk', dirty: false }
+    expect(applyRecoveredDraft(current, 'disk')).toMatchObject({
+      path: '/notes/a.md',
+      dirty: false,
+      revision: 3,
     })
   })
 

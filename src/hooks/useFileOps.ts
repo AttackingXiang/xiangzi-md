@@ -7,6 +7,7 @@ import { InFlightCache } from '../lib/inFlightCache'
 import { LatestTaskQueue } from '../lib/latestTask'
 import {
   acceptExternalRead,
+  applyRecoveredDraft,
   completePersistedTransform,
   completeSave,
   markExternalUnavailable,
@@ -216,30 +217,94 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   }, [lang, setActiveId, setTabs])
 
   const recoverDraft = useCallback(
-    (draft: Draft): void => {
-      const existing = stateRef.current.tabs.find((tab) => tab.id === draft.id)
-      if (existing) {
-        setActiveId(existing.id)
+    async (draft: Draft): Promise<void> => {
+      const existingById = stateRef.current.tabs.find((tab) => tab.id === draft.id)
+      if (existingById) {
+        setActiveId(existingById.id)
         return
       }
-      const tab: Tab = {
-        id: draft.id,
-        path: null,
-        recoverySourcePath: draft.path,
-        name: recoveredDraftName(draft.name, lang),
-        content: draft.content,
-        savedContent: '',
-        dirty: true,
-        revision: 1,
-        version: null,
-        // 草稿是应用内快照（content 早已是编辑器吐出的纯 LF 文本），不是原始
-        // 磁盘字节，没有可还原的换行风格信号；跟新建文件一样按 'lf' 处理，
-        // 用户真正保存（saveAs）时也不会去覆盖原文件，不存在换行风格错乱的
-        // 外部可见影响。
-        eol: 'lf',
+
+      // A draft without a path came from a genuinely new, never-saved document.
+      // It cannot be restored to disk, so keep the existing recovered-tab flow.
+      if (!draft.path) {
+        const tab: Tab = {
+          id: draft.id,
+          path: null,
+          recoverySourcePath: null,
+          name: recoveredDraftName(draft.name, lang),
+          content: draft.content,
+          savedContent: '',
+          dirty: true,
+          revision: 1,
+          version: null,
+          // 草稿是应用内快照（content 早已是编辑器吐出的纯 LF 文本），不是原始
+          // 磁盘字节，没有可还原的换行风格信号；跟新建文件一样按 'lf' 处理。
+          eol: 'lf',
+        }
+        setTabs((previous) => [...previous, tab])
+        setActiveId(tab.id)
+        return
       }
-      setTabs((previous) => [...previous, tab])
-      setActiveId(tab.id)
+
+      // Session restoration can already have opened the original path with a new
+      // runtime tab id. Reuse that tab instead of creating a duplicate.
+      const existingByPath = stateRef.current.tabs.find((tab) => tab.path === draft.path)
+      if (existingByPath) {
+        setTabs((previous) =>
+          previous.map((tab) =>
+            tab.id === existingByPath.id ? applyRecoveredDraft(tab, draft.content) : tab,
+          ),
+        )
+        setActiveId(existingByPath.id)
+        return
+      }
+
+      try {
+        const file = await desktop.readFile(draft.path)
+        const openedWhileReading = stateRef.current.tabs.find((tab) => tab.path === file.path)
+        if (openedWhileReading) {
+          setTabs((previous) =>
+            previous.map((tab) =>
+              tab.id === openedWhileReading.id ? applyRecoveredDraft(tab, draft.content) : tab,
+            ),
+          )
+          setActiveId(openedWhileReading.id)
+          return
+        }
+
+        const tab: Tab = {
+          id: draft.id,
+          path: file.path,
+          recoverySourcePath: null,
+          name: file.name,
+          content: draft.content,
+          savedContent: file.content,
+          dirty: draft.content !== file.content,
+          revision: 1,
+          version: file.version,
+          eol: detectLineEnding(file.content),
+        }
+        savedVersionsRef.current.set(tab.id, file.version)
+        setTabs((previous) => [...previous, tab])
+        setActiveId(tab.id)
+      } catch {
+        // The original file may have been deleted or moved. Preserve the draft
+        // rather than losing it, but make it an explicit Save As recovery tab.
+        const tab: Tab = {
+          id: draft.id,
+          path: null,
+          recoverySourcePath: draft.path,
+          name: recoveredDraftName(draft.name, lang),
+          content: draft.content,
+          savedContent: '',
+          dirty: true,
+          revision: 1,
+          version: null,
+          eol: 'lf',
+        }
+        setTabs((previous) => [...previous, tab])
+        setActiveId(tab.id)
+      }
     },
     [lang, setActiveId, setTabs],
   )

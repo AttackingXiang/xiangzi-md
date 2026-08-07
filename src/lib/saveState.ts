@@ -50,6 +50,18 @@ export function updateTabContent(current: Tab, content: string): Tab {
   }
 }
 
+/** Applies a recovered snapshot to an already path-bound tab without changing its save target. */
+export function applyRecoveredDraft(current: Tab, content: string): Tab {
+  return {
+    ...current,
+    content,
+    recoverySourcePath: null,
+    dirty: content !== current.savedContent,
+    revision: current.revision + (current.content === content ? 0 : 1),
+    diskState: undefined,
+  }
+}
+
 /** Reconciles a verified disk read without ever overwriting unsaved editor content. */
 export function reconcileExternalRead(current: Tab, file: OpenedFile): ExternalReadResult {
   if (current.version?.contentHash === file.version.contentHash) {

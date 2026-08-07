@@ -6,7 +6,7 @@ import { t } from '../lib/i18n'
 interface Deps {
   tabs: Tab[]
   getCurrentTabs: () => Tab[]
-  openRecoveredDraft: (draft: Draft) => void
+  openRecoveredDraft: (draft: Draft) => Promise<void>
 }
 
 /**
@@ -112,7 +112,7 @@ export function useDraftRecovery({ tabs, getCurrentTabs, openRecoveredDraft }: D
       try {
         const draft = await desktop.readDraft(summary.id)
         managedIdsRef.current.add(draft.id)
-        openRecoveredDraft(draft)
+        await openRecoveredDraft(draft)
         setDrafts((current) => current.filter((item) => item.id !== draft.id))
       } catch (error) {
         console.error('Draft recovery failed', error)

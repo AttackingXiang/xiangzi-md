@@ -29,7 +29,7 @@ export interface Tab {
   id: string
   /** 已保存文件的绝对路径；新建未保存文件为 null */
   path: string | null
-  /** 恢复草稿的原文件路径，仅用于解析相对资源，不会作为保存目标 */
+  /** 恢复草稿的原文件路径；原文件不可用时仅用于解析相对资源 */
   recoverySourcePath?: string | null
   name: string
   content: string
