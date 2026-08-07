@@ -44,6 +44,9 @@ blake3 = "1"
 reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "rustls-no-provider"] }
 # docx 是 zip，用于导出后字体后处理（deflate 读写）
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# 定位 docx XML 里的标签边界/自闭合状态/直接子元素顺序；已经是 Cargo.lock 里的
+# 传递依赖（被别的包间接拉入），提升成直接依赖不引入新的供应链面。
+quick-xml = "0.41"
 png = "0.18.1"
 image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
 

@@ -1,4 +1,5 @@
 pub mod attachment;
+pub(crate) mod docx_xml;
 pub mod drafts;
 pub mod lifecycle;
 pub mod menu;

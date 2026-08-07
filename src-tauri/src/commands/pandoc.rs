@@ -8,7 +8,7 @@
 use crate::commands::app::open_path_with_default_app;
 use crate::domain::academic_layout::AcademicLayout;
 use crate::domain::error::{AppError, AppResult};
-use crate::infrastructure::{settings::SettingsStore, workspace};
+use crate::infrastructure::{docx_xml, settings::SettingsStore, workspace};
 use serde::Serialize;
 use std::{
     io::{Cursor, Read, Write},
@@ -1157,39 +1157,42 @@ fn patch_document_page_layout(
     let Some(section_start) = body_section_start(xml) else {
         return xml.to_owned();
     };
-    let Some(section_open_end_rel) = xml[section_start..].find('>') else {
+    let Some(span) = docx_xml::find_element(&xml[section_start..], "w:sectPr") else {
         return xml.to_owned();
     };
-    let section_open_end = section_start + section_open_end_rel;
-    if xml.as_bytes().get(section_open_end.saturating_sub(1)) == Some(&b'/') {
-        let replacement =
-            format!("<w:sectPr>{footer_reference}{page_size}{page_margins}</w:sectPr>");
-        return format!(
-            "{}{}{}",
-            &xml[..section_start],
-            replacement,
-            &xml[section_open_end + 1..]
+    let section_end = section_start + span.outer.end;
+    let mut section = xml[section_start..section_end].to_owned();
+
+    // CT_SectPr（ECMA-376）规定的子元素顺序节选：footerReference 在
+    // footnotePr/endnotePr 之前，pgSz/pgMar 在它们之后、pgNumType 等更靠后的
+    // 属性之前。这张表把这几个位置都列全，而不是只列会被插入的三个标签——
+    // 否则自定义模板如果带着 footnotePr 这类我们不插入、但顺序上排在中间的
+    // 元素，pgSz/pgMar 会因为"锚点不认识它"被错误地插到它前面。
+    const ORDER: &[&str] = &[
+        "w:footerReference",
+        "w:footnotePr",
+        "w:endnotePr",
+        "w:pgSz",
+        "w:pgMar",
+        "w:pgNumType",
+        "w:formProt",
+        "w:textDirection",
+        "w:bidi",
+        "w:rtlGutter",
+        "w:docGrid",
+    ];
+    if footer_rel_id.is_some() {
+        section = docx_xml::upsert_self_child(
+            &section,
+            "w:sectPr",
+            "w:footerReference",
+            &footer_reference,
+            ORDER,
         );
     }
-    let Some(section_close_rel) = xml[section_open_end + 1..].find("</w:sectPr>") else {
-        return xml.to_owned();
-    };
-    let section_end = section_open_end + 1 + section_close_rel + "</w:sectPr>".len();
-    let section = &xml[section_start..section_end];
-    // sectPr 的 OOXML 顺序要求 footerReference 位于 pgSz/pgMar 之前，
-    // 页面属性则应位于 footnotePr 等尾部属性之前。
-    let section = if footer_rel_id.is_some() {
-        replace_or_insert_section_child(
-            section,
-            "footerReference",
-            &footer_reference,
-            "</w:sectPr>",
-        )
-    } else {
-        section.to_owned()
-    };
-    let section = replace_or_insert_section_child(&section, "pgSz", &page_size, "</w:sectPr>");
-    let section = replace_or_insert_section_child(&section, "pgMar", &page_margins, "</w:sectPr>");
+    section = docx_xml::upsert_self_child(&section, "w:sectPr", "w:pgSz", &page_size, ORDER);
+    section = docx_xml::upsert_self_child(&section, "w:sectPr", "w:pgMar", &page_margins, ORDER);
+
     format!(
         "{}{}{}",
         &xml[..section_start],
@@ -1217,13 +1220,7 @@ fn patch_list_paragraphs(xml: &str, layout: &AcademicLayout) -> String {
         let paragraph_end = relative_end + "</w:p>".len();
         let paragraph = &rest[..paragraph_end];
         let patched = if paragraph.contains("<w:numPr") {
-            replace_or_insert_container_child(
-                paragraph,
-                "pPr",
-                "spacing",
-                &list_spacing,
-                &["<w:r", "</w:p>"],
-            )
+            upsert_in_paragraph_ppr(paragraph, "w:spacing", &list_spacing)
         } else {
             paragraph.to_owned()
         };
@@ -1233,38 +1230,6 @@ fn patch_list_paragraphs(xml: &str, layout: &AcademicLayout) -> String {
 
     result.push_str(rest);
     result
-}
-
-fn replace_or_insert_section_child(
-    section: &str,
-    tag_name: &str,
-    replacement: &str,
-    close: &str,
-) -> String {
-    if find_word_tag_start(section, &format!("<w:{tag_name}")).is_some() {
-        return replace_or_insert_self_closing_child(section, tag_name, replacement, close);
-    }
-    let insert_at = [
-        "<w:footnotePr",
-        "<w:endnotePr",
-        "<w:pgNumType",
-        "<w:formProt",
-        "<w:textDirection",
-        "<w:bidi",
-        "<w:rtlGutter",
-        "<w:docGrid",
-        close,
-    ]
-    .iter()
-    .filter_map(|needle| section.find(needle))
-    .min()
-    .unwrap_or(section.len());
-    format!(
-        "{}{}{}",
-        &section[..insert_at],
-        replacement,
-        &section[insert_at..]
-    )
 }
 
 /// 为页脚部件登记一条关系。`target` 是相对 `word/` 的文件名。
@@ -1520,49 +1485,78 @@ pub fn patch_academic_styles_xml(xml: &str, layout: &AcademicLayout) -> String {
     }
 }
 
+/// `<w:style>` 直接子元素的相对顺序（CT_Style，ECMA-376 节选）：pPr 在 rPr 之前。
+/// 只列这份代码实际会新建的两个标签，不是完整 schema。
+const STYLE_CHILD_ORDER: &[&str] = &["w:pPr", "w:rPr"];
+
+/// `<w:pPr>` 直接子元素的相对顺序（CT_PPr 节选）：pBdr、wordWrap 在前，
+/// spacing/ind/jc 在后。跨 `patch_code_block_border`/`patch_paragraph_style`/
+/// `patch_list_paragraphs` 共用同一张表，而不是各自维护一份——这正是这次重写
+/// 想要的效果：OOXML 顺序知识只在一个地方维护。
+const PPR_CHILD_ORDER: &[&str] = &["w:pBdr", "w:wordWrap", "w:spacing", "w:ind", "w:jc"];
+
+/// `<w:rPr>` 直接子元素的相对顺序（CT_RPr 节选）：rFonts 最先，然后 b/i，
+/// 然后 color，最后 sz/szCs。字体规范化（`patch_style_blocks`）和论文排版
+/// （`patch_paragraph_style`/`patch_run_style`）都会在同一个 rPr 上插入内容，
+/// 且论文排版先跑一遍——共用这张表两边的插入才能正确交错，而不是各按各的
+/// 顺序表各自追加、最终顺序取决于谁先跑。
+const RPR_CHILD_ORDER: &[&str] = &["w:rFonts", "w:b", "w:i", "w:color", "w:sz", "w:szCs"];
+
+/// 在 `block`（一份完整的 `<w:style>...</w:style>`）的 `w:pPr` 里插入/替换一个
+/// 子元素；`w:pPr` 整个不存在就连它一起按 [`STYLE_CHILD_ORDER`] 新建。
+fn upsert_in_style_ppr(block: &str, tag: &str, fragment: &str) -> String {
+    let Some(style) = docx_xml::find_element(block, "w:style") else {
+        return block.to_owned();
+    };
+    match docx_xml::find_direct_child(block, &style, "w:pPr") {
+        Some(ppr) => docx_xml::upsert_ordered_child(block, &ppr, tag, fragment, PPR_CHILD_ORDER),
+        None => {
+            let fresh = format!("<w:pPr>{fragment}</w:pPr>");
+            docx_xml::upsert_ordered_child(block, &style, "w:pPr", &fresh, STYLE_CHILD_ORDER)
+        }
+    }
+}
+
+/// 同 [`upsert_in_style_ppr`]，作用在 `w:rPr` 上。
+fn upsert_in_style_rpr(block: &str, tag: &str, fragment: &str) -> String {
+    let Some(style) = docx_xml::find_element(block, "w:style") else {
+        return block.to_owned();
+    };
+    match docx_xml::find_direct_child(block, &style, "w:rPr") {
+        Some(rpr) => docx_xml::upsert_ordered_child(block, &rpr, tag, fragment, RPR_CHILD_ORDER),
+        None => {
+            let fresh = format!("<w:rPr>{fragment}</w:rPr>");
+            docx_xml::upsert_ordered_child(block, &style, "w:rPr", &fresh, STYLE_CHILD_ORDER)
+        }
+    }
+}
+
+/// `<w:p>` 直接子元素的相对顺序（CT_P 节选）：pPr 必须排在正文内容（w:r 等）
+/// 之前。
+const PARAGRAPH_CHILD_ORDER: &[&str] = &["w:pPr", "w:r"];
+
+/// 同 [`upsert_in_style_ppr`]，作用在一份完整的 `<w:p>...</w:p>` 段落上；
+/// pPr 不存在时按 [`PARAGRAPH_CHILD_ORDER`] 新建，插在第一个 `w:r` 之前。
+fn upsert_in_paragraph_ppr(paragraph: &str, tag: &str, fragment: &str) -> String {
+    let Some(p) = docx_xml::find_element(paragraph, "w:p") else {
+        return paragraph.to_owned();
+    };
+    match docx_xml::find_direct_child(paragraph, &p, "w:pPr") {
+        Some(ppr) => {
+            docx_xml::upsert_ordered_child(paragraph, &ppr, tag, fragment, PPR_CHILD_ORDER)
+        }
+        None => {
+            let fresh = format!("<w:pPr>{fragment}</w:pPr>");
+            docx_xml::upsert_ordered_child(paragraph, &p, "w:pPr", &fresh, PARAGRAPH_CHILD_ORDER)
+        }
+    }
+}
+
 /// 给代码块的 SourceCode 段落样式加一圈细边框，对应 layout.code_block_bordered。
-///
-/// pBdr 在 OOXML 的 w:pPr 子元素顺序里必须排在 wordWrap 之前；SourceCode 样式
-/// 目前唯一已有的子元素就是 wordWrap。`replace_or_insert_container_child` 帮不
-/// 上忙——它只在"容器本身不存在、需要新建"时支持指定插入位置，pPr 这里已经
-/// 存在，会直接走"追加到已有容器末尾"的分支，把顺序写反，所以这里手写一个
-/// 只服务于这一个场景的插入逻辑。
 fn patch_code_block_border(xml: &str) -> String {
     const BORDER: &str = r#"<w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:space="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:space="4" w:color="000000"/></w:pBdr>"#;
     patch_style_block_by_id(xml, "SourceCode", |block| {
-        let Some(ppr_start) = find_word_tag_start(block, "<w:pPr") else {
-            // 没有 pPr 就新建一个。位置不能随便放：w:style 的子元素顺序里 pPr
-            // 必须排在 rPr 之前，而自定义模板里的 SourceCode 完全可能是「只有
-            // rPr、没有 pPr」的形态（内置模板带 wordWrap 所以有 pPr，走不到
-            // 这个分支）。插在 rPr 前面，没有 rPr 才退回样式块末尾。
-            let insert_at = find_word_tag_start(block, "<w:rPr")
-                .or_else(|| block.rfind("</w:style>"))
-                .unwrap_or(block.len());
-            let ppr = format!("<w:pPr>{BORDER}</w:pPr>");
-            return format!("{}{}{}", &block[..insert_at], ppr, &block[insert_at..]);
-        };
-        let Some(open_end_rel) = block[ppr_start..].find('>') else {
-            return block.to_owned();
-        };
-        let open_end = ppr_start + open_end_rel;
-        if block.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
-            // 自闭合的 <w:pPr/>，先展开成一对标签再放边框进去。
-            let expanded = format!("<w:pPr>{BORDER}</w:pPr>");
-            return format!(
-                "{}{}{}",
-                &block[..ppr_start],
-                expanded,
-                &block[open_end + 1..]
-            );
-        }
-        // 已有内容的 pPr：插到 wordWrap 之前；wordWrap 不存在就退到 pPr 末尾
-        // （对应 OOXML 顺序里 pBdr 之后、wordWrap 之前可能出现的其它属性都不在
-        // 这个样式的已知形态里，末尾兜底不会产生实际的顺序问题）。
-        let insert_at = find_word_tag_start(&block[open_end + 1..], "<w:wordWrap")
-            .map(|relative| open_end + 1 + relative)
-            .or_else(|| block.find("</w:pPr>"))
-            .unwrap_or(block.len());
-        format!("{}{}{}", &block[..insert_at], BORDER, &block[insert_at..])
+        upsert_in_style_ppr(block, "w:pBdr", BORDER)
     })
 }
 
@@ -1571,20 +1565,16 @@ fn patch_style_block_by_id<F>(xml: &str, style_id: &str, patch: F) -> String
 where
     F: FnOnce(&str) -> String,
 {
-    let needle = format!(r#"w:styleId="{style_id}""#);
-    let Some(style_attr_start) = xml.find(&needle) else {
+    let Some(style) = docx_xml::find_element_by_attr(xml, "w:style", "w:styleId", style_id) else {
         return xml.to_owned();
     };
-    let Some(style_start) = xml[..style_attr_start].rfind("<w:style ") else {
-        return xml.to_owned();
-    };
-    let rest = &xml[style_start..];
-    let Some(style_end_rel) = rest.find("</w:style>") else {
-        return xml.to_owned();
-    };
-    let style_end = style_end_rel + "</w:style>".len();
-    let patched = patch(&rest[..style_end]);
-    format!("{}{}{}", &xml[..style_start], patched, &rest[style_end..])
+    let patched = patch(&xml[style.outer.clone()]);
+    format!(
+        "{}{}{}",
+        &xml[..style.outer.start],
+        patched,
+        &xml[style.outer.end..]
+    )
 }
 
 /// 改写段落样式的段落属性和运行属性。
@@ -1606,13 +1596,13 @@ struct ParagraphStyle<'a> {
 fn patch_paragraph_style(block: &str, style: &ParagraphStyle) -> String {
     let mut block = block.to_owned();
     if let Some(spacing) = style.spacing {
-        block = replace_or_insert_ppr_child(&block, "spacing", spacing);
+        block = upsert_in_style_ppr(&block, "w:spacing", spacing);
     }
     if let Some(indent) = style.indent {
-        block = replace_or_insert_ppr_child(&block, "ind", indent);
+        block = upsert_in_style_ppr(&block, "w:ind", indent);
     }
     if let Some(alignment) = style.alignment {
-        block = replace_or_insert_ppr_child(&block, "jc", alignment);
+        block = upsert_in_style_ppr(&block, "w:jc", alignment);
     }
     patch_run_style(&block, style.size, style.bold, style.italic)
 }
@@ -1628,8 +1618,8 @@ fn patch_run_style(
     if let Some(size) = size {
         let size_tag = format!(r#"<w:sz w:val="{size}"/>"#);
         let size_cs_tag = format!(r#"<w:szCs w:val="{size}"/>"#);
-        block = replace_or_insert_rpr_child(&block, "sz", &size_tag);
-        block = replace_or_insert_rpr_child(&block, "szCs", &size_cs_tag);
+        block = upsert_in_style_rpr(&block, "w:sz", &size_tag);
+        block = upsert_in_style_rpr(&block, "w:szCs", &size_cs_tag);
     }
     if let Some(bold) = bold {
         let tag = if bold {
@@ -1637,7 +1627,7 @@ fn patch_run_style(
         } else {
             r#"<w:b w:val="0"/>"#
         };
-        block = replace_or_insert_rpr_child(&block, "b", tag);
+        block = upsert_in_style_rpr(&block, "w:b", tag);
     }
     if let Some(italic) = italic {
         let tag = if italic {
@@ -1645,140 +1635,17 @@ fn patch_run_style(
         } else {
             r#"<w:i w:val="0"/>"#
         };
-        block = replace_or_insert_rpr_child(&block, "i", tag);
+        block = upsert_in_style_rpr(&block, "w:i", tag);
     }
     block
 }
 
-/// 在样式的 w:pPr 中替换或插入一个自闭合子元素。
-fn replace_or_insert_ppr_child(block: &str, tag_name: &str, replacement: &str) -> String {
-    // pPr 必须排在 rPr 之前，所以先拿 rPr 当落点。
-    replace_or_insert_container_child(
-        block,
-        "pPr",
-        tag_name,
-        replacement,
-        &["<w:rPr", "</w:style>"],
-    )
-}
-
-/// 在样式的 w:rPr 中替换或插入一个自闭合子元素。
-fn replace_or_insert_rpr_child(block: &str, tag_name: &str, replacement: &str) -> String {
-    replace_or_insert_container_child(block, "rPr", tag_name, replacement, &["</w:style>"])
-}
-
-/// 在 `host` 的 `<w:{container}>` 里替换或插入一个自闭合子元素；容器不存在时
-/// 连容器一起建出来，插在 `insert_before` 里第一个能找到的标签之前。
-///
-/// 样式块（容器 pPr/rPr，落点 `<w:rPr` 或 `</w:style>`）和正文段落
-/// （容器 pPr，落点 `<w:r` 或 `</w:p>`）原本是两个几乎逐行相同的函数，
-/// 合并成一个——差别只有容器名和落点候选。落点一律用 `find_word_tag_start`
-/// 匹配完整标签，免得 `<w:rPr` 命中 `<w:rPrChange`。
-fn replace_or_insert_container_child(
-    host: &str,
-    container_name: &str,
-    tag_name: &str,
-    replacement: &str,
-    insert_before: &[&str],
-) -> String {
-    let open = format!("<w:{container_name}");
-    let close = format!("</w:{container_name}>");
-
-    if let Some(container_start) = find_word_tag_start(host, &open) {
-        let Some(open_end_rel) = host[container_start..].find('>') else {
-            return host.to_owned();
-        };
-        let open_end = container_start + open_end_rel;
-        // `<w:pPr/>` 这种自闭合写法要先展开成一对标签才能塞子元素。
-        if host.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
-            let expanded = format!("<w:{container_name}>{replacement}</w:{container_name}>");
-            return format!(
-                "{}{}{}",
-                &host[..container_start],
-                expanded,
-                &host[open_end + 1..]
-            );
-        }
-        let Some(close_rel) = host[open_end + 1..].find(&close) else {
-            return host.to_owned();
-        };
-        let container_end = open_end + 1 + close_rel + close.len();
-        let patched = replace_or_insert_self_closing_child(
-            &host[container_start..container_end],
-            tag_name,
-            replacement,
-            &close,
-        );
-        return format!(
-            "{}{}{}",
-            &host[..container_start],
-            patched,
-            &host[container_end..]
-        );
-    }
-
-    // 落点候选有两种形态：`<w:rPr` 这类开标签前缀要按完整标签匹配（否则会命中
-    // `<w:rPrChange`），而 `</w:style>` 这类完整闭标签本身就已经界定清楚了，
-    // 再去检查它后面跟什么只会一个都匹配不上。
-    let insert_at = insert_before
-        .iter()
-        .find_map(|needle| {
-            if needle.starts_with("</") {
-                host.find(needle)
-            } else {
-                find_word_tag_start(host, needle)
-            }
-        })
-        .unwrap_or(host.len());
-    let container = format!("<w:{container_name}>{replacement}</w:{container_name}>");
-    format!("{}{}{}", &host[..insert_at], container, &host[insert_at..])
-}
-
-fn replace_or_insert_self_closing_child(
-    container: &str,
-    tag_name: &str,
-    replacement: &str,
-    close: &str,
-) -> String {
-    let needle = format!("<w:{tag_name}");
-    if let Some(tag_start) = find_word_tag_start(container, &needle) {
-        let Some(tag_end) = element_end(container, tag_start, tag_name) else {
-            return container.to_owned();
-        };
-        return format!(
-            "{}{}{}",
-            &container[..tag_start],
-            replacement,
-            &container[tag_end..]
-        );
-    }
-    let insert_at = container.rfind(close).unwrap_or(container.len());
-    format!(
-        "{}{}{}",
-        &container[..insert_at],
-        replacement,
-        &container[insert_at..]
-    )
-}
-
-/// 返回从 `start` 开始的这个元素在 XML 里的结束偏移（开区间右端）。
-///
-/// 这些位置本该都是自闭合标签，但不能靠 `find("/>")` 去找结尾：真遇到
-/// `<w:ind ...></w:ind>` 这种写法时，它会一路匹配到后面某个无关标签的 `/>`，
-/// 把中间整段 XML 一起替换掉。所以先只在本标签的 `>` 之内判断是不是自闭合，
-/// 不是的话再去找配对的结束标签。
-fn element_end(xml: &str, start: usize, tag_name: &str) -> Option<usize> {
-    let open_end_rel = xml[start..].find('>')?;
-    let open_end = start + open_end_rel;
-    if xml.as_bytes().get(open_end.saturating_sub(1)) == Some(&b'/') {
-        return Some(open_end + 1);
-    }
-    let close = format!("</w:{tag_name}>");
-    let close_rel = xml[open_end + 1..].find(&close)?;
-    Some(open_end + 1 + close_rel + close.len())
-}
-
 /// 查找完整的 w:xxx 标签，避免把 w:sz 当成 w:szCs 的前缀。
+///
+/// 仍在用：`body_section_start`/`patch_list_paragraphs` 需要在整份文档里逐个
+/// 找同名标签的所有出现位置（"下一个 `<w:sectPr`""下一个 `<w:p`"），这是
+/// "找同一种标签的所有出现"，不是 [`docx_xml`] 那套"找一个元素、看它的直接
+/// 子元素"要解决的问题，两者不能互相替代。
 fn find_word_tag_start(xml: &str, needle: &str) -> Option<usize> {
     let mut offset = 0;
     while let Some(relative) = xml[offset..].find(needle) {
@@ -1792,56 +1659,16 @@ fn find_word_tag_start(xml: &str, needle: &str) -> Option<usize> {
     None
 }
 
+/// 没有 `w:tblPr` 就什么都不做——不像 `patch_code_block_border` 那样连容器
+/// 一起新建；Table 样式目前的已知形态里 tblPr 恒存在，保持这个限制而不是无
+/// 依据地猜一个插入位置。
 fn patch_table_style(xml: &str) -> String {
     const BORDERS: &str = r#"<w:tblBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="000000"/><w:bottom w:val="single" w:sz="8" w:space="0" w:color="000000"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>"#;
     patch_style_block_by_id(xml, "Table", |block| {
-        let Some(tbl_pr_start) = block.find("<w:tblPr") else {
+        let Some(tbl_pr) = docx_xml::find_element(block, "w:tblPr") else {
             return block.to_owned();
         };
-        let Some(tbl_pr_open_end_rel) = block[tbl_pr_start..].find('>') else {
-            return block.to_owned();
-        };
-        let tbl_pr_open_end = tbl_pr_start + tbl_pr_open_end_rel;
-        if block.as_bytes().get(tbl_pr_open_end.saturating_sub(1)) == Some(&b'/') {
-            let replacement = format!("<w:tblPr>{BORDERS}</w:tblPr>");
-            return format!(
-                "{}{}{}",
-                &block[..tbl_pr_start],
-                replacement,
-                &block[tbl_pr_open_end + 1..]
-            );
-        }
-        let Some(tbl_pr_close_rel) = block[tbl_pr_open_end + 1..].find("</w:tblPr>") else {
-            return block.to_owned();
-        };
-        let tbl_pr_end = tbl_pr_open_end + 1 + tbl_pr_close_rel + "</w:tblPr>".len();
-        let tbl_pr = &block[tbl_pr_start..tbl_pr_end];
-        let patched_tbl_pr = if let Some(border_start) = tbl_pr.find("<w:tblBorders") {
-            let Some(border_end_rel) = tbl_pr[border_start..].find("</w:tblBorders>") else {
-                return block.to_owned();
-            };
-            let border_end = border_start + border_end_rel + "</w:tblBorders>".len();
-            format!(
-                "{}{}{}",
-                &tbl_pr[..border_start],
-                BORDERS,
-                &tbl_pr[border_end..]
-            )
-        } else {
-            let insert_at = tbl_pr.rfind("</w:tblPr>").unwrap_or(tbl_pr.len());
-            format!(
-                "{}{}{}",
-                &tbl_pr[..insert_at],
-                BORDERS,
-                &tbl_pr[insert_at..]
-            )
-        };
-        format!(
-            "{}{}{}",
-            &block[..tbl_pr_start],
-            patched_tbl_pr,
-            &block[tbl_pr_end..]
-        )
+        docx_xml::upsert_ordered_child(block, &tbl_pr, "w:tblBorders", BORDERS, &["w:tblBorders"])
     })
 }
 
@@ -1888,20 +1715,21 @@ pub fn patch_styles_xml(xml: &str) -> String {
 
 /// 改写 <w:docDefaults>...</w:docDefaults> 里 rPrDefault 内的 rFonts。
 fn patch_doc_defaults(xml: &str) -> String {
-    // 找 docDefaults 块
-    let Some(start) = xml.find("<w:docDefaults") else {
+    let Some(defaults) = docx_xml::find_element(xml, "w:docDefaults") else {
         return xml.to_owned();
     };
-    let Some(end_tag) = xml[start..].find("</w:docDefaults>") else {
-        return xml.to_owned();
-    };
-    let end = start + end_tag + "</w:docDefaults>".len();
+    let patched_defaults = replace_or_insert_r_fonts_in_rpr(
+        &xml[defaults.outer.clone()],
+        FONT_BODY_EA,
+        FONT_BODY_LATIN,
+    );
 
-    let defaults_block = &xml[start..end];
-    let patched_defaults =
-        replace_or_insert_r_fonts_in_rpr(defaults_block, FONT_BODY_EA, FONT_BODY_LATIN);
-
-    format!("{}{}{}", &xml[..start], patched_defaults, &xml[end..])
+    format!(
+        "{}{}{}",
+        &xml[..defaults.outer.start],
+        patched_defaults,
+        &xml[defaults.outer.end..]
+    )
 }
 
 /// 逐个 <w:style ...>...</w:style> 块按分类改写 w:rFonts。
@@ -1960,28 +1788,20 @@ fn patch_style_blocks(xml: &str) -> String {
 /// 在给定 XML 片段的 <w:rPr> 内替换或插入 <w:rFonts>。
 /// 用于 docDefaults 和标题/代码类样式（需要保证有 rFonts）。
 fn replace_or_insert_r_fonts_in_rpr(xml: &str, ea: &str, latin: &str) -> String {
-    let fonts_tag = format!(r#"<w:rFonts {attrs}/>"#, attrs = make_r_fonts(ea, latin),);
-
+    // 已有 rFonts：只是替换属性值，不涉及子元素顺序——不在这次重写的目标范围
+    // 内，保留原来"遍历替换每一处"的写法（`w:rPrChange` 这类修订标记理论上会
+    // 让同一个片段里出现不止一个 rFonts，原逻辑早就考虑到了这一点）。
     if xml.contains("<w:rFonts") {
-        // 已有 rFonts：替换整个标签（包含属性）
-        replace_r_fonts(xml, ea, latin)
-    } else if let Some(rpr_end) = xml.find("</w:rPr>") {
-        // rPr 存在但没有 rFonts：在 </w:rPr> 前插入
-        let mut out = xml[..rpr_end].to_owned();
-        out.push_str(&fonts_tag);
-        out.push_str(&xml[rpr_end..]);
-        out
-    } else if let Some(rpr_start) = xml.find("<w:rPr>") {
-        // 空 <w:rPr></w:rPr>（无属性版本）
-        let after = rpr_start + "<w:rPr>".len();
-        let mut out = xml[..after].to_owned();
-        out.push_str(&fonts_tag);
-        out.push_str(&xml[after..]);
-        out
-    } else {
-        // 连 rPr 都没有：不插入（避免破坏结构）
-        xml.to_owned()
+        return replace_r_fonts(xml, ea, latin);
     }
+    // 没有 rFonts：要么插进已有的 rPr，要么 rPr 整个不存在就不插入——原来的写法
+    // 只认得"非自闭合、已有内容"和"非自闭合、完全空标签"两种 rPr 形态，真遇到
+    // `<w:rPr/>` 自闭合会被误判成"没有 rPr"，静默漏加字体。
+    let fonts_tag = format!(r#"<w:rFonts {}/>"#, make_r_fonts(ea, latin));
+    let Some(rpr) = docx_xml::find_element(xml, "w:rPr") else {
+        return xml.to_owned();
+    };
+    docx_xml::upsert_ordered_child(xml, &rpr, "w:rFonts", &fonts_tag, RPR_CHILD_ORDER)
 }
 
 /// 替换片段内所有 <w:rFonts ...> 的属性，并删除主题引用属性。
@@ -2014,6 +1834,8 @@ fn replace_r_fonts(xml: &str, ea: &str, latin: &str) -> String {
 fn replace_or_insert_color_in_rpr(xml: &str, color: &str) -> String {
     let color_tag = format!(r#"<w:color w:val="{color}"/>"#);
 
+    // 已有 color：只是替换属性值，跟 replace_or_insert_r_fonts_in_rpr 里替换
+    // 已有 rFonts 是同一类操作，同样不涉及子元素顺序，不在这次重写范围内。
     if xml.contains("<w:color") {
         let mut result = String::with_capacity(xml.len());
         let mut rest = xml;
@@ -2028,12 +1850,15 @@ fn replace_or_insert_color_in_rpr(xml: &str, color: &str) -> String {
             rest = &rest[tag_end + 2..];
         }
         result.push_str(rest);
-        result
-    } else if let Some(rpr_end) = xml.rfind("</w:rPr>") {
-        format!("{}{}{}", &xml[..rpr_end], color_tag, &xml[rpr_end..])
-    } else {
-        xml.to_owned()
+        return result;
     }
+
+    // 没有 color：插进 rPr 里，按 RPR_CHILD_ORDER 排在正确位置——这是一次真正
+    // 的子元素插入，跟 rFonts 那边是同一类问题。
+    let Some(rpr) = docx_xml::find_element(xml, "w:rPr") else {
+        return xml.to_owned();
+    };
+    docx_xml::upsert_ordered_child(xml, &rpr, "w:color", &color_tag, RPR_CHILD_ORDER)
 }
 
 /// 从 XML 片段里提取指定属性值（简单字符串扫描，够用于机器生成的 XML）。
@@ -2049,6 +1874,11 @@ fn extract_attr<'a>(xml: &'a str, attr: &str) -> Option<&'a str> {
 /// 改写 word/theme/theme1.xml：
 /// - majorFont 的 <a:latin typeface> 设 Calibri，<a:ea typeface> 设 黑体
 /// - minorFont 的 <a:latin typeface> 设 Calibri，<a:ea typeface> 设 宋体
+///
+/// 这一族（连同 `set_theme_font`/`replace_typeface_attr`）没有迁移到
+/// `docx_xml`：它们只替换已经存在的标签上的一个属性值，找不到就直接放弃，
+/// 从不插入新元素，所以不存在子元素顺序的问题——不是这次重写要解决的那类
+/// 场景，迁移不会带来任何实际收益。
 pub fn patch_theme_xml(xml: &str) -> String {
     let xml = set_theme_font(xml, "majorFont", "a:latin", FONT_BODY_LATIN);
     let xml = set_theme_font(&xml, "majorFont", "a:ea", FONT_HEADING_EA);
@@ -2123,7 +1953,15 @@ mod tests {
 
     /// 模拟 pandoc 生成的最小 styles.xml
     /// 见 academic_styles_output_is_unchanged_for_default_layout。
-    const GOLDEN_ACADEMIC_STYLES_HASH: u64 = 2663708543885300001;
+    ///
+    /// 这个值在 docx_xml 重写时有意更新过一次：旧的手写补丁逻辑只会"在已有内容
+    /// 末尾追加"或"原地替换"，从不重新排列已有的兄弟元素，所以 FIXTURE 里 Title
+    /// 预先写好的 `<w:jc>`、Heading1 预先写好的 `<w:color>` 会保持在它们原来（不
+    /// 符合 CT_PPr/CT_RPr 顺序）的位置上，新插入的 spacing/ind/b 只能追加在它们
+    /// 后面。新的 `upsert_ordered_child` 会按声明的 order 表正确地把新插入的元素
+    /// 排到已有元素之间，而不是无脑追加到最后——这是一处真实的顺序修正，不是
+    /// 误改；具体证据见 patch_paragraph_style/patch_run_style 的重写。
+    const GOLDEN_ACADEMIC_STYLES_HASH: u64 = 7600489230930714727;
 
     const FIXTURE_STYLES: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -2257,6 +2095,25 @@ mod tests {
         let dd_end = patched.find("</w:docDefaults>").unwrap() + "</w:docDefaults>".len();
         let dd = &patched[dd_start..dd_end];
         assert!(dd.contains("宋体"), "docDefaults 应含宋体，实际：\n{dd}");
+    }
+
+    /// FIXTURE_STYLES 里每个样式都已经带着 rFonts/color，从没真正跑过"这两个
+    /// 标签压根不存在，需要新插入"这条路径——包括曾经会被误判成"没有 rPr"、
+    /// 静默漏加字体的 `<w:rPr/>` 自闭合写法。
+    #[test]
+    fn inserts_r_fonts_and_color_when_the_style_has_neither() {
+        const NO_FONTS: &str = r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Heading1"><w:rPr/></w:style></w:styles>"#;
+        let patched = patch_styles_xml(NO_FONTS);
+        assert!(
+            patched.contains("黑体"),
+            "Heading1 的 rPr 是自闭合的，也应该正确插入黑体：\n{patched}"
+        );
+        assert!(
+            patched.contains(r#"<w:color w:val="000000"/>"#),
+            "同一个自闭合 rPr 也应该正确插入显式黑色：\n{patched}"
+        );
+        // rFonts 必须排在 color 前面（CT_RPr 顺序），不能是插入顺序颠倒的产物。
+        assert!(patched.find("rFonts").unwrap() < patched.find("w:color").unwrap());
     }
 
     /// 排版重构的验收基准：默认参数下产出的 XML 必须与重构前逐字节一致。
@@ -2517,23 +2374,6 @@ mod tests {
         assert!(!patched[..paragraph_end].contains("footerReference"));
         assert!(patched[paragraph_end..].contains(r#"<w:pgSz w:w="11906" w:h="16838"/>"#));
         assert!(patched[paragraph_end..].contains("footerReference"));
-    }
-
-    #[test]
-    fn replacing_a_non_self_closing_child_does_not_swallow_later_xml() {
-        // 早先用 find("/>") 定位结尾，遇到成对写法会一路吃到后面无关标签的 "/>"。
-        let container = r#"<w:pPr><w:ind w:firstLine="1"></w:ind><w:jc w:val="left"/></w:pPr>"#;
-        let patched = replace_or_insert_self_closing_child(
-            container,
-            "ind",
-            r#"<w:ind w:firstLine="480"/>"#,
-            "</w:pPr>",
-        );
-
-        assert_eq!(
-            patched,
-            r#"<w:pPr><w:ind w:firstLine="480"/><w:jc w:val="left"/></w:pPr>"#
-        );
     }
 
     #[test]
