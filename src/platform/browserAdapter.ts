@@ -85,7 +85,7 @@ function openedFile(path: string, content: string): OpenedFile {
 
 export function createBrowserPreviewSettings(): AppSettings {
   return {
-    schemaVersion: 10,
+    schemaVersion: 12,
     attachmentMode: 'subfolder',
     attachmentFolder: 'assets',
     imageMaxWidth: 800,
@@ -117,6 +117,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     tagResultSort: 'updated',
     tagClickOpensOverview: false,
     favoriteLabels: {},
+    sidebarVisible: false,
     session: { folder: null, openFiles: [], activePath: null },
     fileTreeSort: 'default',
     pinnedFolders: [],

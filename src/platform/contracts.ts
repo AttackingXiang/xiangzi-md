@@ -111,6 +111,8 @@ export interface AppSettings {
   /** 点正文里的标签时是否同时展开左侧「全部标签」树（默认关：只出结果列） */
   tagClickOpensOverview: boolean
   favoriteLabels: Record<string, string>
+  /** 左侧文件栏是否显示；首次安装默认关闭，之后记忆用户上次的切换状态。 */
+  sidebarVisible: boolean
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
   /** 文件树排序：'default'（文件夹在前、名称升序）/'nameDesc'/'modified'/'opened'/'smart' */
   fileTreeSort: FileTreeSort

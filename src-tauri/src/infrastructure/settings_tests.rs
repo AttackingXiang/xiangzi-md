@@ -37,6 +37,7 @@ fn legacy_settings_receive_current_defaults() {
     assert!(settings.show_sidebar_search_button);
     assert!(settings.show_sidebar_tags_button);
     assert!(!settings.show_sidebar_sort_button);
+    assert!(!settings.sidebar_visible);
     // 老配置文件里没有这个键，必须落到「开启」的默认值上，
     // 否则升级会悄悄改变所有人的导出排版。
     assert!(settings.pandoc_academic_layout);
@@ -148,6 +149,7 @@ fn patch_only_changes_explicit_fields() {
             language: Some("en".into()),
             auto_save: Some(true),
             show_status_bar: Some(false),
+            sidebar_visible: Some(true),
             ..SettingsPatch::default()
         },
     );
@@ -155,6 +157,7 @@ fn patch_only_changes_explicit_fields() {
     assert!(settings.auto_save);
     assert!(!settings.show_status_bar);
     assert!(settings.show_status_path);
+    assert!(settings.sidebar_visible);
     assert_eq!(settings.theme, "system");
 }
 

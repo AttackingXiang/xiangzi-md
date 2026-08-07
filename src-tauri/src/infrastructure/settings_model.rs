@@ -2,7 +2,7 @@ use crate::domain::academic_layout::AcademicLayout;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 11;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 12;
 pub(crate) const MAX_RECENT_ITEMS: usize = 15;
 /// frecency 语料库上限：比展示用的 recent_files（15）大，保留更长的打开历史用于打分。
 pub(crate) const MAX_RECENT_DOCS: usize = 100;
@@ -132,6 +132,8 @@ pub struct AppSettings {
     pub tag_result_sort: String,
     /// 点正文里的标签时是否同时展开左侧「全部标签」树（默认关：只出结果列）。
     pub tag_click_opens_overview: bool,
+    /// 左侧文件栏是否显示；首次安装默认关闭，之后记忆用户上次的切换状态。
+    pub sidebar_visible: bool,
     pub session: SessionSettings,
     /// 文件树排序方式：'default'（文件夹在前、名称升序，默认）、'nameDesc'、
     /// 'modified'（最近修改）、'opened'（最近打开）、'smart'（智能混合推荐）。
@@ -246,6 +248,7 @@ impl Default for AppSettings {
             tag_tree_sort: "count".into(),
             tag_result_sort: "updated".into(),
             tag_click_opens_overview: false,
+            sidebar_visible: false,
             session: SessionSettings::default(),
             file_tree_sort: "default".into(),
             pinned_folders: Vec::new(),
@@ -385,6 +388,7 @@ pub struct SettingsPatch {
     pub tag_tree_sort: Option<String>,
     pub tag_result_sort: Option<String>,
     pub tag_click_opens_overview: Option<bool>,
+    pub sidebar_visible: Option<bool>,
     pub session: Option<SessionSettings>,
     pub file_tree_sort: Option<String>,
     pub pinned_folders: Option<Vec<String>>,

@@ -36,6 +36,7 @@ pub(super) fn migrate_settings(settings: &mut AppSettings, source_version: u32) 
             8 => migrate_v8_to_v9(settings),
             9 => migrate_v9_to_v10(settings),
             10 => migrate_v10_to_v11(settings),
+            11 => migrate_v11_to_v12(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -64,6 +65,10 @@ fn migrate_v9_to_v10(_settings: &mut AppSettings) {}
 /// `#[serde(default)]`）已经把老配置文件里缺失的这个键填成
 /// `AcademicLayout::default()`，这里无需再做什么。
 fn migrate_v10_to_v11(_settings: &mut AppSettings) {}
+
+/// v11→v12：新增 sidebar_visible。字段级 `#[serde(default)]`（继承自结构体上的
+/// `#[serde(default)]`）已经把老配置文件里缺失的这个键填成首次安装所需的关闭状态。
+fn migrate_v11_to_v12(_settings: &mut AppSettings) {}
 
 /// v8→v9：把纯 MRU 的 recent_files 灌进 frecency 语料 recent_docs，让老用户升级后立即
 /// 有打分原料。open_count 一律 1，last_opened_nanos 按 MRU 次序递减造一个单调时间戳

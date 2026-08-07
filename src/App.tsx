@@ -7,6 +7,7 @@ import {
   useState,
   lazy,
   Suspense,
+  type SetStateAction,
 } from 'react'
 import { desktop, isBrowserPreview } from './platform'
 import Sidebar from './components/Sidebar'
@@ -378,6 +379,38 @@ export default function App(): JSX.Element {
     window.addEventListener('mouseup', onUp)
   }, [])
 
+  // ── Sidebar visibility ─────────────────────────────────────────────────────
+  // The persisted value is loaded asynchronously. Keep the app shell behind the
+  // existing settings-loading gate until it has been applied, so a saved-open
+  // sidebar does not flash closed on startup.
+  const [sidebarVisible, setSidebarVisibleState] = useState(false)
+  const [sidebarVisibilityReady, setSidebarVisibilityReady] = useState(false)
+  const sidebarVisibleRef = useRef(false)
+  const setSidebarVisible = useCallback(
+    (value: SetStateAction<boolean>): void => {
+      const next = typeof value === 'function' ? value(sidebarVisibleRef.current) : value
+      sidebarVisibleRef.current = next
+      setSidebarVisibleState(next)
+      void saveSettings({ sidebarVisible: next }).catch((error: unknown) => {
+        const readOnly =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === ErrorCode.SETTINGS_READ_ONLY
+        void desktop.notify(
+          readOnly ? t('这些设置来自更高版本，当前以只读模式运行。') : t('设置保存失败。'),
+        )
+      })
+    },
+    [saveSettings],
+  )
+  useEffect(() => {
+    if (!settingsReady || !settings) return
+    sidebarVisibleRef.current = settings.sidebarVisible
+    setSidebarVisibleState(settings.sidebarVisible)
+    setSidebarVisibilityReady(true)
+  }, [settingsReady, settings?.sidebarVisible])
+
   // ── Reveal active file in sidebar ──────────────────────────────────────────
   const [revealRequest, setRevealRequest] = useState<{ path: string; id: number } | null>(null)
   const revealRequestCounterRef = useRef(0)
@@ -465,10 +498,15 @@ export default function App(): JSX.Element {
       console.error('Reveal active file failed', error)
       void desktop.notify(t('无法定位文件所在目录'))
     }
-  }, [pushRecentFolder, requestReveal, settings?.favoriteFiles, settings?.favorites])
+  }, [
+    pushRecentFolder,
+    requestReveal,
+    setSidebarVisible,
+    settings?.favoriteFiles,
+    settings?.favorites,
+  ])
 
   // ── UI state ───────────────────────────────────────────────────────────────
-  const [sidebarVisible, setSidebarVisible] = useState(true)
   const [outlineVisible, setOutlineVisible] = useState(false)
   const [sourceMode, setSourceMode] = useState(false)
   const [clipboardPathPrompt, setClipboardPathPrompt] = useState<{
@@ -1257,8 +1295,9 @@ export default function App(): JSX.Element {
     saveTab,
     onAddProperty: requestAddProperty,
   })
-  // Don't render until settings are loaded (avoids flash of wrong theme/width)
-  if (!settings) {
+  // Don't render until settings and the persisted sidebar state are loaded
+  // (avoids a flash of the wrong theme/width/sidebar visibility).
+  if (!settings || !sidebarVisibilityReady) {
     return (
       <div className="app">
         <TitleBar />
