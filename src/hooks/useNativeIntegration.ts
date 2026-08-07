@@ -7,6 +7,7 @@ import { t } from '../lib/i18n'
 import { isShortcutAction, type ShortcutAction } from '../lib/shortcuts'
 import { desktop } from '../platform'
 import type { Tab } from '../types'
+import type { RecentItemsSection } from '../components/RecentItemsDialog'
 
 interface NativeIntegrationOptions {
   stateRef: { current: { tabs: Tab[]; activeId: string | null } }
@@ -22,6 +23,7 @@ interface NativeIntegrationOptions {
   requestCloseDecision: (tabs: Tab[], reason?: CloseReason) => Promise<CloseDecision>
   saveTab: (id: string) => Promise<boolean>
   onAddProperty: () => void
+  onShowRecentItems: (section: RecentItemsSection) => void
 }
 
 export function useNativeIntegration(options: NativeIntegrationOptions): void {
@@ -39,6 +41,7 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
     requestCloseDecision,
     saveTab,
     onAddProperty,
+    onShowRecentItems,
   } = options
   const quitPromptOpenRef = useRef(false)
 
@@ -53,6 +56,8 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
         // macOS 原生菜单也会派发它。
         if (action === 'copy-as-plain-text') clipboardCmd.copyAsPlainText()
         else if (action === 'add-property') onAddProperty()
+        else if (action === 'show-recent-folders') onShowRecentItems('folders')
+        else if (action === 'show-recent-files') onShowRecentItems('files')
         else if (action === 'export-html') void exportHTML()
         else if (action === 'export-pdf') void exportPDF()
         else if (action === 'export-image') void exportImage()
@@ -98,6 +103,7 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
       exportPDF,
       importDocx,
       onAddProperty,
+      onShowRecentItems,
       requestCloseDecision,
       saveTab,
       stateRef,

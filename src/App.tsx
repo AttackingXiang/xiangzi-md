@@ -45,6 +45,7 @@ const UnsavedChangesDialog = lazy(() => import('./components/UnsavedChangesDialo
 const ExternalChangeDialog = lazy(() => import('./components/ExternalChangeDialog'))
 const ClipboardPathDialog = lazy(() => import('./components/ClipboardPathDialog'))
 const DraftRecoveryDialog = lazy(() => import('./components/DraftRecoveryDialog'))
+const RecentItemsDialog = lazy(() => import('./components/RecentItemsDialog'))
 const ExportCompleteDialog = lazy(() => import('./components/ExportCompleteDialog'))
 const SearchPanel = lazy(() => import('./components/SearchPanel'))
 const RelatedDocumentsSidebar = lazy(
@@ -88,6 +89,7 @@ import { tableZoomBridge } from './lib/tableZoomBridge'
 import { linkPromptBridge } from './lib/linkPromptBridge'
 import { editorZoomSource } from './lib/editorZoom'
 import type { FileTreeSort, Folder, Tab } from './types'
+import type { RecentItemsSection } from './components/RecentItemsDialog'
 import { useSettings } from './hooks/useSettings'
 import { useNow } from './hooks/useNow'
 import { useFileOps } from './hooks/useFileOps'
@@ -580,6 +582,10 @@ export default function App(): JSX.Element {
   const requestSearchFocus = useCallback(() => setSearchFocusRequest((value) => value + 1), [])
   const openSidebarSearch = useCallback(() => setSearchView(true), [setSearchView])
   const [showPalette, setShowPalette] = useState(false)
+  const [recentItemsSection, setRecentItemsSection] = useState<RecentItemsSection | null>(null)
+  const showRecentItems = useCallback((section: RecentItemsSection): void => {
+    setRecentItemsSection(section)
+  }, [])
   const [focusMode, setFocusMode] = useState(false)
   const [typewriterMode, setTypewriterMode] = useState(false)
   const [readingMode, setReadingMode] = useState(false)
@@ -1294,6 +1300,7 @@ export default function App(): JSX.Element {
     requestCloseDecision,
     saveTab,
     onAddProperty: requestAddProperty,
+    onShowRecentItems: showRecentItems,
   })
   // Don't render until settings and the persisted sidebar state are loaded
   // (avoids a flash of the wrong theme/width/sidebar visibility).
@@ -1779,6 +1786,19 @@ export default function App(): JSX.Element {
             files={paletteFiles}
             onOpenFile={(p, n) => openPath(p, n)}
             onClose={() => setShowPalette(false)}
+          />
+        </Suspense>
+      )}
+
+      {recentItemsSection && (
+        <Suspense fallback={<ModalFallback />}>
+          <RecentItemsDialog
+            recentFiles={settings.recentFiles}
+            recentFolders={settings.recentFolders}
+            initialSection={recentItemsSection}
+            onOpenRecentFile={(path) => void openPath(path, baseName(path))}
+            onOpenRecentFolder={openFolderByPath}
+            onClose={() => setRecentItemsSection(null)}
           />
         </Suspense>
       )}

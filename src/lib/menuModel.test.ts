@@ -19,13 +19,14 @@ const allItems: MenuModelItem[] = []
 for (const submenu of MENU_MODEL) walk(submenu.items, (item) => allItems.push(item))
 
 describe('shared menu model', () => {
-  it('exposes the five top-level menus', () => {
+  it('exposes the six top-level menus', () => {
     expect(MENU_MODEL.map((submenu) => submenu.id)).toEqual([
       'app',
       'file',
       'edit',
       'view',
       'tools',
+      'recent',
     ])
   })
 

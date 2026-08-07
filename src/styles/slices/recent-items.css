@@ -1,0 +1,121 @@
+.recent-items-backdrop {
+  z-index: 180;
+}
+
+.recent-items-dialog {
+  width: min(620px, 92vw);
+  max-height: min(640px, 82vh);
+}
+
+.recent-items-header {
+  align-items: flex-start;
+}
+
+.recent-items-header h2,
+.recent-items-header p {
+  margin: 0;
+}
+
+.recent-items-header h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.recent-items-header p {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+.recent-items-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.recent-items-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.recent-items-tabs button:hover,
+.recent-items-tabs button.active {
+  background: var(--bg-active);
+  color: var(--accent-text);
+}
+
+.recent-items-list {
+  min-height: 120px;
+  max-height: 54vh;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.recent-items-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.recent-items-row > svg {
+  flex: 0 0 auto;
+  color: var(--accent-text);
+}
+
+.recent-items-row:hover,
+.recent-items-row:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.recent-items-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.recent-items-copy strong,
+.recent-items-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-items-copy strong {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.recent-items-copy span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.recent-items-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}

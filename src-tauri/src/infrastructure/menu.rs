@@ -324,7 +324,7 @@ mod tests {
     fn shared_menu_model_parses() {
         let model = model().expect("shared/menu.json 应能解析");
         let ids: Vec<&str> = model.menus.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, ["app", "file", "edit", "view", "tools"]);
+        assert_eq!(ids, ["app", "file", "edit", "view", "tools", "recent"]);
     }
 
     #[test]
