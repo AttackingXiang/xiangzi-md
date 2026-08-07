@@ -48,7 +48,7 @@ export default function RecentItemsDialog({
       >
         <header className="modal-header recent-items-header">
           <div>
-            <h2 id="recent-items-title">{t('最近打开')}</h2>
+            <h2 id="recent-items-title">{t('最近')}</h2>
             <p>{foldersActive ? t('最近打开的文件夹') : t('最近打开的文件')}</p>
           </div>
           <button className="icon-btn sm" onClick={onClose} title={t('关闭')}>
@@ -56,7 +56,7 @@ export default function RecentItemsDialog({
           </button>
         </header>
 
-        <div className="recent-items-tabs" role="tablist" aria-label={t('最近打开')}>
+        <div className="recent-items-tabs" role="tablist" aria-label={t('最近')}>
           <button
             type="button"
             role="tab"
@@ -65,7 +65,7 @@ export default function RecentItemsDialog({
             onClick={() => setSection('folders')}
           >
             <Folder size={14} />
-            {t('最近文件夹')}
+            {t('最近打开的文件夹')}
           </button>
           <button
             type="button"
@@ -75,7 +75,7 @@ export default function RecentItemsDialog({
             onClick={() => setSection('files')}
           >
             <FileText size={14} />
-            {t('最近文件')}
+            {t('最近打开的文件')}
           </button>
         </div>
 

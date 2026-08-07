@@ -27,6 +27,7 @@ const EN: Record<string, string> = {
   '名称（Z→A）': 'Name (Z→A)',
   最近修改: 'Recently modified',
   最近打开: 'Recently opened',
+  最近: 'Recent',
   智能推荐: 'Smart (recommended)',
   设置: 'Settings',
   标签: 'Tags',

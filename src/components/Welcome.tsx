@@ -139,7 +139,7 @@ export default function Welcome({
           {recentFiles.length > 0 && (
             <div className="recent-col">
               <div className="recent-title">
-                <Clock size={14} /> {t('最近文件')}
+                <Clock size={14} /> {t('最近打开的文件')}
               </div>
               <div className="scrollbar-host recent-list-scrollbar-host">
                 <div className="recent-list" ref={recentFilesRef}>
@@ -167,7 +167,7 @@ export default function Welcome({
           {recentFolders.length > 0 && (
             <div className="recent-col">
               <div className="recent-title">
-                <Folder size={14} /> {t('最近文件夹')}
+                <Folder size={14} /> {t('最近打开的文件夹')}
               </div>
               <div className="scrollbar-host recent-list-scrollbar-host">
                 <div className="recent-list" ref={recentFoldersRef}>

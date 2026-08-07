@@ -676,7 +676,7 @@
     {
       "id": "recent",
       "label": {
-        "zh": "最近打开",
+        "zh": "最近",
         "en": "Recent"
       },
       "items": [
@@ -684,16 +684,16 @@
           "kind": "action",
           "id": "show-recent-folders",
           "label": {
-            "zh": "最近文件夹",
-            "en": "Recent Folders"
+            "zh": "最近打开文件夹",
+            "en": "Recently Opened Folders"
           }
         },
         {
           "kind": "action",
           "id": "show-recent-files",
           "label": {
-            "zh": "最近文件",
-            "en": "Recent Files"
+            "zh": "最近打开文件",
+            "en": "Recently Opened Files"
           }
         }
       ]
