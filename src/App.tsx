@@ -66,6 +66,7 @@ import { ModalFallback, PanelFallback } from './components/LoadingFallback'
 import ExternalChangeBanner from './components/ExternalChangeBanner'
 import ExternalReloadToast from './components/ExternalReloadToast'
 import CopyFeedbackToast from './components/CopyFeedbackToast'
+import CodeLanguageFeedbackToast from './components/CodeLanguageFeedbackToast'
 import type { CloseDecision, CloseReason } from './components/UnsavedChangesDialog'
 import { t, tf } from './lib/i18n'
 import { ErrorCode } from './lib/errorCodes'
@@ -81,6 +82,7 @@ import { buildFrecencyRank } from './lib/recency'
 import { parseOutline } from './lib/outline'
 import { setCopyPreferences } from './lib/copyPreferences'
 import { subscribeCopyFeedback, type CopyFeedbackDetail } from './lib/copyFeedback'
+import { subscribeCodeLanguageFeedback } from './lib/codeLanguageFeedback'
 import { clipboardCmd } from './lib/editorCommands'
 import { cm6ActiveViewBridge } from './features/cm6-editor/activeViewBridge'
 import { reorderHeading, revealHeading } from './features/cm6-editor/outline'
@@ -607,16 +609,28 @@ export default function App(): JSX.Element {
   const [zoomSrc, setZoomSrc] = useState<string | null>(null)
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>(null)
   const openEditorContext = useEditorContextMenu(setCtxMenu)
-  const [copyFeedback, setCopyFeedback] = useState<
-    (CopyFeedbackDetail & { sequence: number }) | null
-  >(null)
+  type EditorFeedback =
+    | (CopyFeedbackDetail & { kind: 'copy'; sequence: number })
+    | { kind: 'language'; language: string; sequence: number }
+  type EditorFeedbackInput =
+    | (CopyFeedbackDetail & { kind: 'copy' })
+    | { kind: 'language'; language: string }
+  const [editorFeedback, setEditorFeedback] = useState<EditorFeedback | null>(null)
+  const feedbackSequenceRef = useRef(0)
+  const dismissEditorFeedback = useCallback(() => setEditorFeedback(null), [])
   useEffect(() => {
-    let sequence = 0
-    return subscribeCopyFeedback((detail) => {
-      setCopyFeedback({ ...detail, sequence: ++sequence })
-    })
+    const show = (detail: EditorFeedbackInput): void => {
+      setEditorFeedback({ ...detail, sequence: ++feedbackSequenceRef.current })
+    }
+    const unsubscribeCopy = subscribeCopyFeedback((detail) => show({ ...detail, kind: 'copy' }))
+    const unsubscribeLanguage = subscribeCodeLanguageFeedback((detail) =>
+      show({ ...detail, kind: 'language' }),
+    )
+    return () => {
+      unsubscribeCopy()
+      unsubscribeLanguage()
+    }
   }, [])
-  const dismissCopyFeedback = useCallback(() => setCopyFeedback(null), [])
   const [tablePicker, setTablePicker] = useState<{
     x: number
     y: number
@@ -1703,16 +1717,24 @@ export default function App(): JSX.Element {
               />
             )}
 
-            {copyFeedback && (
+            {editorFeedback?.kind === 'copy' && (
               <CopyFeedbackToast
-                key={copyFeedback.sequence}
-                format={copyFeedback.format}
+                key={editorFeedback.sequence}
+                format={editorFeedback.format}
                 onCopyAlternate={
-                  copyFeedback.format === 'rich'
+                  editorFeedback.format === 'rich'
                     ? clipboardCmd.copyAsPlainText
                     : clipboardCmd.copyAsRichText
                 }
-                onClose={dismissCopyFeedback}
+                onClose={dismissEditorFeedback}
+              />
+            )}
+
+            {editorFeedback?.kind === 'language' && (
+              <CodeLanguageFeedbackToast
+                key={editorFeedback.sequence}
+                language={editorFeedback.language}
+                onClose={dismissEditorFeedback}
               />
             )}
           </div>

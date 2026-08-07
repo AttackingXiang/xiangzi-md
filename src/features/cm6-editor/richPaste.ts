@@ -1,6 +1,57 @@
-import type { Extension } from '@codemirror/state'
+import {
+  ChangeSet,
+  type EditorState,
+  EditorSelection,
+  type ChangeSpec,
+  type Extension,
+  type SelectionRange,
+} from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { markdownFromClipboardHtml } from '../../lib/markdownPaste'
+import { emitCodeLanguageFeedback } from '../../lib/codeLanguageFeedback'
+import { detectCodeLanguage } from './codeLanguageDetection'
+import { fencedCodeAtSelection, isCodeBlockPresentation } from './codeBlockDetection'
+
+export interface MarkdownPastePlan {
+  changes: ChangeSpec | readonly ChangeSpec[]
+  selection?: SelectionRange
+  detectedLanguage: string | null
+}
+
+/** Build the ordinary paste change and, when applicable, the code-language change. */
+export function prepareMarkdownPaste(state: EditorState, pasted: string): MarkdownPastePlan {
+  const selection = state.selection.main
+  const data = state.selection.ranges.length === 1 ? fencedCodeAtSelection(state) : null
+  const rawLanguage = data?.language.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? ''
+  const canAutoDetect =
+    data !== null &&
+    data.closingFrom !== null &&
+    isCodeBlockPresentation(state, data) &&
+    selection.from >= data.codeFrom &&
+    selection.to <= data.codeTo &&
+    state.doc.sliceString(data.codeFrom, data.codeTo).trim() === '' &&
+    (!rawLanguage || rawLanguage === 'text')
+  const detected = canAutoDetect ? detectCodeLanguage(pasted) : null
+
+  const pasteChange: ChangeSpec = { from: selection.from, to: selection.to, insert: pasted }
+  if (!detected || !data) {
+    return { changes: pasteChange, detectedLanguage: null }
+  }
+
+  const languageChange: ChangeSpec = {
+    from: data.languageFrom,
+    to: data.languageTo,
+    insert: detected.value,
+  }
+  const changes = [languageChange, pasteChange]
+  const changeSet = ChangeSet.of(changes, state.doc.length)
+  const pasteFrom = changeSet.mapPos(selection.from, -1)
+  return {
+    changes,
+    selection: EditorSelection.cursor(pasteFrom + pasted.length),
+    detectedLanguage: detected.label,
+  }
+}
 
 /** Preserve rich clipboard structure by inserting Markdown instead of rendered plain text. */
 export function richMarkdownPaste(): Extension {
@@ -10,15 +61,19 @@ export function richMarkdownPaste(): Extension {
       const clipboard = event.clipboardData
       if (!clipboard || clipboard.files.length > 0) return false
       const html = clipboard.getData('text/html')
-      if (!html) return false
-      const markdown = markdownFromClipboardHtml(html)
-      if (markdown === null) return false
+      const markdown = html ? markdownFromClipboardHtml(html) : null
+      const pasted = markdown ?? clipboard.getData('text/plain')
+      if (!pasted) return false
 
       event.preventDefault()
-      view.dispatch(view.state.replaceSelection(markdown), {
+      const plan = prepareMarkdownPaste(view.state, pasted)
+      view.dispatch({
+        changes: plan.changes,
+        selection: plan.selection,
         userEvent: 'input.paste',
         scrollIntoView: true,
       })
+      if (plan.detectedLanguage) emitCodeLanguageFeedback(plan.detectedLanguage)
       return true
     },
   })

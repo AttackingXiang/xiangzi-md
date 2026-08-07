@@ -487,6 +487,7 @@ const EN: Record<string, string> = {
   '未能识别，请手动选择': 'Not recognized — choose manually',
   自动: 'Auto',
   自动检测语言: 'Auto-detect language',
+  代码语言已识别: 'Code language detected',
 }
 
 let lang: Lang = 'zh'

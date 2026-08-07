@@ -7,6 +7,8 @@ import { computeCm6ToolbarState } from '../features/cm6-editor/toolbarState'
 import { linkPromptBridge } from './linkPromptBridge'
 import { readClipboard } from './clipboardRead'
 import { markdownFromClipboardHtml } from './markdownPaste'
+import { emitCodeLanguageFeedback } from './codeLanguageFeedback'
+import { prepareMarkdownPaste } from '../features/cm6-editor/richPaste'
 import { tableCellCommandBridge, type TableCellInlineFormat } from './tableCellCommandBridge'
 import { withClipboardFormat } from './copyPreferences'
 
@@ -139,10 +141,14 @@ export async function pasteFromClipboard(): Promise<boolean> {
 
   const view = cm6ActiveViewBridge.get()
   if (!view || view.state.readOnly) return false
-  view.dispatch(view.state.replaceSelection(rich), {
+  const plan = prepareMarkdownPaste(view.state, rich)
+  view.dispatch({
+    changes: plan.changes,
+    selection: plan.selection,
     userEvent: 'input.paste',
     scrollIntoView: true,
   })
+  if (plan.detectedLanguage) emitCodeLanguageFeedback(plan.detectedLanguage)
   view.focus()
   return true
 }
