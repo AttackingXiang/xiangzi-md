@@ -13,6 +13,28 @@ export const codeLanguageOptions: readonly CodeLanguageOption[] = [
     .sort((a, b) => a.label.localeCompare(b.label)),
 ]
 
+const knownByName = new Map<string, CodeLanguageOption>()
+for (const description of languages) {
+  const option = { label: description.name, value: description.name.toLowerCase() }
+  // A fence info string stops at the first space, so a multi-word value would not
+  // round-trip through the Markdown source.
+  if (/\s/.test(option.value)) continue
+  for (const name of [description.name, ...description.alias]) {
+    const key = name.toLowerCase()
+    if (!knownByName.has(key)) knownByName.set(key, option)
+  }
+}
+
+/**
+ * Resolve a language name or alias to a fence value, accepting only exact matches.
+ * Unlike {@link resolveCodeLanguageInput} this never falls back to fuzzy or prefix
+ * matching, which turns unrelated names into confident nonsense ("plaintext" matches
+ * LaTeX, "javascriptreact" matches Java). Detection needs the strict variant.
+ */
+export function matchKnownCodeLanguage(name: string): CodeLanguageOption | null {
+  return knownByName.get(name.trim().toLowerCase()) ?? null
+}
+
 export function normalizedLanguageValue(language: string): string {
   const normalized = language.trim().toLowerCase()
   if (!normalized) return ''

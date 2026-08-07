@@ -9,7 +9,8 @@ import {
 import { EditorView } from '@codemirror/view'
 import { markdownFromClipboardHtml } from '../../lib/markdownPaste'
 import { emitCodeLanguageFeedback } from '../../lib/codeLanguageFeedback'
-import { detectCodeLanguage } from './codeLanguageDetection'
+import { detectCodeLanguage, type DetectedCodeLanguage } from './codeLanguageDetection'
+import { detectClipboardCodeLanguage } from './clipboardCodeLanguage'
 import { fencedCodeAtSelection, isCodeBlockPresentation } from './codeBlockDetection'
 
 export interface MarkdownPastePlan {
@@ -18,8 +19,16 @@ export interface MarkdownPastePlan {
   detectedLanguage: string | null
 }
 
-/** Build the ordinary paste change and, when applicable, the code-language change. */
-export function prepareMarkdownPaste(state: EditorState, pasted: string): MarkdownPastePlan {
+/**
+ * Build the ordinary paste change and, when applicable, the code-language change.
+ * `clipboardLanguage` is what the source application declared about the snippet; it
+ * outranks anything inferred from the characters.
+ */
+export function prepareMarkdownPaste(
+  state: EditorState,
+  pasted: string,
+  clipboardLanguage: DetectedCodeLanguage | null = null,
+): MarkdownPastePlan {
   const selection = state.selection.main
   const data = state.selection.ranges.length === 1 ? fencedCodeAtSelection(state) : null
   const rawLanguage = data?.language.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? ''
@@ -31,7 +40,7 @@ export function prepareMarkdownPaste(state: EditorState, pasted: string): Markdo
     selection.to <= data.codeTo &&
     state.doc.sliceString(data.codeFrom, data.codeTo).trim() === '' &&
     (!rawLanguage || rawLanguage === 'text')
-  const detected = canAutoDetect ? detectCodeLanguage(pasted) : null
+  const detected = canAutoDetect ? (clipboardLanguage ?? detectCodeLanguage(pasted)) : null
 
   const pasteChange: ChangeSpec = { from: selection.from, to: selection.to, insert: pasted }
   if (!detected || !data) {
@@ -66,7 +75,11 @@ export function richMarkdownPaste(): Extension {
       if (!pasted) return false
 
       event.preventDefault()
-      const plan = prepareMarkdownPaste(view.state, pasted)
+      const clipboardLanguage = detectClipboardCodeLanguage({
+        html,
+        editorData: clipboard.getData('vscode-editor-data'),
+      })
+      const plan = prepareMarkdownPaste(view.state, pasted, clipboardLanguage)
       view.dispatch({
         changes: plan.changes,
         selection: plan.selection,

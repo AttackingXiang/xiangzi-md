@@ -46,6 +46,31 @@ describe('Markdown code-block paste', () => {
     )
   })
 
+  it('prefers the language the clipboard declared over the guessed one', () => {
+    const doc = '```\n\n```'
+    const state = stateAt(doc, doc.indexOf('\n\n') + 1)
+    const declared = { value: 'kotlin', label: 'Kotlin' }
+    const plan = prepareMarkdownPaste(state, 'const value = 1', declared)
+
+    expect(plan.detectedLanguage).toBe('Kotlin')
+    expect(
+      state.update({ changes: plan.changes, selection: plan.selection }).state.doc.toString(),
+    ).toBe(
+      // prettier-ignore
+      '```kotlin\nconst value = 1\n```',
+    )
+  })
+
+  it('ignores a declared language outside an empty code block', () => {
+    const doc = 'plain paragraph'
+    const state = stateAt(doc, doc.length)
+
+    expect(
+      prepareMarkdownPaste(state, 'val x = 1', { value: 'kotlin', label: 'Kotlin' })
+        .detectedLanguage,
+    ).toBeNull()
+  })
+
   it('also detects a language when the empty block is explicitly text', () => {
     const doc = '```text\n\n```'
     const state = stateAt(doc, doc.indexOf('\n\n') + 1)

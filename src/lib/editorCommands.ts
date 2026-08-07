@@ -9,6 +9,7 @@ import { readClipboard } from './clipboardRead'
 import { markdownFromClipboardHtml } from './markdownPaste'
 import { emitCodeLanguageFeedback } from './codeLanguageFeedback'
 import { prepareMarkdownPaste } from '../features/cm6-editor/richPaste'
+import { detectClipboardCodeLanguage } from '../features/cm6-editor/clipboardCodeLanguage'
 import { tableCellCommandBridge, type TableCellInlineFormat } from './tableCellCommandBridge'
 import { withClipboardFormat } from './copyPreferences'
 
@@ -141,7 +142,12 @@ export async function pasteFromClipboard(): Promise<boolean> {
 
   const view = cm6ActiveViewBridge.get()
   if (!view || view.state.readOnly) return false
-  const plan = prepareMarkdownPaste(view.state, rich)
+  // 语言提示也要和 ⌘V 一致；这条路径读不到 vscode-editor-data，只有 HTML 一份。
+  const plan = prepareMarkdownPaste(
+    view.state,
+    rich,
+    detectClipboardCodeLanguage({ html: clipboard.html }),
+  )
   view.dispatch({
     changes: plan.changes,
     selection: plan.selection,
