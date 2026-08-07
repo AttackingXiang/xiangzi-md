@@ -66,9 +66,14 @@ fn migrate_v9_to_v10(_settings: &mut AppSettings) {}
 /// `AcademicLayout::default()`，这里无需再做什么。
 fn migrate_v10_to_v11(_settings: &mut AppSettings) {}
 
-/// v11→v12：新增 sidebar_visible。字段级 `#[serde(default)]`（继承自结构体上的
-/// `#[serde(default)]`）已经把老配置文件里缺失的这个键填成首次安装所需的关闭状态。
-fn migrate_v11_to_v12(_settings: &mut AppSettings) {}
+/// v11→v12：新增 sidebar_visible。字段级 `#[serde(default)]` 会把老配置文件里缺失的
+/// 这个键填成 `false`，但那是给「真正首次安装」（压根没有配置文件，走
+/// `AppSettings::default()`）准备的初始值。走到这条迁移分支说明配置文件早已存在，
+/// 也就是升级用户——升级前侧边栏是未持久化的 `useState(true)`，每次启动都默认展开，
+/// 所以这里要显式改回 `true`，避免升级后侧边栏无声消失。
+fn migrate_v11_to_v12(settings: &mut AppSettings) {
+    settings.sidebar_visible = true;
+}
 
 /// v8→v9：把纯 MRU 的 recent_files 灌进 frecency 语料 recent_docs，让老用户升级后立即
 /// 有打分原料。open_count 一律 1，last_opened_nanos 按 MRU 次序递减造一个单调时间戳

@@ -37,7 +37,9 @@ fn legacy_settings_receive_current_defaults() {
     assert!(settings.show_sidebar_search_button);
     assert!(settings.show_sidebar_tags_button);
     assert!(!settings.show_sidebar_sort_button);
-    assert!(!settings.sidebar_visible);
+    // 老配置文件里没有这个键：升级前侧边栏是未持久化的 useState(true)，每次启动都
+    // 默认展开，所以必须落到「开启」，否则升级会让所有老用户的侧边栏悄悄消失。
+    assert!(settings.sidebar_visible);
     // 老配置文件里没有这个键，必须落到「开启」的默认值上，
     // 否则升级会悄悄改变所有人的导出排版。
     assert!(settings.pandoc_academic_layout);
