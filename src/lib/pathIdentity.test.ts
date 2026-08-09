@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   documentPathKey,
+  documentPathKeyForPlatform,
   isPathAtOrUnder,
   replacePathPrefix,
   sameDocumentPath,
@@ -19,6 +20,15 @@ describe('path identity', () => {
     expect(isPathAtOrUnder('/notes-old/a.md', '/notes')).toBe(false)
     expect(isPathAtOrUnder('/notes/a.md', '/')).toBe(true)
     expect(isPathAtOrUnder('C:\\Notes\\a.md', 'c:\\')).toBe(true)
+  })
+
+  it('treats // as UNC only on Windows instead of lowercasing POSIX paths', () => {
+    expect(documentPathKeyForPlatform('//Volumes/Case/File.md', 'macos')).toBe(
+      '//Volumes/Case/File.md',
+    )
+    expect(documentPathKeyForPlatform('//Server/Share/File.md', 'windows')).toBe(
+      '//server/share/file.md',
+    )
   })
 
   it('preserves descendant filename casing when a Windows folder moves', () => {

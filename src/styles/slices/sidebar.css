@@ -302,6 +302,11 @@
   cursor: grabbing;
 }
 
+.tree-row.tree-error-row,
+.tree-row.tree-error-row:active {
+  cursor: pointer;
+}
+
 .tree-row:hover {
   background: var(--bg-hover);
   color: var(--text);

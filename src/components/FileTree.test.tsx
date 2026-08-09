@@ -89,4 +89,31 @@ describe('FileTree lazy directory errors', () => {
     expect(host.textContent).toContain('notes.md')
     expect(host.querySelector('.tree-error-row')).toBeNull()
   })
+
+  it('includes the retry action in arrow-key tree navigation and retries with Enter', async () => {
+    desktop.readDir
+      .mockRejectedValueOnce(new Error('permission lost'))
+      .mockResolvedValueOnce([child])
+    renderTree()
+
+    const folderRow = host.querySelector<HTMLElement>('.tree-row.dir')
+    await act(async () => {
+      folderRow?.click()
+      await Promise.resolve()
+    })
+    const retryRow = host.querySelector<HTMLButtonElement>('.tree-error-row')
+    expect(retryRow?.getAttribute('role')).toBe('treeitem')
+
+    folderRow?.focus()
+    act(() => {
+      folderRow?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    })
+    expect(document.activeElement).toBe(retryRow)
+
+    await act(async () => {
+      retryRow?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(host.textContent).toContain('notes.md')
+  })
 })

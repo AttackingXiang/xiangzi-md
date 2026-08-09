@@ -1,3 +1,5 @@
+import { currentDesktopPlatform, type DesktopPlatform } from './platform'
+
 function normalizedDisplayPath(path: string): string {
   const normalized = path
     .replace(/\\/g, '/')
@@ -6,14 +8,23 @@ function normalizedDisplayPath(path: string): string {
   return normalized.replace(/\/+$/, '')
 }
 
-function isWindowsPath(path: string): boolean {
-  return /^[A-Za-z]:\//.test(path) || path.startsWith('//')
+function isWindowsPath(path: string, platform: DesktopPlatform): boolean {
+  return (
+    /^[A-Za-z]:[\\/]/.test(path) ||
+    path.startsWith('\\\\') ||
+    (platform === 'windows' && path.startsWith('//'))
+  )
 }
 
 /** Stable identity key; Windows drive and UNC paths compare case-insensitively. */
-export function documentPathKey(path: string): string {
+export function documentPathKeyForPlatform(path: string, platform: DesktopPlatform): string {
+  const windowsPath = isWindowsPath(path, platform)
   const normalized = normalizedDisplayPath(path)
-  return isWindowsPath(normalized) ? normalized.toLowerCase() : normalized
+  return windowsPath ? normalized.toLowerCase() : normalized
+}
+
+export function documentPathKey(path: string): string {
+  return documentPathKeyForPlatform(path, currentDesktopPlatform())
 }
 
 export function sameDocumentPath(left: string, right: string): boolean {
@@ -31,8 +42,8 @@ export function isPathAtOrUnder(candidate: string, base: string): boolean {
 export function replacePathPrefix(path: string, sourcePath: string, targetPath: string): string {
   const normalizedPath = normalizedDisplayPath(path)
   const normalizedSource = normalizedDisplayPath(sourcePath)
-  if (!isPathAtOrUnder(normalizedPath, normalizedSource)) return path
-  if (sameDocumentPath(normalizedPath, normalizedSource)) return targetPath
+  if (!isPathAtOrUnder(path, sourcePath)) return path
+  if (sameDocumentPath(path, sourcePath)) return targetPath
 
   const suffix = normalizedPath.slice(normalizedSource.length).replace(/^\/+/, '')
   const separator = targetPath.includes('\\') && !targetPath.includes('/') ? '\\' : '/'

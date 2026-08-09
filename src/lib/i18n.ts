@@ -381,6 +381,8 @@ const EN: Record<string, string> = {
   '另存为失败。': 'Save As failed.',
   '该文件已在另一个标签页中打开，未执行另存为。':
     'That file is already open in another tab. Save As was canceled.',
+  '该文件正在另一个标签页中另存为，未执行本次写入。':
+    'Another tab is already saving to that file. This write was canceled.',
   '文件夹不存在：\n': 'Folder not found:\n',
   '无法打开文件夹：\n': 'Could not open folder:\n',
   '移动失败：\n': 'Move failed:\n',

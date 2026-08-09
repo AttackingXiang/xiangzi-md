@@ -74,6 +74,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   const openQueueRef = useRef(createTaskQueue(2))
   const openTasksRef = useRef(new InFlightCache<string, OpenPathResult>())
   const saveQueuesRef = useRef(new LatestTaskQueue<string, SaveOperationResult>())
+  const saveAsTargetOwnersRef = useRef(new Map<string, string>())
   const savedVersionsRef = useRef(new Map<string, Tab['version']>())
   const savingIdsRef = useRef(new Set<string>())
   const pendingExternalChecksRef = useRef(new Set<string>())
@@ -391,27 +392,44 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
           return { kind: 'duplicate', path, tabId: id, existingTabId: duplicate.id }
         }
 
-        const result = await desktop.writeFile(
-          path,
-          applyLineEnding(tab.content, tab.eol ?? 'lf'),
-          null,
-          true,
-        )
-        savedVersionsRef.current.set(id, result.version)
-        setTabs((previous) =>
-          previous.map((current) =>
-            current.id === id
-              ? {
-                  ...completeSave(current, tab, result.version),
-                  path,
-                  recoverySourcePath: null,
-                  name: baseName(path) || tab.name,
-                }
-              : current,
-          ),
-        )
-        recordDocEdit(path)
-        return { kind: 'saved', path, tabId: id }
+        const targetKey = documentPathKey(path)
+        const pendingOwnerId = saveAsTargetOwnersRef.current.get(targetKey)
+        if (pendingOwnerId && pendingOwnerId !== id) {
+          if (stateRef.current.tabs.some((current) => current.id === pendingOwnerId)) {
+            setActiveId(pendingOwnerId)
+          }
+          await desktop.notify(t('该文件正在另一个标签页中另存为，未执行本次写入。'))
+          return { kind: 'duplicate', path, tabId: id, existingTabId: pendingOwnerId }
+        }
+
+        saveAsTargetOwnersRef.current.set(targetKey, id)
+        try {
+          const result = await desktop.writeFile(
+            path,
+            applyLineEnding(tab.content, tab.eol ?? 'lf'),
+            null,
+            true,
+          )
+          savedVersionsRef.current.set(id, result.version)
+          setTabs((previous) =>
+            previous.map((current) =>
+              current.id === id
+                ? {
+                    ...completeSave(current, tab, result.version),
+                    path,
+                    recoverySourcePath: null,
+                    name: baseName(path) || tab.name,
+                  }
+                : current,
+            ),
+          )
+          recordDocEdit(path)
+          return { kind: 'saved', path, tabId: id }
+        } finally {
+          if (saveAsTargetOwnersRef.current.get(targetKey) === id) {
+            saveAsTargetOwnersRef.current.delete(targetKey)
+          }
+        }
       } catch {
         await desktop.notify(t('另存为失败。'))
         return { kind: 'failed', tabId: id }

@@ -117,4 +117,23 @@ describe('useSettings persistence coordination', () => {
     expect(controller?.settingsSaveError).toBe(true)
     expect(controller?.settingsSaving).toBe(false)
   })
+
+  it('does not reauthorize unchanged asset paths after unrelated settings writes', async () => {
+    const base = createBrowserPreviewSettings()
+    const withAssetPath = { ...base, assetSearchPaths: ['/images'] }
+    desktop.setSettings
+      .mockResolvedValueOnce(withAssetPath)
+      .mockResolvedValueOnce({ ...withAssetPath, showToolbar: false })
+
+    await act(async () => {
+      await controller!.saveSettings({ assetSearchPaths: ['/images'] })
+    })
+    expect(desktop.authorizeAssetSearchDirectory).toHaveBeenCalledTimes(1)
+    expect(desktop.authorizeAssetSearchDirectory).toHaveBeenCalledWith('/images')
+
+    await act(async () => {
+      await controller!.saveSettings({ showToolbar: false })
+    })
+    expect(desktop.authorizeAssetSearchDirectory).toHaveBeenCalledTimes(1)
+  })
 })

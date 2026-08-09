@@ -33,6 +33,25 @@ interface Props {
   onFocusPath: (path: string) => void
 }
 
+function moveTreeFocus(
+  current: HTMLElement,
+  key: 'ArrowDown' | 'ArrowUp' | 'Home' | 'End',
+): boolean {
+  const container = current.closest<HTMLElement>('[role="tree"]')
+  const rows = container
+    ? Array.from(container.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+    : []
+  if (rows.length === 0) return false
+
+  if (key === 'Home') rows[0]?.focus()
+  else if (key === 'End') rows[rows.length - 1]?.focus()
+  else {
+    const index = rows.indexOf(current)
+    rows[index + (key === 'ArrowDown' ? 1 : -1)]?.focus()
+  }
+  return true
+}
+
 export default function FileTree({
   nodes,
   activePath,
@@ -347,20 +366,7 @@ const TreeNode = memo(function TreeNode({
       case 'ArrowUp':
       case 'Home':
       case 'End': {
-        const container = e.currentTarget.closest<HTMLElement>('[role="tree"]')
-        const rows = container
-          ? Array.from(container.querySelectorAll<HTMLElement>('[role="treeitem"]'))
-          : []
-        if (rows.length === 0) return
-        e.preventDefault()
-        if (e.key === 'Home') {
-          rows[0]?.focus()
-        } else if (e.key === 'End') {
-          rows[rows.length - 1]?.focus()
-        } else {
-          const index = rows.indexOf(e.currentTarget)
-          rows[index + (e.key === 'ArrowDown' ? 1 : -1)]?.focus()
-        }
+        if (moveTreeFocus(e.currentTarget, e.key)) e.preventDefault()
         return
       }
       case 'ArrowRight': {
@@ -398,6 +404,30 @@ const TreeNode = memo(function TreeNode({
         }
         return
       }
+      default:
+        return
+    }
+  }
+
+  const handleRetryKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>): void => {
+    switch (e.key) {
+      case 'ArrowDown':
+      case 'ArrowUp':
+      case 'Home':
+      case 'End': {
+        if (moveTreeFocus(e.currentTarget, e.key)) e.preventDefault()
+        return
+      }
+      case 'ArrowLeft':
+        e.preventDefault()
+        nodeRef.current?.focus()
+        return
+      case 'ArrowRight':
+      case 'Enter':
+      case ' ':
+        e.preventDefault()
+        void loadChildren()
+        return
       default:
         return
     }
@@ -470,14 +500,23 @@ const TreeNode = memo(function TreeNode({
           </div>
         )}
         {expanded && loadError && !loading && (
-          <button
-            type="button"
-            className="tree-error-row"
-            style={{ paddingLeft: `${(depth + 1) * 14 + 27}px` }}
-            onClick={() => void loadChildren()}
-          >
-            {t('读取失败，点击重试')}
-          </button>
+          <ul className="file-tree" role="group">
+            <li role="none">
+              <button
+                type="button"
+                className="tree-row tree-error-row"
+                style={{ paddingLeft: `${(depth + 1) * 14 + 27}px` }}
+                data-tree-name={t('读取失败，点击重试')}
+                role="treeitem"
+                aria-level={depth + 2}
+                tabIndex={-1}
+                onKeyDown={handleRetryKeyDown}
+                onClick={() => void loadChildren()}
+              >
+                {t('读取失败，点击重试')}
+              </button>
+            </li>
+          </ul>
         )}
       </li>
     )

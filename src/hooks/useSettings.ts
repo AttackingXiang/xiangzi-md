@@ -190,12 +190,15 @@ export function useSettings() {
   // Persisted settings identify intended search roots, but never grant access
   // by themselves. Re-establish the asset-protocol scope only when the native
   // persisted fs scope still proves that the user selected each directory.
+  // Filesystem paths cannot contain NUL, so this value key remains stable even
+  // when Tauri returns a newly deserialized settings object after an unrelated write.
+  const assetSearchPathsKey = (settings?.assetSearchPaths ?? []).join('\0')
   useEffect(() => {
-    if (!settings) return
-    for (const path of settings.assetSearchPaths) {
+    if (!assetSearchPathsKey) return
+    for (const path of assetSearchPathsKey.split('\0')) {
       void desktop.authorizeAssetSearchDirectory(path).catch(() => {})
     }
-  }, [settings?.assetSearchPaths])
+  }, [assetSearchPathsKey])
 
   // 图片本身用固定图层展示（见 foundation.css 的 body::before），这里额外算出
   // 一个 0-1 的无单位系数，供编辑器正文表面按同一强度变半透明，让图片透出来。

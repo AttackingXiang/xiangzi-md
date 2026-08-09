@@ -119,6 +119,55 @@ describe('useFileOps document operation outcomes', () => {
     act(() => root.unmount())
   })
 
+  it('reserves a new Save As target while another tab is still writing it', async () => {
+    const { root } = mount()
+    act(() => {
+      controller?.setTabs([
+        savedTab('first', '/notes/first.md', 'first'),
+        savedTab('second', '/notes/second.md', 'second'),
+      ])
+      controller?.setActiveId('first')
+    })
+    desktopMock.pickSavePath.mockResolvedValue('/notes/shared.md')
+
+    let finishWrite!: () => void
+    const writePending = new Promise<void>((resolve) => {
+      finishWrite = resolve
+    })
+    desktopMock.writeFile.mockImplementationOnce(async (path: string) => {
+      await writePending
+      return { path, version: version('shared') }
+    })
+
+    const firstSaveAs = controller!.saveAsTab('first')
+    const secondSaveAs = controller!.saveAsTab('second')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(desktopMock.writeFile).toHaveBeenCalledTimes(1)
+
+    finishWrite()
+    const [firstResult, secondResult] = await act(async () =>
+      Promise.all([firstSaveAs, secondSaveAs]),
+    )
+    expect(firstResult).toEqual({
+      kind: 'saved',
+      path: '/notes/shared.md',
+      tabId: 'first',
+    })
+    expect(secondResult).toEqual({
+      kind: 'duplicate',
+      path: '/notes/shared.md',
+      tabId: 'second',
+      existingTabId: 'first',
+    })
+    expect(controller?.tabs.filter((tab) => tab.path === '/notes/shared.md')).toHaveLength(1)
+
+    act(() => root.unmount())
+  })
+
   it('serializes Save As behind an in-flight normal save for the same tab', async () => {
     const { root } = mount()
     act(() => {
