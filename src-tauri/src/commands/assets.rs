@@ -75,8 +75,14 @@ mod tests {
 
     #[test]
     fn asset_search_scope_requires_a_bounded_absolute_directory() {
+        #[cfg(windows)]
+        let root = Path::new(r"C:\");
+        #[cfg(not(windows))]
+        let root = Path::new("/");
+        let valid_directory = root.join("notes").join("images");
+
         assert!(validate_asset_search_path_shape(Path::new("images")).is_err());
-        assert!(validate_asset_search_path_shape(Path::new("/")).is_err());
-        assert!(validate_asset_search_path_shape(Path::new("/notes/images")).is_ok());
+        assert!(validate_asset_search_path_shape(root).is_err());
+        assert!(validate_asset_search_path_shape(&valid_directory).is_ok());
     }
 }

@@ -551,7 +551,8 @@ mod tests {
 
         assert!(!response.truncated);
         assert_eq!(response.items.len(), 2);
-        assert_eq!(response.items[0].name, "note.md");
+        assert!(response.items.iter().any(|item| item.name == "note.md"));
+        assert!(response.items.iter().any(|item| item.name == "config.json"));
         assert!(response.items.iter().all(|item| item.modified_nanos > 0));
     }
 
