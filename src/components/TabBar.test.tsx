@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../types'
-import TabBar, { TAB_DRAG_MIME } from './TabBar'
+import TabBar from './TabBar'
 
 const { startWindowDraggingMock } = vi.hoisted(() => ({
   startWindowDraggingMock: vi.fn().mockResolvedValue(undefined),
@@ -28,10 +28,11 @@ function tab(id: string): Tab {
   }
 }
 
-function dragEvent(type: string, dataTransfer: DataTransfer, clientX: number): DragEvent {
-  const event = new DragEvent(type, { bubbles: true, clientX })
-  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer })
-  return event
+function pointerEvent(
+  type: string,
+  init: { clientX?: number; clientY?: number; button?: number } = {},
+): PointerEvent {
+  return new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, ...init })
 }
 
 function renderTabBar({
@@ -110,35 +111,49 @@ describe('TabBar window and tab dragging', () => {
     const firstTab = host.querySelector<HTMLElement>('.tab')
 
     act(() => {
-      firstTab?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      firstTab?.dispatchEvent(pointerEvent('pointerdown'))
+      window.dispatchEvent(pointerEvent('pointerup'))
     })
 
     expect(startWindowDraggingMock).not.toHaveBeenCalled()
     expect(onSelect).toHaveBeenCalledWith('a')
   })
 
-  it('uses the internal tab id payload when reordering tabs', () => {
+  it('reorders tabs via pointer drag, since HTML5 draggable is unreliable in WKWebView', () => {
     const onMoveTab = vi.fn()
     const host = renderTabBar({ onMoveTab })
     const tabs = host.querySelectorAll<HTMLElement>('.tab')
-    const dataTransfer = new DataTransfer()
-
-    act(() => {
-      tabs[0]?.dispatchEvent(dragEvent('dragstart', dataTransfer, 10))
-    })
-
-    expect(dataTransfer.getData(TAB_DRAG_MIME)).toBe('a')
-    expect(dataTransfer.effectAllowed).toBe('move')
 
     Object.defineProperty(tabs[1], 'getBoundingClientRect', {
       configurable: true,
       value: () => ({ left: 100, width: 100 }),
     })
+    const elementFromPointSpy = vi
+      .spyOn(document, 'elementFromPoint')
+      .mockReturnValue(tabs[1] ?? null)
+
     act(() => {
-      tabs[1]?.dispatchEvent(dragEvent('dragover', dataTransfer, 180))
-      tabs[1]?.dispatchEvent(dragEvent('drop', dataTransfer, 180))
+      tabs[0]?.dispatchEvent(pointerEvent('pointerdown', { clientX: 10, clientY: 10 }))
+      window.dispatchEvent(pointerEvent('pointermove', { clientX: 180, clientY: 10 }))
+      window.dispatchEvent(pointerEvent('pointerup', { clientX: 180, clientY: 10 }))
     })
 
     expect(onMoveTab).toHaveBeenCalledWith(0, 2)
+    elementFromPointSpy.mockRestore()
+  })
+
+  it('treats a plain click (no movement) as a selection, not a reorder', () => {
+    const onMoveTab = vi.fn()
+    const onSelect = vi.fn()
+    const host = renderTabBar({ onMoveTab, onSelect })
+    const tabs = host.querySelectorAll<HTMLElement>('.tab')
+
+    act(() => {
+      tabs[0]?.dispatchEvent(pointerEvent('pointerdown', { clientX: 10, clientY: 10 }))
+      window.dispatchEvent(pointerEvent('pointerup', { clientX: 10, clientY: 10 }))
+    })
+
+    expect(onSelect).toHaveBeenCalledWith('a')
+    expect(onMoveTab).not.toHaveBeenCalled()
   })
 })

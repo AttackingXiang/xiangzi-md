@@ -92,14 +92,19 @@ body.is-macos .main > .tabbar .tab {
   transition: background 0.12s;
 }
 
-.tab[draggable='true'] {
+.tab-reorderable {
   cursor: grab;
-  -webkit-user-drag: element;
 }
 
-.tab[draggable='true']:active,
+.tab-reorderable:active,
 .tab.tab-dragging {
   cursor: grabbing;
+}
+
+body.tab-pointer-dragging,
+body.tab-pointer-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 .tab:hover {

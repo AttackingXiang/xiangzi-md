@@ -7,8 +7,6 @@ import { shortcutHint } from '../lib/shortcuts'
 import { handleWindowDragPointerDown } from '../lib/windowDragRegion'
 import HoverScrollbars from './LazyHoverScrollbars'
 
-export const TAB_DRAG_MIME = 'application/x-xiangzi-tab'
-
 interface Props {
   tabs: Tab[]
   activeId: string | null
@@ -124,54 +122,89 @@ const TabBar = memo(function TabBar({
   }, [showOverflow])
 
   // ── Drag helpers ──────────────────────────────────────────────────────────
+  // HTML5 drag-and-drop (`draggable`, dragstart/dragover/drop) is unreliable in
+  // WKWebView — dragstart routinely never fires — so tab reordering is driven
+  // by pointer events instead, mirroring the outline / tag-tree drag.
+
+  const dragCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => () => dragCleanupRef.current?.(), [])
 
   const clearTabDrag = (): void => {
     setDraggedTabId(null)
     setDropTarget(null)
   }
 
-  const isInternalTabDrag = (event: React.DragEvent): boolean =>
-    draggedTabId !== null || Array.from(event.dataTransfer.types).includes(TAB_DRAG_MIME)
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>, fromTabId: string): void => {
+    if (event.button !== 0) return
+    dragCleanupRef.current?.()
+    const startX = event.clientX
+    const startY = event.clientY
+    let dragging = false
 
-  const dropSide = (event: React.DragEvent): 'left' | 'right' => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    return event.clientX < rect.left + rect.width / 2 ? 'left' : 'right'
-  }
-
-  const handleDragStart = (event: React.DragEvent<HTMLDivElement>, tabId: string): void => {
-    setDraggedTabId(tabId)
-    event.dataTransfer.effectAllowed = 'move'
-    try {
-      event.dataTransfer.setData(TAB_DRAG_MIME, tabId)
-    } catch {
-      // React state remains the source of truth when WebKit rejects custom MIME types.
+    const cleanup = (): void => {
+      window.removeEventListener('pointermove', handlePointerMove, true)
+      window.removeEventListener('pointerup', handlePointerUp, true)
+      window.removeEventListener('pointercancel', handlePointerCancel, true)
+      window.removeEventListener('blur', handlePointerCancel, true)
+      document.body.classList.remove('tab-pointer-dragging')
+      clearTabDrag()
+      dragCleanupRef.current = null
     }
-  }
 
-  const handleDragOver = (event: React.DragEvent, tabId: string): void => {
-    event.preventDefault()
-    if (!isInternalTabDrag(event)) return
-    event.dataTransfer.dropEffect = 'move'
-    const side = dropSide(event)
-    if (dropTarget?.tabId !== tabId || dropTarget.side !== side) setDropTarget({ tabId, side })
-  }
+    const resolveTarget = (
+      clientX: number,
+      clientY: number,
+    ): { tabId: string; side: 'left' | 'right' } | null => {
+      const candidate = document
+        .elementFromPoint(clientX, clientY)
+        ?.closest<HTMLElement>('[data-tab-drag-id]')
+      if (!candidate) return null
+      const tabId = candidate.dataset.tabDragId
+      if (!tabId) return null
+      const rect = candidate.getBoundingClientRect()
+      const side = clientX < rect.left + rect.width / 2 ? 'left' : 'right'
+      return { tabId, side }
+    }
 
-  const handleDrop = (event: React.DragEvent, targetTabId: string): void => {
-    event.preventDefault()
-    if (!isInternalTabDrag(event)) return
-    const sourceTabId = draggedTabId || event.dataTransfer.getData(TAB_DRAG_MIME)
-    const fromGlobal = tabs.findIndex((tab) => tab.id === sourceTabId)
-    const targetGlobal = tabs.findIndex((tab) => tab.id === targetTabId)
-    if (fromGlobal !== -1 && targetGlobal !== -1) {
-      const insertAt = targetGlobal + (dropSide(event) === 'right' ? 1 : 0)
+    const handlePointerMove = (moveEvent: PointerEvent): void => {
+      if (!dragging && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) {
+        return
+      }
+      if (!dragging) {
+        dragging = true
+        setDraggedTabId(fromTabId)
+        document.body.classList.add('tab-pointer-dragging')
+        window.getSelection()?.removeAllRanges()
+      }
+      moveEvent.preventDefault()
+      setDropTarget(resolveTarget(moveEvent.clientX, moveEvent.clientY))
+    }
+
+    const handlePointerUp = (upEvent: PointerEvent): void => {
+      const target = dragging ? resolveTarget(upEvent.clientX, upEvent.clientY) : null
+      if (dragging) upEvent.preventDefault()
+      cleanup()
+      if (!target || target.tabId === fromTabId) return
+      const fromGlobal = tabs.findIndex((tab) => tab.id === fromTabId)
+      const targetGlobal = tabs.findIndex((tab) => tab.id === target.tabId)
+      if (fromGlobal === -1 || targetGlobal === -1) return
+      const insertAt = targetGlobal + (target.side === 'right' ? 1 : 0)
       onMoveTab(fromGlobal, insertAt)
     }
-    clearTabDrag()
+
+    const handlePointerCancel = (): void => cleanup()
+
+    window.addEventListener('pointermove', handlePointerMove, true)
+    window.addEventListener('pointerup', handlePointerUp, true)
+    window.addEventListener('pointercancel', handlePointerCancel, true)
+    window.addEventListener('blur', handlePointerCancel, true)
+    dragCleanupRef.current = cleanup
   }
 
   // ── Shared tab renderer ───────────────────────────────────────────────────
 
-  const renderTab = (tab: Tab, extra?: React.HTMLAttributes<HTMLDivElement>): JSX.Element => {
+  const renderTab = (tab: Tab, reorderable = false): JSX.Element => {
     const isActive = tab.id === activeId
     const isDragging = draggedTabId === tab.id
     const dropLeft = dropTarget?.tabId === tab.id && dropTarget.side === 'left'
@@ -182,8 +215,10 @@ const TabBar = memo(function TabBar({
         key={tab.id}
         ref={isActive ? activeRef : undefined}
         data-window-drag-interactive
+        data-tab-drag-id={reorderable ? tab.id : undefined}
         className={[
           'tab',
+          reorderable ? 'tab-reorderable' : '',
           isActive ? 'active' : '',
           tab.dirty ? 'dirty' : '',
           isDragging ? 'tab-dragging' : '',
@@ -194,7 +229,9 @@ const TabBar = memo(function TabBar({
           .join(' ')}
         title={tab.path ?? tab.name}
         onPointerDown={(e) => {
-          if (e.button === 0) onSelect(tab.id)
+          if (e.button !== 0) return
+          onSelect(tab.id)
+          if (reorderable) startDrag(e, tab.id)
         }}
         onClick={(e) => {
           if (e.detail === 0) onSelect(tab.id)
@@ -209,7 +246,6 @@ const TabBar = memo(function TabBar({
             onClose(tab.id)
           }
         }}
-        {...extra}
       >
         <span className="tab-name">{stripExtension(tab.name)}</span>
         <button
@@ -292,15 +328,7 @@ const TabBar = memo(function TabBar({
       {/* ── 滚动区（normal tabs） ──────────────────────────────────────── */}
       <div className="scrollbar-host tabs-scrollbar-host">
         <div className="tabs" ref={tabsRef}>
-          {normalTabs.map((tab) =>
-            renderTab(tab, {
-              draggable: true,
-              onDragStart: (event) => handleDragStart(event, tab.id),
-              onDragOver: (event) => handleDragOver(event, tab.id),
-              onDrop: (event) => handleDrop(event, tab.id),
-              onDragEnd: clearTabDrag,
-            }),
-          )}
+          {normalTabs.map((tab) => renderTab(tab, true))}
         </div>
         <Suspense fallback={null}>
           <HoverScrollbars targetRef={tabsRef} axes="horizontal" />
