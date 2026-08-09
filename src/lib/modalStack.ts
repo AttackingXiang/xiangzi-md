@@ -24,6 +24,11 @@ export function isTopmostModal(element: HTMLElement | null): boolean {
   return element !== null && stack.at(-1) === element
 }
 
+/** True while any modal owns application focus. */
+export function hasOpenModal(): boolean {
+  return stack.length > 0
+}
+
 /** For tests only — production entries are balanced by useModalFocus. */
 export function resetModalStack(): void {
   stack.length = 0

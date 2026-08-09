@@ -4,6 +4,7 @@ import { desktop } from '../../platform'
 import type { AppSettings } from '../../types'
 import { FILE_TREE_SORT_OPTIONS } from '../../lib/fileTreeSort'
 import { TEXT_FORMAT_GROUPS, isGroupEnabled, toggleGroup } from '../../lib/textFormats'
+import { sameDocumentPath } from '../../lib/pathIdentity'
 import { SettingsPage, SettingsCard, SettingRow, ToggleRow } from './primitives'
 import type { SectionProps } from './types'
 
@@ -203,7 +204,7 @@ export default function FilesSection({ settings, onChange, en }: SectionProps): 
                     onClick={() =>
                       onChange({
                         hiddenWorkspacePaths: settings.hiddenWorkspacePaths.filter(
-                          (item) => item !== path,
+                          (item) => !sameDocumentPath(item, path),
                         ),
                       })
                     }
@@ -218,7 +219,11 @@ export default function FilesSection({ settings, onChange, en }: SectionProps): 
               disabled={settings.hiddenWorkspacePaths.length >= 64}
               onClick={async () => {
                 const result = await desktop.pickFolder()
-                if (!result || settings.hiddenWorkspacePaths.includes(result.path)) return
+                if (
+                  !result ||
+                  settings.hiddenWorkspacePaths.some((path) => sameDocumentPath(path, result.path))
+                )
+                  return
                 onChange({
                   hiddenWorkspacePaths: [...settings.hiddenWorkspacePaths, result.path].slice(
                     0,

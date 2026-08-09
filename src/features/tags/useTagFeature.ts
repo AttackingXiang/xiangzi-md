@@ -14,6 +14,7 @@ import { buildFrecencyRank } from '../../lib/recency'
 import { applyLineEnding, detectLineEnding } from '../../lib/lineEndings'
 import { useNow } from '../../hooks/useNow'
 import { useTagNavigation } from './useTagNavigation'
+import { documentPathKey, isPathAtOrUnder } from '../../lib/pathIdentity'
 import {
   documentMetaFromMarkdown,
   extractInlineTags,
@@ -188,8 +189,7 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
     // 不属于这个工作区的文档。判定逻辑与 revealActiveFile 里的 isUnderFolder
     // 保持一致。
     const root = folder?.root
-    const isUnderFolder =
-      !root || activeTab.path.startsWith(root + '/') || activeTab.path.startsWith(root + '\\')
+    const isUnderFolder = !root || isPathAtOrUnder(activeTab.path, root)
     if (!isUnderFolder) return
     tagIndex.upsertDocument(
       documentMetaFromMarkdown(
@@ -307,13 +307,15 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
       if (!window.confirm(message)) return
 
       const openByPath = new Map<string, (typeof stateRef.current.tabs)[number]>()
-      for (const tab of stateRef.current.tabs) if (tab.path) openByPath.set(tab.path, tab)
+      for (const tab of stateRef.current.tabs) {
+        if (tab.path) openByPath.set(documentPathKey(tab.path), tab)
+      }
 
       let changed = 0
       let failed = 0
       for (const path of paths) {
         try {
-          const tab = openByPath.get(path)
+          const tab = openByPath.get(documentPathKey(path))
           if (tab) {
             if (await applyToOpenTab(tab)) changed += 1
           } else {

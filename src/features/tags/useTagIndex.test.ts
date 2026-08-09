@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { documentPathKey } from '../../lib/pathIdentity'
 import { planScan, type ListedScanFile, type TagScanCache } from './useTagIndex'
 import type { DocumentMeta } from './types'
 
@@ -16,7 +17,7 @@ function makeMeta(path: string): DocumentMeta {
 function makeCache(entries: Array<[string, number, DocumentMeta]>): TagScanCache {
   const cache: TagScanCache = new Map()
   for (const [path, modifiedNanos, meta] of entries) {
-    cache.set(path, { modifiedNanos, meta })
+    cache.set(documentPathKey(path), { modifiedNanos, meta })
   }
   return cache
 }
@@ -44,6 +45,14 @@ describe('planScan', () => {
     expect(plan.cached).toEqual([])
     expect(plan.toRead).toEqual([{ path: '/root/a.md', name: 'a.md' }])
     expect(plan.stalePaths).toEqual([])
+  })
+
+  it('Windows 路径仅大小写不同时仍命中同一个缓存项', () => {
+    const meta = makeMeta('C:\\Notes\\A.md')
+    const cache = makeCache([['C:\\Notes\\A.md', 100, meta]])
+    const files: ListedScanFile[] = [{ path: 'c:\\notes\\a.md', name: 'a.md', modifiedNanos: 100 }]
+
+    expect(planScan(files, cache)).toMatchObject({ cached: [meta], toRead: [], stalePaths: [] })
   })
 
   it('缓存里没有的新文件要重读', () => {

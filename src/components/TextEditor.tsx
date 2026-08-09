@@ -59,6 +59,7 @@ import { resolveTextLanguage, isStandardJsonFile, isFoldableFile } from '../lib/
 import { unwrapText, wrapText, type TextEnvelope, type Eol } from '../lib/textFidelity'
 import { textEditorBridge } from '../lib/textEditorBridge'
 import { getLang, t } from '../lib/i18n'
+import { createExternalSyncTransaction, isExternalDocumentSync } from '../features/cm6-editor/sync'
 
 /** CodeMirror 搜索面板的中文文案（英文用其内置默认值，故只在中文时注入）。 */
 const SEARCH_PHRASES_ZH: Record<string, string> = {
@@ -213,7 +214,8 @@ export default function TextEditor({
       EditorView.updateListener.of((update: ViewUpdate) => {
         // 与 Markdown 编辑器一致：拿到焦点时成为命令目标。
         if (update.focusChanged && update.view.hasFocus) cm6ActiveViewBridge.activate(update.view)
-        if (update.docChanged) {
+        const externalSync = update.transactions.some(isExternalDocumentSync)
+        if (update.docChanged && !externalSync) {
           const raw = wrapText(envelopeRef.current, update.state.doc.toString())
           onChangeRef.current(raw)
         }
@@ -280,6 +282,20 @@ export default function TextEditor({
       view.destroy()
     }
   }, [])
+
+  // 外部文件重载、草稿恢复和其它 Tab 级状态更新都通过 content 回灌。TextEditor
+  // 不能只在挂载时读取一次，否则界面会继续显示旧文本，下一次用户输入还会把旧
+  // CodeMirror 文档重新写回 React 状态。复用 Markdown 编辑器的外部同步事务：
+  // 保留当前选区、隔离撤销历史，并且不把这次回灌再次报告成用户编辑。
+  useLayoutEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    const incoming = unwrapText(content)
+    envelopeRef.current = { bom: incoming.bom, eol: incoming.eol }
+    const transaction = createExternalSyncTransaction(view.state, incoming.text)
+    if (transaction) view.dispatch(transaction)
+    else onCursorChangeRef.current?.(cursorInfo(view.state, incoming.eol))
+  }, [content])
 
   // ── 异步加载语言支持 ────────────────────────────────────────────────────────
   useEffect(() => {

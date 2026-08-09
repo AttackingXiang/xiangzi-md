@@ -9,6 +9,7 @@ import type { SortContext } from '../lib/fileTreeSort'
 import type { SidebarControls } from '../lib/sidebarControls'
 import { t } from '../lib/i18n'
 import { baseName } from '../lib/path'
+import { sameDocumentPath } from '../lib/pathIdentity'
 
 interface Props {
   folder: FolderType | null
@@ -38,6 +39,7 @@ interface Props {
   onFavoritesCollapsedChange: (collapsed: boolean) => void
   onFavoriteContext: (path: string, x: number, y: number) => void
   onRefresh: () => void
+  treeError?: string | null
   onNodeContext: (node: FileNode, x: number, y: number) => void
   onRootContext: (x: number, y: number) => void
   onMove: (sourcePath: string, targetDirPath: string) => Promise<void>
@@ -74,6 +76,7 @@ const Sidebar = memo(function Sidebar({
   onFavoritesCollapsedChange,
   onFavoriteContext,
   onRefresh,
+  treeError = null,
   onNodeContext,
   onRootContext,
   onMove,
@@ -84,7 +87,9 @@ const Sidebar = memo(function Sidebar({
   style,
 }: Props): JSX.Element {
   const bodyRef = useRef<HTMLDivElement>(null)
-  const isFav = folder ? favorites.includes(folder.root) : false
+  const isFav = folder
+    ? favorites.some((favorite) => sameDocumentPath(favorite, folder.root))
+    : false
   const hideFolderNames = hideAttachmentFolders && attachmentFolder ? [attachmentFolder] : []
 
   // Roving-tabindex target for the file tree's keyboard navigation. Lifted here (rather than
@@ -133,13 +138,17 @@ const Sidebar = memo(function Sidebar({
           </button>
           {!favoritesCollapsed &&
             [...favorites]
-              .sort((a, b) => Number(favoriteFiles.includes(a)) - Number(favoriteFiles.includes(b)))
+              .sort(
+                (a, b) =>
+                  Number(favoriteFiles.some((path) => sameDocumentPath(path, a))) -
+                  Number(favoriteFiles.some((path) => sameDocumentPath(path, b))),
+              )
               .map((fav) => {
-                const isFile = favoriteFiles.includes(fav)
+                const isFile = favoriteFiles.some((path) => sameDocumentPath(path, fav))
                 return (
                   <div
                     key={fav}
-                    className={`fav-row${!isFile && folder?.root === fav ? ' active' : ''}`}
+                    className={`fav-row${!isFile && folder?.root && sameDocumentPath(folder.root, fav) ? ' active' : ''}`}
                     title={fav}
                     onClick={() =>
                       isFile ? onOpenFile(fav, baseName(fav)) : onOpenFolderPath(fav)
@@ -170,6 +179,14 @@ const Sidebar = memo(function Sidebar({
             }
           }}
         >
+          {treeError && (
+            <div className="tree-error-banner" role="alert">
+              <span>{treeError}</span>
+              <button type="button" onClick={onRefresh}>
+                {t('重试')}
+              </button>
+            </div>
+          )}
           {folder ? (
             // focusedPath 走 Context 而不是 prop：见 FileTree.tsx 里 FocusedPathContext 的注释，
             // 这样按方向键只会重渲染实际翻转 tab-stop 状态的那一两行，不会因为逐层转发 prop

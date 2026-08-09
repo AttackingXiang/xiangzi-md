@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { DocumentMeta } from '../types'
 import RelatedDocumentItem from './RelatedDocumentItem'
 import { getLang, t } from '../../../lib/i18n'
+import { sameDocumentPath } from '../../../lib/pathIdentity'
 
 interface Props {
   tag: string
@@ -107,7 +108,7 @@ export default function RelatedDocumentsSidebar({
             <RelatedDocumentItem
               key={document.path}
               document={document}
-              active={document.path === activePath}
+              active={activePath !== null && sameDocumentPath(document.path, activePath)}
               onOpen={() => onOpenDocument(document.path, document.name)}
             />
           ))

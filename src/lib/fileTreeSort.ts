@@ -1,5 +1,6 @@
 import type { FileNode, FileTreeSort } from '../types'
 import { recencyBlend } from './recency'
+import { documentPathKey, isPathAtOrUnder, sameDocumentPath } from './pathIdentity'
 
 export interface FileTreeSortOption {
   value: FileTreeSort
@@ -28,7 +29,8 @@ export interface SortContext {
 export function buildRecentRank(recentFiles: readonly string[]): Map<string, number> {
   const rank = new Map<string, number>()
   recentFiles.forEach((path, index) => {
-    if (!rank.has(path)) rank.set(path, index)
+    const key = documentPathKey(path)
+    if (!rank.has(key)) rank.set(key, index)
   })
   return rank
 }
@@ -46,9 +48,7 @@ interface NodeSignal {
 
 /** path 是否位于 dir 目录之内（任意层级）。兼容 '/' 与 '\\' 分隔符。 */
 function isInsideDir(path: string, dir: string): boolean {
-  if (!path.startsWith(dir)) return false
-  const next = path.charCodeAt(dir.length)
-  return next === 47 /* '/' */ || next === 92 /* '\\' */
+  return !sameDocumentPath(path, dir) && isPathAtOrUnder(path, dir)
 }
 
 /**
@@ -61,7 +61,7 @@ function isInsideDir(path: string, dir: string): boolean {
  */
 function resolveSignal(node: FileNode, recentRank: ReadonlyMap<string, number>): NodeSignal {
   if (!node.isDir) {
-    return { rank: recentRank.get(node.path), mtime: node.modifiedNanos }
+    return { rank: recentRank.get(documentPathKey(node.path)), mtime: node.modifiedNanos }
   }
 
   // rank：全局 recentRank（≤15 条）前缀匹配，无需 children 已加载。
@@ -95,11 +95,12 @@ function byNameAsc(a: FileNode, b: FileNode): number {
  */
 export function sortNodes(nodes: readonly FileNode[], ctx: SortContext): FileNode[] {
   const signals = new Map<string, NodeSignal>()
-  for (const node of nodes) signals.set(node.path, resolveSignal(node, ctx.recentRank))
+  for (const node of nodes)
+    signals.set(documentPathKey(node.path), resolveSignal(node, ctx.recentRank))
   let newest = 0
   for (const s of signals.values()) if (s.mtime > newest) newest = s.mtime
 
-  const sig = (node: FileNode): NodeSignal => signals.get(node.path) as NodeSignal
+  const sig = (node: FileNode): NodeSignal => signals.get(documentPathKey(node.path)) as NodeSignal
 
   const compare = (a: FileNode, b: FileNode): number => {
     // 文件夹始终排在文件之前，各模式只决定同类之间的次序。
@@ -139,7 +140,7 @@ export function sortNodes(nodes: readonly FileNode[], ctx: SortContext): FileNod
   const pinned: FileNode[] = []
   const rest: FileNode[] = []
   for (const node of nodes) {
-    if (ctx.pinnedPaths.has(node.path)) pinned.push(node)
+    if (ctx.pinnedPaths.has(documentPathKey(node.path))) pinned.push(node)
     else rest.push(node)
   }
   pinned.sort(compare)

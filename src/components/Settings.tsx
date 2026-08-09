@@ -42,6 +42,8 @@ interface Props {
   updater: UpdaterController
   customCssError?: boolean
   backgroundImageError?: boolean
+  saving?: boolean
+  saveError?: boolean
   initialSection?: SettingsSection
   /** 当前打开的 Markdown 文档，供 Word/Pandoc 页的论文排版预览使用真实内容；
    * 不是 Markdown 或没有打开文件时为 null。 */
@@ -55,6 +57,8 @@ export default function Settings({
   updater,
   customCssError = false,
   backgroundImageError = false,
+  saving = false,
+  saveError = false,
   initialSection = 'appearance',
   activeDocument = null,
   onChange,
@@ -102,6 +106,21 @@ export default function Settings({
       >
         <header className="modal-header settings-header">
           <span id="settings-title">{t('设置')}</span>
+          <span
+            className={`settings-save-state${saveError ? ' is-error' : ''}`}
+            role={saveError ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            {saveError
+              ? en
+                ? 'Save failed. The last persisted settings were restored.'
+                : '保存失败，已恢复上次成功保存的设置。'
+              : saving
+                ? en
+                  ? 'Saving…'
+                  : '正在保存…'
+                : ''}
+          </span>
           <button
             className="icon-btn sm"
             aria-label={en ? 'Close settings' : '关闭设置'}

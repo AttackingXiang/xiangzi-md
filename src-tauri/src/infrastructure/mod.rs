@@ -1,6 +1,7 @@
 pub mod attachment;
 pub(crate) mod docx_xml;
 pub mod drafts;
+mod file_capabilities;
 pub mod lifecycle;
 pub mod menu;
 pub mod protocol;

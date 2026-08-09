@@ -1,9 +1,14 @@
+import { Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import type { AppSettings } from '../../types'
 import { t } from '../../lib/i18n'
+import { desktop } from '../../platform'
+import { sameDocumentPath } from '../../lib/pathIdentity'
 import { SettingsPage, SettingsCard, SettingRow, ToggleRow } from './primitives'
 import type { SectionProps } from './types'
 
 export default function AttachmentsSection({ settings, onChange, en }: SectionProps): JSX.Element {
+  const [pathError, setPathError] = useState<string | null>(null)
   const folder = settings.attachmentFolder || 'assets'
   const usesFolder = ['subfolder', 'docSubfolder', 'vaultSubfolder'].includes(
     settings.attachmentMode,
@@ -79,26 +84,68 @@ export default function AttachmentsSection({ settings, onChange, en }: SectionPr
         />
       </SettingsCard>
       <SettingsCard title={t('额外图片搜索目录')}>
-        <textarea
-          className="settings-textarea"
-          rows={5}
-          value={settings.assetSearchPaths.join('\n')}
-          placeholder="/path/to/static\n/path/to/public"
-          onChange={(event) =>
-            onChange({
-              assetSearchPaths: event.target.value
-                .split('\n')
-                .map((path) => path.trim())
-                .filter(Boolean)
-                .slice(0, 32),
-            })
-          }
-        />
         <p className="settings-hint">
-          {t(
-            '图片无法在文档目录找到时，依次搜索这里列出的目录（每行一个绝对路径）。适用于图片统一存放在与文档不同层级的情况。',
-          )}
+          {en
+            ? 'When an image is not found beside the document, these explicitly authorized folders are searched in order.'
+            : '图片无法在文档目录找到时，依次搜索这些已明确授权的目录。'}
         </p>
+        <div className="settings-path-list">
+          {settings.assetSearchPaths.length === 0 && (
+            <p className="settings-empty-text">
+              {en ? 'No extra image folders.' : '尚未添加额外图片目录。'}
+            </p>
+          )}
+          {settings.assetSearchPaths.map((path) => (
+            <div className="settings-path-row" key={path}>
+              <span title={path}>{path}</span>
+              <button
+                className="icon-btn sm"
+                aria-label={en ? `Remove ${path}` : `移除 ${path}`}
+                onClick={() =>
+                  onChange({
+                    assetSearchPaths: settings.assetSearchPaths.filter(
+                      (item) => !sameDocumentPath(item, path),
+                    ),
+                  })
+                }
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+        {pathError && (
+          <p className="settings-error" role="alert">
+            {pathError}
+          </p>
+        )}
+        <button
+          className="secondary-btn"
+          disabled={settings.assetSearchPaths.length >= 32}
+          onClick={async () => {
+            setPathError(null)
+            try {
+              const selected = await desktop.pickFolder()
+              if (
+                !selected ||
+                settings.assetSearchPaths.some((path) => sameDocumentPath(path, selected.path))
+              )
+                return
+              await desktop.authorizeAssetSearchDirectory(selected.path)
+              onChange({
+                assetSearchPaths: [...settings.assetSearchPaths, selected.path].slice(0, 32),
+              })
+            } catch {
+              setPathError(
+                en
+                  ? 'This folder could not be authorized. Select it again and retry.'
+                  : '无法授权该文件夹，请重新选择后再试。',
+              )
+            }
+          }}
+        >
+          {en ? 'Choose folder…' : '选择文件夹…'}
+        </button>
       </SettingsCard>
     </SettingsPage>
   )

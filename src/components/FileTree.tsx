@@ -7,6 +7,7 @@ import { sortNodes, type SortContext } from '../lib/fileTreeSort'
 import { t } from '../lib/i18n'
 import { isTypeaheadKey, nextTypeaheadIndex, pushTypeaheadChar } from '../lib/treeTypeahead'
 import { FocusedPathContext } from './fileTreeFocusContext'
+import { isPathAtOrUnder, sameDocumentPath } from '../lib/pathIdentity'
 
 interface Props {
   nodes: FileNode[]
@@ -75,9 +76,9 @@ export default function FileTree({
         const isFirstRootNode = depth === 0 && index === 0
         const isRovingTabStop =
           focusedPath !== null
-            ? focusedPath === node.path
+            ? sameDocumentPath(focusedPath, node.path)
             : activePath !== null
-              ? activePath === node.path
+              ? sameDocumentPath(activePath, node.path)
               : isFirstRootNode
         return (
           <TreeNode
@@ -147,6 +148,7 @@ const TreeNode = memo(function TreeNode({
   const [expanded, setExpanded] = useState(() => expandedPaths.has(node.path))
   const [children, setChildren] = useState<FileNode[] | null>(node.children ?? null)
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const nodeRef = useRef<HTMLDivElement>(null)
   const dragCleanupRef = useRef<(() => void) | null>(null)
@@ -154,25 +156,27 @@ const TreeNode = memo(function TreeNode({
   const mountedRef = useRef(true)
   const loadingRef = useRef(false)
 
-  const isActive = activePath === node.path
+  const isActive = activePath !== null && sameDocumentPath(activePath, node.path)
   const indent = { paddingLeft: `${depth * 14 + 8}px` }
 
   const isAncestor =
     node.isDir &&
     revealPath !== null &&
-    (revealPath.startsWith(node.path + '/') || revealPath.startsWith(node.path + '\\'))
+    !sameDocumentPath(revealPath, node.path) &&
+    isPathAtOrUnder(revealPath, node.path)
 
-  const isRevealed = revealPath === node.path
+  const isRevealed = revealPath !== null && sameDocumentPath(revealPath, node.path)
 
   const loadChildren = useCallback(async (): Promise<void> => {
     if (children !== null || loadingRef.current) return
     loadingRef.current = true
     setLoading(true)
+    setLoadError(false)
     try {
       const kids = await desktop.readDir(node.path)
       if (mountedRef.current) setChildren(kids)
     } catch {
-      if (mountedRef.current) setChildren([])
+      if (mountedRef.current) setLoadError(true)
     } finally {
       loadingRef.current = false
       if (mountedRef.current) setLoading(false)
@@ -464,6 +468,16 @@ const TreeNode = memo(function TreeNode({
           <div className="tree-empty-row" style={{ paddingLeft: `${(depth + 1) * 14 + 27}px` }}>
             {t('空文件夹')}
           </div>
+        )}
+        {expanded && loadError && !loading && (
+          <button
+            type="button"
+            className="tree-error-row"
+            style={{ paddingLeft: `${(depth + 1) * 14 + 27}px` }}
+            onClick={() => void loadChildren()}
+          >
+            {t('读取失败，点击重试')}
+          </button>
         )}
       </li>
     )

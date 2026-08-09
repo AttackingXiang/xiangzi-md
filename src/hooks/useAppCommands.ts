@@ -15,6 +15,7 @@ import { clipboardCmd, editorCmd } from '../lib/editorCommands'
 import { findNavigationBridge } from '../lib/findNavigationBridge'
 import { t } from '../lib/i18n'
 import type { ShortcutAction } from '../lib/shortcuts'
+import type { SaveOperationResult } from '../lib/documentOperations'
 
 interface FileEntry {
   path: string
@@ -32,7 +33,7 @@ interface AppCommandOptions {
   openFile: () => Promise<void>
   openFolder: () => Promise<void>
   saveTab: (id: string) => Promise<boolean>
-  saveAsTab: (id: string) => Promise<void>
+  saveAsTab: (id: string) => Promise<SaveOperationResult>
   closeTab: (id: string) => Promise<void>
   exportHTML: () => Promise<void>
   exportPDF: () => Promise<void>

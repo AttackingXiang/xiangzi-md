@@ -6,6 +6,7 @@
 /// - normalize_docx_fonts 对 pandoc 生成的 docx 后处理，把 word/styles.xml
 ///   和 word/theme/theme1.xml 里的字体归一化为指定规范，不依赖 pandoc 版本。
 use crate::commands::app::open_path_with_default_app;
+use crate::commands::pandoc_args::parse_pandoc_args;
 use crate::domain::academic_layout::AcademicLayout;
 use crate::domain::error::{AppError, AppResult};
 use crate::infrastructure::{docx_xml, settings::SettingsStore, workspace};
@@ -239,88 +240,6 @@ pub fn find_pandoc_full(override_path: Option<&str>) -> Option<PathBuf> {
     } else {
         None
     }
-}
-
-const MAX_CUSTOM_PANDOC_ARGS: usize = 64;
-
-/// 按常见命令行引号规则解析附加参数，但始终直接传给 Command，不经过 shell。
-fn parse_pandoc_args(raw: &str) -> AppResult<Vec<String>> {
-    #[derive(Clone, Copy, PartialEq)]
-    enum Quote {
-        None,
-        Single,
-        Double,
-    }
-
-    let mut args = Vec::new();
-    let mut current = String::new();
-    let mut quote = Quote::None;
-    let mut escaped = false;
-
-    for ch in raw.chars() {
-        if escaped {
-            current.push(ch);
-            escaped = false;
-            continue;
-        }
-        match (quote, ch) {
-            (Quote::None | Quote::Double, '\\') => escaped = true,
-            (Quote::None, '\'') => quote = Quote::Single,
-            (Quote::None, '"') => quote = Quote::Double,
-            (Quote::Single, '\'') => quote = Quote::None,
-            (Quote::Double, '"') => quote = Quote::None,
-            (Quote::None, value) if value.is_whitespace() => {
-                if !current.is_empty() {
-                    args.push(std::mem::take(&mut current));
-                }
-            }
-            (_, value) => current.push(value),
-        }
-    }
-
-    if escaped || quote != Quote::None {
-        return Err(AppError::new(
-            "pandoc_args_invalid",
-            "Pandoc 附加参数中存在未闭合的引号或转义符",
-        ));
-    }
-    if !current.is_empty() {
-        args.push(current);
-    }
-    if args.len() > MAX_CUSTOM_PANDOC_ARGS {
-        return Err(AppError::new(
-            "pandoc_args_invalid",
-            format!("Pandoc 附加参数不能超过 {MAX_CUSTOM_PANDOC_ARGS} 项"),
-        ));
-    }
-    if let Some(argument) = args
-        .iter()
-        .find(|argument| is_reserved_pandoc_arg(argument))
-    {
-        return Err(AppError::new(
-            "pandoc_args_reserved",
-            format!("参数 {argument} 由应用管理，请使用对应设置项"),
-        ));
-    }
-    Ok(args)
-}
-
-fn is_reserved_pandoc_arg(argument: &str) -> bool {
-    const LONG: &[&str] = &[
-        "--from",
-        "--to",
-        "--output",
-        "--extract-media",
-        "--reference-doc",
-    ];
-    LONG.iter()
-        .any(|name| argument == *name || argument.starts_with(&format!("{name}=")))
-        || ["-f", "-t", "-o"].iter().any(|name| {
-            argument == *name
-                || (argument.starts_with(name)
-                    && argument.len() > name.len()
-                    && !argument.starts_with("--"))
-        })
 }
 
 // ── Tauri 命令 ────────────────────────────────────────────────────────────────

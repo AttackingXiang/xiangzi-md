@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, Command as CommandIcon } from 'lucide-react'
 import { t } from '../lib/i18n'
+import ModalShell from './ModalShell'
 
 export interface Command {
   id: string
@@ -86,44 +87,46 @@ export default function CommandPalette({
   }
 
   return (
-    <div className="modal-backdrop palette-backdrop" onClick={onClose}>
-      <div className="palette" onClick={(e) => e.stopPropagation()}>
-        <input
-          ref={inputRef}
-          className="palette-input"
-          placeholder={t('输入命令或文件名…')}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') {
-              e.preventDefault()
-              setActive((a) => Math.min(a + 1, items.length - 1))
-            } else if (e.key === 'ArrowUp') {
-              e.preventDefault()
-              setActive((a) => Math.max(a - 1, 0))
-            } else if (e.key === 'Enter') {
-              exec(items[active])
-            } else if (e.key === 'Escape') {
-              onClose()
-            }
-          }}
-        />
-        <div className="palette-list" ref={listRef}>
-          {items.length === 0 && <div className="palette-empty">{t('无匹配项')}</div>}
-          {items.map((it, i) => (
-            <div
-              key={it.key}
-              className={`palette-item${i === active ? ' active' : ''}`}
-              onMouseEnter={() => setActive(i)}
-              onClick={() => exec(it)}
-            >
-              {it.icon === 'cmd' ? <CommandIcon size={14} /> : <FileText size={14} />}
-              <span className="palette-label">{it.label}</span>
-              {it.hint && <span className="palette-hint">{it.hint}</span>}
-            </div>
-          ))}
-        </div>
+    <ModalShell
+      className="palette"
+      backdropClassName="palette-backdrop"
+      label={t('命令面板')}
+      onBackdrop={onClose}
+      onEscape={onClose}
+    >
+      <input
+        ref={inputRef}
+        className="palette-input"
+        placeholder={t('输入命令或文件名…')}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            setActive((a) => Math.min(a + 1, items.length - 1))
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            setActive((a) => Math.max(a - 1, 0))
+          } else if (e.key === 'Enter') {
+            exec(items[active])
+          }
+        }}
+      />
+      <div className="palette-list" ref={listRef}>
+        {items.length === 0 && <div className="palette-empty">{t('无匹配项')}</div>}
+        {items.map((it, i) => (
+          <div
+            key={it.key}
+            className={`palette-item${i === active ? ' active' : ''}`}
+            onMouseEnter={() => setActive(i)}
+            onClick={() => exec(it)}
+          >
+            {it.icon === 'cmd' ? <CommandIcon size={14} /> : <FileText size={14} />}
+            <span className="palette-label">{it.label}</span>
+            {it.hint && <span className="palette-hint">{it.hint}</span>}
+          </div>
+        ))}
       </div>
-    </div>
+    </ModalShell>
   )
 }

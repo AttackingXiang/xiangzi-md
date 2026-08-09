@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { desktop } from '../platform'
 import type { Draft, DraftSummary, Tab } from '../types'
 import { t } from '../lib/i18n'
+import type { DraftRecoveryResult } from '../lib/draftRecovery'
 
 interface Deps {
   tabs: Tab[]
   getCurrentTabs: () => Tab[]
-  openRecoveredDraft: (draft: Draft) => Promise<void>
+  openRecoveredDraft: (draft: Draft) => Promise<DraftRecoveryResult>
 }
 
 /**
@@ -22,6 +23,11 @@ export function useDraftRecovery({ tabs, getCurrentTabs, openRecoveredDraft }: D
   const writeVersionsRef = useRef(new Map<string, number>())
   const writePromisesRef = useRef(new Map<string, Promise<void>>())
   const snapshotRevisionsRef = useRef(new Map<string, number>())
+  // A previous-run draft can be recovered into a session-restored tab whose
+  // runtime id differs from the stored draft id. Keep the original snapshot
+  // until that owner tab is saved or explicitly discarded, so a crash between
+  // recovery and the next periodic snapshot cannot lose the recovered content.
+  const recoveredOwnersRef = useRef(new Map<string, string>())
 
   useEffect(() => {
     if (loadedRef.current) return
@@ -41,6 +47,7 @@ export function useDraftRecovery({ tabs, getCurrentTabs, openRecoveredDraft }: D
         const nextVersion = (writeVersionsRef.current.get(id) ?? 0) + 1
         writeVersionsRef.current.set(id, nextVersion)
         managedIdsRef.current.delete(id)
+        recoveredOwnersRef.current.delete(id)
         snapshotRevisionsRef.current.delete(id)
         try {
           await writePromisesRef.current.get(id)
@@ -89,7 +96,9 @@ export function useDraftRecovery({ tabs, getCurrentTabs, openRecoveredDraft }: D
 
   useEffect(() => {
     const dirtyIds = new Set(tabs.filter((tab) => tab.dirty).map((tab) => tab.id))
-    const staleManagedIds = [...managedIdsRef.current].filter((id) => !dirtyIds.has(id))
+    const staleManagedIds = [...managedIdsRef.current].filter(
+      (id) => !dirtyIds.has(recoveredOwnersRef.current.get(id) ?? id),
+    )
     if (staleManagedIds.length > 0) void deleteDrafts(staleManagedIds)
 
     if (!tabs.some((tab) => tab.dirty)) return undefined
@@ -111,8 +120,10 @@ export function useDraftRecovery({ tabs, getCurrentTabs, openRecoveredDraft }: D
     async (summary: DraftSummary): Promise<void> => {
       try {
         const draft = await desktop.readDraft(summary.id)
+        const result = await openRecoveredDraft(draft)
+        if (result.kind === 'blocked') return
         managedIdsRef.current.add(draft.id)
-        await openRecoveredDraft(draft)
+        if (result.tabId !== draft.id) recoveredOwnersRef.current.set(draft.id, result.tabId)
         setDrafts((current) => current.filter((item) => item.id !== draft.id))
       } catch (error) {
         console.error('Draft recovery failed', error)

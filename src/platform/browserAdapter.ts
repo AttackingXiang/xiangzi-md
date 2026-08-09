@@ -13,6 +13,7 @@ import type {
   SearchResponse,
   UpdaterPort,
 } from './contracts'
+import { DEFAULT_VISIBLE_TEXT_EXTENSIONS } from '../lib/fileCapabilities'
 import { DEFAULT_ACADEMIC_LAYOUT } from './contracts'
 
 const PREVIEW_ROOT = '/browser-preview'
@@ -124,36 +125,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     hideAttachmentFolders: false,
     assetSearchPaths: [],
     showAllFiles: false,
-    visibleTextExtensions: [
-      'txt',
-      'log',
-      'json',
-      'json5',
-      'jsonc',
-      'yaml',
-      'yml',
-      'toml',
-      'ini',
-      'conf',
-      'properties',
-      'xml',
-      'svg',
-      'html',
-      'htm',
-      'css',
-      'js',
-      'mjs',
-      'cjs',
-      'jsx',
-      'ts',
-      'mts',
-      'cts',
-      'tsx',
-      'sql',
-      'sh',
-      'bash',
-      'zsh',
-    ],
+    visibleTextExtensions: [...DEFAULT_VISIBLE_TEXT_EXTENSIONS],
     hiddenWorkspacePaths: [],
     hiddenNamePatterns: [
       '.git',
@@ -291,15 +263,12 @@ export const browserDesktopAdapter: DesktopPort = {
   watchPaths: async () => () => undefined,
   readBinaryFile: async () => new Uint8Array(),
   readRemoteImage: async (url) => new Uint8Array(await (await fetch(url)).arrayBuffer()),
+  authorizeAssetSearchDirectory: async () => undefined,
   writeFile: async (path, content) => {
     files.set(path, content)
     return { path, version: fileVersion(content) }
   },
-  saveAs: async (content, suggestedName = 'untitled.md') => {
-    const path = nextPreviewPath(suggestedName)
-    files.set(path, content)
-    return openedFile(path, content)
-  },
+  pickSavePath: async (suggestedName = 'untitled.md') => nextPreviewPath(suggestedName),
   readDir: async (path) => (path === PREVIEW_ROOT ? previewTree() : []),
   listFiles: async () => ({
     items: previewTree().map(({ path, name, modifiedNanos }) => ({ path, name, modifiedNanos })),

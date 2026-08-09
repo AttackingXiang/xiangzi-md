@@ -1,3 +1,4 @@
+use super::file_capabilities::TEXT_EXTENSIONS;
 use crate::domain::academic_layout::AcademicLayout;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -257,39 +258,10 @@ impl Default for AppSettings {
             asset_search_paths: Vec::new(),
             show_all_files: false,
             // 默认勾选全部受支持格式，保持「支持即可见」的既有体验；用户可逐项取消。
-            visible_text_extensions: [
-                "txt",
-                "log",
-                "json",
-                "json5",
-                "jsonc",
-                "yaml",
-                "yml",
-                "toml",
-                "ini",
-                "conf",
-                "properties",
-                "xml",
-                "svg",
-                "html",
-                "htm",
-                "css",
-                "js",
-                "mjs",
-                "cjs",
-                "jsx",
-                "ts",
-                "mts",
-                "cts",
-                "tsx",
-                "sql",
-                "sh",
-                "bash",
-                "zsh",
-            ]
-            .iter()
-            .map(|ext| (*ext).to_string())
-            .collect(),
+            visible_text_extensions: TEXT_EXTENSIONS
+                .iter()
+                .map(|ext| (*ext).to_string())
+                .collect(),
             hidden_workspace_paths: Vec::new(),
             hidden_name_patterns: vec![
                 ".git".into(),

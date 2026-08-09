@@ -7,6 +7,9 @@ import { replaceMovedPath } from '../lib/treeDrag'
 import { removeWorkspacePath } from '../lib/workspaceRemoval'
 import type { FileNode, Folder, Tab } from '../types'
 import type { ContextMenuState, MenuItem } from '../components/ContextMenu'
+import type { OpenPathResult } from '../lib/documentOperations'
+import { replacePathPrefix, sameDocumentPath } from '../lib/pathIdentity'
+import { RetriableUndoStack } from '../lib/retriableUndo'
 
 export type UndoItem =
   | { type: 'rename'; fromPath: string; toPath: string; toName: string }
@@ -18,7 +21,7 @@ export type UndoItem =
 interface Deps {
   folder: Folder | null
   setFolder: (updater: (prev: Folder | null) => Folder | null) => void
-  openPath: (path: string, name?: string) => Promise<void>
+  openPath: (path: string, name?: string) => Promise<OpenPathResult>
   confirmCloseTabs: (ids: readonly string[]) => Promise<boolean>
   closeTabsWithoutPrompt: (ids: readonly string[]) => void
   tabs: Tab[]
@@ -67,11 +70,14 @@ export function useTreeOps({
   setInputDialog,
 }: Deps) {
   const [treeKey, setTreeKey] = useState(0)
+  const [treeError, setTreeError] = useState<string | null>(null)
+  const folderRootRef = useRef(folder?.root ?? null)
+  folderRootRef.current = folder?.root ?? null
 
   // Persists expanded folder paths across tree remounts (refresh/rename/move).
   const expandedPathsRef = useRef<Set<string>>(new Set())
 
-  const undoStack = useRef<UndoItem[]>([])
+  const undoStack = useRef(new RetriableUndoStack<UndoItem>())
   const [canUndo, setCanUndo] = useState(false)
 
   const pushUndo = useCallback((item: UndoItem) => {
@@ -84,13 +90,7 @@ export function useTreeOps({
     (oldPath: string, newPath: string): void => {
       const updated = new Set<string>()
       for (const p of expandedPathsRef.current) {
-        if (p === oldPath) {
-          updated.add(newPath)
-        } else if (p.startsWith(oldPath + '/') || p.startsWith(oldPath + '\\')) {
-          updated.add(newPath + p.slice(oldPath.length))
-        } else {
-          updated.add(p)
-        }
+        updated.add(replacePathPrefix(p, oldPath, newPath))
       }
       expandedPathsRef.current = updated
       // 同一处顺带把 frecency 语料里的旧路径改写掉，避免重命名/移动后残留失效记录。
@@ -104,12 +104,20 @@ export function useTreeOps({
     if (!root) return
     try {
       const tree = await desktop.readDir(root)
-      setFolder((f) => (f ? { ...f, tree } : f))
+      if (!folderRootRef.current || !sameDocumentPath(folderRootRef.current, root)) return
+      setFolder((current) =>
+        current && sameDocumentPath(current.root, root) ? { ...current, tree } : current,
+      )
       setTreeKey((k) => k + 1)
+      setTreeError(null)
     } catch {
-      /* ignore */
+      if (folderRootRef.current && sameDocumentPath(folderRootRef.current, root)) {
+        setTreeError(t('文件树读取失败，请重试。'))
+      }
     }
   }, [folder?.root, setFolder])
+
+  useEffect(() => setTreeError(null), [folder?.root])
 
   // 应用没有文件系统 watcher：外部工具（如 Obsidian）在别处改了同一个目录时，
   // 文件树和标签索引都不会自动更新。折中方案——窗口重新获得焦点时轻量刷新一次：
@@ -202,11 +210,7 @@ export function useTreeOps({
   )
 
   const undoLastOp = useCallback(async () => {
-    const item = undoStack.current.pop()
-    if (!item) return
-    setCanUndo(undoStack.current.length > 0)
-
-    try {
+    const attempt = await undoStack.current.undo(async (item) => {
       if (item.type === 'restore') {
         await item.run()
         return
@@ -237,7 +241,9 @@ export function useTreeOps({
         )
       }
       await refreshTree()
-    } catch {
+    })
+    setCanUndo(undoStack.current.canUndo)
+    if (attempt.kind === 'failed') {
       window.alert(t('撤销失败'))
     }
   }, [refreshTree, setTabs, updateExpandedAfterMove])
@@ -273,7 +279,9 @@ export function useTreeOps({
         items.push({ label: t('新建文件'), onClick: () => createFileIn(node.path) })
         items.push({ label: t('新建文件夹'), onClick: () => createFolderIn(node.path) })
         items.push({
-          label: pinnedFolders.includes(node.path) ? t('取消置顶') : t('置顶'),
+          label: pinnedFolders.some((path) => sameDocumentPath(path, node.path))
+            ? t('取消置顶')
+            : t('置顶'),
           onClick: () => togglePinnedFolder(node.path),
           separatorBefore: true,
         })
@@ -290,7 +298,7 @@ export function useTreeOps({
         })
       }
       items.push({
-        label: favorites.includes(node.path)
+        label: favorites.some((path) => sameDocumentPath(path, node.path))
           ? t('取消收藏')
           : t(node.isDir ? '收藏文件夹' : '收藏文件'),
         onClick: () => toggleFavorite(node.path, !node.isDir),
@@ -332,7 +340,7 @@ export function useTreeOps({
         { label: t('新建文件夹'), onClick: () => createFolderIn(folder.root) },
       ]
       const parent = dirName(folder.root)
-      if (parent && parent !== folder.root) {
+      if (parent && !sameDocumentPath(parent, folder.root)) {
         items.push({
           label: t('打开上级文件夹'),
           onClick: () => openParentFolder(folder.root),
@@ -342,7 +350,7 @@ export function useTreeOps({
       items.push({
         label: t('选择其他文件夹'),
         onClick: () => chooseFolderFrom(folder.root),
-        separatorBefore: !parent || parent === folder.root,
+        separatorBefore: !parent || sameDocumentPath(parent, folder.root),
       })
       items.push({
         label: t(revealLocationKey()),
@@ -368,6 +376,7 @@ export function useTreeOps({
 
   return {
     treeKey,
+    treeError,
     refreshTree,
     createFileIn,
     createFolderIn,

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { t } from '../lib/i18n'
+import ModalShell from './ModalShell'
 
 interface Props {
   title: string
@@ -33,38 +34,36 @@ export default function InputDialog({
 
   const submit = (): void => {
     const v = value.trim()
-    if (v) onSubmit(v)
+    if (!v) return
+    onSubmit(v)
     onClose()
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal-input" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <span>{title}</span>
-        </div>
-        <div className="modal-body">
-          <input
-            ref={inputRef}
-            className="input-dialog-field"
-            value={value}
-            placeholder={placeholder}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') submit()
-              if (e.key === 'Escape') onClose()
-            }}
-          />
-          <div className="input-dialog-actions">
-            <button className="secondary-btn" onClick={onClose}>
-              {t('取消')}
-            </button>
-            <button className="primary-btn" onClick={submit}>
-              {confirmText}
-            </button>
-          </div>
+    <ModalShell className="modal modal-input" label={title} onBackdrop={onClose} onEscape={onClose}>
+      <div className="modal-header">
+        <span>{title}</span>
+      </div>
+      <div className="modal-body">
+        <input
+          ref={inputRef}
+          className="input-dialog-field"
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit()
+          }}
+        />
+        <div className="input-dialog-actions">
+          <button className="secondary-btn" onClick={onClose}>
+            {t('取消')}
+          </button>
+          <button className="primary-btn" disabled={!value.trim()} onClick={submit}>
+            {confirmText}
+          </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   )
 }

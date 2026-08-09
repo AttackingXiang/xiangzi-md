@@ -18,6 +18,8 @@ const EN: Record<string, string> = {
   收藏名称: 'Favorite name',
   尚未打开文件夹: 'No folder opened',
   打开文件夹: 'Open Folder',
+  '文件树读取失败，请重试。': 'Could not read the file tree. Try again.',
+  '读取失败，点击重试': 'Could not read this folder. Click to retry.',
   收藏此目录: 'Add to favorites',
   取消收藏: 'Remove from favorites',
   刷新: 'Refresh',
@@ -377,6 +379,8 @@ const EN: Record<string, string> = {
   '重新加载会丢弃当前编辑；保留我的版本会覆盖磁盘上的外部更改。':
     'Reloading discards your edits; keeping your version overwrites the external changes.',
   '另存为失败。': 'Save As failed.',
+  '该文件已在另一个标签页中打开，未执行另存为。':
+    'That file is already open in another tab. Save As was canceled.',
   '文件夹不存在：\n': 'Folder not found:\n',
   '无法打开文件夹：\n': 'Could not open folder:\n',
   '移动失败：\n': 'Move failed:\n',

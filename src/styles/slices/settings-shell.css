@@ -301,6 +301,19 @@
   font-size: 12px;
 }
 
+.settings-save-state {
+  flex: 1;
+  min-height: 1em;
+  padding: 0 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.settings-save-state.is-error {
+  color: var(--danger, #c43d3d);
+}
+
 .settings-file-picker,
 .update-settings-row,
 .settings-section-intro {

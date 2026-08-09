@@ -77,6 +77,7 @@ import { HIDDEN_SIDEBAR_CONTROLS, sidebarControlsFromSettings } from './lib/side
 import { recordContentChanges } from './lib/searchReload'
 import type { PathStat } from './platform/contracts'
 import { replaceMovedPath } from './lib/treeDrag'
+import { documentPathKey, isPathAtOrUnder, sameDocumentPath } from './lib/pathIdentity'
 import type { SortContext } from './lib/fileTreeSort'
 import { buildFrecencyRank } from './lib/recency'
 import { parseOutline } from './lib/outline'
@@ -90,7 +91,7 @@ import { tablePickerBridge } from './lib/tablePickerBridge'
 import { tableZoomBridge } from './lib/tableZoomBridge'
 import { linkPromptBridge } from './lib/linkPromptBridge'
 import { editorZoomSource } from './lib/editorZoom'
-import type { FileTreeSort, Folder, Tab } from './types'
+import type { AppSettings, FileTreeSort, Folder, Tab } from './types'
 import type { RecentItemsSection } from './components/RecentItemsDialog'
 import { useSettings } from './hooks/useSettings'
 import { useNow } from './hooks/useNow'
@@ -102,6 +103,8 @@ import { useEditorContextMenu } from './hooks/useEditorContextMenu'
 import { useExportActions, type ExportActivity } from './hooks/useExportActions'
 import { useAppCommands } from './hooks/useAppCommands'
 import { useNativeIntegration } from './hooks/useNativeIntegration'
+import { useResizablePanels } from './hooks/useResizablePanels'
+import { useWorkspaceSession } from './hooks/useWorkspaceSession'
 import type { SettingsSection } from './components/Settings'
 import { groupKeysToCollapse } from './features/tags/tagTree'
 import { replaceMarkdownBody } from './features/tags/frontmatter'
@@ -123,7 +126,10 @@ export default function App(): JSX.Element {
     themeRenderVersion,
     customCssError,
     backgroundImageError,
+    settingsSaving,
+    settingsSaveError,
     saveSettings,
+    persistSettingsInBackground,
     recordDocOpen,
     recordDocEdit,
     recordDocRename,
@@ -138,20 +144,9 @@ export default function App(): JSX.Element {
   } = useSettings()
 
   const lang = settings?.language ?? 'zh'
-  const selectionToolbarEnabled = settings?.showSelectionToolbar
-  const toggleSelectionToolbar = useCallback((): void => {
-    if (selectionToolbarEnabled === undefined) return
-    void saveSettings({ showSelectionToolbar: !selectionToolbarEnabled })
-  }, [saveSettings, selectionToolbarEnabled])
-  const toolbarEnabled = settings?.showToolbar
-  const toggleToolbar = useCallback((): void => {
-    if (toolbarEnabled === undefined) return
-    void saveSettings({ showToolbar: !toolbarEnabled })
-  }, [saveSettings, toolbarEnabled])
-  const saveDefaultHighlightColor = useCallback(
-    (defaultHighlightColor: string): void => {
-      if (settings?.defaultHighlightColor === defaultHighlightColor) return
-      void saveSettings({ defaultHighlightColor }).catch((error: unknown) => {
+  const persistUserSettings = useCallback(
+    (patch: Partial<AppSettings>): void => {
+      void saveSettings(patch).catch((error: unknown) => {
         const readOnly =
           typeof error === 'object' &&
           error !== null &&
@@ -162,7 +157,24 @@ export default function App(): JSX.Element {
         )
       })
     },
-    [saveSettings, settings?.defaultHighlightColor],
+    [saveSettings],
+  )
+  const selectionToolbarEnabled = settings?.showSelectionToolbar
+  const toggleSelectionToolbar = useCallback((): void => {
+    if (selectionToolbarEnabled === undefined) return
+    persistUserSettings({ showSelectionToolbar: !selectionToolbarEnabled })
+  }, [persistUserSettings, selectionToolbarEnabled])
+  const toolbarEnabled = settings?.showToolbar
+  const toggleToolbar = useCallback((): void => {
+    if (toolbarEnabled === undefined) return
+    persistUserSettings({ showToolbar: !toolbarEnabled })
+  }, [persistUserSettings, toolbarEnabled])
+  const saveDefaultHighlightColor = useCallback(
+    (defaultHighlightColor: string): void => {
+      if (settings?.defaultHighlightColor === defaultHighlightColor) return
+      persistUserSettings({ defaultHighlightColor })
+    },
+    [persistUserSettings, settings?.defaultHighlightColor],
   )
 
   // ── Unsaved changes confirmation ─────────────────────────────────────────
@@ -330,58 +342,14 @@ export default function App(): JSX.Element {
   }, [tabs])
 
   // ── Panel widths (drag-to-resize) ──────────────────────────────────────────
-  const [sidebarWidth, setSidebarWidth] = useState(256)
-  const [outlineWidth, setOutlineWidth] = useState(240)
-  const [resultsWidth, setResultsWidth] = useState(300)
-  const sidebarWidthRef = useRef(sidebarWidth)
-  sidebarWidthRef.current = sidebarWidth
-  const outlineWidthRef = useRef(outlineWidth)
-  outlineWidthRef.current = outlineWidth
-  const resultsWidthRef = useRef(resultsWidth)
-  resultsWidthRef.current = resultsWidth
-
-  const startSidebarResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    const startX = e.clientX
-    const startW = sidebarWidthRef.current
-    const onMove = (ev: MouseEvent): void =>
-      setSidebarWidth(Math.max(160, Math.min(520, startW + ev.clientX - startX)))
-    const onUp = (): void => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [])
-
-  const startResultsResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    const startX = e.clientX
-    const startW = resultsWidthRef.current
-    const onMove = (ev: MouseEvent): void =>
-      setResultsWidth(Math.max(200, Math.min(560, startW + ev.clientX - startX)))
-    const onUp = (): void => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [])
-
-  const startOutlineResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    const startX = e.clientX
-    const startW = outlineWidthRef.current
-    // Outline is on the right; dragging left widens it
-    const onMove = (ev: MouseEvent): void =>
-      setOutlineWidth(Math.max(160, Math.min(520, startW + startX - ev.clientX)))
-    const onUp = (): void => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [])
+  const {
+    sidebarWidth,
+    outlineWidth,
+    resultsWidth,
+    startSidebarResize,
+    startResultsResize,
+    startOutlineResize,
+  } = useResizablePanels()
 
   // ── Sidebar visibility ─────────────────────────────────────────────────────
   // The persisted value is loaded asynchronously. Keep the app shell behind the
@@ -395,18 +363,9 @@ export default function App(): JSX.Element {
       const next = typeof value === 'function' ? value(sidebarVisibleRef.current) : value
       sidebarVisibleRef.current = next
       setSidebarVisibleState(next)
-      void saveSettings({ sidebarVisible: next }).catch((error: unknown) => {
-        const readOnly =
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === ErrorCode.SETTINGS_READ_ONLY
-        void desktop.notify(
-          readOnly ? t('这些设置来自更高版本，当前以只读模式运行。') : t('设置保存失败。'),
-        )
-      })
+      persistUserSettings({ sidebarVisible: next })
     },
-    [saveSettings],
+    [persistUserSettings],
   )
   useEffect(() => {
     if (!settingsReady || !settings) return
@@ -473,20 +432,19 @@ export default function App(): JSX.Element {
     const fileParent = dirName(tabPath)
     if (!fileParent) return
     const currentFolder = folderRef.current
-    const favoriteFiles = new Set(settings?.favoriteFiles ?? [])
+    const favoriteFiles = new Set((settings?.favoriteFiles ?? []).map(documentPathKey))
     const favoriteRoot = (settings?.favorites ?? [])
       .filter(
         (favorite) =>
-          !favoriteFiles.has(favorite) &&
-          (tabPath.startsWith(favorite + '/') || tabPath.startsWith(favorite + '\\')),
+          !favoriteFiles.has(documentPathKey(favorite)) && isPathAtOrUnder(tabPath, favorite),
       )
       .sort((left, right) => right.length - left.length)[0]
-    const isUnderFolder =
-      currentFolder?.root &&
-      (tabPath.startsWith(currentFolder.root + '/') ||
-        tabPath.startsWith(currentFolder.root + '\\'))
+    const isUnderFolder = currentFolder?.root && isPathAtOrUnder(tabPath, currentFolder.root)
     try {
-      if (favoriteRoot && favoriteRoot !== currentFolder?.root) {
+      if (
+        favoriteRoot &&
+        (!currentFolder?.root || !sameDocumentPath(favoriteRoot, currentFolder.root))
+      ) {
         const result = await desktop.openFolderPath(favoriteRoot)
         if (!result) return
         setFolder(result)
@@ -552,18 +510,9 @@ export default function App(): JSX.Element {
   const openSidebarSettings = useCallback(() => setSettingsSection('appearance'), [])
   const changeFileTreeSort = useCallback(
     (fileTreeSort: FileTreeSort): void => {
-      void saveSettings({ fileTreeSort }).catch((error: unknown) => {
-        const readOnly =
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === ErrorCode.SETTINGS_READ_ONLY
-        void desktop.notify(
-          readOnly ? t('这些设置来自更高版本，当前以只读模式运行。') : t('设置保存失败。'),
-        )
-      })
+      persistUserSettings({ fileTreeSort })
     },
-    [saveSettings],
+    [persistUserSettings],
   )
   const [showFind, setShowFind] = useState(false)
   const [findFocusRequest, setFindFocusRequest] = useState(0)
@@ -663,49 +612,17 @@ export default function App(): JSX.Element {
 
   const updater = useUpdater(settings?.checkUpdatesOnStartup ?? false)
 
-  // ── Session restore (runs once after settings load) ─────────────────────
-  const didRestore = useRef(false)
-  const [sessionRestored, setSessionRestored] = useState(false)
-  useEffect(() => {
-    if (!settingsReady || didRestore.current || !settings) return
-    didRestore.current = true
-    void (async () => {
-      try {
-        if (settings.session?.folder) {
-          const res = await desktop.openFolderPath(settings.session.folder)
-          if (res) setFolder(res)
-        }
-        if (settings.session?.openFiles?.length) {
-          await restoreSession(settings.session.openFiles, settings.session.activePath)
-        }
-      } catch (error) {
-        console.error('Session restore failed', error)
-      } finally {
-        // Do not persist an empty session while asynchronous restoration is
-        // still reading files. That race previously erased the saved tabs.
-        setSessionRestored(true)
-      }
-    })()
-  }, [settingsReady, settings, restoreSession])
-
-  // ── Session persistence (debounced, single write) ─────────────────────────
-  // Stable key that only changes when tab paths change, not when content changes.
-  // Without this, every keystroke would restart the 500ms debounce timer.
-  const tabPathsKey = tabs.map((t) => t.path ?? '').join('\0')
-  useEffect(() => {
-    if (!sessionRestored) return
-    const session = {
-      folder: folder?.root ?? null,
-      openFiles: tabs.filter((t) => t.path).map((t) => t.path as string),
-      activePath: activeTab?.path ?? null,
-    }
-    const timer = setTimeout(() => {
-      void desktop
-        .setSettings({ session })
-        .catch((error: unknown) => console.error('Session persistence failed', error))
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [folder?.root, tabPathsKey, activeTab?.path, sessionRestored])
+  // ── Workspace session restore and persistence ──────────────────────────────
+  useWorkspaceSession({
+    settingsReady,
+    settings,
+    folder,
+    tabs,
+    activePath: activeTab?.path ?? null,
+    setFolder,
+    restoreSession,
+    persistSettings: persistSettingsInBackground,
+  })
 
   // ── Folder open ────────────────────────────────────────────────────────────
   const openFolder = useCallback(async () => {
@@ -861,6 +778,7 @@ export default function App(): JSX.Element {
   // ── File tree ops ──────────────────────────────────────────────────────────
   const {
     treeKey,
+    treeError,
     refreshTree,
     openNodeContext,
     openRootContext,
@@ -982,24 +900,20 @@ export default function App(): JSX.Element {
   }, [activeId, outlineVisible, updateActiveOutline])
   // frecency 衰减用的“现在”，周期刷新；避免在 render 里直接调 Date.now()。
   const now = useNow()
+  const openTabPathsKey = tabs
+    .flatMap((tab) => (tab.path ? [documentPathKey(tab.path)] : []))
+    .join('\0')
   // 文件树排序上下文：排序方式 + 置顶集合 + frecency 排名。集中在此计算，
   // 逐层传给 FileTree，避免每个节点各自重建 Set/Map。排名由 recentDocs 语料按
   // frecency 算出，并把当前打开的 tab 加权置顶（见 lib/recency.ts）。
   const fileTreeSortContext = useMemo<SortContext>(() => {
-    const openTabPaths = new Set(tabs.flatMap((tab) => (tab.path ? [tab.path] : [])))
+    const openTabPaths = new Set(openTabPathsKey ? openTabPathsKey.split('\0') : [])
     return {
       mode: settings?.fileTreeSort ?? 'default',
-      pinnedPaths: new Set(settings?.pinnedFolders ?? []),
+      pinnedPaths: new Set((settings?.pinnedFolders ?? []).map(documentPathKey)),
       recentRank: buildFrecencyRank(settings?.recentDocs ?? [], now, openTabPaths),
     }
-  }, [
-    settings?.fileTreeSort,
-    settings?.pinnedFolders,
-    settings?.recentDocs,
-    tabPathsKey,
-    tabs,
-    now,
-  ])
+  }, [settings?.fileTreeSort, settings?.pinnedFolders, settings?.recentDocs, openTabPathsKey, now])
 
   // 「最近打开」门控：切到某文件后停留 ≥ DWELL_MS 才算一次有效打开，过滤误点/快速翻找。
   // 依赖 activeTab?.path（原始值，敲字不变），切换/关闭会清掉计时器。
@@ -1106,13 +1020,14 @@ export default function App(): JSX.Element {
   // ── Search ─────────────────────────────────────────────────────────────────
   const openSearchResult = useCallback(
     async (path: string, query: string, lineNumber?: number, matchIndex?: number) => {
-      await openPath(path, baseName(path))
+      const result = await openPath(path, baseName(path))
+      if (result.kind === 'failed' || stateRef.current.activeId !== result.tabId) return
       setFindInitial(query)
       setFindLine(lineNumber)
       setFindMatchIndex(matchIndex)
       setShowFind(true)
     },
-    [openPath],
+    [openPath, stateRef],
   )
 
   // ── Outline navigation ─────────────────────────────────────────────────────
@@ -1160,7 +1075,7 @@ export default function App(): JSX.Element {
         // navigating a different tab if the user switches again immediately.
         window.setTimeout(() => {
           const current = stateRef.current.tabs.find((tab) => tab.id === stateRef.current.activeId)
-          if (current?.path !== target.path) return
+          if (!current?.path || !sameDocumentPath(current.path, target.path)) return
           const view = cm6ActiveViewBridge.get()
           if (!view) return
           const offset = headingOffsetForAnchor(view.state.doc.toString(), target.anchor ?? '')
@@ -1223,7 +1138,7 @@ export default function App(): JSX.Element {
               : { ...tab, path: newPath, name: baseName(newPath) || res.name }
           }),
         )
-        if (originalDir && originalDir !== targetDirPath) {
+        if (originalDir && !sameDocumentPath(originalDir, targetDirPath)) {
           pushUndo({ type: 'move', fromPath: res.path, toDir: originalDir, toName: originalName })
         }
         await refreshTree()
@@ -1346,7 +1261,11 @@ export default function App(): JSX.Element {
               <aside className="sidebar">
                 <SidebarHeader
                   folder={folder}
-                  isFav={folder ? settings.favorites.includes(folder.root) : false}
+                  isFav={
+                    folder
+                      ? settings.favorites.some((path) => sameDocumentPath(path, folder.root))
+                      : false
+                  }
                   canUndo={canUndo}
                   controls={sidebarControls}
                   onUndo={undoLastOp}
@@ -1403,6 +1322,7 @@ export default function App(): JSX.Element {
                 onFavoritesCollapsedChange={setFavoritesCollapsed}
                 onFavoriteContext={openFavoriteContext}
                 onRefresh={refreshTree}
+                treeError={treeError}
                 onNodeContext={openNodeContext}
                 onRootContext={openRootContext}
                 onMove={moveTreeItem}
@@ -1426,7 +1346,7 @@ export default function App(): JSX.Element {
                   reloadKey={searchReloadKey}
                   focusRequest={searchFocusRequest}
                   initialMode={settings.folderSearchMode}
-                  onModeChange={(folderSearchMode) => void saveSettings({ folderSearchMode })}
+                  onModeChange={(folderSearchMode) => persistUserSettings({ folderSearchMode })}
                   onOpenResult={openSearchResult}
                   onOpenFile={(path) => void openPath(path, baseName(path))}
                   onBack={() => setSearchView(false)}
@@ -1773,6 +1693,8 @@ export default function App(): JSX.Element {
             updater={updater}
             customCssError={customCssError}
             backgroundImageError={backgroundImageError}
+            saving={settingsSaving}
+            saveError={settingsSaveError}
             initialSection={settingsSection}
             activeDocument={
               activeTab && !isTextKind
@@ -1788,16 +1710,7 @@ export default function App(): JSX.Element {
                       tagCollapsedKeys: groupKeysToCollapse(tagTree, patch.tagDefaultExpandDepth),
                     }
                   : patch
-              void saveSettings(effective).catch((error: unknown) => {
-                const readOnly =
-                  typeof error === 'object' &&
-                  error !== null &&
-                  'code' in error &&
-                  error.code === ErrorCode.SETTINGS_READ_ONLY
-                void desktop.notify(
-                  readOnly ? t('这些设置来自更高版本，当前以只读模式运行。') : t('设置保存失败。'),
-                )
-              })
+              persistUserSettings(effective)
             }}
             onClose={() => setSettingsSection(null)}
           />

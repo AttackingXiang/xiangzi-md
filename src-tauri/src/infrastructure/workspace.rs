@@ -2,6 +2,7 @@ use crate::domain::{
     error::{AppError, AppResult},
     models::{FileNode, FileVersion, Folder, ListedFile, ListedFilesResponse, OpenedFile},
 };
+use crate::infrastructure::file_capabilities::{is_known_text, is_markdown};
 use crate::infrastructure::settings::AppSettings;
 use std::{
     collections::{HashMap, HashSet},
@@ -19,39 +20,6 @@ use walkdir::WalkDir;
 pub use super::workspace_mutations::{create_dir, create_file, move_item, rename_item, trash_item};
 pub use super::workspace_write::{write_binary_file, write_file, write_streamed_file};
 
-const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx"];
-/// 文件树里可见并可用 TextEditor 打开的纯文本 / 代码 / 结构化数据扩展名。
-/// 与前端 src/lib/textLanguages.ts 的映射保持一致；无扩展名文件另行放行。
-const TEXT_EXTENSIONS: &[&str] = &[
-    "txt",
-    "log",
-    "json",
-    "json5",
-    "jsonc",
-    "yaml",
-    "yml",
-    "toml",
-    "ini",
-    "conf",
-    "properties",
-    "xml",
-    "svg",
-    "html",
-    "htm",
-    "css",
-    "js",
-    "mjs",
-    "cjs",
-    "jsx",
-    "ts",
-    "mts",
-    "cts",
-    "tsx",
-    "sql",
-    "sh",
-    "bash",
-    "zsh",
-];
 const IGNORED_DIRECTORIES: &[&str] = &[".git", "node_modules", ".DS_Store", ".obsidian", ".vscode"];
 const MAX_LISTED_FILES: usize = 8_000;
 pub(super) const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
@@ -168,38 +136,6 @@ pub(super) fn file_name(path: &Path) -> String {
         .and_then(OsStr::to_str)
         .unwrap_or_default()
         .to_owned()
-}
-
-fn is_markdown(path: &Path) -> bool {
-    path.extension()
-        .and_then(OsStr::to_str)
-        .is_some_and(|extension| {
-            MARKDOWN_EXTENSIONS
-                .iter()
-                .any(|candidate| extension.eq_ignore_ascii_case(candidate))
-        })
-}
-
-/// 该文件能否在编辑器里打开（Markdown 走 Milkdown，其余走 TextEditor）。这决定
-/// FileNode.openable，与「是否出现在文件树」相互独立：show_all_files 打开时二进制
-/// 文件也会显示，但 openable 仍为 false。
-fn is_known_text(path: &Path) -> bool {
-    // Dotfiles (.gitignore, .env, etc.) are hidden by OS convention;
-    // the user opts in to seeing them via show_all_files.
-    let name = path.file_name().and_then(OsStr::to_str).unwrap_or("");
-    if name.starts_with('.') {
-        return false;
-    }
-    match path.extension().and_then(OsStr::to_str) {
-        // 无扩展名文件（README、LICENSE、Makefile 等）当作纯文本放行。
-        None => true,
-        Some(extension) => {
-            is_markdown(path)
-                || TEXT_EXTENSIONS
-                    .iter()
-                    .any(|candidate| extension.eq_ignore_ascii_case(candidate))
-        }
-    }
 }
 
 fn modified_nanos(metadata: &fs::Metadata) -> u64 {
@@ -457,13 +393,13 @@ pub fn read_binary_file(app: &AppHandle, path: &Path, max_bytes: u64) -> AppResu
     Ok(bytes)
 }
 
-/// 递归收集 root 下的 markdown 文件及其 mtime，供前端做增量扫描。抽成不依赖
+/// 递归收集 root 下可编辑文本文件及其 mtime，供前端做增量扫描。抽成不依赖
 /// AppHandle 的纯函数，方便单测直接用临时目录验证，不必搭建 Tauri app 环境。
-fn walk_markdown_files(root: &Path) -> ListedFilesResponse {
-    walk_markdown_files_with_limit(root, MAX_LISTED_FILES)
+fn walk_openable_text_files(root: &Path) -> ListedFilesResponse {
+    walk_openable_text_files_with_limit(root, MAX_LISTED_FILES)
 }
 
-fn walk_markdown_files_with_limit(root: &Path, limit: usize) -> ListedFilesResponse {
+fn walk_openable_text_files_with_limit(root: &Path, limit: usize) -> ListedFilesResponse {
     let mut files = Vec::new();
     let mut truncated = false;
     for entry in WalkDir::new(root)
@@ -473,7 +409,7 @@ fn walk_markdown_files_with_limit(root: &Path, limit: usize) -> ListedFilesRespo
         .filter_map(Result::ok)
     {
         let path = entry.path();
-        if entry.file_type().is_file() && is_markdown(path) {
+        if entry.file_type().is_file() && is_known_text(path) {
             if files.len() >= limit {
                 truncated = true;
                 break;
@@ -502,16 +438,17 @@ fn walk_markdown_files_with_limit(root: &Path, limit: usize) -> ListedFilesRespo
 
 pub fn list_files(app: &AppHandle, root: &Path) -> AppResult<ListedFilesResponse> {
     ensure_allowed(app, root)?;
-    Ok(walk_markdown_files(root))
+    Ok(walk_openable_text_files(root))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        document_scope_dirs, is_ignored, is_known_text, validate_binary_size, walk_markdown_files,
+        document_scope_dirs, is_ignored, validate_binary_size, walk_openable_text_files,
         AppSettings, WorkspaceVisibility, DOC_ANCESTOR_AUTH_LEVELS,
     };
     use crate::domain::safe_name::validate_item_name;
+    use crate::infrastructure::file_capabilities::is_known_text;
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -601,29 +538,30 @@ mod tests {
     }
 
     #[test]
-    fn walk_markdown_files_reports_a_positive_mtime_for_each_listed_file() {
+    fn openable_text_listing_reports_mtime_and_includes_non_markdown() {
         // 前端用 modified_nanos 判断“文件是否变过”来决定要不要重读全文；这里只
         // 验证真实文件系统写入的 mtime 会被如实带出来（非 0 兜底值）。
         let directory = tempfile::tempdir().expect("temp workspace directory");
         std::fs::write(directory.path().join("note.md"), "# hello").expect("write note.md");
+        std::fs::write(directory.path().join("config.json"), "{}").expect("write config.json");
         std::fs::write(directory.path().join("ignored.png"), b"not markdown")
             .expect("write ignored.png");
 
-        let response = walk_markdown_files(directory.path());
+        let response = walk_openable_text_files(directory.path());
 
         assert!(!response.truncated);
-        assert_eq!(response.items.len(), 1);
+        assert_eq!(response.items.len(), 2);
         assert_eq!(response.items[0].name, "note.md");
-        assert!(response.items[0].modified_nanos > 0);
+        assert!(response.items.iter().all(|item| item.modified_nanos > 0));
     }
 
     #[test]
-    fn reports_when_the_markdown_listing_is_truncated() {
+    fn reports_when_the_text_listing_is_truncated() {
         let directory = tempfile::tempdir().expect("temp workspace directory");
         for name in ["a.md", "b.md", "c.md"] {
             std::fs::write(directory.path().join(name), "# note").expect("write markdown");
         }
-        let response = super::walk_markdown_files_with_limit(directory.path(), 2);
+        let response = super::walk_openable_text_files_with_limit(directory.path(), 2);
         assert_eq!(response.items.len(), 2);
         assert!(response.truncated);
     }

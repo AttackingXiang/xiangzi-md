@@ -5,6 +5,7 @@ import { tabsAreClean } from '../lib/documentState'
 import { clipboardCmd } from '../lib/editorCommands'
 import { t } from '../lib/i18n'
 import { isShortcutAction, type ShortcutAction } from '../lib/shortcuts'
+import { hasOpenModal } from '../lib/modalStack'
 import { desktop } from '../platform'
 import type { Tab } from '../types'
 import type { RecentItemsSection } from '../components/RecentItemsDialog'
@@ -24,6 +25,10 @@ interface NativeIntegrationOptions {
   saveTab: (id: string) => Promise<boolean>
   onAddProperty: () => void
   onShowRecentItems: (section: RecentItemsSection) => void
+}
+
+export function shouldHandleNativeMenuAction(action: string): boolean {
+  return action === 'query-dirty' || !hasOpenModal()
 }
 
 export function useNativeIntegration(options: NativeIntegrationOptions): void {
@@ -48,6 +53,11 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
   useEffect(
     () =>
       desktop.onMenuAction((action) => {
+        // Native application-menu events do not carry a DOM target, so guard
+        // them at the same modal boundary as keyboard shortcuts. The quit
+        // handshake remains available because the OS may request it at any
+        // time and still needs the dirty-document decision flow.
+        if (!shouldHandleNativeMenuAction(action)) return
         if (isShortcutAction(action)) {
           dispatchShortcut(action)
           return

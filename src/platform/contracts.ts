@@ -374,19 +374,19 @@ export interface DesktopPort {
   ): Promise<() => void>
   readBinaryFile(path: string, maxBytes?: number): Promise<Uint8Array>
   readRemoteImage(url: string): Promise<Uint8Array>
+  /** Grants asset-protocol access only after a native folder picker authorized the directory. */
+  authorizeAssetSearchDirectory(path: string): Promise<void>
   writeFile(
     path: string,
     content: string,
     expectedVersion: FileVersion | null,
     force?: boolean,
   ): Promise<WriteResult>
-  saveAs(
-    content: string,
-    suggestedName?: string,
-  ): Promise<Pick<OpenedFile, 'path' | 'name' | 'version'> | null>
+  /** Select a Save As target without writing it; callers validate tab/path conflicts first. */
+  pickSavePath(suggestedName?: string, extensions?: readonly string[]): Promise<string | null>
   readDir(path: string): Promise<FileNode[]>
-  // modifiedNanos 供 useTagIndex 做增量扫描：mtime 没变的文件直接复用缓存的
-  // meta，不再逐个 readFile 把全文内容搬过 IPC。
+  // modifiedNanos 供标签索引与命令面板做增量/轻量扫描：mtime 没变的文件可复用
+  // 缓存，不再逐个 readFile 把全文内容搬过 IPC。
   listFiles(root: string): Promise<ListedFilesResponse>
   createFile(dirPath: string, fileName: string): Promise<{ path: string; name: string }>
   createDir(dirPath: string, name: string): Promise<{ path: string; name: string }>

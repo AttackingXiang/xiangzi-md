@@ -218,6 +218,36 @@
   scrollbar-color: transparent transparent;
 }
 
+.tree-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 2px 2px 8px;
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--danger, #c43d3d) 35%, transparent);
+  border-radius: 6px;
+  color: var(--danger, #c43d3d);
+  font-size: 12px;
+}
+
+.tree-error-banner button,
+.tree-error-row {
+  border: 0;
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tree-error-row {
+  display: block;
+  width: 100%;
+  min-height: 26px;
+  padding-right: 8px;
+  text-align: left;
+}
+
 /* 文件树的横、纵滚动条仅在鼠标或键盘焦点位于树内时显示。 */
 .sidebar-body::-webkit-scrollbar-thumb {
   background: transparent;

@@ -16,7 +16,16 @@ import {
 } from '../lib/saveState'
 import { activateOrAppendTab, mergeRestoredTabs, tabsAreClean } from '../lib/documentState'
 import { isKnownTextFile } from '../lib/fileKind'
+import { saveDialogExtensions } from '../lib/fileCapabilities'
+import type { DraftRecoveryResult } from '../lib/draftRecovery'
 import { applyLineEnding, detectLineEnding } from '../lib/lineEndings'
+import { baseName } from '../lib/path'
+import { documentPathKey, sameDocumentPath } from '../lib/pathIdentity'
+import {
+  saveOperationSucceeded,
+  type OpenPathResult,
+  type SaveOperationResult,
+} from '../lib/documentOperations'
 import type { Draft, Tab } from '../types'
 import type { OpenedFile } from '../platform/contracts'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
@@ -63,8 +72,8 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   const [tabs, setTabsState] = useState<Tab[]>([])
   const [activeId, setActiveIdState] = useState<string | null>(null)
   const openQueueRef = useRef(createTaskQueue(2))
-  const openTasksRef = useRef(new InFlightCache<string, void>())
-  const saveQueuesRef = useRef(new LatestTaskQueue<string, boolean>())
+  const openTasksRef = useRef(new InFlightCache<string, OpenPathResult>())
+  const saveQueuesRef = useRef(new LatestTaskQueue<string, SaveOperationResult>())
   const savedVersionsRef = useRef(new Map<string, Tab['version']>())
   const savingIdsRef = useRef(new Set<string>())
   const pendingExternalChecksRef = useRef(new Set<string>())
@@ -121,41 +130,55 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   const activeTab = tabs.find((t) => t.id === activeId) ?? null
 
   const activateOpenedTab = useCallback(
-    (tab: Tab): void => {
-      const result = activateOrAppendTab(stateRef.current.tabs, tab)
+    (tab: Tab): { tabId: string; opened: boolean } => {
+      const current = stateRef.current.tabs
+      const result = activateOrAppendTab(current, tab)
       setTabs(result.tabs)
       setActiveId(result.activeId)
+      return { tabId: result.activeId ?? tab.id, opened: result.tabs !== current }
     },
     [setActiveId, setTabs],
   )
 
   // ── Open ───────────────────────────────────────────────────────────────────
   const openPath = useCallback(
-    (path: string, name?: string): Promise<void> => {
-      const existing = stateRef.current.tabs.find((t) => t.path === path)
+    (path: string, name?: string): Promise<OpenPathResult> => {
+      const existing = stateRef.current.tabs.find(
+        (tab) => tab.path && sameDocumentPath(tab.path, path),
+      )
       if (existing) {
         setActiveId(existing.id)
-        return Promise.resolve()
+        return Promise.resolve({
+          kind: 'activated',
+          path: existing.path ?? path,
+          tabId: existing.id,
+        })
       }
       // 与文件树 openable / Rust is_known_text 对齐：Markdown、无扩展名、已知文本
       // 才放行。挡住最近文件里已变成二进制/未知类型的陈旧条目，避免误进 TextEditor。
       if (!isKnownTextFile(name ?? path)) {
         void desktop.notify(t('无法打开该类型的文件：\n') + path)
-        return Promise.resolve()
+        return Promise.resolve({ kind: 'failed', path, reason: 'unsupported' })
       }
-      return openTasksRef.current.getOrCreate(path, () =>
+      return openTasksRef.current.getOrCreate(documentPathKey(path), () =>
         openQueueRef.current.run(async () => {
-          const openedWhileQueued = stateRef.current.tabs.find((tab) => tab.path === path)
+          const openedWhileQueued = stateRef.current.tabs.find(
+            (tab) => tab.path && sameDocumentPath(tab.path, path),
+          )
           if (openedWhileQueued) {
             setActiveId(openedWhileQueued.id)
-            return
+            return {
+              kind: 'activated',
+              path: openedWhileQueued.path ?? path,
+              tabId: openedWhileQueued.id,
+            }
           }
           let file
           try {
             file = await desktop.readFile(path)
           } catch {
             await desktop.notify(t('文件不存在或无法打开：\n') + path)
-            return
+            return { kind: 'failed', path, reason: 'unavailable' }
           }
           const tab: Tab = {
             id: newTabId(),
@@ -168,7 +191,12 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
             version: file.version,
             eol: detectLineEnding(file.content),
           }
-          activateOpenedTab(tab)
+          const activation = activateOpenedTab(tab)
+          return {
+            kind: activation.opened ? 'opened' : 'activated',
+            path: file.path,
+            tabId: activation.tabId,
+          }
         }),
       )
     },
@@ -178,13 +206,15 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   const openFile = useCallback(async () => {
     const file = await desktop.openFile()
     if (!file) return
-    const existing = stateRef.current.tabs.find((t) => t.path === file.path)
+    const existing = stateRef.current.tabs.find(
+      (tab) => tab.path && sameDocumentPath(tab.path, file.path),
+    )
     if (existing) {
       setActiveId(existing.id)
       return
     }
-    await openTasksRef.current.getOrCreate(file.path, () => {
-      activateOpenedTab({
+    await openTasksRef.current.getOrCreate(documentPathKey(file.path), () => {
+      const activation = activateOpenedTab({
         id: newTabId(),
         path: file.path,
         name: file.name,
@@ -195,7 +225,11 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         version: file.version,
         eol: detectLineEnding(file.content),
       })
-      return Promise.resolve()
+      return Promise.resolve({
+        kind: activation.opened ? 'opened' : 'activated',
+        path: file.path,
+        tabId: activation.tabId,
+      })
     })
   }, [activateOpenedTab, setActiveId])
 
@@ -217,11 +251,11 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   }, [lang, setActiveId, setTabs])
 
   const recoverDraft = useCallback(
-    async (draft: Draft): Promise<void> => {
+    async (draft: Draft): Promise<DraftRecoveryResult> => {
       const existingById = stateRef.current.tabs.find((tab) => tab.id === draft.id)
       if (existingById) {
         setActiveId(existingById.id)
-        return
+        return { kind: 'recovered', tabId: existingById.id }
       }
 
       // A draft without a path came from a genuinely new, never-saved document.
@@ -243,17 +277,23 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         }
         setTabs((previous) => [...previous, tab])
         setActiveId(tab.id)
-        return
+        return { kind: 'recovered', tabId: tab.id }
       }
 
       // Session restoration can already have opened the original path with a new
       // runtime tab id. Reuse that tab instead of creating a duplicate.
-      const existingByPath = stateRef.current.tabs.find((tab) => tab.path === draft.path)
+      const existingByPath = stateRef.current.tabs.find(
+        (tab) => tab.path && sameDocumentPath(tab.path, draft.path!),
+      )
       if (existingByPath) {
         if (existingByPath.dirty) {
           setActiveId(existingByPath.id)
           void desktop.notify(t('该文档已有未保存的修改，草稿未自动恢复，避免覆盖当前内容。'))
-          return
+          return {
+            kind: 'blocked',
+            tabId: existingByPath.id,
+            reason: 'dirty-existing-path',
+          }
         }
         setTabs((previous) =>
           previous.map((tab) =>
@@ -261,17 +301,23 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
           ),
         )
         setActiveId(existingByPath.id)
-        return
+        return { kind: 'recovered', tabId: existingByPath.id }
       }
 
       try {
         const file = await desktop.readFile(draft.path)
-        const openedWhileReading = stateRef.current.tabs.find((tab) => tab.path === file.path)
+        const openedWhileReading = stateRef.current.tabs.find(
+          (tab) => tab.path && sameDocumentPath(tab.path, file.path),
+        )
         if (openedWhileReading) {
           if (openedWhileReading.dirty) {
             setActiveId(openedWhileReading.id)
             void desktop.notify(t('该文档已有未保存的修改，草稿未自动恢复，避免覆盖当前内容。'))
-            return
+            return {
+              kind: 'blocked',
+              tabId: openedWhileReading.id,
+              reason: 'dirty-existing-path',
+            }
           }
           setTabs((previous) =>
             previous.map((tab) =>
@@ -279,7 +325,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
             ),
           )
           setActiveId(openedWhileReading.id)
-          return
+          return { kind: 'recovered', tabId: openedWhileReading.id }
         }
 
         const tab: Tab = {
@@ -297,6 +343,7 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         savedVersionsRef.current.set(tab.id, file.version)
         setTabs((previous) => [...previous, tab])
         setActiveId(tab.id)
+        return { kind: 'recovered', tabId: tab.id }
       } catch {
         // The original file may have been deleted or moved. Preserve the draft
         // rather than losing it, but make it an explicit Save As recovery tab.
@@ -314,82 +361,106 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         }
         setTabs((previous) => [...previous, tab])
         setActiveId(tab.id)
+        return { kind: 'recovered', tabId: tab.id }
       }
     },
     [lang, setActiveId, setTabs],
   )
 
   // ── Save ───────────────────────────────────────────────────────────────────
+  const performSaveAs = useCallback(
+    async (id: string): Promise<SaveOperationResult> => {
+      const initial = stateRef.current.tabs.find((tab) => tab.id === id)
+      if (!initial) return { kind: 'failed', tabId: id }
+      try {
+        const path = await desktop.pickSavePath(initial.name, saveDialogExtensions(initial.name))
+        if (!path) return { kind: 'cancelled', tabId: id }
+
+        // The save dialog can stay open while queued document work settles. Read
+        // the authoritative tab again after selection so the newest content is
+        // what lands at the chosen target.
+        const tab = stateRef.current.tabs.find((current) => current.id === id)
+        if (!tab) return { kind: 'cancelled', tabId: id }
+        const duplicate = stateRef.current.tabs.find(
+          (current) =>
+            current.id !== id && current.path !== null && sameDocumentPath(current.path, path),
+        )
+        if (duplicate) {
+          setActiveId(duplicate.id)
+          await desktop.notify(t('该文件已在另一个标签页中打开，未执行另存为。'))
+          return { kind: 'duplicate', path, tabId: id, existingTabId: duplicate.id }
+        }
+
+        const result = await desktop.writeFile(
+          path,
+          applyLineEnding(tab.content, tab.eol ?? 'lf'),
+          null,
+          true,
+        )
+        savedVersionsRef.current.set(id, result.version)
+        setTabs((previous) =>
+          previous.map((current) =>
+            current.id === id
+              ? {
+                  ...completeSave(current, tab, result.version),
+                  path,
+                  recoverySourcePath: null,
+                  name: baseName(path) || tab.name,
+                }
+              : current,
+          ),
+        )
+        recordDocEdit(path)
+        return { kind: 'saved', path, tabId: id }
+      } catch {
+        await desktop.notify(t('另存为失败。'))
+        return { kind: 'failed', tabId: id }
+      }
+    },
+    [recordDocEdit, setActiveId, setTabs],
+  )
+
   const performSave = useCallback(
-    async (id: string, force = false): Promise<boolean> => {
+    async (id: string, force = false): Promise<SaveOperationResult> => {
       const tab = stateRef.current.tabs.find((t) => t.id === id)
-      if (!tab) return false
+      if (!tab) return { kind: 'failed', tabId: id }
+      if (!tab.path) return performSaveAs(id)
       if (tab.path) savingIdsRef.current.add(id)
       try {
-        if (tab.path) {
-          // tab.content/mirror 一律是编辑器吐出的纯 LF 文本；磁盘要按这份文档原始
-          // 的换行风格落盘，写盘前统一在这里转换一次。转换只影响发给 desktop 的
-          // 字节，Tab 状态本身（content/savedContent，供 dirty 判断/编辑器回填用）
-          // 继续保持纯 LF，完全不感知这层还原。
-          const diskContent = applyLineEnding(tab.content, tab.eol ?? 'lf')
-          let result
-          try {
-            // force：批量标签改名等场景直接覆盖，跳过版本冲突检查/弹窗——写的正是
-            // 我们刚基于当前内容改出来的结果，不该被“外部修改”挡住而悄悄存不进去。
-            result = await desktop.writeFile(
-              tab.path,
-              diskContent,
-              savedVersionsRef.current.get(id) ?? tab.version,
-              force,
-            )
-          } catch (error) {
-            const code =
-              typeof error === 'object' && error !== null && 'code' in error
-                ? String(error.code)
-                : ''
-            if (code !== ErrorCode.FILE_CONFLICT) throw error
-            pendingExternalChecksRef.current.add(id)
-            return false
-          }
-          savedVersionsRef.current.set(id, result.version)
-          setTabs((prev) =>
-            prev.map((current) =>
-              current.id === id ? completeSave(current, tab, result.version) : current,
-            ),
+        // tab.content/mirror 一律是编辑器吐出的纯 LF 文本；磁盘要按这份文档原始
+        // 的换行风格落盘，写盘前统一在这里转换一次。转换只影响发给 desktop 的
+        // 字节，Tab 状态本身继续保持纯 LF。
+        const diskContent = applyLineEnding(tab.content, tab.eol ?? 'lf')
+        let result
+        try {
+          result = await desktop.writeFile(
+            tab.path,
+            diskContent,
+            savedVersionsRef.current.get(id) ?? tab.version,
+            force,
           )
-          recordDocEdit(tab.path)
-          return true
-        } else {
-          const result = await desktop.saveAs(
-            applyLineEnding(tab.content, tab.eol ?? 'lf'),
-            tab.name,
-          )
-          if (result) {
-            savedVersionsRef.current.set(id, result.version)
-            setTabs((prev) =>
-              prev.map((t) =>
-                t.id === id
-                  ? {
-                      ...completeSave(t, tab, result.version),
-                      path: result.path,
-                      recoverySourcePath: null,
-                      name: result.name,
-                    }
-                  : t,
-              ),
-            )
-            recordDocEdit(result.path)
-            return true
-          }
-          return false
+        } catch (error) {
+          const code =
+            typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : ''
+          if (code !== ErrorCode.FILE_CONFLICT) throw error
+          pendingExternalChecksRef.current.add(id)
+          return { kind: 'conflict', tabId: id }
         }
+        savedVersionsRef.current.set(id, result.version)
+        setTabs((prev) =>
+          prev.map((current) =>
+            current.id === id ? completeSave(current, tab, result.version) : current,
+          ),
+        )
+        recordDocEdit(tab.path)
+        return { kind: 'saved', path: tab.path, tabId: id }
       } catch {
         await desktop.notify(
           getLang() === 'en'
             ? `Failed to save "${tab.name}". Check disk space or permissions.`
             : `保存「${tab.name}」失败，请检查磁盘空间或权限。`,
         )
-        return false
+        return { kind: 'failed', tabId: id }
       } finally {
         if (tab.path) {
           savingIdsRef.current.delete(id)
@@ -399,12 +470,12 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         }
       }
     },
-    [recordDocEdit, setTabs],
+    [performSaveAs, recordDocEdit, setTabs],
   )
 
   const saveTab = useCallback(
-    (id: string, force = false): Promise<boolean> =>
-      saveQueuesRef.current.run(id, () => performSave(id, force)),
+    async (id: string, force = false): Promise<boolean> =>
+      saveOperationSucceeded(await saveQueuesRef.current.run(id, () => performSave(id, force))),
     [performSave],
   )
 
@@ -430,33 +501,9 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
   )
 
   const saveAsTab = useCallback(
-    async (id: string) => {
-      const tab = stateRef.current.tabs.find((t) => t.id === id)
-      if (!tab) return
-      try {
-        // 另存为沿用这份文档已判定的换行风格；tab.content 本身继续保持纯 LF。
-        const result = await desktop.saveAs(applyLineEnding(tab.content, tab.eol ?? 'lf'), tab.name)
-        if (result) {
-          savedVersionsRef.current.set(id, result.version)
-          setTabs((prev) =>
-            prev.map((t) =>
-              t.id === id
-                ? {
-                    ...completeSave(t, tab, result.version),
-                    path: result.path,
-                    recoverySourcePath: null,
-                    name: result.name,
-                  }
-                : t,
-            ),
-          )
-          recordDocEdit(result.path)
-        }
-      } catch {
-        await desktop.notify(t('另存为失败。'))
-      }
-    },
-    [recordDocEdit, setTabs],
+    (id: string): Promise<SaveOperationResult> =>
+      saveQueuesRef.current.run(id, () => performSaveAs(id)),
+    [performSaveAs],
   )
 
   // ── Content update ─────────────────────────────────────────────────────────
@@ -469,12 +516,13 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
 
   const checkExternalChanges = useCallback(
     async (paths?: readonly string[]): Promise<void> => {
-      const targets = paths ? new Set(paths) : null
+      const targets = paths ? new Set(paths.map(documentPathKey)) : null
       const candidates = stateRef.current.tabs.filter(
-        (tab) => tab.path && tab.version && (!targets || targets.has(tab.path)),
+        (tab) => tab.path && tab.version && (!targets || targets.has(documentPathKey(tab.path))),
       )
       await mapWithConcurrencyLimit(candidates, 4, async (candidate) => {
         if (!candidate.path) return
+        const candidatePath = candidate.path
         if (savingIdsRef.current.has(candidate.id)) {
           pendingExternalChecksRef.current.add(candidate.id)
           return
@@ -484,13 +532,13 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
 
         let file: OpenedFile | undefined
         try {
-          file = await desktop.readFile(candidate.path)
+          file = await desktop.readFile(candidatePath)
         } catch {
           let shouldMarkUnavailable = true
           // Atomic-save tools can briefly remove the destination between rename events.
           await new Promise((resolve) => setTimeout(resolve, 180))
           try {
-            file = await desktop.readFile(candidate.path)
+            file = await desktop.readFile(candidatePath)
             shouldMarkUnavailable = false
           } catch {
             // The banner deliberately says unavailable rather than assuming deletion.
@@ -499,7 +547,9 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
             if (externalCheckSequenceRef.current.get(candidate.id) !== checkSequence) return
             setTabs((previous) =>
               previous.map((tab) =>
-                tab.id === candidate.id && tab.path === candidate.path
+                tab.id === candidate.id &&
+                tab.path !== null &&
+                sameDocumentPath(tab.path, candidatePath)
                   ? markExternalUnavailable(tab, Date.now())
                   : tab,
               ),
@@ -514,7 +564,12 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
         let reloadedVersion: Tab['version'] = null
         setTabs((previous) =>
           previous.map((tab) => {
-            if (tab.id !== candidate.id || tab.path !== candidate.path) return tab
+            if (
+              tab.id !== candidate.id ||
+              tab.path === null ||
+              !sameDocumentPath(tab.path, candidatePath)
+            )
+              return tab
             const result = reconcileExternalRead(tab, file)
             if (result.outcome === 'reloaded') {
               reloadedName = tab.name
@@ -540,13 +595,19 @@ export function useFileOps({ lang, requestCloseDecision, recordDocEdit }: Deps) 
     async (id: string): Promise<void> => {
       const tab = stateRef.current.tabs.find((item) => item.id === id)
       if (!tab?.path) return
+      const requestedPath = tab.path
       const requestedRevision = tab.revision
       try {
-        const file = await desktop.readFile(tab.path)
+        const file = await desktop.readFile(requestedPath)
         let accepted = false
         setTabs((previous) =>
           previous.map((current) => {
-            if (current.id !== id || current.path !== tab.path) return current
+            if (
+              current.id !== id ||
+              current.path === null ||
+              !sameDocumentPath(current.path, requestedPath)
+            )
+              return current
             if (current.revision !== requestedRevision) {
               return reconcileExternalRead(current, file).tab
             }

@@ -23,6 +23,19 @@ describe('document tab lifecycle', () => {
     expect(result.activeId).toBe('existing')
   })
 
+  it('deduplicates Windows path casing during open and session restoration', () => {
+    const current = [tab('existing', 'C:\\Notes\\A.md')]
+    expect(activateOrAppendTab(current, tab('duplicate', 'c:\\notes\\a.md')).tabs).toBe(current)
+    const restored = mergeRestoredTabs(
+      current,
+      [tab('restored', 'c:\\NOTES\\A.MD')],
+      'c:\\notes\\a.md',
+      null,
+    )
+    expect(restored.tabs).toBe(current)
+    expect(restored.activeId).toBe('existing')
+  })
+
   it('appends a genuinely new path exactly once', () => {
     const current = [tab('a', '/notes/a.md')]
     const first = activateOrAppendTab(current, tab('b', '/notes/b.md'))

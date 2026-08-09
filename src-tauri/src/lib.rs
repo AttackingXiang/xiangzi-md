@@ -53,6 +53,7 @@ pub fn run() {
             commands::app::open_with_default,
             commands::assets::read_remote_image,
             commands::assets::allow_background_image,
+            commands::assets::authorize_asset_search_directory,
             commands::workspace::open_folder_path,
             commands::workspace::open_containing_folder,
             commands::workspace::read_file,

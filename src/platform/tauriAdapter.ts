@@ -14,7 +14,6 @@ import type {
   AppSettings,
   DesktopPort,
   FileNode,
-  FileVersion,
   FolderSearchMode,
   Folder,
   InstalledTheme,
@@ -27,6 +26,7 @@ import type {
 } from './contracts'
 import { exportFileStem, imageFormatForPath } from '../lib/exportFormat'
 import { dirName } from '../lib/path'
+import { OPENABLE_DOCUMENT_EXTENSIONS } from '../lib/fileCapabilities'
 import { themeInstallRequestFromUrl } from '../lib/themeMarketplace'
 
 const MAX_BINARY_READ_BYTES = 64 * 1024 * 1024
@@ -147,41 +147,7 @@ export const tauriDesktopAdapter: DesktopPort = {
       filters: [
         {
           name: 'Text',
-          extensions: [
-            'md',
-            'markdown',
-            'mdown',
-            'mkd',
-            'mdx',
-            'txt',
-            'log',
-            'json',
-            'json5',
-            'jsonc',
-            'yaml',
-            'yml',
-            'toml',
-            'ini',
-            'conf',
-            'properties',
-            'xml',
-            'svg',
-            'html',
-            'htm',
-            'css',
-            'js',
-            'mjs',
-            'cjs',
-            'jsx',
-            'ts',
-            'mts',
-            'cts',
-            'tsx',
-            'sql',
-            'sh',
-            'bash',
-            'zsh',
-          ],
+          extensions: [...OPENABLE_DOCUMENT_EXTENSIONS],
         },
         { name: 'All Files', extensions: ['*'] },
       ],
@@ -208,25 +174,17 @@ export const tauriDesktopAdapter: DesktopPort = {
   },
   readRemoteImage: async (url) =>
     new Uint8Array(await invoke<ArrayBuffer>('read_remote_image', { url })),
+  authorizeAssetSearchDirectory: (path) => invoke('authorize_asset_search_directory', { path }),
   writeFile: (path, content, expectedVersion, force = false) =>
     invoke('write_file', { path, content, expectedVersion, force }),
-  saveAs: async (content, suggestedName) => {
+  pickSavePath: async (suggestedName, extensions = []) => {
     const path = await save({
       defaultPath: suggestedName ?? 'untitled.md',
-      filters: [{ name: 'Markdown', extensions: ['md'] }],
+      ...(extensions.length > 0
+        ? { filters: [{ name: 'Document', extensions: [...extensions] }] }
+        : {}),
     })
-    if (!path) return null
-    const result = await invoke<{ path: string; version: FileVersion }>('write_file', {
-      path,
-      content,
-      expectedVersion: null,
-      force: true,
-    })
-    return {
-      path,
-      name: path.split(/[\\/]/).pop() ?? suggestedName ?? 'untitled.md',
-      version: result.version,
-    }
+    return path || null
   },
   readDir: (path) => invoke<FileNode[]>('read_dir', { path }),
   listFiles: (root) => invoke('list_files', { root }),

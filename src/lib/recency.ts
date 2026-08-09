@@ -1,4 +1,5 @@
 import type { RecentDoc } from '../types'
+import { documentPathKey } from './pathIdentity'
 
 /**
  * 「最近活跃度」打分中枢——文件树与标签树的智能排序共用这一处权重与公式，避免复制漂移。
@@ -53,13 +54,16 @@ export function buildFrecencyRank(
   openTabPaths?: ReadonlySet<string>,
 ): Map<string, number> {
   const scored = new Map<string, number>()
+  const openKeys = openTabPaths ? new Set(Array.from(openTabPaths, documentPathKey)) : undefined
   for (const doc of docs) {
-    scored.set(doc.path, frecencyScore(doc, now, openTabPaths?.has(doc.path) ?? false))
+    const key = documentPathKey(doc.path)
+    scored.set(key, frecencyScore(doc, now, openKeys?.has(key) ?? false))
   }
   // 已打开但还没被记录的文件（例如刚点开还没到停留阈值）：也给满额打开加成，别落榜。
   if (openTabPaths) {
     for (const path of openTabPaths) {
-      if (!scored.has(path)) scored.set(path, OPEN_TAB_BONUS)
+      const key = documentPathKey(path)
+      if (!scored.has(key)) scored.set(key, OPEN_TAB_BONUS)
     }
   }
 

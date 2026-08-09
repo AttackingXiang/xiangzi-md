@@ -1,3 +1,4 @@
+use super::file_capabilities::is_known_text;
 use std::{
     path::Path,
     sync::{
@@ -8,7 +9,6 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 
-const SUPPORTED_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx", "txt"];
 const MAX_PENDING_OPEN_PATHS: usize = 32;
 
 pub struct LifecycleState {
@@ -73,9 +73,7 @@ impl LifecycleState {
 
 pub fn supported_path(raw: &str) -> Option<String> {
     let path = Path::new(raw);
-    let extension = path.extension()?.to_str()?.to_ascii_lowercase();
-    (path.is_file() && SUPPORTED_EXTENSIONS.contains(&extension.as_str()))
-        .then(|| path.to_string_lossy().into_owned())
+    (path.is_file() && is_known_text(path)).then(|| path.to_string_lossy().into_owned())
 }
 
 pub fn queue_supported_arguments(app: &AppHandle, arguments: impl IntoIterator<Item = String>) {
@@ -102,16 +100,14 @@ pub fn reveal_main_window(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::SUPPORTED_EXTENSIONS;
+    use crate::infrastructure::file_capabilities::{MARKDOWN_EXTENSIONS, TEXT_EXTENSIONS};
 
     #[test]
-    fn supported_extensions_cover_legacy_formats() {
-        assert!(SUPPORTED_EXTENSIONS.contains(&"md"));
-        assert!(SUPPORTED_EXTENSIONS.contains(&"markdown"));
-        assert!(SUPPORTED_EXTENSIONS.contains(&"mdown"));
-        assert!(SUPPORTED_EXTENSIONS.contains(&"mkd"));
-        assert!(SUPPORTED_EXTENSIONS.contains(&"mdx"));
-        assert!(SUPPORTED_EXTENSIONS.contains(&"txt"));
-        assert!(!SUPPORTED_EXTENSIONS.contains(&"html"));
+    fn external_open_uses_the_full_editor_manifest() {
+        assert!(MARKDOWN_EXTENSIONS.contains(&"mdown"));
+        assert!(MARKDOWN_EXTENSIONS.contains(&"mdx"));
+        assert!(TEXT_EXTENSIONS.contains(&"txt"));
+        assert!(TEXT_EXTENSIONS.contains(&"html"));
+        assert!(TEXT_EXTENSIONS.contains(&"tsx"));
     }
 }

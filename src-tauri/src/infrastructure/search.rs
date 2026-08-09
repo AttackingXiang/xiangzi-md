@@ -3,10 +3,9 @@ use crate::{
         error::AppResult,
         models::{SearchMatch, SearchResponse, SearchResult},
     },
-    infrastructure::workspace::ensure_allowed,
+    infrastructure::{file_capabilities::is_known_text, workspace::ensure_allowed},
 };
 use std::{
-    ffi::OsStr,
     fs,
     path::Path,
     sync::{
@@ -78,16 +77,6 @@ impl SearchToken {
     }
 }
 
-fn is_markdown(path: &Path) -> bool {
-    path.extension()
-        .and_then(OsStr::to_str)
-        .is_some_and(|extension| {
-            ["md", "markdown", "mdown", "mkd", "mdx"]
-                .iter()
-                .any(|candidate| extension.eq_ignore_ascii_case(candidate))
-        })
-}
-
 pub fn search_in_folder(
     app: &AppHandle,
     root: &Path,
@@ -146,7 +135,7 @@ pub fn search_in_folder(
             reason = Some("file_limit".to_owned());
             break;
         }
-        if !entry.file_type().is_file() || !is_markdown(entry.path()) {
+        if !entry.file_type().is_file() || !is_known_text(entry.path()) {
             continue;
         }
         file_count += 1;
@@ -239,14 +228,17 @@ pub fn search_in_folder(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_markdown, SearchCancellation};
+    use super::SearchCancellation;
+    use crate::infrastructure::file_capabilities::is_known_text;
     use std::path::Path;
 
     #[test]
-    fn markdown_filter_is_case_insensitive() {
-        assert!(is_markdown(Path::new("README.MD")));
-        assert!(is_markdown(Path::new("page.markdown")));
-        assert!(!is_markdown(Path::new("page.html")));
+    fn search_filter_includes_every_editable_text_format() {
+        assert!(is_known_text(Path::new("README.MD")));
+        assert!(is_known_text(Path::new("page.markdown")));
+        assert!(is_known_text(Path::new("page.html")));
+        assert!(is_known_text(Path::new("app.ts")));
+        assert!(!is_known_text(Path::new("photo.png")));
     }
 
     #[test]

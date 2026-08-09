@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { desktop } from '../../platform'
 import { mapWithConcurrencyLimit } from '../../lib/asyncPool'
+import { documentPathKey, sameDocumentPath } from '../../lib/pathIdentity'
 import { documentMetaFromMarkdown, MARKDOWN_EXTENSION_RE, tagKey } from './frontmatter'
 import type { DocumentMeta, TagIndex } from './types'
 
@@ -50,8 +51,9 @@ export function planScan(
   const toRead: Array<{ path: string; name: string }> = []
   const listedPaths = new Set<string>()
   for (const file of files) {
-    listedPaths.add(file.path)
-    const entry = cache.get(file.path)
+    const key = documentPathKey(file.path)
+    listedPaths.add(key)
+    const entry = cache.get(key)
     if (entry && entry.modifiedNanos === file.modifiedNanos) {
       cached.push(entry.meta)
     } else {
@@ -75,7 +77,7 @@ export function useTagIndex(root: string | null, reloadKey: number) {
   const [refreshVersion, setRefreshVersion] = useState(0)
   const scanIdRef = useRef(0)
   const previousRootRef = useRef<string | null>(null)
-  // path -> 上次读到的 mtime + 解析出的 meta。key 用 path 而不是 name 或
+  // path identity -> 上次读到的 mtime + 解析出的 meta。key 用规范化路径而不是 name 或
   // path+mtime 组合：path 在一次会话内唯一标识一个文件，重命名/移动会产生
   // 新 path（旧 path 随后在 stalePaths 里被剔除），mtime 只是判断"要不要重读"
   // 的附加条件，不需要也不应该参与 key（否则同一文件 mtime 一变就会在 Map
@@ -89,7 +91,11 @@ export function useTagIndex(root: string | null, reloadKey: number) {
     // 只有 root 真的换了（切换文件夹）才清空，避免 reloadKey/refreshVersion
     // 触发的同文件夹重扫也跟着闪一下空列表。root 从一个文件夹切到另一个时，
     // 不清空的话会在新文件夹的扫描结果回来之前，一直显示旧文件夹的标签/文档。
-    const rootChanged = previousRootRef.current !== root
+    const previousRoot = previousRootRef.current
+    const rootChanged =
+      previousRoot !== null && root !== null
+        ? !sameDocumentPath(previousRoot, root)
+        : previousRoot !== root
     previousRootRef.current = root
     if (!root) {
       setDocuments([])
@@ -134,7 +140,7 @@ export function useTagIndex(root: string | null, reloadKey: number) {
             // 这次写入不看 scanId 是否仍是最新：无论本次扫描是否已被更晚触发的扫描
             // 超越，这里记的都是刚刚真实读到的磁盘内容，天然幂等、随时可信，写入
             // 缓存没有风险。
-            cacheRef.current.set(opened.path, {
+            cacheRef.current.set(documentPathKey(opened.path), {
               modifiedNanos: opened.version.modifiedNanos,
               meta,
             })
@@ -185,10 +191,10 @@ export function useTagIndex(root: string | null, reloadKey: number) {
    */
   const upsertDocument = useCallback((document: DocumentMeta, modifiedNanos?: number): void => {
     if (modifiedNanos !== undefined) {
-      cacheRef.current.set(document.path, { modifiedNanos, meta: document })
+      cacheRef.current.set(documentPathKey(document.path), { modifiedNanos, meta: document })
     }
     setDocuments((current) => {
-      const withoutCurrent = current.filter((item) => item.path !== document.path)
+      const withoutCurrent = current.filter((item) => !sameDocumentPath(item.path, document.path))
       return [...withoutCurrent, document].sort(
         (a, b) => b.updatedAt - a.updatedAt || a.title.localeCompare(b.title),
       )

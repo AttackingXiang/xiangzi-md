@@ -4,6 +4,8 @@ import { setLang } from '../lib/i18n'
 import { bytesToBlobUrl } from '../lib/backgroundImage'
 import { applyThemeShade } from '../lib/themeShade'
 import { applySearchFocusEffect } from '../lib/searchFocusEffect'
+import { SettingsPersistenceQueue } from '../lib/settingsPersistence'
+import { isPathAtOrUnder, replacePathPrefix, sameDocumentPath } from '../lib/pathIdentity'
 import type { AppSettings, RecentDoc } from '../types'
 
 /** frecency 语料库上限，与 Rust 端 MAX_RECENT_DOCS 保持一致。 */
@@ -12,11 +14,6 @@ const RECENT_DOCS_CAP = 100
 const RECENT_ITEMS_CAP = 100
 /** 同一文件在此毫秒数内重复触发只刷新时间、不累加 openCount，避免切 tab 反复计数。 */
 const OPEN_COUNT_COOLDOWN_MS = 60_000
-
-/** candidate 是否等于 base，或位于 base 目录之下（兼容 '/' 与 '\\' 分隔符）。 */
-function isPathAtOrUnder(candidate: string, base: string): boolean {
-  return candidate === base || candidate.startsWith(base + '/') || candidate.startsWith(base + '\\')
-}
 
 /** 按最近打开时间倒序截断到上限，并派生出最近文件列表。 */
 function normalizeRecentDocs(docs: RecentDoc[]): {
@@ -40,9 +37,18 @@ export function useSettings() {
   const [settingsReady, setSettingsReady] = useState(false)
   const [customCssError, setCustomCssError] = useState(false)
   const [backgroundImageError, setBackgroundImageError] = useState(false)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsSaveError, setSettingsSaveError] = useState(false)
   const [themeRenderVersion, setThemeRenderVersion] = useState(0)
   const backgroundImageUrlRef = useRef<string | null>(null)
-  const languageSaveRevisionRef = useRef(0)
+  const settingsRevisionRef = useRef(0)
+  const pendingUserSavesRef = useRef(0)
+  const settingsPersistenceRef = useRef<SettingsPersistenceQueue<AppSettings> | null>(null)
+  if (!settingsPersistenceRef.current) {
+    settingsPersistenceRef.current = new SettingsPersistenceQueue((patch) =>
+      desktop.setSettings(patch),
+    )
+  }
 
   useEffect(() => {
     void desktop
@@ -181,6 +187,16 @@ export function useSettings() {
     }
   }, [settings?.backgroundImagePath])
 
+  // Persisted settings identify intended search roots, but never grant access
+  // by themselves. Re-establish the asset-protocol scope only when the native
+  // persisted fs scope still proves that the user selected each directory.
+  useEffect(() => {
+    if (!settings) return
+    for (const path of settings.assetSearchPaths) {
+      void desktop.authorizeAssetSearchDirectory(path).catch(() => {})
+    }
+  }, [settings?.assetSearchPaths])
+
   // 图片本身用固定图层展示（见 foundation.css 的 body::before），这里额外算出
   // 一个 0-1 的无单位系数，供编辑器正文表面按同一强度变半透明，让图片透出来。
   useEffect(() => {
@@ -213,234 +229,282 @@ export function useSettings() {
   }, [settings?.themeShade, settings?.theme])
 
   // ── Mutations ──────────────────────────────────────────────────────────────
-  const saveSettings = useCallback(async (patch: Partial<AppSettings>): Promise<AppSettings> => {
-    const language = patch.language
-    const languageRevision = language === undefined ? null : ++languageSaveRevisionRef.current
-
-    if (language !== undefined) {
-      // Apply language changes before persistence completes. Calling setLang
-      // first is important: the state update causes the render, while setLang
-      // itself intentionally does not have a React subscription.
-      setLang(language)
-      setSettings((previous) => (previous ? { ...previous, language } : previous))
-    }
-
-    try {
-      const next = await desktop.setSettings(patch)
-      if (languageRevision !== null && languageRevision !== languageSaveRevisionRef.current) {
-        return next
-      }
-      setLang(next.language)
-      setSettings(next)
-      return next
-    } catch (error) {
-      if (languageRevision !== null && languageRevision === languageSaveRevisionRef.current) {
-        // Restore the persisted value when an optimistic language update fails.
-        // Reading it back also handles two rapid language changes where an
-        // earlier request may have succeeded or failed independently.
-        try {
-          const persisted = await desktop.getSettings()
-          if (languageRevision === languageSaveRevisionRef.current) {
-            setLang(persisted.language)
-            setSettings(persisted)
-          }
-        } catch {
-          // Keep the optimistic value if the authoritative settings cannot be
-          // read; the caller still receives and reports the original error.
-        }
-      }
-      throw error
-    }
+  const applyAuthoritativeSettings = useCallback((next: AppSettings): void => {
+    setLang(next.language)
+    setSettings(next)
   }, [])
+
+  const restorePersistedSettings = useCallback(
+    async (revision: number): Promise<void> => {
+      try {
+        const persisted = await desktop.getSettings()
+        if (revision === settingsRevisionRef.current) applyAuthoritativeSettings(persisted)
+      } catch {
+        // Keep the optimistic value when the authoritative settings cannot be
+        // read; the original write error is still reported by the caller.
+      }
+    },
+    [applyAuthoritativeSettings],
+  )
+
+  const persistInBackground = useCallback(
+    (patch: Partial<AppSettings>, context: string): void => {
+      const revision = ++settingsRevisionRef.current
+      void settingsPersistenceRef
+        .current!.enqueue(patch)
+        .then((next) => {
+          if (revision === settingsRevisionRef.current) applyAuthoritativeSettings(next)
+        })
+        .catch((error: unknown) => {
+          console.error(context, error)
+          if (revision === settingsRevisionRef.current) void restorePersistedSettings(revision)
+        })
+    },
+    [applyAuthoritativeSettings, restorePersistedSettings],
+  )
+
+  const saveSettings = useCallback(
+    async (patch: Partial<AppSettings>): Promise<AppSettings> => {
+      const revision = ++settingsRevisionRef.current
+      pendingUserSavesRef.current += 1
+      setSettingsSaving(true)
+      setSettingsSaveError(false)
+      if (patch.language !== undefined) setLang(patch.language)
+      setSettings((previous) => (previous ? { ...previous, ...patch } : previous))
+
+      try {
+        const next = await settingsPersistenceRef.current!.enqueue(patch)
+        if (revision === settingsRevisionRef.current) applyAuthoritativeSettings(next)
+        return next
+      } catch (error) {
+        if (revision === settingsRevisionRef.current) {
+          setSettingsSaveError(true)
+          await restorePersistedSettings(revision)
+        }
+        throw error
+      } finally {
+        pendingUserSavesRef.current -= 1
+        if (pendingUserSavesRef.current === 0) setSettingsSaving(false)
+      }
+    },
+    [applyAuthoritativeSettings, restorePersistedSettings],
+  )
 
   // 记录一次「有效打开」：命中则刷新 lastOpened（冷却外才 +1 openCount），否则新建。
   // 同时重算 recentFiles 镜像并持久化。门控（停留够久/首次编辑）在 App 层，这里只落库。
-  const recordDocOpen = useCallback((p: string) => {
-    const nowNanos = Date.now() * 1_000_000
-    const cooldownNanos = OPEN_COUNT_COOLDOWN_MS * 1_000_000
-    setSettings((prev) => {
-      if (!prev) return prev
-      const hit = prev.recentDocs.find((doc) => doc.path === p)
-      const next = hit
-        ? prev.recentDocs.map((doc) =>
-            doc.path === p
-              ? {
-                  ...doc,
-                  openCount:
-                    doc.openCount + (nowNanos - doc.lastOpenedNanos > cooldownNanos ? 1 : 0),
-                  lastOpenedNanos: nowNanos,
-                }
-              : doc,
-          )
-        : [
-            { path: p, openCount: 1, lastOpenedNanos: nowNanos, lastEditedNanos: 0 },
-            ...prev.recentDocs,
-          ]
-      const { recentDocs, recentFiles } = normalizeRecentDocs(next)
-      void desktop
-        .setSettings({ recentDocs, recentFiles })
-        .catch((error: unknown) => console.error('Recent docs persistence failed', error))
-      return { ...prev, recentDocs, recentFiles }
-    })
-  }, [])
+  const recordDocOpen = useCallback(
+    (p: string) => {
+      const nowNanos = Date.now() * 1_000_000
+      const cooldownNanos = OPEN_COUNT_COOLDOWN_MS * 1_000_000
+      setSettings((prev) => {
+        if (!prev) return prev
+        const hit = prev.recentDocs.find((doc) => sameDocumentPath(doc.path, p))
+        const next = hit
+          ? prev.recentDocs.map((doc) =>
+              sameDocumentPath(doc.path, p)
+                ? {
+                    ...doc,
+                    openCount:
+                      doc.openCount + (nowNanos - doc.lastOpenedNanos > cooldownNanos ? 1 : 0),
+                    lastOpenedNanos: nowNanos,
+                  }
+                : doc,
+            )
+          : [
+              { path: p, openCount: 1, lastOpenedNanos: nowNanos, lastEditedNanos: 0 },
+              ...prev.recentDocs,
+            ]
+        const { recentDocs, recentFiles } = normalizeRecentDocs(next)
+        persistInBackground({ recentDocs, recentFiles }, 'Recent docs persistence failed')
+        return { ...prev, recentDocs, recentFiles }
+      })
+    },
+    [persistInBackground],
+  )
 
   // 记录一次编辑/保存：刷新 lastEdited（编辑是强信号，缺记录则连打开一起补上）。
-  const recordDocEdit = useCallback((p: string) => {
-    const nowNanos = Date.now() * 1_000_000
-    setSettings((prev) => {
-      if (!prev) return prev
-      const hit = prev.recentDocs.find((doc) => doc.path === p)
-      const next = hit
-        ? prev.recentDocs.map((doc) =>
-            doc.path === p ? { ...doc, lastEditedNanos: nowNanos } : doc,
-          )
-        : [
-            {
-              path: p,
-              openCount: 1,
-              lastOpenedNanos: nowNanos,
-              lastEditedNanos: nowNanos,
-            },
-            ...prev.recentDocs,
-          ]
-      const { recentDocs, recentFiles } = normalizeRecentDocs(next)
-      void desktop
-        .setSettings({ recentDocs, recentFiles })
-        .catch((error: unknown) => console.error('Recent docs persistence failed', error))
-      return { ...prev, recentDocs, recentFiles }
-    })
-  }, [])
+  const recordDocEdit = useCallback(
+    (p: string) => {
+      const nowNanos = Date.now() * 1_000_000
+      setSettings((prev) => {
+        if (!prev) return prev
+        const hit = prev.recentDocs.find((doc) => sameDocumentPath(doc.path, p))
+        const next = hit
+          ? prev.recentDocs.map((doc) =>
+              sameDocumentPath(doc.path, p) ? { ...doc, lastEditedNanos: nowNanos } : doc,
+            )
+          : [
+              {
+                path: p,
+                openCount: 1,
+                lastOpenedNanos: nowNanos,
+                lastEditedNanos: nowNanos,
+              },
+              ...prev.recentDocs,
+            ]
+        const { recentDocs, recentFiles } = normalizeRecentDocs(next)
+        persistInBackground({ recentDocs, recentFiles }, 'Recent docs persistence failed')
+        return { ...prev, recentDocs, recentFiles }
+      })
+    },
+    [persistInBackground],
+  )
 
   // 重命名/移动文件或文件夹后，改写 recentDocs 里命中的路径（含文件夹前缀下的所有后代）。
-  const recordDocRename = useCallback((oldPath: string, newPath: string) => {
-    setSettings((prev) => {
-      if (!prev) return prev
-      let changed = false
-      const remapped = prev.recentDocs.map((doc) => {
-        if (!isPathAtOrUnder(doc.path, oldPath)) return doc
-        changed = true
-        return { ...doc, path: newPath + doc.path.slice(oldPath.length) }
+  const recordDocRename = useCallback(
+    (oldPath: string, newPath: string) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        let changed = false
+        const remapped = prev.recentDocs.map((doc) => {
+          if (!isPathAtOrUnder(doc.path, oldPath)) return doc
+          changed = true
+          return { ...doc, path: replacePathPrefix(doc.path, oldPath, newPath) }
+        })
+        if (!changed) return prev
+        const { recentDocs, recentFiles } = normalizeRecentDocs(remapped)
+        persistInBackground({ recentDocs, recentFiles }, 'Recent docs persistence failed')
+        return { ...prev, recentDocs, recentFiles }
       })
-      if (!changed) return prev
-      const { recentDocs, recentFiles } = normalizeRecentDocs(remapped)
-      void desktop
-        .setSettings({ recentDocs, recentFiles })
-        .catch((error: unknown) => console.error('Recent docs persistence failed', error))
-      return { ...prev, recentDocs, recentFiles }
-    })
-  }, [])
+    },
+    [persistInBackground],
+  )
 
   // 删除文件或文件夹后，移除 recentDocs 里该路径及其后代的记录。
-  const recordDocRemove = useCallback((p: string) => {
-    setSettings((prev) => {
-      if (!prev) return prev
-      const kept = prev.recentDocs.filter((doc) => !isPathAtOrUnder(doc.path, p))
-      if (kept.length === prev.recentDocs.length) return prev
-      const { recentDocs, recentFiles } = normalizeRecentDocs(kept)
-      void desktop
-        .setSettings({ recentDocs, recentFiles })
-        .catch((error: unknown) => console.error('Recent docs persistence failed', error))
-      return { ...prev, recentDocs, recentFiles }
-    })
-  }, [])
+  const recordDocRemove = useCallback(
+    (p: string) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const kept = prev.recentDocs.filter((doc) => !isPathAtOrUnder(doc.path, p))
+        if (kept.length === prev.recentDocs.length) return prev
+        const { recentDocs, recentFiles } = normalizeRecentDocs(kept)
+        persistInBackground({ recentDocs, recentFiles }, 'Recent docs persistence failed')
+        return { ...prev, recentDocs, recentFiles }
+      })
+    },
+    [persistInBackground],
+  )
 
-  const pushRecentFolder = useCallback((p: string) => {
-    setSettings((prev) => {
-      if (!prev) return prev
-      const recentFolders = [p, ...prev.recentFolders.filter((x) => x !== p)].slice(
-        0,
-        RECENT_ITEMS_CAP,
-      )
-      void desktop
-        .setSettings({ recentFolders })
-        .catch((error: unknown) => console.error('Recent folders persistence failed', error))
-      return { ...prev, recentFolders }
-    })
-  }, [])
+  const pushRecentFolder = useCallback(
+    (p: string) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const recentFolders = [
+          p,
+          ...prev.recentFolders.filter((path) => !sameDocumentPath(path, p)),
+        ].slice(0, RECENT_ITEMS_CAP)
+        persistInBackground({ recentFolders }, 'Recent folders persistence failed')
+        return { ...prev, recentFolders }
+      })
+    },
+    [persistInBackground],
+  )
 
-  const toggleFavorite = useCallback((p: string, isFile = false) => {
-    setSettings((prev) => {
-      if (!prev) return prev
-      const has = prev.favorites.includes(p)
-      const favorites = has ? prev.favorites.filter((x) => x !== p) : [...prev.favorites, p]
-      const currentFavoriteFiles = prev.favoriteFiles ?? []
-      const favoriteFiles = has
-        ? currentFavoriteFiles.filter((x) => x !== p)
-        : isFile
-          ? [...currentFavoriteFiles.filter((x) => x !== p), p]
-          : currentFavoriteFiles.filter((x) => x !== p)
-      const favoriteLabels = { ...prev.favoriteLabels }
-      if (has) delete favoriteLabels[p]
-      void desktop
-        .setSettings({ favorites, favoriteFiles, favoriteLabels })
-        .catch((error: unknown) => console.error('Favorites persistence failed', error))
-      return { ...prev, favorites, favoriteFiles, favoriteLabels }
-    })
-  }, [])
+  const toggleFavorite = useCallback(
+    (p: string, isFile = false) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const existingFavorite = prev.favorites.find((path) => sameDocumentPath(path, p))
+        const has = existingFavorite !== undefined
+        const favorites = has
+          ? prev.favorites.filter((path) => !sameDocumentPath(path, p))
+          : [...prev.favorites, p]
+        const currentFavoriteFiles = prev.favoriteFiles ?? []
+        const favoriteFiles = has
+          ? currentFavoriteFiles.filter((path) => !sameDocumentPath(path, p))
+          : isFile
+            ? [...currentFavoriteFiles.filter((path) => !sameDocumentPath(path, p)), p]
+            : currentFavoriteFiles.filter((path) => !sameDocumentPath(path, p))
+        const favoriteLabels = { ...prev.favoriteLabels }
+        if (has) {
+          for (const path of Object.keys(favoriteLabels)) {
+            if (sameDocumentPath(path, existingFavorite)) delete favoriteLabels[path]
+          }
+        }
+        persistInBackground(
+          { favorites, favoriteFiles, favoriteLabels },
+          'Favorites persistence failed',
+        )
+        return { ...prev, favorites, favoriteFiles, favoriteLabels }
+      })
+    },
+    [persistInBackground],
+  )
 
-  const setFavoritesCollapsed = useCallback((favoritesCollapsed: boolean) => {
-    setSettings((prev) => {
-      if (!prev || prev.favoritesCollapsed === favoritesCollapsed) return prev
-      void desktop
-        .setSettings({ favoritesCollapsed })
-        .catch((error: unknown) => console.error('Favorites state persistence failed', error))
-      return { ...prev, favoritesCollapsed }
-    })
-  }, [])
+  const setFavoritesCollapsed = useCallback(
+    (favoritesCollapsed: boolean) => {
+      setSettings((prev) => {
+        if (!prev || prev.favoritesCollapsed === favoritesCollapsed) return prev
+        persistInBackground({ favoritesCollapsed }, 'Favorites state persistence failed')
+        return { ...prev, favoritesCollapsed }
+      })
+    },
+    [persistInBackground],
+  )
 
-  const togglePinnedFolder = useCallback((path: string) => {
-    setSettings((prev) => {
-      if (!prev) return prev
-      const current = prev.pinnedFolders ?? []
-      const has = current.includes(path)
-      const pinnedFolders = has ? current.filter((x) => x !== path) : [...current, path]
-      void desktop
-        .setSettings({ pinnedFolders })
-        .catch((error: unknown) => console.error('Pinned folders persistence failed', error))
-      return { ...prev, pinnedFolders }
-    })
-  }, [])
+  const togglePinnedFolder = useCallback(
+    (path: string) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const current = prev.pinnedFolders ?? []
+        const has = current.some((currentPath) => sameDocumentPath(currentPath, path))
+        const pinnedFolders = has
+          ? current.filter((currentPath) => !sameDocumentPath(currentPath, path))
+          : [...current, path]
+        persistInBackground({ pinnedFolders }, 'Pinned folders persistence failed')
+        return { ...prev, pinnedFolders }
+      })
+    },
+    [persistInBackground],
+  )
 
-  const togglePinnedTag = useCallback((tagKey: string) => {
-    setSettings((prev) => {
-      if (!prev) return prev
-      const current = prev.pinnedTags ?? []
-      const has = current.includes(tagKey)
-      const pinnedTags = has ? current.filter((x) => x !== tagKey) : [...current, tagKey]
-      void desktop
-        .setSettings({ pinnedTags })
-        .catch((error: unknown) => console.error('Pinned tags persistence failed', error))
-      return { ...prev, pinnedTags }
-    })
-  }, [])
+  const togglePinnedTag = useCallback(
+    (tagKey: string) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const current = prev.pinnedTags ?? []
+        const has = current.includes(tagKey)
+        const pinnedTags = has ? current.filter((x) => x !== tagKey) : [...current, tagKey]
+        persistInBackground({ pinnedTags }, 'Pinned tags persistence failed')
+        return { ...prev, pinnedTags }
+      })
+    },
+    [persistInBackground],
+  )
 
   // 折叠/展开某个标签分组，并把整份折叠集合持久化（含置顶区的 pin: 前缀 key）。
-  const toggleTagCollapsed = useCallback((key: string) => {
-    setSettings((prev) => {
-      if (!prev) return prev
-      const current = prev.tagCollapsedKeys ?? []
-      const has = current.includes(key)
-      const tagCollapsedKeys = has ? current.filter((x) => x !== key) : [...current, key]
-      void desktop
-        .setSettings({ tagCollapsedKeys })
-        .catch((error: unknown) => console.error('Tag collapse persistence failed', error))
-      return { ...prev, tagCollapsedKeys }
-    })
-  }, [])
+  const toggleTagCollapsed = useCallback(
+    (key: string) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const current = prev.tagCollapsedKeys ?? []
+        const has = current.includes(key)
+        const tagCollapsedKeys = has ? current.filter((x) => x !== key) : [...current, key]
+        persistInBackground({ tagCollapsedKeys }, 'Tag collapse persistence failed')
+        return { ...prev, tagCollapsedKeys }
+      })
+    },
+    [persistInBackground],
+  )
 
-  const setFavoriteLabel = useCallback((p: string, value: string) => {
-    setSettings((prev) => {
-      if (!prev || !prev.favorites.includes(p)) return prev
-      const label = Array.from(value.trim()).slice(0, 80).join('')
-      const favoriteLabels = { ...prev.favoriteLabels }
-      if (label) favoriteLabels[p] = label
-      else delete favoriteLabels[p]
-      void desktop
-        .setSettings({ favoriteLabels })
-        .catch((error: unknown) => console.error('Favorite label persistence failed', error))
-      return { ...prev, favoriteLabels }
-    })
-  }, [])
+  const setFavoriteLabel = useCallback(
+    (p: string, value: string) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        const favoritePath = prev.favorites.find((path) => sameDocumentPath(path, p))
+        if (!favoritePath) return prev
+        const label = Array.from(value.trim()).slice(0, 80).join('')
+        const favoriteLabels = { ...prev.favoriteLabels }
+        for (const path of Object.keys(favoriteLabels)) {
+          if (sameDocumentPath(path, favoritePath)) delete favoriteLabels[path]
+        }
+        if (label) favoriteLabels[favoritePath] = label
+        persistInBackground({ favoriteLabels }, 'Favorite label persistence failed')
+        return { ...prev, favoriteLabels }
+      })
+    },
+    [persistInBackground],
+  )
 
   return {
     settings,
@@ -448,7 +512,10 @@ export function useSettings() {
     themeRenderVersion,
     customCssError,
     backgroundImageError,
+    settingsSaving,
+    settingsSaveError,
     saveSettings,
+    persistSettingsInBackground: persistInBackground,
     recordDocOpen,
     recordDocEdit,
     recordDocRename,

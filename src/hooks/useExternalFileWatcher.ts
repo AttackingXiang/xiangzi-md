@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { desktop } from '../platform'
 import { dirName } from '../lib/path'
 import type { Tab } from '../types'
+import { documentPathKey } from '../lib/pathIdentity'
 
 interface Options {
   tabs: Tab[]
@@ -13,7 +14,13 @@ const WATCH_DELAY_MS = 350
 const FOCUS_THROTTLE_MS = 5_000
 
 function uniqueOpenPaths(tabs: readonly Tab[]): string[] {
-  return [...new Set(tabs.flatMap((tab) => (tab.path ? [tab.path] : [])))].sort()
+  const paths = new Map<string, string>()
+  for (const tab of tabs) {
+    if (tab.path) paths.set(documentPathKey(tab.path), tab.path)
+  }
+  return [...paths.values()].sort((left, right) =>
+    documentPathKey(left).localeCompare(documentPathKey(right)),
+  )
 }
 
 /**

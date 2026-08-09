@@ -8,6 +8,7 @@ import {
   type ShortcutAction,
 } from '../lib/shortcuts'
 import { tableCellCommandBridge, type TableCellInlineFormat } from '../lib/tableCellCommandBridge'
+import { hasOpenModal } from '../lib/modalStack'
 
 const TABLE_CELL_FORMAT_ACTIONS = new Set<ShortcutAction>(
   SHORTCUT_DEFINITIONS.filter(({ category }) => category === 'format').map(({ id }) => id),
@@ -89,6 +90,15 @@ export function useAppShortcuts(
             return
           }
         }
+        // A modal owns the application command scope. Consume matching app
+        // shortcuts so actions such as New, Close or Save cannot mutate the
+        // document hidden behind it. Native editing shortcuts are not part of
+        // this map, and literal select-all in a text control was handled above.
+        if (hasOpenModal()) {
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
         if (
           action === 'select-all' &&
           binding === 'Mod+A' &&
@@ -103,6 +113,8 @@ export function useAppShortcuts(
       // A changed shortcut must also disable its old binding before Milkdown or
       // a browser default sees it.
       if (replacedDefaults.has(binding)) {
+        if (hasOpenModal() && binding === 'Mod+A' && focusedTextControlForSelectAll(event.target))
+          return
         event.preventDefault()
         event.stopPropagation()
       }
