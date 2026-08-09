@@ -36,10 +36,12 @@ function dragEvent(type: string, dataTransfer: DataTransfer, clientX: number): D
 
 function renderTabBar({
   enableWindowDragging = true,
+  showLeadingControls = false,
   onMoveTab = vi.fn(),
   onSelect = vi.fn(),
 }: {
   enableWindowDragging?: boolean
+  showLeadingControls?: boolean
   onMoveTab?: (fromIndex: number, insertAt: number) => void
   onSelect?: (id: string) => void
 } = {}): HTMLElement {
@@ -59,7 +61,7 @@ function renderTabBar({
         outlineVisible={false}
         onToggleSidebar={vi.fn()}
         onToggleOutline={vi.fn()}
-        showLeadingControls={false}
+        showLeadingControls={showLeadingControls}
         enableWindowDragging={enableWindowDragging}
       />,
     ),
@@ -73,6 +75,16 @@ afterEach(() => {
 })
 
 describe('TabBar window and tab dragging', () => {
+  it('keeps macOS leading controls at the compact window-bar size', () => {
+    const host = renderTabBar({ showLeadingControls: true })
+    const leadingButton = host.querySelector<HTMLButtonElement>('.tabbar > .icon-btn')
+    const leadingIcon = leadingButton?.querySelector('svg')
+
+    expect(leadingButton?.classList.contains('sm')).toBe(true)
+    expect(leadingIcon?.getAttribute('width')).toBe('15')
+    expect(leadingIcon?.getAttribute('height')).toBe('15')
+  })
+
   it('starts window dragging only from enabled blank space', () => {
     const enabledHost = renderTabBar()
     const enabledBar = enabledHost.querySelector<HTMLElement>('.tabbar')

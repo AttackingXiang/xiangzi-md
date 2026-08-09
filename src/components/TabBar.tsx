@@ -51,6 +51,8 @@ const TabBar = memo(function TabBar({
 
   const [hasOverflow, setHasOverflow] = useState(false)
   const [showOverflow, setShowOverflow] = useState(false)
+  const leadingControlClassName = enableWindowDragging ? 'icon-btn sm' : 'icon-btn'
+  const leadingControlIconSize = enableWindowDragging ? 15 : 16
 
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<{ tabId: string; side: 'left' | 'right' } | null>(
@@ -228,16 +230,20 @@ const TabBar = memo(function TabBar({
       {showLeadingControls && (
         <>
           <button
-            className="icon-btn"
+            className={leadingControlClassName}
             title={`${t('切换侧边栏')} (${shortcutHint('Mod+\\')})`}
             onClick={onToggleSidebar}
           >
-            <PanelLeft size={16} />
+            <PanelLeft size={leadingControlIconSize} />
           </button>
 
           {showRevealButton && onRevealFile && activeHasPath && (
-            <button className="icon-btn" title={t('在文件夹中定位')} onClick={onRevealFile}>
-              <MapPin size={16} />
+            <button
+              className={leadingControlClassName}
+              title={t('在文件夹中定位')}
+              onClick={onRevealFile}
+            >
+              <MapPin size={leadingControlIconSize} />
             </button>
           )}
         </>
