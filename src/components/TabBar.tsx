@@ -139,23 +139,27 @@ const TabBar = memo(function TabBar({
   }
 
   const handleDragStart = (event: React.DragEvent<HTMLDivElement>, tabId: string): void => {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData(TAB_DRAG_MIME, tabId)
     setDraggedTabId(tabId)
+    event.dataTransfer.effectAllowed = 'move'
+    try {
+      event.dataTransfer.setData(TAB_DRAG_MIME, tabId)
+    } catch {
+      // React state remains the source of truth when WebKit rejects custom MIME types.
+    }
   }
 
   const handleDragOver = (event: React.DragEvent, tabId: string): void => {
-    if (!isInternalTabDrag(event)) return
     event.preventDefault()
+    if (!isInternalTabDrag(event)) return
     event.dataTransfer.dropEffect = 'move'
     const side = dropSide(event)
     if (dropTarget?.tabId !== tabId || dropTarget.side !== side) setDropTarget({ tabId, side })
   }
 
   const handleDrop = (event: React.DragEvent, targetTabId: string): void => {
-    if (!isInternalTabDrag(event)) return
     event.preventDefault()
-    const sourceTabId = event.dataTransfer.getData(TAB_DRAG_MIME) || draggedTabId
+    if (!isInternalTabDrag(event)) return
+    const sourceTabId = draggedTabId || event.dataTransfer.getData(TAB_DRAG_MIME)
     const fromGlobal = tabs.findIndex((tab) => tab.id === sourceTabId)
     const targetGlobal = tabs.findIndex((tab) => tab.id === targetTabId)
     if (fromGlobal !== -1 && targetGlobal !== -1) {
