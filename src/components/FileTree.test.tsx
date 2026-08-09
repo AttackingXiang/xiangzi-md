@@ -117,3 +117,30 @@ describe('FileTree lazy directory errors', () => {
     expect(host.textContent).toContain('notes.md')
   })
 })
+
+describe('FileTree pointer dragging', () => {
+  it('clears a native text selection as soon as a row receives pointer down', () => {
+    renderTree()
+    const row = host.querySelector<HTMLElement>('.tree-row.dir')
+    const name = host.querySelector<HTMLElement>('.tree-name')
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.selectNodeContents(name as Node)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    expect(selection?.toString()).toBe('images')
+
+    act(() => {
+      row?.dispatchEvent(
+        new PointerEvent('pointerdown', {
+          bubbles: true,
+          button: 0,
+          clientX: 20,
+          clientY: 20,
+        }),
+      )
+    })
+
+    expect(selection?.rangeCount).toBe(0)
+  })
+})

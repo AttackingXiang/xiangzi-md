@@ -243,6 +243,11 @@ const TreeNode = memo(function TreeNode({
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
     if (e.button !== 0 || e.ctrlKey) return
 
+    // Clear a browser-native range before the drag threshold is crossed. Waiting
+    // until the first pointermove is too late on WebKit: a short movement can
+    // briefly select the file name before the drag state takes over.
+    window.getSelection()?.removeAllRanges()
+
     dragCleanupRef.current?.()
     const payload = { path: node.path, isDir: node.isDir }
     const startX = e.clientX

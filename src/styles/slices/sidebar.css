@@ -21,6 +21,7 @@
   border-right: 1px solid var(--workspace-divider);
   display: flex;
   flex-direction: column;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -296,6 +297,8 @@
   width: max-content;
   min-width: 100%;
   cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .tree-row:active {
@@ -360,11 +363,45 @@
   outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
   outline-offset: -1px;
   color: var(--text);
+  animation: tree-drop-target-pulse 850ms ease-in-out infinite;
 }
 
 .tree-row.dragging {
-  opacity: 0.48;
+  position: relative;
+  z-index: 1;
+  opacity: 0.62;
   background: var(--bg-hover);
+  transform-origin: left center;
+  animation: tree-row-lift 850ms ease-in-out infinite;
+}
+
+@keyframes tree-row-lift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(0.985);
+    box-shadow: 0 2px 7px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  50% {
+    transform: translate3d(3px, -1px, 0) scale(1);
+    box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+}
+
+@keyframes tree-drop-target-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 48%, transparent);
+  }
+  50% {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 78%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-row.dragging,
+  .tree-row.drag-over {
+    animation: none;
+  }
 }
 
 /* Dropping into empty tree space moves the item out to the workspace root. */
