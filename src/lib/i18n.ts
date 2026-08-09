@@ -185,6 +185,7 @@ const EN: Record<string, string> = {
   背景强度: 'Background intensity',
   代码块不透明度: 'Code block opacity',
   窗口控制: 'Window controls',
+  窗口标题栏: 'Window title bar',
   关闭窗口: 'Close window',
   最小化窗口: 'Minimize window',
   最大化窗口: 'Maximize window',

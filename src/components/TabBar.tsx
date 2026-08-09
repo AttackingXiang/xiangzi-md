@@ -4,7 +4,10 @@ import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 import { stripExtension } from '../lib/path'
 import { shortcutHint } from '../lib/shortcuts'
+import { handleWindowDragPointerDown } from '../lib/windowDragRegion'
 import HoverScrollbars from './LazyHoverScrollbars'
+
+export const TAB_DRAG_MIME = 'application/x-xiangzi-tab'
 
 interface Props {
   tabs: Tab[]
@@ -20,6 +23,8 @@ interface Props {
   onRevealFile?: () => void
   activeHasPath?: boolean
   showRevealButton?: boolean
+  showLeadingControls?: boolean
+  enableWindowDragging?: boolean
 }
 
 const TabBar = memo(function TabBar({
@@ -36,6 +41,8 @@ const TabBar = memo(function TabBar({
   onRevealFile,
   activeHasPath,
   showRevealButton = true,
+  showLeadingControls = true,
+  enableWindowDragging = false,
 }: Props): JSX.Element {
   const activeRef = useRef<HTMLDivElement>(null)
   const tabsRef = useRef<HTMLDivElement>(null)
@@ -45,20 +52,31 @@ const TabBar = memo(function TabBar({
   const [hasOverflow, setHasOverflow] = useState(false)
   const [showOverflow, setShowOverflow] = useState(false)
 
-  // Drag state — operates on normalTabs local indices
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [dropTarget, setDropTarget] = useState<{ index: number; side: 'left' | 'right' } | null>(
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ tabId: string; side: 'left' | 'right' } | null>(
     null,
   )
 
   // Split into pinned (locked) and scrollable
   const pinnedTabs = tabs.filter((t) => t.locked)
   const normalTabs = tabs.filter((t) => !t.locked)
+  const firstNormalTabId = normalTabs[0]?.id
+  const normalTabOrderKey = normalTabs.map((tab) => tab.id).join('\u0000')
 
   // Scroll active tab into view (only applies to scrollable area)
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
-  }, [activeId])
+    if (!normalTabOrderKey) return
+    const activeTab = activeRef.current
+    const scrollArea = tabsRef.current
+    if (!activeTab || !scrollArea) return
+
+    if (firstNormalTabId === activeId) {
+      scrollArea.scrollLeft = 0
+      return
+    }
+
+    activeTab.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
+  }, [activeId, firstNormalTabId, normalTabOrderKey])
 
   // Horizontal scroll via wheel on the scrollable area
   useEffect(() => {
@@ -103,50 +121,61 @@ const TabBar = memo(function TabBar({
     return () => document.removeEventListener('mousedown', close, true)
   }, [showOverflow])
 
-  // ── Drag helpers (local to normalTabs) ───────────────────────────────────
+  // ── Drag helpers ──────────────────────────────────────────────────────────
 
-  const handleDragOver = (e: React.DragEvent, localIndex: number): void => {
-    e.preventDefault()
-    if (dragIndex === null) return
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const side = e.clientX < rect.left + rect.width / 2 ? 'left' : 'right'
-    if (dropTarget?.index !== localIndex || dropTarget.side !== side)
-      setDropTarget({ index: localIndex, side })
+  const clearTabDrag = (): void => {
+    setDraggedTabId(null)
+    setDropTarget(null)
   }
 
-  const handleDrop = (e: React.DragEvent, localIndex: number): void => {
-    e.preventDefault()
-    if (dragIndex === null || dropTarget === null) return
-    const localInsertAt = dropTarget.side === 'right' ? localIndex + 1 : localIndex
-    // Convert local indices → global indices in tabs[]
-    const fromGlobal = tabs.findIndex((tb) => tb.id === normalTabs[dragIndex]?.id)
-    const insertGlobal =
-      localInsertAt < normalTabs.length
-        ? tabs.findIndex((tb) => tb.id === normalTabs[localInsertAt]?.id)
-        : tabs.length
-    if (fromGlobal !== -1) onMoveTab(fromGlobal, insertGlobal)
-    setDragIndex(null)
-    setDropTarget(null)
+  const isInternalTabDrag = (event: React.DragEvent): boolean =>
+    draggedTabId !== null || Array.from(event.dataTransfer.types).includes(TAB_DRAG_MIME)
+
+  const dropSide = (event: React.DragEvent): 'left' | 'right' => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return event.clientX < rect.left + rect.width / 2 ? 'left' : 'right'
+  }
+
+  const handleDragStart = (event: React.DragEvent<HTMLDivElement>, tabId: string): void => {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData(TAB_DRAG_MIME, tabId)
+    setDraggedTabId(tabId)
+  }
+
+  const handleDragOver = (event: React.DragEvent, tabId: string): void => {
+    if (!isInternalTabDrag(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    const side = dropSide(event)
+    if (dropTarget?.tabId !== tabId || dropTarget.side !== side) setDropTarget({ tabId, side })
+  }
+
+  const handleDrop = (event: React.DragEvent, targetTabId: string): void => {
+    if (!isInternalTabDrag(event)) return
+    event.preventDefault()
+    const sourceTabId = event.dataTransfer.getData(TAB_DRAG_MIME) || draggedTabId
+    const fromGlobal = tabs.findIndex((tab) => tab.id === sourceTabId)
+    const targetGlobal = tabs.findIndex((tab) => tab.id === targetTabId)
+    if (fromGlobal !== -1 && targetGlobal !== -1) {
+      const insertAt = targetGlobal + (dropSide(event) === 'right' ? 1 : 0)
+      onMoveTab(fromGlobal, insertAt)
+    }
+    clearTabDrag()
   }
 
   // ── Shared tab renderer ───────────────────────────────────────────────────
 
-  const renderTab = (
-    tab: Tab,
-    extra?: React.HTMLAttributes<HTMLDivElement> & { 'data-drag-idx'?: number },
-  ): JSX.Element => {
+  const renderTab = (tab: Tab, extra?: React.HTMLAttributes<HTMLDivElement>): JSX.Element => {
     const isActive = tab.id === activeId
-    const { 'data-drag-idx': localIdx, ...divProps } = extra ?? {}
-    const isDragging = localIdx !== undefined && dragIndex === localIdx
-    const dropLeft =
-      localIdx !== undefined && dropTarget?.index === localIdx && dropTarget.side === 'left'
-    const dropRight =
-      localIdx !== undefined && dropTarget?.index === localIdx && dropTarget.side === 'right'
+    const isDragging = draggedTabId === tab.id
+    const dropLeft = dropTarget?.tabId === tab.id && dropTarget.side === 'left'
+    const dropRight = dropTarget?.tabId === tab.id && dropTarget.side === 'right'
 
     return (
       <div
         key={tab.id}
         ref={isActive ? activeRef : undefined}
+        data-window-drag-interactive
         className={[
           'tab',
           isActive ? 'active' : '',
@@ -174,7 +203,7 @@ const TabBar = memo(function TabBar({
             onClose(tab.id)
           }
         }}
-        {...divProps}
+        {...extra}
       >
         <span className="tab-name">{stripExtension(tab.name)}</span>
         <button
@@ -192,19 +221,26 @@ const TabBar = memo(function TabBar({
   }
 
   return (
-    <div className="tabbar">
-      <button
-        className="icon-btn drag-none"
-        title={`${t('切换侧边栏')} (${shortcutHint('Mod+\\')})`}
-        onClick={onToggleSidebar}
-      >
-        <PanelLeft size={16} />
-      </button>
+    <div
+      className="tabbar"
+      onPointerDown={enableWindowDragging ? handleWindowDragPointerDown : undefined}
+    >
+      {showLeadingControls && (
+        <>
+          <button
+            className="icon-btn"
+            title={`${t('切换侧边栏')} (${shortcutHint('Mod+\\')})`}
+            onClick={onToggleSidebar}
+          >
+            <PanelLeft size={16} />
+          </button>
 
-      {showRevealButton && onRevealFile && activeHasPath && (
-        <button className="icon-btn drag-none" title={t('在文件夹中定位')} onClick={onRevealFile}>
-          <MapPin size={16} />
-        </button>
+          {showRevealButton && onRevealFile && activeHasPath && (
+            <button className="icon-btn" title={t('在文件夹中定位')} onClick={onRevealFile}>
+              <MapPin size={16} />
+            </button>
+          )}
+        </>
       )}
 
       {/* ── 固定区（pinned / locked tabs） ────────────────────────────── */}
@@ -216,6 +252,7 @@ const TabBar = memo(function TabBar({
               return (
                 <div
                   key={tab.id}
+                  data-window-drag-interactive
                   className={['tab tab-pinned', isActive ? 'active' : '', tab.dirty ? 'dirty' : '']
                     .filter(Boolean)
                     .join(' ')}
@@ -245,17 +282,13 @@ const TabBar = memo(function TabBar({
       {/* ── 滚动区（normal tabs） ──────────────────────────────────────── */}
       <div className="scrollbar-host tabs-scrollbar-host">
         <div className="tabs" ref={tabsRef}>
-          {normalTabs.map((tab, localIdx) =>
+          {normalTabs.map((tab) =>
             renderTab(tab, {
               draggable: true,
-              onDragStart: () => setDragIndex(localIdx),
-              onDragOver: (e: React.DragEvent) => handleDragOver(e, localIdx),
-              onDrop: (e: React.DragEvent) => handleDrop(e, localIdx),
-              onDragEnd: () => {
-                setDragIndex(null)
-                setDropTarget(null)
-              },
-              'data-drag-idx': localIdx,
+              onDragStart: (event) => handleDragStart(event, tab.id),
+              onDragOver: (event) => handleDragOver(event, tab.id),
+              onDrop: (event) => handleDrop(event, tab.id),
+              onDragEnd: clearTabDrag,
             }),
           )}
         </div>
@@ -264,77 +297,80 @@ const TabBar = memo(function TabBar({
         </Suspense>
       </div>
 
-      {/* ── 溢出列表按钮 ──────────────────────────────────────────────── */}
-      {hasOverflow && (
-        <div className="tab-overflow-wrap">
-          <button
-            ref={overflowBtnRef}
-            className={`icon-btn drag-none${showOverflow ? ' active' : ''}`}
-            title={t('所有已打开标签')}
-            onClick={() => setShowOverflow((v) => !v)}
-          >
-            <ChevronDown size={14} />
-          </button>
-
-          {showOverflow && (
-            <div
-              className="tab-overflow-panel"
-              ref={overflowPanelRef}
-              style={
-                showOverflow
-                  ? (() => {
-                      const rect = overflowBtnRef.current?.getBoundingClientRect()
-                      return rect
-                        ? { top: rect.bottom + 4, right: window.innerWidth - rect.right }
-                        : {}
-                    })()
-                  : undefined
-              }
+      <div className="tabbar-actions">
+        {/* ── 溢出列表按钮 ────────────────────────────────────────────── */}
+        {hasOverflow && (
+          <div className="tab-overflow-wrap">
+            <button
+              ref={overflowBtnRef}
+              className={`icon-btn${showOverflow ? ' active' : ''}`}
+              title={t('所有已打开标签')}
+              onClick={() => setShowOverflow((v) => !v)}
             >
-              {tabs.map((tab) => (
-                <div
-                  key={tab.id}
-                  className={`tab-overflow-item${tab.id === activeId ? ' active' : ''}`}
-                >
-                  <button
-                    className="tab-overflow-select"
-                    onPointerDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      onSelect(tab.id)
-                      setShowOverflow(false)
-                    }}
-                  >
-                    {tab.dirty && <span className="dot" />}
-                    {tab.locked && <Pin size={11} className="tab-overflow-lock" />}
-                    <span className="tab-overflow-name">{stripExtension(tab.name)}</span>
-                  </button>
-                  <button
-                    className="tab-overflow-close"
-                    disabled={tab.locked}
-                    title={tab.locked ? t('已固定（右键解除固定）') : t('关闭')}
-                    onPointerDown={(e) => e.preventDefault()}
-                    onClick={() => onClose(tab.id)}
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              <ChevronDown size={14} />
+            </button>
 
-      <button className="icon-btn tab-add drag-none" title={t('打开首页')} onClick={onShowWelcome}>
-        <Plus size={16} />
-      </button>
+            {showOverflow && (
+              <div
+                className="tab-overflow-panel"
+                data-window-drag-interactive
+                ref={overflowPanelRef}
+                style={
+                  showOverflow
+                    ? (() => {
+                        const rect = overflowBtnRef.current?.getBoundingClientRect()
+                        return rect
+                          ? { top: rect.bottom + 4, right: window.innerWidth - rect.right }
+                          : {}
+                      })()
+                    : undefined
+                }
+              >
+                {tabs.map((tab) => (
+                  <div
+                    key={tab.id}
+                    className={`tab-overflow-item${tab.id === activeId ? ' active' : ''}`}
+                  >
+                    <button
+                      className="tab-overflow-select"
+                      onPointerDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        onSelect(tab.id)
+                        setShowOverflow(false)
+                      }}
+                    >
+                      {tab.dirty && <span className="dot" />}
+                      {tab.locked && <Pin size={11} className="tab-overflow-lock" />}
+                      <span className="tab-overflow-name">{stripExtension(tab.name)}</span>
+                    </button>
+                    <button
+                      className="tab-overflow-close"
+                      disabled={tab.locked}
+                      title={tab.locked ? t('已固定（右键解除固定）') : t('关闭')}
+                      onPointerDown={(e) => e.preventDefault()}
+                      onClick={() => onClose(tab.id)}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-      <button
-        className={`icon-btn drag-none${outlineVisible ? ' active' : ''}`}
-        title={`${t('大纲')}（${outlineVisible ? t('已显示') : t('已隐藏')}）${shortcutHint('Mod+Shift+K')}`}
-        onClick={onToggleOutline}
-      >
-        <List size={16} />
-      </button>
+        <button className="icon-btn tab-add" title={t('打开首页')} onClick={onShowWelcome}>
+          <Plus size={16} />
+        </button>
+
+        <button
+          className={`icon-btn${outlineVisible ? ' active' : ''}`}
+          title={`${t('大纲')}（${outlineVisible ? t('已显示') : t('已隐藏')}）${shortcutHint('Mod+Shift+K')}`}
+          onClick={onToggleOutline}
+        >
+          <List size={16} />
+        </button>
+      </div>
     </div>
   )
 })

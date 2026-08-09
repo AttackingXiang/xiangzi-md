@@ -15,12 +15,48 @@
   padding: 0 8px;
   background: transparent;
   border-bottom: 1px solid var(--workspace-divider);
-  -webkit-app-region: drag;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.tabbar .icon-btn,
-.tabbar .tab {
-  -webkit-app-region: no-drag;
+/* On macOS the leading pane owns the traffic-light row, while document tabs
+   occupy only the editor pane, matching the split desktop-window structure. */
+body.is-macos .main > .tabbar {
+  position: relative;
+  flex: 0 0 52px;
+  height: 52px;
+  min-height: 52px;
+  background: var(--workspace-surface);
+}
+
+/* The compact toolbar overlaps the last few pixels of the tab row. Keep the
+   pane divider above that overlap so the tab and toolbar still read as two
+   distinct horizontal bands. */
+body.is-macos .main > .tabbar::after {
+  content: '';
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--workspace-divider);
+  pointer-events: none;
+}
+
+body.is-macos .main.has-leading-pane > .tabbar {
+  padding-left: 0;
+}
+
+body.is-macos .main > .tabbar > .tabs-scrollbar-host {
+  align-self: stretch;
+}
+
+/* With no leading pane, reserve the native traffic lights and leave that
+   empty inset draggable. */
+body.is-macos .main:not(.has-leading-pane) > .tabbar {
+  padding-left: 78px;
 }
 
 .tabs {
@@ -30,6 +66,15 @@
   overflow-x: auto;
   height: 100%;
   align-items: center;
+  scroll-padding-inline: 8px;
+}
+
+.tabs .tab {
+  scroll-margin-inline: 8px;
+}
+
+body.is-macos .main > .tabbar .tab {
+  transform: translateY(2px);
 }
 
 .tab {
@@ -47,6 +92,16 @@
   transition: background 0.12s;
 }
 
+.tab[draggable='true'] {
+  cursor: grab;
+  -webkit-user-drag: element;
+}
+
+.tab[draggable='true']:active,
+.tab.tab-dragging {
+  cursor: grabbing;
+}
+
 .tab:hover {
   background: var(--bg-hover);
 }
@@ -55,6 +110,31 @@
   background: var(--bg);
   color: var(--text);
   box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+/* macOS uses a bottom-attached tab instead of a floating rounded field. */
+body.is-macos .main > .tabbar .tab.active {
+  position: relative;
+  z-index: 6;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+body.is-macos .main > .tabbar .tab.active::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  right: 10px;
+  bottom: -10px;
+  left: 10px;
+  height: 4px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 .tab-name {
@@ -68,6 +148,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  -webkit-user-drag: none;
   width: 18px;
   height: 18px;
   border-radius: 5px;
@@ -82,6 +163,15 @@
   color: var(--text);
 }
 
+body.is-macos .main > .tabbar .tab:not(.active):not(.dirty) .tab-close {
+  opacity: 0;
+}
+
+body.is-macos .main > .tabbar .tab:hover .tab-close,
+body.is-macos .main > .tabbar .tab:focus-within .tab-close {
+  opacity: 1;
+}
+
 .tab .dot {
   width: 8px;
   height: 8px;
@@ -91,6 +181,22 @@
 
 .tab-add {
   flex: 0 0 auto;
+}
+
+.tabbar-actions {
+  display: contents;
+}
+
+body.is-macos .main > .tabbar .tabbar-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  margin-left: 4px;
+  padding-left: 8px;
+  border-left: 1px solid var(--workspace-divider-strong);
+  transform: translateY(2px);
 }
 
 /* 拖拽中的标签：半透明 */

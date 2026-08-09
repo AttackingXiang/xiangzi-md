@@ -4,7 +4,8 @@ import TitleBarMenu from './TitleBarMenu'
 import { currentDesktopPlatform } from '../lib/platform'
 import { t } from '../lib/i18n'
 import { isTauriRuntime } from '../platform'
-import { runWindowAction, startWindowDragging, watchWindowMaximized } from '../lib/windowActions'
+import { runWindowAction, watchWindowMaximized } from '../lib/windowActions'
+import { handleWindowDragPointerDown, isWindowDragInteractiveTarget } from '../lib/windowDragRegion'
 
 const EMPTY_SHORTCUTS: Record<string, string> = {}
 
@@ -53,25 +54,9 @@ export default function TitleBar({
         event.preventDefault()
         event.stopPropagation()
       }}
-      onPointerDown={(event) => {
-        if (
-          event.button !== 0 ||
-          (event.target instanceof Element && event.target.closest('[data-titlebar-interactive]'))
-        )
-          return
-        // Not gated on event.detail: PointerEvent.detail is spec-optional and
-        // Chromium/WebView2 (Windows) reports 0 rather than a click count, so
-        // requiring `=== 1` silently blocked every drag on Windows. Starting
-        // a drag on a double-click's second press is harmless — there's no
-        // pointer movement between clicks, so nothing actually moves, and
-        // the separate onDoubleClick handler below still fires normally.
-        void startWindowDragging().catch((error: unknown) =>
-          console.error('Window dragging failed', error),
-        )
-      }}
+      onPointerDown={handleWindowDragPointerDown}
       onDoubleClick={(event) => {
-        if (event.target instanceof Element && event.target.closest('[data-titlebar-interactive]'))
-          return
+        if (isWindowDragInteractiveTarget(event.target)) return
         event.preventDefault()
         event.stopPropagation()
         void runWindowAction('maximize').catch((error: unknown) =>
@@ -89,7 +74,7 @@ export default function TitleBar({
       )}
 
       {!isMac && (
-        <div className="titlebar-controls" data-titlebar-interactive aria-label={t('窗口控制')}>
+        <div className="titlebar-controls" data-window-drag-interactive aria-label={t('窗口控制')}>
           <>
             <WindowButton label={t('最小化窗口')} onClick={() => runWindowAction('minimize')}>
               <Minus size={15} />

@@ -9,6 +9,14 @@
   overflow: hidden;
 }
 
+body.is-macos .sidebar-wrap {
+  border-right: 1px solid var(--workspace-divider);
+}
+
+body.is-macos .sidebar-wrap > .sidebar {
+  border-right: 0;
+}
+
 /* ---------- 侧边栏 ---------- */
 .sidebar {
   flex: 1;
@@ -59,10 +67,38 @@
   border-right: 1px solid var(--workspace-divider);
 }
 
-.results-wrap > :first-child {
+.results-pane-content {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.results-pane-content > * {
+  height: 100%;
+}
+
+.mac-window-bar {
+  flex: 0 0 52px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 8px 0 78px;
+  background: var(--workspace-surface);
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mac-window-bar .icon-btn {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  transform: translateY(1px);
+}
+
+.mac-window-bar .icon-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
 }
 
 .resize-handle:hover,
@@ -83,6 +119,12 @@
 
 .is-mac .sidebar-header {
   padding-top: 8px;
+}
+
+/* The editor toolbar was lifted to tighten the chrome gap; keep the sidebar
+   title/actions row on the same visual baseline. */
+body.is-macos .sidebar-header {
+  transform: translateY(-4px);
 }
 
 .sidebar-title {

@@ -135,7 +135,7 @@ export default function TitleBarMenu({
   const active = menus.find((submenu) => submenu.id === open)
 
   return (
-    <div className="titlebar-menubar" data-titlebar-interactive>
+    <div className="titlebar-menubar" data-window-drag-interactive>
       {menus.map((submenu) => (
         <button
           key={submenu.id}

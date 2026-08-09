@@ -56,6 +56,7 @@ const DocumentPropertyPanel = lazy(() => import('./features/tags/components/Docu
 import Welcome from './components/Welcome'
 import StatusBar from './components/StatusBar'
 import TitleBar from './components/TitleBar'
+import MacWindowBar from './components/MacWindowBar'
 const Outline = lazy(() => import('./components/Outline'))
 const FindBar = lazy(() => import('./components/FindBar'))
 // ContextMenu stays eager on purpose: right-click expects the menu on the very next frame,
@@ -72,7 +73,7 @@ import { t, tf } from './lib/i18n'
 import { ErrorCode } from './lib/errorCodes'
 import { baseName, dirName } from './lib/path'
 import { clipboardPath } from './lib/clipboardPath'
-import { revealLocationKey } from './lib/platform'
+import { currentDesktopPlatform, revealLocationKey } from './lib/platform'
 import { HIDDEN_SIDEBAR_CONTROLS, sidebarControlsFromSettings } from './lib/sidebarControls'
 import { recordContentChanges } from './lib/searchReload'
 import type { PathStat } from './platform/contracts'
@@ -1244,19 +1245,52 @@ export default function App(): JSX.Element {
     )
   }
 
+  const isMac = currentDesktopPlatform() === 'macos'
+  const resultsPaneVisible = !!((searchView && folder) || tagNavigation.selectedTag)
+  const hasLeadingPane = sidebarVisible || resultsPaneVisible
+  const workspaceTabBar = (
+    <TabBar
+      tabs={tabs}
+      activeId={activeId}
+      onSelect={selectTab}
+      onClose={closeTab}
+      onMoveTab={moveTab}
+      onTabContext={openTabContext}
+      onShowWelcome={showWelcome}
+      outlineVisible={outlineVisible}
+      onToggleSidebar={toggleSidebarVisible}
+      onToggleOutline={toggleOutlineVisible}
+      onRevealFile={revealActiveFile}
+      activeHasPath={!!activeTab?.path}
+      showRevealButton={settings.showRevealButton}
+      showLeadingControls={!isMac || !hasLeadingPane}
+      enableWindowDragging={isMac}
+    />
+  )
+
   return (
     <div className="app">
-      <TitleBar
-        documentName={activeTab?.name}
-        dirty={activeTab?.dirty}
-        shortcuts={settings.shortcuts}
-        onOpenAbout={() => setSettingsSection('about')}
-        onAddProperty={requestAddProperty}
-        canAddProperty={!!activeTab && !isTextKind && !readingMode}
-      />
+      {!isMac && (
+        <TitleBar
+          documentName={activeTab?.name}
+          dirty={activeTab?.dirty}
+          shortcuts={settings.shortcuts}
+          onOpenAbout={() => setSettingsSection('about')}
+          onAddProperty={requestAddProperty}
+          canAddProperty={!!activeTab && !isTextKind && !readingMode}
+        />
+      )}
       <div className="workspace-shell">
         {sidebarVisible && (
           <div className="sidebar-wrap" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+            {isMac && (
+              <MacWindowBar
+                onToggleSidebar={toggleSidebarVisible}
+                onRevealFile={revealActiveFile}
+                activeHasPath={!!activeTab?.path}
+                showRevealButton={settings.showRevealButton}
+              />
+            )}
             {tagNavigation.overviewOpen ? (
               <aside className="sidebar">
                 <SidebarHeader
@@ -1337,62 +1371,60 @@ export default function App(): JSX.Element {
         )}
 
         {/* 中间“结果列”：全文搜索结果 或 点某个标签后的文档列表。可拖宽，关掉即隐藏。 */}
-        {(searchView && folder) || tagNavigation.selectedTag ? (
+        {resultsPaneVisible ? (
           <div className="results-wrap" style={{ width: resultsWidth, minWidth: resultsWidth }}>
-            {searchView && folder ? (
-              <Suspense fallback={<PanelFallback />}>
-                <SearchPanel
-                  root={folder.root}
-                  reloadKey={searchReloadKey}
-                  focusRequest={searchFocusRequest}
-                  initialMode={settings.folderSearchMode}
-                  onModeChange={(folderSearchMode) => persistUserSettings({ folderSearchMode })}
-                  onOpenResult={openSearchResult}
-                  onOpenFile={(path) => void openPath(path, baseName(path))}
-                  onBack={() => setSearchView(false)}
-                />
-              </Suspense>
-            ) : (
-              <Suspense fallback={<PanelFallback />}>
-                <RelatedDocumentsSidebar
-                  tag={
-                    tagIndex.tagLabels[tagNavigation.selectedTag ?? ''] ??
-                    tagNavigation.selectedTag ??
-                    ''
-                  }
-                  documents={relatedDocuments}
-                  activePath={activeTab?.path ?? null}
-                  folderName={folder?.name ?? null}
-                  loading={tagIndex.loading}
-                  error={tagIndex.error}
-                  truncated={tagIndex.truncated}
-                  overviewOpen={tagNavigation.overviewOpen}
-                  onShowAllTags={showAllTags}
-                  onClose={tagNavigation.closeResults}
-                  onOpenDocument={(path, name) => void openPath(path, name)}
-                />
-              </Suspense>
+            {isMac && !sidebarVisible && (
+              <MacWindowBar
+                onToggleSidebar={toggleSidebarVisible}
+                onRevealFile={revealActiveFile}
+                activeHasPath={!!activeTab?.path}
+                showRevealButton={settings.showRevealButton}
+              />
             )}
+            <div className="results-pane-content">
+              {searchView && folder ? (
+                <Suspense fallback={<PanelFallback />}>
+                  <SearchPanel
+                    root={folder.root}
+                    reloadKey={searchReloadKey}
+                    focusRequest={searchFocusRequest}
+                    initialMode={settings.folderSearchMode}
+                    onModeChange={(folderSearchMode) => persistUserSettings({ folderSearchMode })}
+                    onOpenResult={openSearchResult}
+                    onOpenFile={(path) => void openPath(path, baseName(path))}
+                    onBack={() => setSearchView(false)}
+                  />
+                </Suspense>
+              ) : (
+                <Suspense fallback={<PanelFallback />}>
+                  <RelatedDocumentsSidebar
+                    tag={
+                      tagIndex.tagLabels[tagNavigation.selectedTag ?? ''] ??
+                      tagNavigation.selectedTag ??
+                      ''
+                    }
+                    documents={relatedDocuments}
+                    activePath={activeTab?.path ?? null}
+                    folderName={folder?.name ?? null}
+                    loading={tagIndex.loading}
+                    error={tagIndex.error}
+                    truncated={tagIndex.truncated}
+                    overviewOpen={tagNavigation.overviewOpen}
+                    onShowAllTags={showAllTags}
+                    onClose={tagNavigation.closeResults}
+                    onOpenDocument={(path, name) => void openPath(path, name)}
+                  />
+                </Suspense>
+              )}
+            </div>
             <div className="resize-handle" onMouseDown={startResultsResize} />
           </div>
         ) : null}
 
-        <div className={`main${sidebarVisible ? '' : ' no-sidebar'}`}>
-          <TabBar
-            tabs={tabs}
-            activeId={activeId}
-            onSelect={selectTab}
-            onClose={closeTab}
-            onMoveTab={moveTab}
-            onTabContext={openTabContext}
-            onShowWelcome={showWelcome}
-            outlineVisible={outlineVisible}
-            onToggleSidebar={toggleSidebarVisible}
-            onToggleOutline={toggleOutlineVisible}
-            onRevealFile={revealActiveFile}
-            activeHasPath={!!activeTab?.path}
-            showRevealButton={settings.showRevealButton}
-          />
+        <div
+          className={`main${sidebarVisible ? '' : ' no-sidebar'}${hasLeadingPane ? ' has-leading-pane' : ''}`}
+        >
+          {workspaceTabBar}
 
           {showFind && !isTextKind && (
             <Suspense fallback={null}>

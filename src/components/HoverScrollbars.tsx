@@ -175,6 +175,7 @@ export default function HoverScrollbars({ targetRef, axes = 'both' }: Props): JS
       ]
         .filter(Boolean)
         .join(' ')}
+      data-window-drag-interactive
       aria-hidden="true"
     >
       {hasVertical && (
