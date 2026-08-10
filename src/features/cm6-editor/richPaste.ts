@@ -44,7 +44,11 @@ export function prepareMarkdownPaste(
 
   const pasteChange: ChangeSpec = { from: selection.from, to: selection.to, insert: pasted }
   if (!detected || !data) {
-    return { changes: pasteChange, detectedLanguage: null }
+    return {
+      changes: pasteChange,
+      selection: EditorSelection.cursor(selection.from + pasted.length),
+      detectedLanguage: null,
+    }
   }
 
   const languageChange: ChangeSpec = {

@@ -79,4 +79,25 @@ describe('Markdown code-block paste', () => {
       '```sql\nSELECT id FROM users;\n```',
     )
   })
+
+  it('places the cursor after the pasted text in an already-languaged code block', () => {
+    const doc = '```python\n\n```'
+    const cursor = doc.indexOf('\n\n') + 1
+    const state = stateAt(doc, cursor)
+    const pasted = 'const value = 1'
+
+    const result = applyPaste(state, pasted)
+    expect(result.selection.main.from).toBe(cursor + pasted.length)
+    expect(result.selection.main.empty).toBe(true)
+  })
+
+  it('places the cursor after the pasted text in plain paragraph text', () => {
+    const doc = 'plain paragraph'
+    const state = stateAt(doc, doc.length)
+    const pasted = ' more text'
+
+    const result = applyPaste(state, pasted)
+    expect(result.selection.main.from).toBe(doc.length + pasted.length)
+    expect(result.selection.main.empty).toBe(true)
+  })
 })
