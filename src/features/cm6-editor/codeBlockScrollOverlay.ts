@@ -2,7 +2,9 @@ import type { EditorState, Extension } from '@codemirror/state'
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view'
 import {
   activeEditableFencedCode,
+  fencedCodeAt,
   findFencedCodeAt,
+  isCodeBlockPresentation,
   isEditableMermaidSource,
   needsCodeCaretRepaint,
   type FencedCodeData,
@@ -17,6 +19,7 @@ import {
   CODE_SCROLLBAR_HEIGHT,
   CODE_SCROLLBAR_MARGIN,
   codeControlsFitInside,
+  codeControlsTarget,
   codeControlsTop,
   codeBlockOverlayHorizontalGeometry,
   codeContentCaretX,
@@ -323,7 +326,10 @@ interface ActiveBlockMeasure {
 
 interface CodeScrollMeasure {
   fences: FenceClassMeasure[]
+  /** 光标所在的块：滚动条（以及它的行内 scrollLeft 同步）只认这个。 */
   active: ActiveBlockMeasure | null
+  /** 控件浮层要 pin 到的块：鼠标悬停的块优先，否则退回光标所在的块。 */
+  controls: ActiveBlockMeasure | null
 }
 
 /** Keeps every source row full-width while synchronizing their hidden
@@ -340,6 +346,9 @@ class CodeBlockScrollPlugin {
   private revealPending = true
   private controlsInside = false
   private controlsBlockFrom = -1
+  /** 指针当前所在代码行的文档位置；-1 表示指针不在任何代码块上。存位置而不是
+   * 元素引用：CM6 会回收行 DOM，引用留不住。 */
+  private hoveredLineFrom = -1
   private drag: { scrollbar: HTMLElement; pointerId: number; offset: number } | null = null
   private readonly controls: CodeBlockControlsOverlay
   private readonly scrollbar: HTMLElement | null
@@ -374,6 +383,10 @@ class CodeBlockScrollPlugin {
     // when the viewport (plus margin) is unchanged and CM6 therefore
     // dispatches no view update.
     view.scrollDOM.addEventListener('scroll', this.onScroll, true)
+    // 悬停跟踪用 pointerover（冒泡、只在跨元素时触发）而不是 pointermove：
+    // 后者每帧几十次，而我们只关心"指针换到别的行了吗"。
+    view.scrollDOM.addEventListener('pointerover', this.onPointerOver)
+    view.scrollDOM.addEventListener('pointerleave', this.onPointerLeave)
     this.syncMermaidSourceControl(view.state)
     this.schedule()
     this.frame = requestAnimationFrame(() => this.schedule())
@@ -415,6 +428,8 @@ class CodeBlockScrollPlugin {
     cancelAnimationFrame(this.frame)
     cancelAnimationFrame(this.repaintFrame)
     this.view.scrollDOM.removeEventListener('scroll', this.onScroll, true)
+    this.view.scrollDOM.removeEventListener('pointerover', this.onPointerOver)
+    this.view.scrollDOM.removeEventListener('pointerleave', this.onPointerLeave)
     this.stopDragging()
     this.controls.destroy()
     this.scrollbar?.remove()
@@ -426,6 +441,39 @@ class CodeBlockScrollPlugin {
     this.controls.setMermaidSourceVisible(
       Boolean(source && head >= source.from && head <= source.to),
     )
+  }
+
+  /** 指针换到哪一行了。只记位置、只在变化时排一次 measure；真正的几何读取仍然
+   * 走 `requestMeasure` 的 read 阶段，不在事件里读 DOM。 */
+  private readonly onPointerOver = (event: PointerEvent): void => {
+    // 触摸没有"悬停"这一说：手指按下去就等于点击，控件会照旧跟着光标出现。
+    if (event.pointerType === 'touch') return
+    const target = event.target
+    if (!(target instanceof Element)) return
+    // 指针挪到控件浮层上时保持当前块。浮层是 scrollDOM 的子节点、不在代码行里，
+    // 不豁免的话"从代码块移向复制按钮"这条路上控件会先消失。
+    if (target.closest('.xmd-cm-code-preview-header')) return
+    const line = target.closest<HTMLElement>(
+      '.cm-line.xmd-cm-code-line, .cm-line.xmd-cm-code-fence-line',
+    )
+    const next = line ? this.view.posAtDOM(line, 0) : -1
+    if (next === this.hoveredLineFrom) return
+    this.hoveredLineFrom = next
+    this.schedule()
+  }
+
+  private readonly onPointerLeave = (): void => {
+    if (this.hoveredLineFrom === -1) return
+    this.hoveredLineFrom = -1
+    this.schedule()
+  }
+
+  /** 指针悬停的代码块（若有）。位置在 read 阶段重新解析，因为文档可能已经变了。 */
+  private hoveredFencedCode(view: EditorView): FencedCodeData | null {
+    const position = this.hoveredLineFrom
+    if (position < 0 || position > view.state.doc.length) return null
+    const data = fencedCodeAt(view.state, position)
+    return data !== null && isCodeBlockPresentation(view.state, data) ? data : null
   }
 
   private readonly onScroll = (event: Event): void => {
@@ -664,8 +712,26 @@ class CodeBlockScrollPlugin {
       const pos = view.posAtDOM(fence, 0)
       fences.push({ fence, active: data !== null && pos >= data.from && pos <= data.to })
     }
-    if (!data) return { fences, active: null }
 
+    const active = data ? this.measureBlock(view, data, reveal) : null
+    // 悬停只驱动控件，滚动条继续跟着光标所在的块——否则鼠标扫过文档时，每个
+    // 路过的代码块底部都会闪一条滚动条，而光标那块的滚动条反而被抢走。
+    const target = codeControlsTarget(
+      data,
+      this.hoveredFencedCode(view),
+      this.controls.dom.contains(document.activeElement),
+    )
+    const controls =
+      target === null || target === data ? active : this.measureBlock(view, target, false)
+    return { fences, active, controls }
+  }
+
+  /** 单个代码块的几何测量。只在 `requestMeasure` 的 read 阶段调用。 */
+  private measureBlock(
+    view: EditorView,
+    data: FencedCodeData,
+    reveal: boolean,
+  ): ActiveBlockMeasure | null {
     // Vertical block geometry comes from the height map (`view.lineBlockAt`)
     // rather than `view.coordsAtPos`: positions outside the rendered viewport
     // fall into CM6's internal BlockGapWidget replacements, for which
@@ -694,7 +760,7 @@ class CodeBlockScrollPlugin {
     }
     const block = this.activeMountedBlock(data)
     const firstMountedLine = block?.lines[0]
-    if (!block || !firstMountedLine) return { fences, active: null }
+    if (!block || !firstMountedLine) return null
     const horizontal = codeBlockOverlayHorizontalGeometry(
       firstMountedLine.getBoundingClientRect(),
       scrollRect,
@@ -749,31 +815,28 @@ class CodeBlockScrollPlugin {
     }
 
     return {
-      fences,
-      active: {
-        data,
-        readOnly: view.state.readOnly,
-        contents,
-        contentScrollLefts,
-        contentWidth: rowContentWidth,
-        trackWidth,
-        // Not contentScrollLefts[0]: CM6 recycles row DOM on scroll and a
-        // recycled row resets to 0, so row 0 alone isn't reliable — max keeps
-        // whichever row still holds the real (non-recycled) offset.
-        scrollLeft: contentScrollLefts.length ? Math.max(...contentScrollLefts) : 0,
-        revealScrollLeft,
-        overflow: rowContentWidth > trackWidth + 1,
-        controlsTop,
-        controlsInside,
-        controlsAnchorLeft: horizontal.controlsAnchorLeft,
-        scrollbarTop: pinnedOverlayTop(
-          'block-end',
-          geometry,
-          CODE_SCROLLBAR_HEIGHT,
-          CODE_SCROLLBAR_MARGIN,
-        ),
-        scrollbarLeft: horizontal.scrollbarLeft,
-      },
+      data,
+      readOnly: view.state.readOnly,
+      contents,
+      contentScrollLefts,
+      contentWidth: rowContentWidth,
+      trackWidth,
+      // Not contentScrollLefts[0]: CM6 recycles row DOM on scroll and a
+      // recycled row resets to 0, so row 0 alone isn't reliable — max keeps
+      // whichever row still holds the real (non-recycled) offset.
+      scrollLeft: contentScrollLefts.length ? Math.max(...contentScrollLefts) : 0,
+      revealScrollLeft,
+      overflow: rowContentWidth > trackWidth + 1,
+      controlsTop,
+      controlsInside,
+      controlsAnchorLeft: horizontal.controlsAnchorLeft,
+      scrollbarTop: pinnedOverlayTop(
+        'block-end',
+        geometry,
+        CODE_SCROLLBAR_HEIGHT,
+        CODE_SCROLLBAR_MARGIN,
+      ),
+      scrollbarLeft: horizontal.scrollbarLeft,
     }
   }
 
@@ -782,10 +845,11 @@ class CodeBlockScrollPlugin {
       fence.classList.toggle('xmd-cm-code-block-active', active)
     }
 
-    const active = measure.active
+    // 控件跟"光标所在块或悬停块"，滚动条只跟光标所在块。
+    const controls = measure.controls
     const controlsDom = this.controls.dom
-    if (!active || active.controlsTop === null) {
-      if (!active) {
+    if (!controls || controls.controlsTop === null) {
+      if (!controls) {
         this.controlsBlockFrom = -1
         this.controlsInside = false
       }
@@ -797,19 +861,20 @@ class CodeBlockScrollPlugin {
         controlsDom.style.top = '-9999px'
       }
     } else {
-      const blockChanged = this.controlsBlockFrom !== active.data.from
-      this.controls.setBlock(active.data, active.readOnly)
-      this.controlsBlockFrom = active.data.from
-      this.controlsInside = active.controlsInside
+      const blockChanged = this.controlsBlockFrom !== controls.data.from
+      this.controls.setBlock(controls.data, controls.readOnly)
+      this.controlsBlockFrom = controls.data.from
+      this.controlsInside = controls.controlsInside
       controlsDom.classList.add('is-active')
-      controlsDom.classList.toggle('is-inside', active.controlsInside)
-      controlsDom.style.top = `${active.controlsTop}px`
-      controlsDom.style.left = `${active.controlsAnchorLeft}px`
+      controlsDom.classList.toggle('is-inside', controls.controlsInside)
+      controlsDom.style.top = `${controls.controlsTop}px`
+      controlsDom.style.left = `${controls.controlsAnchorLeft}px`
       // setBlock may resize the language input (or reveal the Mermaid action).
       // Re-measure once with the new block's actual controls width.
       if (blockChanged) this.schedule()
     }
 
+    const active = measure.active
     const scrollbar = this.scrollbar
     if (!scrollbar) return
     if (!active || active.scrollbarTop === null) {

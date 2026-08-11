@@ -176,3 +176,20 @@ export function codeControlsTop(
   if (earTop >= viewportTop) return earTop
   return Math.max(blockTop, Math.min(viewportTop, blockBottom - height))
 }
+
+/**
+ * 右上角控件（语言 + 复制）跟哪个代码块走。
+ *
+ * 全文档只有一份控件浮层，所以"光标所在的块"和"鼠标悬停的块"必须二选一：
+ * - 正在浮层里操作（改语言、补全弹层开着）时锁定当前那个块，别被路过的鼠标抢走；
+ * - 否则悬停优先——用户把鼠标移到某个代码块上，要的就是那个块的按钮；
+ * - 鼠标不在任何代码块上时退回光标所在的块，也就是改动前的老行为。
+ */
+export function codeControlsTarget<Block extends { from: number }>(
+  selectionBlock: Block | null,
+  hoveredBlock: Block | null,
+  overlayFocused: boolean,
+): Block | null {
+  if (overlayFocused || !hoveredBlock) return selectionBlock
+  return hoveredBlock.from === selectionBlock?.from ? selectionBlock : hoveredBlock
+}

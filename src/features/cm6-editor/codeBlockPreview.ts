@@ -33,6 +33,7 @@ export type { CodeBlockPreviewOptions } from './codeBlockScrollOverlay'
 export {
   codeBlockOverlayHorizontalGeometry,
   codeControlsFitInside,
+  codeControlsTarget,
   codeControlsTop,
   pinnedOverlayTop,
 } from './codeBlockGeometry'

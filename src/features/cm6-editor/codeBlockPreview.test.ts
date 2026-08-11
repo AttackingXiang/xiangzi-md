@@ -7,6 +7,7 @@ import {
   codeBlockOverlayHorizontalGeometry,
   codeControlsTop,
   codeControlsFitInside,
+  codeControlsTarget,
   codeLanguageOptions,
   collectFencedCodeHiddenRanges,
   ensureLineAfterTerminalFencedCode,
@@ -287,6 +288,30 @@ describe('CM6 fenced code preview', () => {
         extensions: [markdown(), EditorState.allowMultipleSelections.of(true)],
       })
       expect(needsCodeCaretRepaint(state)).toBe(false)
+    })
+  })
+
+  describe('codeControlsTarget', () => {
+    const caretBlock = { from: 10 }
+    const otherBlock = { from: 90 }
+
+    it('follows the hovered block so the controls appear without clicking first', () => {
+      expect(codeControlsTarget(null, otherBlock, false)).toBe(otherBlock)
+      expect(codeControlsTarget(caretBlock, otherBlock, false)).toBe(otherBlock)
+    })
+
+    it('falls back to the caret block when the pointer is off every code block', () => {
+      expect(codeControlsTarget(caretBlock, null, false)).toBe(caretBlock)
+      expect(codeControlsTarget(null, null, false)).toBeNull()
+    })
+
+    it('keeps the caret block while the overlay itself is being used', () => {
+      // 改语言时补全弹层开着，路过的鼠标不能把控件拽到别的块上。
+      expect(codeControlsTarget(caretBlock, otherBlock, true)).toBe(caretBlock)
+    })
+
+    it('prefers the caret block object when both resolve to the same block', () => {
+      expect(codeControlsTarget(caretBlock, { from: caretBlock.from }, false)).toBe(caretBlock)
     })
   })
 
