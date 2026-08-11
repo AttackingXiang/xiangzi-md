@@ -1,22 +1,15 @@
-import { MapPin, PanelLeft } from 'lucide-react'
 import { t } from '../lib/i18n'
-import { shortcutHint } from '../lib/shortcuts'
 import { runWindowAction } from '../lib/windowActions'
 import { handleWindowDragPointerDown, isWindowDragInteractiveTarget } from '../lib/windowDragRegion'
 
-interface Props {
-  onToggleSidebar: () => void
-  onRevealFile?: () => void
-  activeHasPath?: boolean
-  showRevealButton?: boolean
-}
-
-export default function MacWindowBar({
-  onToggleSidebar,
-  onRevealFile,
-  activeHasPath = false,
-  showRevealButton = true,
-}: Props): JSX.Element {
+/**
+ * macOS 上左栏顶部的那条空白带。
+ *
+ * 它只负责给系统红绿灯让出位置、并把这块区域变成窗口拖拽区（双击最大化）。
+ * 侧边栏开关和「在文件夹中定位」两颗按钮已经挪到顶部标签栏的最左侧，那里不管
+ * 左栏开着还是关着都在同一个位置，不会跟着面板一起消失。
+ */
+export default function MacWindowBar(): JSX.Element {
   return (
     <div
       className="mac-window-bar"
@@ -30,20 +23,6 @@ export default function MacWindowBar({
           console.error('Window maximize failed', error),
         )
       }}
-    >
-      <button
-        className="icon-btn sm"
-        title={`${t('切换侧边栏')} (${shortcutHint('Mod+\\')})`}
-        onClick={onToggleSidebar}
-      >
-        <PanelLeft size={15} />
-      </button>
-
-      {showRevealButton && onRevealFile && activeHasPath && (
-        <button className="icon-btn sm" title={t('在文件夹中定位')} onClick={onRevealFile}>
-          <MapPin size={15} />
-        </button>
-      )}
-    </div>
+    />
   )
 }

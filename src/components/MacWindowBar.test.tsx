@@ -14,11 +14,11 @@ vi.mock('../lib/windowActions', () => ({
   startWindowDragging: startWindowDraggingMock,
 }))
 
-function renderWindowBar(onToggleSidebar = vi.fn()): HTMLElement {
+function renderWindowBar(): HTMLElement {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
-  act(() => root.render(<MacWindowBar onToggleSidebar={onToggleSidebar} />))
+  act(() => root.render(<MacWindowBar />))
   return host
 }
 
@@ -39,19 +39,8 @@ describe('MacWindowBar', () => {
     expect(startWindowDraggingMock).toHaveBeenCalledOnce()
   })
 
-  it('keeps interactive controls out of the drag gesture', () => {
-    const onToggleSidebar = vi.fn()
-    const host = renderWindowBar(onToggleSidebar)
-    const button = host.querySelector<HTMLButtonElement>('button')
-
-    act(() => {
-      button?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
-      button?.click()
-    })
-
-    expect(startWindowDraggingMock).not.toHaveBeenCalled()
-    expect(onToggleSidebar).toHaveBeenCalledOnce()
-  })
+  // 这条带子上已经没有按钮了（都挪去了标签栏），拖拽豁免的逻辑本身由
+  // windowDragRegion 自己的测试覆盖。
 
   it('maximizes on a double click in the empty region', () => {
     const host = renderWindowBar()

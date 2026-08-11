@@ -1342,7 +1342,6 @@ export default function App(): JSX.Element {
       onRevealFile={revealActiveFile}
       activeHasPath={!!activeTab?.path}
       showRevealButton={settings.showRevealButton}
-      showLeadingControls={!isMac || !hasLeadingPane}
       enableWindowDragging={isMac}
     />
   )
@@ -1365,14 +1364,7 @@ export default function App(): JSX.Element {
             className="sidebar-wrap"
             style={{ width: sidebarPanel.width, minWidth: sidebarPanel.width }}
           >
-            {isMac && (
-              <MacWindowBar
-                onToggleSidebar={toggleSidebarVisible}
-                onRevealFile={revealActiveFile}
-                activeHasPath={!!activeTab?.path}
-                showRevealButton={settings.showRevealButton}
-              />
-            )}
+            {isMac && <MacWindowBar />}
             {/* 头部（当前文件夹那一行）和模式切换器三种模式共用，只有下面的主体在换。
                 Esc 统一在这里退回文件树，不管焦点落在面板里还是切换器上；搜索框自己
                 会先吃掉一次 Esc 用来清空关键词（见 SearchPanel）。 */}
@@ -1482,14 +1474,7 @@ export default function App(): JSX.Element {
             className="results-wrap"
             style={{ width: resultsPanel.width, minWidth: resultsPanel.width }}
           >
-            {isMac && !sidebarVisible && (
-              <MacWindowBar
-                onToggleSidebar={toggleSidebarVisible}
-                onRevealFile={revealActiveFile}
-                activeHasPath={!!activeTab?.path}
-                showRevealButton={settings.showRevealButton}
-              />
-            )}
+            {isMac && !sidebarVisible && <MacWindowBar />}
             <div className="results-pane-content">
               <Suspense fallback={<PanelFallback />}>
                 <RelatedDocumentsSidebar
