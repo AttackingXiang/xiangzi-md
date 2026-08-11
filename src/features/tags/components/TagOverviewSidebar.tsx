@@ -229,8 +229,8 @@ export default function TagOverviewSidebar({
   const hasTags = tree.length > 0
 
   return (
-    // 顶部的模式切换器已经写着"标签"了，这里只留一行计数；退出走切换器或 Esc
-    // （Esc 由左栏容器统一处理，见 App.tsx 的 sidebar onKeyDown）。
+    // 标题和退出入口都由共享头部那颗标签图标承担（点亮=当前模式，再点退回文件树），
+    // 这里只留一行计数；Esc 由左栏容器统一处理，见 App.tsx 的 sidebar onKeyDown。
     <div className="tag-panel tag-overview-panel">
       <div className="tag-sidebar-heading tag-sidebar-heading-slim">
         <span className="tag-sidebar-count">

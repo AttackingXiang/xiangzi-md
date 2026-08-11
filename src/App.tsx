@@ -108,7 +108,6 @@ import { hasEditor, onEditorAvailable, searchMountedEditor } from './lib/searchB
 import { useResizablePanels } from './hooks/useResizablePanels'
 import { useFolderSearch } from './hooks/useFolderSearch'
 import ResizeHandle from './components/ResizeHandle'
-import SidebarModeTabs from './components/SidebarModeTabs'
 import type { SidebarMode } from './lib/sidebarMode'
 import { useWorkspaceSession } from './hooks/useWorkspaceSession'
 import type { SettingsSection } from './components/Settings'
@@ -553,10 +552,15 @@ export default function App(): JSX.Element {
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('files')
   const [searchFocusRequest, setSearchFocusRequest] = useState(0)
   const requestSearchFocus = useCallback(() => setSearchFocusRequest((value) => value + 1), [])
-  // 搜索面板就长在左栏里（替掉文件树），所以左栏必须是展开的。
-  const openSidebarSearch = useCallback(() => {
+  // 搜索面板就长在左栏里（替掉文件树），所以左栏必须是展开的。头部那颗放大镜
+  // 同时是"进入"和"退出"：再点一次回到文件树，这样这一栏不需要额外的切换器。
+  const toggleSidebarSearch = useCallback(() => {
     setSidebarVisible(true)
-    setSidebarMode('search')
+    setSidebarMode((mode) => (mode === 'search' ? 'files' : 'search'))
+  }, [setSidebarVisible, setSidebarMode])
+  const toggleSidebarTags = useCallback(() => {
+    setSidebarVisible(true)
+    setSidebarMode((mode) => (mode === 'tags' ? 'files' : 'tags'))
   }, [setSidebarVisible, setSidebarMode])
   const showFileTree = useCallback(() => setSidebarMode('files'), [setSidebarMode])
   const [showPalette, setShowPalette] = useState(false)
@@ -1392,8 +1396,9 @@ export default function App(): JSX.Element {
                 onUndo={undoLastOp}
                 onToggleFavorite={toggleFavorite}
                 onRefresh={refreshTree}
-                onOpenSearch={openSidebarSearch}
-                onShowTags={showAllTags}
+                onOpenSearch={toggleSidebarSearch}
+                onShowTags={toggleSidebarTags}
+                activeMode={sidebarMode}
                 onOpenFolder={openFolder}
                 onOpenSettings={openSidebarSettings}
                 onRootContext={openRootContext}
@@ -1401,7 +1406,6 @@ export default function App(): JSX.Element {
                 fileTreeSort={sidebarMode === 'files' ? fileTreeSortContext.mode : undefined}
                 onFileTreeSortChange={sidebarMode === 'files' ? changeFileTreeSort : undefined}
               />
-              {folder && <SidebarModeTabs mode={sidebarMode} onChange={setSidebarMode} />}
               {folder && sidebarMode === 'search' ? (
                 <Suspense fallback={<PanelFallback />}>
                   <SearchPanel

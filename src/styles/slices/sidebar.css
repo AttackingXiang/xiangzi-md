@@ -109,55 +109,7 @@ body.is-macos .sidebar-wrap > .sidebar {
   outline: none;
 }
 
-/* ---------- 左栏模式切换（文件 / 搜索 / 标签） ---------- */
-.sidebar-mode-tabs {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 2px;
-  margin: 0 8px 6px;
-  padding: 2px;
-  border-radius: 7px;
-  background: var(--bg-hover);
-}
-
-.sidebar-mode-tab {
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.sidebar-mode-tab:hover {
-  color: var(--text-2);
-}
-
-.sidebar-mode-tab.active {
-  background: var(--bg-sidebar);
-  color: var(--accent-text);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
-}
-
-.sidebar-mode-tab svg {
-  flex-shrink: 0;
-}
-
-.sidebar-mode-tab span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 三种模式的主体共用这一层：撑满 SidebarHeader + 切换器之下的剩余高度。 */
+/* 三种模式（文件 / 搜索 / 标签）的主体共用这一层：撑满共享头部之下的剩余高度。 */
 .sidebar-panel {
   flex: 1 1 0;
   min-height: 0;

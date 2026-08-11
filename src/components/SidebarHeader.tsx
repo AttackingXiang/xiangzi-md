@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FileTreeSort, Folder as FolderType } from '../types'
 import { FILE_TREE_SORT_OPTIONS } from '../lib/fileTreeSort'
 import type { SidebarControls } from '../lib/sidebarControls'
+import type { SidebarMode } from '../lib/sidebarMode'
 import { t } from '../lib/i18n'
 
 interface Props {
@@ -24,8 +25,12 @@ interface Props {
   onUndo: () => void
   onToggleFavorite: (root: string) => void
   onRefresh: () => void
+  /** 进入搜索模式；已经在搜索模式时点同一颗按钮退回文件树。 */
   onOpenSearch: () => void
+  /** 进入标签模式；同上，再点一次退回文件树。 */
   onShowTags: () => void
+  /** 左栏当前模式，用来把对应的那颗图标点亮。 */
+  activeMode: SidebarMode
   onOpenFolder: () => void
   onOpenSettings: () => void
   onRootContext: (x: number, y: number) => void
@@ -47,6 +52,7 @@ export default function SidebarHeader({
   onRefresh,
   onOpenSearch,
   onShowTags,
+  activeMode,
   onOpenFolder,
   onOpenSettings,
   onRootContext,
@@ -118,7 +124,12 @@ export default function SidebarHeader({
           </button>
         )}
         {folder && controls.search && (
-          <button className="icon-btn sm" title={t('在文件夹中搜索')} onClick={onOpenSearch}>
+          <button
+            className={`icon-btn sm${activeMode === 'search' ? ' active' : ''}`}
+            title={activeMode === 'search' ? t('返回文件') : t('在文件夹中搜索')}
+            aria-pressed={activeMode === 'search'}
+            onClick={onOpenSearch}
+          >
             <Search size={15} />
           </button>
         )}
@@ -156,7 +167,12 @@ export default function SidebarHeader({
           </div>
         )}
         {folder && controls.tags && (
-          <button className="icon-btn sm" title={t('标签治理')} onClick={onShowTags}>
+          <button
+            className={`icon-btn sm${activeMode === 'tags' ? ' active' : ''}`}
+            title={activeMode === 'tags' ? t('返回文件') : t('标签治理')}
+            aria-pressed={activeMode === 'tags'}
+            onClick={onShowTags}
+          >
             <Tags size={15} />
           </button>
         )}

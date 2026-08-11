@@ -24,7 +24,6 @@ const EN: Record<string, string> = {
   取消收藏: 'Remove from favorites',
   刷新: 'Refresh',
   在文件夹中搜索: 'Search in folder',
-  侧边栏视图: 'Sidebar view',
   最近搜索: 'Recent searches',
   在文件树中定位: 'Reveal in file tree',
   侧边栏宽度: 'Sidebar width',
