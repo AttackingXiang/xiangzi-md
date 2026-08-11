@@ -58,3 +58,15 @@ vitest.config.d.ts
 # Draft for an unrelated product concept, kept locally for reference only —
 # not part of Xiangzi MD and must never be committed to this repo.
 /docs/AI_PROJECT_MEMORY_PRODUCT_CONCEPT.md
+
+# Local design-review notes.
+/design-qa.md
+
+# English feature copy drafted for the marketing site, not for this repo.
+/docs/WEBSITE_FEATURE_*_EN.md
+/docs/WEBSITE_FUNCTIONS_EN.md
+
+# HarmonyOS port: in-progress ArkTS rewrite kept local for now, along with its
+# migration plan. Nothing here is a build input for the desktop app.
+/docs/harmonyos-migration.md
+/harmonyos/
