@@ -146,19 +146,17 @@ body.is-macos .sidebar-wrap > .sidebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 8px 8px 14px;
-  padding-top: 8px;
+  padding: 8px 8px 4px 14px;
   gap: 6px;
 }
 
-.is-mac .sidebar-header {
-  padding-top: 8px;
-}
-
 /* The editor toolbar was lifted to tighten the chrome gap; keep the sidebar
-   title/actions row on the same visual baseline. */
+   title/actions row on the same visual baseline. Negative margin rather than
+   `transform: translateY(-8px)`: a transform leaves the layout box behind, so
+   everything below the header (favorites, the tree) kept an 8px band of air
+   that made the first section look detached from the folder name. */
 body.is-macos .sidebar-header {
-  transform: translateY(-8px);
+  margin-top: -8px;
 }
 
 .sidebar-title {
@@ -231,7 +229,7 @@ body.is-macos .sidebar-header {
   max-height: 40%;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 4px 8px 8px;
+  padding: 0 8px 8px;
   border-bottom: 1px solid var(--workspace-divider);
 }
 
@@ -245,7 +243,7 @@ body.is-macos .sidebar-header {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 4px 6px;
+  padding: 2px 6px 3px;
 }
 
 .favorite-section-toggle {
@@ -271,9 +269,9 @@ body.is-macos .sidebar-header {
 }
 
 /* 文件夹 / 文件两组的小标题：点文件夹收藏会换掉整个工作区，和"打开一篇文档"
-   不是一回事，只靠图标区分不够。 */
+   不是一回事，只靠图标区分不够。两组同时存在时才有区分意义，只有一组时不渲染。 */
 .fav-group-label {
-  padding: 5px 8px 2px;
+  padding: 4px 8px 1px;
   font-size: 10.5px;
   color: var(--text-muted);
   letter-spacing: 0.03em;
@@ -314,7 +312,17 @@ body.is-macos .sidebar-header {
   color: var(--text);
 }
 
+/* 与 .tree-row.active 保持一致：同一栏里两个列表的"当前项"不该长得不一样。 */
 .fav-row.active {
+  background: var(--bg-active);
+  color: var(--accent-text);
+}
+
+.fav-open svg {
+  color: var(--text-muted);
+}
+
+.fav-row.active .fav-open svg {
   color: var(--accent-text);
 }
 

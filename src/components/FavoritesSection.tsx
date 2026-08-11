@@ -56,6 +56,8 @@ export default function FavoritesSection({
 
   const folderFavorites = favorites.filter((path) => !isFile(path))
   const fileFavorites = favorites.filter(isFile)
+  // 只有一组时分组标题没有区分作用，白占一行——窄栏里这一行不便宜。
+  const showGroupLabels = folderFavorites.length > 0 && fileFavorites.length > 0
 
   /** 指针拖拽而不是 HTML5 draggable：WKWebView 里后者不可靠，大纲/文件树/标签树
    * 都走的这套。只允许在同一组内落位——跨组拖不会改变可见顺序。 */
@@ -162,9 +164,9 @@ export default function FavoritesSection({
       </button>
       {!collapsed && (
         <>
-          {folderFavorites.length > 0 && <div className="fav-group-label">{t('文件夹')}</div>}
+          {showGroupLabels && <div className="fav-group-label">{t('文件夹')}</div>}
           {folderFavorites.map(row)}
-          {fileFavorites.length > 0 && <div className="fav-group-label">{t('文档')}</div>}
+          {showGroupLabels && <div className="fav-group-label">{t('文档')}</div>}
           {fileFavorites.map(row)}
         </>
       )}
