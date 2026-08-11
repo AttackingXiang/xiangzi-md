@@ -1428,6 +1428,7 @@ export default function App(): JSX.Element {
                     loading={tagIndex.loading}
                     error={tagIndex.error}
                     truncated={tagIndex.truncated}
+                    onExit={showFileTree}
                     onOpenTag={openTreeTag}
                     onTogglePin={togglePinnedTag}
                     onToggleCollapsed={toggleTagCollapsed}

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Crosshair, FileText, Search, X } from 'lucide-react'
+import { ArrowLeft, Crosshair, FileText, Search, X } from 'lucide-react'
 import type { SearchResult } from '../types'
 import type { FolderSearchMode } from '../platform/contracts'
 import type { FolderSearchState } from '../hooks/useFolderSearch'
@@ -14,7 +14,7 @@ interface Props {
   onOpenFile: (path: string) => void
   /** 在文件树里定位这个结果（切回文件模式并展开到它）。 */
   onRevealInTree: (path: string) => void
-  /** 空查询时按 Esc：离开搜索、回到文件树。 */
+  /** 回到文件树：顶部的返回按钮，以及空查询时按 Esc。 */
   onExit: () => void
 }
 
@@ -104,6 +104,11 @@ export default function SearchPanel({
 
   return (
     <div className="sidebar-panel search-panel">
+      <button type="button" className="sidebar-back" onClick={onExit}>
+        <ArrowLeft size={14} />
+        {t('返回文件')}
+      </button>
+
       <div className="search-input-wrap">
         <Search size={14} />
         <input

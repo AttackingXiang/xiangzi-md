@@ -109,6 +109,29 @@ body.is-macos .sidebar-wrap > .sidebar {
   outline: none;
 }
 
+/* 搜索 / 标签模式回到文件树的入口。头部那颗点亮的图标和 Esc 也能退出，但那两条
+   都得先知道才用得上，所以在面板顶部留一个看得见的。 */
+.sidebar-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 5px;
+  flex: 0 0 auto;
+  margin: 0 10px 8px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sidebar-back:hover {
+  background: var(--bg-hover);
+}
+
 /* 三种模式（文件 / 搜索 / 标签）的主体共用这一层：撑满共享头部之下的剩余高度。 */
 .sidebar-panel {
   flex: 1 1 0;

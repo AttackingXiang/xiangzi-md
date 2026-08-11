@@ -1,4 +1,4 @@
-import { ChevronRight, Star, Tag } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Star, Tag } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getLang, t } from '../../../lib/i18n'
@@ -15,6 +15,8 @@ interface Props {
   loading: boolean
   error: string | null
   truncated: boolean
+  /** 回到文件树：顶部的返回按钮（Esc 也走同一个动作，由左栏容器统一处理）。 */
+  onExit: () => void
   onOpenTag: (tag: string) => void
   onTogglePin: (key: string) => void
   /** 折叠/展开某个分组（传 collapseId，含 `pin:` 前缀），由上层持久化 */
@@ -38,6 +40,7 @@ export default function TagOverviewSidebar({
   loading,
   error,
   truncated,
+  onExit,
   onOpenTag,
   onTogglePin,
   onToggleCollapsed,
@@ -229,9 +232,13 @@ export default function TagOverviewSidebar({
   const hasTags = tree.length > 0
 
   return (
-    // 标题和退出入口都由共享头部那颗标签图标承担（点亮=当前模式，再点退回文件树），
-    // 这里只留一行计数；Esc 由左栏容器统一处理，见 App.tsx 的 sidebar onKeyDown。
+    // 标题由共享头部承担，这里只留返回按钮和一行计数（模式还可以从头部那颗
+    // 点亮的标签图标或 Esc 退出，见 App.tsx 的 sidebar onKeyDown）。
     <div className="tag-panel tag-overview-panel">
+      <button type="button" className="sidebar-back" onClick={onExit}>
+        <ArrowLeft size={14} />
+        {t('返回文件')}
+      </button>
       <div className="tag-sidebar-heading tag-sidebar-heading-slim">
         <span className="tag-sidebar-count">
           {getLang() === 'en' ? `${total} tags` : `共 ${total} 个标签`}
