@@ -532,7 +532,11 @@ export default function App(): JSX.Element {
   const [searchView, setSearchView] = useState(false)
   const [searchFocusRequest, setSearchFocusRequest] = useState(0)
   const requestSearchFocus = useCallback(() => setSearchFocusRequest((value) => value + 1), [])
-  const openSidebarSearch = useCallback(() => setSearchView(true), [setSearchView])
+  // 搜索面板就长在左栏里（替掉文件树），所以左栏必须是展开的。
+  const openSidebarSearch = useCallback(() => {
+    setSidebarVisible(true)
+    setSearchView(true)
+  }, [setSidebarVisible, setSearchView])
   const [showPalette, setShowPalette] = useState(false)
   const [recentItemsSection, setRecentItemsSection] = useState<RecentItemsSection | null>(null)
   const showRecentItems = useCallback((section: RecentItemsSection): void => {
@@ -1246,7 +1250,7 @@ export default function App(): JSX.Element {
   }
 
   const isMac = currentDesktopPlatform() === 'macos'
-  const resultsPaneVisible = !!((searchView && folder) || tagNavigation.selectedTag)
+  const resultsPaneVisible = !!tagNavigation.selectedTag
   const hasLeadingPane = sidebarVisible || resultsPaneVisible
   const workspaceTabBar = (
     <TabBar
@@ -1291,7 +1295,21 @@ export default function App(): JSX.Element {
                 showRevealButton={settings.showRevealButton}
               />
             )}
-            {tagNavigation.overviewOpen ? (
+            {searchView && folder ? (
+              // 搜索占据文件树的位置（和标签树一样是左栏内的切换），不再单开一列。
+              <Suspense fallback={<PanelFallback />}>
+                <SearchPanel
+                  root={folder.root}
+                  reloadKey={searchReloadKey}
+                  focusRequest={searchFocusRequest}
+                  initialMode={settings.folderSearchMode}
+                  onModeChange={(folderSearchMode) => persistUserSettings({ folderSearchMode })}
+                  onOpenResult={openSearchResult}
+                  onOpenFile={(path) => void openPath(path, baseName(path))}
+                  onBack={() => setSearchView(false)}
+                />
+              </Suspense>
+            ) : tagNavigation.overviewOpen ? (
               <aside className="sidebar">
                 <SidebarHeader
                   folder={folder}
@@ -1370,7 +1388,7 @@ export default function App(): JSX.Element {
           </div>
         )}
 
-        {/* 中间“结果列”：全文搜索结果 或 点某个标签后的文档列表。可拖宽，关掉即隐藏。 */}
+        {/* 中间“结果列”：点某个标签后的文档列表。可拖宽，关掉即隐藏。 */}
         {resultsPaneVisible ? (
           <div className="results-wrap" style={{ width: resultsWidth, minWidth: resultsWidth }}>
             {isMac && !sidebarVisible && (
@@ -1382,40 +1400,25 @@ export default function App(): JSX.Element {
               />
             )}
             <div className="results-pane-content">
-              {searchView && folder ? (
-                <Suspense fallback={<PanelFallback />}>
-                  <SearchPanel
-                    root={folder.root}
-                    reloadKey={searchReloadKey}
-                    focusRequest={searchFocusRequest}
-                    initialMode={settings.folderSearchMode}
-                    onModeChange={(folderSearchMode) => persistUserSettings({ folderSearchMode })}
-                    onOpenResult={openSearchResult}
-                    onOpenFile={(path) => void openPath(path, baseName(path))}
-                    onBack={() => setSearchView(false)}
-                  />
-                </Suspense>
-              ) : (
-                <Suspense fallback={<PanelFallback />}>
-                  <RelatedDocumentsSidebar
-                    tag={
-                      tagIndex.tagLabels[tagNavigation.selectedTag ?? ''] ??
-                      tagNavigation.selectedTag ??
-                      ''
-                    }
-                    documents={relatedDocuments}
-                    activePath={activeTab?.path ?? null}
-                    folderName={folder?.name ?? null}
-                    loading={tagIndex.loading}
-                    error={tagIndex.error}
-                    truncated={tagIndex.truncated}
-                    overviewOpen={tagNavigation.overviewOpen}
-                    onShowAllTags={showAllTags}
-                    onClose={tagNavigation.closeResults}
-                    onOpenDocument={(path, name) => void openPath(path, name)}
-                  />
-                </Suspense>
-              )}
+              <Suspense fallback={<PanelFallback />}>
+                <RelatedDocumentsSidebar
+                  tag={
+                    tagIndex.tagLabels[tagNavigation.selectedTag ?? ''] ??
+                    tagNavigation.selectedTag ??
+                    ''
+                  }
+                  documents={relatedDocuments}
+                  activePath={activeTab?.path ?? null}
+                  folderName={folder?.name ?? null}
+                  loading={tagIndex.loading}
+                  error={tagIndex.error}
+                  truncated={tagIndex.truncated}
+                  overviewOpen={tagNavigation.overviewOpen}
+                  onShowAllTags={showAllTags}
+                  onClose={tagNavigation.closeResults}
+                  onOpenDocument={(path, name) => void openPath(path, name)}
+                />
+              </Suspense>
             </div>
             <div className="resize-handle" onMouseDown={startResultsResize} />
           </div>
