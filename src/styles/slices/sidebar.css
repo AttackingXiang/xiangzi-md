@@ -124,7 +124,7 @@ body.is-macos .sidebar-wrap > .sidebar {
 /* The editor toolbar was lifted to tighten the chrome gap; keep the sidebar
    title/actions row on the same visual baseline. */
 body.is-macos .sidebar-header {
-  transform: translateY(-4px);
+  transform: translateY(-8px);
 }
 
 .sidebar-title {

@@ -13,11 +13,12 @@
   -webkit-user-select: none;
 }
 
-/* Keep the toolbar's bottom edge fixed while lifting its controls inside the row. */
+/* Keep the compressed chrome row fixed while centering controls between the
+   tabbar divider and the toolbar's bottom edge. */
 body.is-macos .main > .editor-toolbar {
-  margin-top: -4px;
-  padding-top: 5px;
-  padding-bottom: 5px;
+  margin-top: -8px;
+  padding-top: 9px;
+  padding-bottom: 1px;
 }
 
 .toolbar-btn {
