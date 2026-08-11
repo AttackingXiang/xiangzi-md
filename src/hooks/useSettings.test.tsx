@@ -67,6 +67,73 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+describe('useSettings favorites follow the file system', () => {
+  async function seedFavorites(): Promise<void> {
+    // 每次写盘的响应都是权威值、会整份合并回状态，所以 mock 要像真实后端那样把
+    // 补丁累积起来——否则后一次写入的响应会把前一次收藏的结果抹掉。
+    let stored = createBrowserPreviewSettings()
+    desktop.setSettings.mockImplementation((patch: Partial<AppSettings>) => {
+      stored = { ...stored, ...patch }
+      return Promise.resolve(stored)
+    })
+    await act(async () => {
+      controller!.toggleFavorite('/vault/notes')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      controller!.toggleFavorite('/vault/notes/todo.md', true)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      controller!.setFavoriteLabel('/vault/notes', '工作')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      controller!.togglePinnedFolder('/vault/notes')
+      await Promise.resolve()
+    })
+  }
+
+  it('remaps favorites, labels and pinned folders when a folder is renamed', async () => {
+    await seedFavorites()
+
+    await act(async () => {
+      controller!.recordDocRename('/vault/notes', '/vault/archive')
+      await Promise.resolve()
+    })
+
+    expect(controller?.settings?.favorites).toEqual(['/vault/archive', '/vault/archive/todo.md'])
+    expect(controller?.settings?.favoriteFiles).toEqual(['/vault/archive/todo.md'])
+    expect(controller?.settings?.favoriteLabels).toEqual({ '/vault/archive': '工作' })
+    expect(controller?.settings?.pinnedFolders).toEqual(['/vault/archive'])
+  })
+
+  it('drops favorites, labels and pinned folders under a deleted folder', async () => {
+    await seedFavorites()
+
+    await act(async () => {
+      controller!.recordDocRemove('/vault/notes')
+      await Promise.resolve()
+    })
+
+    expect(controller?.settings?.favorites).toEqual([])
+    expect(controller?.settings?.favoriteFiles).toEqual([])
+    expect(controller?.settings?.favoriteLabels).toEqual({})
+    expect(controller?.settings?.pinnedFolders).toEqual([])
+  })
+
+  it('leaves unrelated favorites alone', async () => {
+    await seedFavorites()
+
+    await act(async () => {
+      controller!.recordDocRename('/vault/other', '/vault/moved')
+      await Promise.resolve()
+    })
+
+    expect(controller?.settings?.favorites).toEqual(['/vault/notes', '/vault/notes/todo.md'])
+  })
+})
+
 describe('useSettings persistence coordination', () => {
   it('keeps newer optimistic values while an older persisted response completes', async () => {
     const base = createBrowserPreviewSettings()

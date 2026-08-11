@@ -262,16 +262,51 @@ body.is-macos .sidebar-header {
   background: var(--bg-hover);
 }
 
+.fav-count {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0;
+}
+
+/* 文件夹 / 文件两组的小标题：点文件夹收藏会换掉整个工作区，和"打开一篇文档"
+   不是一回事，只靠图标区分不够。 */
+.fav-group-label {
+  padding: 5px 8px 2px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
 .fav-row {
   display: flex;
   align-items: center;
-  gap: 7px;
   height: 28px;
-  padding: 0 8px;
   border-radius: 6px;
-  font-size: 13px;
   color: var(--text-2);
+}
+
+.fav-open {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
   cursor: pointer;
+}
+
+.fav-open svg {
+  flex-shrink: 0;
 }
 
 .fav-row:hover {
@@ -283,10 +318,47 @@ body.is-macos .sidebar-header {
   color: var(--accent-text);
 }
 
+/* 拖拽调顺序时，落点那一行的提示线 */
+.fav-row.drop-target {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+body.fav-dragging {
+  cursor: grabbing;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .fav-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 取消收藏：平时不占视觉重量，指针在这一行上或键盘聚焦时才显出来。 */
+.fav-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 4px;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.fav-row:hover .fav-remove,
+.fav-remove:focus-visible {
+  opacity: 1;
+}
+
+.fav-remove:hover {
+  background: var(--bg-active, var(--bg-hover));
+  color: var(--danger, #c43d3d);
 }
 
 .sidebar-body {

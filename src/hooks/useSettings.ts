@@ -354,6 +354,8 @@ export function useSettings() {
   )
 
   // 重命名/移动文件或文件夹后，改写 recentDocs 里命中的路径（含文件夹前缀下的所有后代）。
+  // 收藏和文件树置顶记的同样是绝对路径，一起改——否则重命名之后它们指向的路径已经
+  // 不存在了，点下去只会得到一句"文件夹不存在"，而用户没做错任何事。
   const recordDocRename = useCallback(
     (oldPath: string, newPath: string) => {
       setSettings((prev) => {
@@ -364,25 +366,72 @@ export function useSettings() {
           changed = true
           return { ...doc, path: replacePathPrefix(doc.path, oldPath, newPath) }
         })
+        const remapPath = (path: string): string => {
+          if (!isPathAtOrUnder(path, oldPath)) return path
+          changed = true
+          return replacePathPrefix(path, oldPath, newPath)
+        }
+        const favorites = prev.favorites.map(remapPath)
+        const favoriteFiles = (prev.favoriteFiles ?? []).map(remapPath)
+        const pinnedFolders = (prev.pinnedFolders ?? []).map(remapPath)
+        const favoriteLabels: Record<string, string> = {}
+        for (const [path, label] of Object.entries(prev.favoriteLabels)) {
+          favoriteLabels[remapPath(path)] = label
+        }
         if (!changed) return prev
         const { recentDocs, recentFiles } = normalizeRecentDocs(remapped)
-        persistInBackground({ recentDocs, recentFiles }, 'Recent docs persistence failed')
-        return { ...prev, recentDocs, recentFiles }
+        persistInBackground(
+          { recentDocs, recentFiles, favorites, favoriteFiles, favoriteLabels, pinnedFolders },
+          'Recent docs persistence failed',
+        )
+        return {
+          ...prev,
+          recentDocs,
+          recentFiles,
+          favorites,
+          favoriteFiles,
+          favoriteLabels,
+          pinnedFolders,
+        }
       })
     },
     [persistInBackground],
   )
 
-  // 删除文件或文件夹后，移除 recentDocs 里该路径及其后代的记录。
+  // 删除文件或文件夹后，移除 recentDocs / 收藏 / 置顶里该路径及其后代的记录。
   const recordDocRemove = useCallback(
     (p: string) => {
       setSettings((prev) => {
         if (!prev) return prev
         const kept = prev.recentDocs.filter((doc) => !isPathAtOrUnder(doc.path, p))
-        if (kept.length === prev.recentDocs.length) return prev
+        const survives = (path: string): boolean => !isPathAtOrUnder(path, p)
+        const favorites = prev.favorites.filter(survives)
+        const favoriteFiles = (prev.favoriteFiles ?? []).filter(survives)
+        const pinnedFolders = (prev.pinnedFolders ?? []).filter(survives)
+        const favoriteLabels = Object.fromEntries(
+          Object.entries(prev.favoriteLabels).filter(([path]) => survives(path)),
+        )
+        const changed =
+          kept.length !== prev.recentDocs.length ||
+          favorites.length !== prev.favorites.length ||
+          favoriteFiles.length !== (prev.favoriteFiles ?? []).length ||
+          pinnedFolders.length !== (prev.pinnedFolders ?? []).length ||
+          Object.keys(favoriteLabels).length !== Object.keys(prev.favoriteLabels).length
+        if (!changed) return prev
         const { recentDocs, recentFiles } = normalizeRecentDocs(kept)
-        persistInBackground({ recentDocs, recentFiles }, 'Recent docs persistence failed')
-        return { ...prev, recentDocs, recentFiles }
+        persistInBackground(
+          { recentDocs, recentFiles, favorites, favoriteFiles, favoriteLabels, pinnedFolders },
+          'Recent docs persistence failed',
+        )
+        return {
+          ...prev,
+          recentDocs,
+          recentFiles,
+          favorites,
+          favoriteFiles,
+          favoriteLabels,
+          pinnedFolders,
+        }
       })
     },
     [persistInBackground],
@@ -429,6 +478,18 @@ export function useSettings() {
           'Favorites persistence failed',
         )
         return { ...prev, favorites, favoriteFiles, favoriteLabels }
+      })
+    },
+    [persistInBackground],
+  )
+
+  /** 拖拽调整收藏顺序：favorites 数组的顺序就是展示顺序。 */
+  const reorderFavorites = useCallback(
+    (favorites: string[]) => {
+      setSettings((prev) => {
+        if (!prev) return prev
+        persistInBackground({ favorites }, 'Favorites persistence failed')
+        return { ...prev, favorites }
       })
     },
     [persistInBackground],
@@ -525,6 +586,7 @@ export function useSettings() {
     recordDocRemove,
     pushRecentFolder,
     toggleFavorite,
+    reorderFavorites,
     togglePinnedFolder,
     togglePinnedTag,
     toggleTagCollapsed,

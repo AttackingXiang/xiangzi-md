@@ -141,6 +141,7 @@ export default function App(): JSX.Element {
     recordDocRemove,
     pushRecentFolder,
     toggleFavorite,
+    reorderFavorites,
     togglePinnedFolder,
     togglePinnedTag,
     toggleTagCollapsed,
@@ -1447,6 +1448,8 @@ export default function App(): JSX.Element {
                   onOpenFile={openPath}
                   onFavoritesCollapsedChange={setFavoritesCollapsed}
                   onFavoriteContext={openFavoriteContext}
+                  onToggleFavorite={toggleFavorite}
+                  onReorderFavorites={reorderFavorites}
                   onRefresh={refreshTree}
                   treeError={treeError}
                   onNodeContext={openNodeContext}

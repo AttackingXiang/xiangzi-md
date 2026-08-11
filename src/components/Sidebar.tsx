@@ -1,13 +1,11 @@
-import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import { memo, Suspense, useCallback, useRef, useState, type RefObject } from 'react'
+import FavoritesSection from './FavoritesSection'
 import FileTree from './FileTree'
 import { FocusedPathContext } from './fileTreeFocusContext'
 import HoverScrollbars from './LazyHoverScrollbars'
 import type { FileNode, Folder as FolderType } from '../types'
 import type { SortContext } from '../lib/fileTreeSort'
 import { t } from '../lib/i18n'
-import { baseName } from '../lib/path'
-import { sameDocumentPath } from '../lib/pathIdentity'
 
 interface Props {
   folder: FolderType | null
@@ -30,6 +28,8 @@ interface Props {
   onOpenFile: (path: string, name?: string) => void
   onFavoritesCollapsedChange: (collapsed: boolean) => void
   onFavoriteContext: (path: string, x: number, y: number) => void
+  onToggleFavorite: (path: string) => void
+  onReorderFavorites: (favorites: string[]) => void
   onRefresh: () => void
   treeError?: string | null
   onNodeContext: (node: FileNode, x: number, y: number) => void
@@ -60,6 +60,8 @@ const Sidebar = memo(function Sidebar({
   onOpenFile,
   onFavoritesCollapsedChange,
   onFavoriteContext,
+  onToggleFavorite,
+  onReorderFavorites,
   onRefresh,
   treeError = null,
   onNodeContext,
@@ -87,47 +89,20 @@ const Sidebar = memo(function Sidebar({
 
   return (
     <div className="sidebar-panel">
-      {favorites.length > 0 && (
-        <div className="sidebar-section">
-          <button
-            className="section-label favorite-section-toggle"
-            title={t(favoritesCollapsed ? '展开收藏目录' : '收起收藏目录')}
-            aria-expanded={!favoritesCollapsed}
-            onClick={() => onFavoritesCollapsedChange(!favoritesCollapsed)}
-          >
-            {favoritesCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-            <span>{t('收藏')}</span>
-          </button>
-          {!favoritesCollapsed &&
-            [...favorites]
-              .sort(
-                (a, b) =>
-                  Number(favoriteFiles.some((path) => sameDocumentPath(path, a))) -
-                  Number(favoriteFiles.some((path) => sameDocumentPath(path, b))),
-              )
-              .map((fav) => {
-                const isFile = favoriteFiles.some((path) => sameDocumentPath(path, fav))
-                return (
-                  <div
-                    key={fav}
-                    className={`fav-row${!isFile && folder?.root && sameDocumentPath(folder.root, fav) ? ' active' : ''}`}
-                    title={fav}
-                    onClick={() =>
-                      isFile ? onOpenFile(fav, baseName(fav)) : onOpenFolderPath(fav)
-                    }
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      onFavoriteContext(fav, event.clientX, event.clientY)
-                    }}
-                  >
-                    {isFile ? <FileText size={14} /> : <Folder size={14} />}
-                    <span className="fav-name">{favoriteLabels[fav]?.trim() || baseName(fav)}</span>
-                  </div>
-                )
-              })}
-        </div>
-      )}
+      <FavoritesSection
+        favorites={favorites}
+        favoriteFiles={favoriteFiles}
+        favoriteLabels={favoriteLabels}
+        collapsed={favoritesCollapsed}
+        folderRoot={folder?.root ?? null}
+        activePath={activePath}
+        onCollapsedChange={onFavoritesCollapsedChange}
+        onOpenFile={onOpenFile}
+        onOpenFolderPath={onOpenFolderPath}
+        onToggleFavorite={onToggleFavorite}
+        onReorder={onReorderFavorites}
+        onContext={onFavoriteContext}
+      />
 
       <div className="scrollbar-host sidebar-scrollbar-host">
         <div
