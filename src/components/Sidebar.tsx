@@ -2,11 +2,9 @@ import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react'
 import { memo, Suspense, useCallback, useRef, useState, type RefObject } from 'react'
 import FileTree from './FileTree'
 import { FocusedPathContext } from './fileTreeFocusContext'
-import SidebarHeader from './SidebarHeader'
 import HoverScrollbars from './LazyHoverScrollbars'
-import type { FileNode, FileTreeSort, Folder as FolderType } from '../types'
+import type { FileNode, Folder as FolderType } from '../types'
 import type { SortContext } from '../lib/fileTreeSort'
-import type { SidebarControls } from '../lib/sidebarControls'
 import { t } from '../lib/i18n'
 import { baseName } from '../lib/path'
 import { sameDocumentPath } from '../lib/pathIdentity'
@@ -30,12 +28,6 @@ interface Props {
   onOpenFolder: () => void
   onOpenFolderPath: (root: string) => void
   onOpenFile: (path: string, name?: string) => void
-  onOpenSettings: () => void
-  onFileTreeSortChange: (sort: FileTreeSort) => void
-  controls: SidebarControls
-  onOpenSearch: () => void
-  onShowTags: () => void
-  onToggleFavorite: (path: string) => void
   onFavoritesCollapsedChange: (collapsed: boolean) => void
   onFavoriteContext: (path: string, x: number, y: number) => void
   onRefresh: () => void
@@ -46,11 +38,10 @@ interface Props {
   reloadKey: number
   /** Ref to the Set of expanded folder paths — persists across tree remounts. */
   expandedPathsRef: RefObject<Set<string>>
-  canUndo: boolean
-  onUndo: () => void
-  style?: React.CSSProperties
 }
 
+/** 左栏「文件」模式的主体：收藏区 + 文件树。顶部的文件夹名那一行（SidebarHeader）
+ * 和模式切换器由 App 渲染，三种模式共用，所以不在这里。 */
 const Sidebar = memo(function Sidebar({
   folder,
   activePath,
@@ -67,12 +58,6 @@ const Sidebar = memo(function Sidebar({
   onOpenFolder,
   onOpenFolderPath,
   onOpenFile,
-  onOpenSettings,
-  onFileTreeSortChange,
-  controls,
-  onOpenSearch,
-  onShowTags,
-  onToggleFavorite,
   onFavoritesCollapsedChange,
   onFavoriteContext,
   onRefresh,
@@ -82,14 +67,8 @@ const Sidebar = memo(function Sidebar({
   onMove,
   reloadKey,
   expandedPathsRef,
-  canUndo,
-  onUndo,
-  style,
 }: Props): JSX.Element {
   const bodyRef = useRef<HTMLDivElement>(null)
-  const isFav = folder
-    ? favorites.some((favorite) => sameDocumentPath(favorite, folder.root))
-    : false
   const hideFolderNames = hideAttachmentFolders && attachmentFolder ? [attachmentFolder] : []
 
   // Roving-tabindex target for the file tree's keyboard navigation. Lifted here (rather than
@@ -107,24 +86,7 @@ const Sidebar = memo(function Sidebar({
   )
 
   return (
-    <aside className="sidebar" style={style}>
-      <SidebarHeader
-        folder={folder}
-        isFav={isFav}
-        canUndo={canUndo}
-        onUndo={onUndo}
-        onToggleFavorite={onToggleFavorite}
-        onRefresh={onRefresh}
-        onOpenSearch={onOpenSearch}
-        onShowTags={onShowTags}
-        onOpenFolder={onOpenFolder}
-        onOpenSettings={onOpenSettings}
-        controls={controls}
-        fileTreeSort={sortContext.mode}
-        onFileTreeSortChange={onFileTreeSortChange}
-        onRootContext={onRootContext}
-      />
-
+    <div className="sidebar-panel">
       {favorites.length > 0 && (
         <div className="sidebar-section">
           <button
@@ -224,7 +186,7 @@ const Sidebar = memo(function Sidebar({
           <HoverScrollbars targetRef={bodyRef} />
         </Suspense>
       </div>
-    </aside>
+    </div>
   )
 })
 

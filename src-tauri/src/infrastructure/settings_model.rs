@@ -136,6 +136,10 @@ pub struct AppSettings {
     pub tag_click_opens_overview: bool,
     /// 左侧文件栏是否显示；首次安装默认关闭，之后记忆用户上次的切换状态。
     pub sidebar_visible: bool,
+    /// 左栏 / 中间结果列 / 右侧大纲的宽度（px）。拖动结束时记忆，双击拖拽条复位默认值。
+    pub sidebar_width: u32,
+    pub results_width: u32,
+    pub outline_width: u32,
     pub session: SessionSettings,
     /// 文件树排序方式：'default'（文件夹在前、名称升序，默认）、'nameDesc'、
     /// 'modified'（最近修改）、'opened'（最近打开）、'smart'（智能混合推荐）。
@@ -251,6 +255,9 @@ impl Default for AppSettings {
             tag_result_sort: "updated".into(),
             tag_click_opens_overview: false,
             sidebar_visible: false,
+            sidebar_width: 256,
+            results_width: 300,
+            outline_width: 240,
             session: SessionSettings::default(),
             file_tree_sort: "default".into(),
             pinned_folders: Vec::new(),
@@ -362,6 +369,9 @@ pub struct SettingsPatch {
     pub tag_result_sort: Option<String>,
     pub tag_click_opens_overview: Option<bool>,
     pub sidebar_visible: Option<bool>,
+    pub sidebar_width: Option<u32>,
+    pub results_width: Option<u32>,
+    pub outline_width: Option<u32>,
     pub session: Option<SessionSettings>,
     pub file_tree_sort: Option<String>,
     pub pinned_folders: Option<Vec<String>>,

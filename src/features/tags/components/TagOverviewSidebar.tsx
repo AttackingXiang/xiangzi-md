@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Star, Tag } from 'lucide-react'
+import { ChevronRight, Star, Tag } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getLang, t } from '../../../lib/i18n'
@@ -15,7 +15,6 @@ interface Props {
   loading: boolean
   error: string | null
   truncated: boolean
-  onClose: () => void
   onOpenTag: (tag: string) => void
   onTogglePin: (key: string) => void
   /** 折叠/展开某个分组（传 collapseId，含 `pin:` 前缀），由上层持久化 */
@@ -39,7 +38,6 @@ export default function TagOverviewSidebar({
   loading,
   error,
   truncated,
-  onClose,
   onOpenTag,
   onTogglePin,
   onToggleCollapsed,
@@ -231,16 +229,10 @@ export default function TagOverviewSidebar({
   const hasTags = tree.length > 0
 
   return (
+    // 顶部的模式切换器已经写着"标签"了，这里只留一行计数；退出走切换器或 Esc
+    // （Esc 由左栏容器统一处理，见 App.tsx 的 sidebar onKeyDown）。
     <div className="tag-panel tag-overview-panel">
-      <div className="tag-sidebar-heading">
-        <button type="button" className="tag-sidebar-back" onClick={onClose}>
-          <ArrowLeft size={14} />
-          {t('返回文件')}
-        </button>
-        <div className="tag-sidebar-title">
-          <Tag size={18} />
-          <strong>{t('全部标签')}</strong>
-        </div>
+      <div className="tag-sidebar-heading tag-sidebar-heading-slim">
         <span className="tag-sidebar-count">
           {getLang() === 'en' ? `${total} tags` : `共 ${total} 个标签`}
         </span>

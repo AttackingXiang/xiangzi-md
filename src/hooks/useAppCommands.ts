@@ -15,6 +15,7 @@ import { clipboardCmd, editorCmd } from '../lib/editorCommands'
 import { findNavigationBridge } from '../lib/findNavigationBridge'
 import { t } from '../lib/i18n'
 import type { ShortcutAction } from '../lib/shortcuts'
+import type { SidebarMode } from '../lib/sidebarMode'
 import type { SaveOperationResult } from '../lib/documentOperations'
 
 interface FileEntry {
@@ -42,7 +43,7 @@ interface AppCommandOptions {
   importDocx: () => Promise<void>
   setShowPalette: Dispatch<SetStateAction<boolean>>
   setSidebarVisible: Dispatch<SetStateAction<boolean>>
-  setSearchView: Dispatch<SetStateAction<boolean>>
+  setSidebarMode: Dispatch<SetStateAction<SidebarMode>>
   setShowFind: Dispatch<SetStateAction<boolean>>
   requestFindFocus: () => void
   requestSearchFocus: () => void
@@ -81,7 +82,7 @@ export function useAppCommands(options: AppCommandOptions): {
     importDocx,
     setShowPalette,
     setSidebarVisible,
-    setSearchView,
+    setSidebarMode,
     setShowFind,
     requestFindFocus,
     requestSearchFocus,
@@ -125,7 +126,7 @@ export function useAppCommands(options: AppCommandOptions): {
         label: t('在文件夹中搜索'),
         run: () => {
           setSidebarVisible(true)
-          setSearchView(true)
+          setSidebarMode('search')
         },
       },
       {
@@ -168,7 +169,7 @@ export function useAppCommands(options: AppCommandOptions): {
       saveTab,
       setFocusMode,
       setOutlineVisible,
-      setSearchView,
+      setSidebarMode,
       setSettingsSection,
       setShowFind,
       setSidebarVisible,
@@ -217,7 +218,7 @@ export function useAppCommands(options: AppCommandOptions): {
           if (shouldOpenFolderSearchFromTarget(target ?? null)) {
             setShowFind(false)
             setSidebarVisible(true)
-            setSearchView(true)
+            setSidebarMode('search')
             requestSearchFocus()
             break
           }
@@ -226,7 +227,7 @@ export function useAppCommands(options: AppCommandOptions): {
           break
         case 'search-in-folder':
           setSidebarVisible(true)
-          setSearchView(true)
+          setSidebarMode('search')
           break
         case 'select-all':
           clipboardCmd.selectAll()
@@ -325,7 +326,7 @@ export function useAppCommands(options: AppCommandOptions): {
       saveTab,
       setFocusMode,
       setOutlineVisible,
-      setSearchView,
+      setSidebarMode,
       setSettingsSection,
       setShowFind,
       setShowPalette,

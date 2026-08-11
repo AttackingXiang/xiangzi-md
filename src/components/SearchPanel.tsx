@@ -1,22 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, FileText, Search } from 'lucide-react'
-import { desktop } from '../platform'
+import { useEffect, useRef } from 'react'
+import { Crosshair, FileText, Search, X } from 'lucide-react'
 import type { SearchResult } from '../types'
-import type { FolderSearchMode, SearchResponse } from '../platform/contracts'
+import type { FolderSearchMode } from '../platform/contracts'
+import type { FolderSearchState } from '../hooks/useFolderSearch'
 import { t, getLang } from '../lib/i18n'
 
 interface Props {
-  root: string
-  /** 上次使用的搜索范围，来自设置。 */
-  initialMode: FolderSearchMode
-  onModeChange: (mode: FolderSearchMode) => void
-  /** 文件树变化或已打开文件保存后变化，用于清理旧搜索结果。 */
-  reloadKey: string
+  /** 搜索状态住在 App 层（见 useFolderSearch 的注释），这里只负责渲染。 */
+  search: FolderSearchState
   /** Incremented when the folder-search shortcut should return focus here. */
   focusRequest?: number
   onOpenResult: (path: string, query: string, lineNumber?: number, matchIndex?: number) => void
   onOpenFile: (path: string) => void
-  onBack: () => void
+  /** 在文件树里定位这个结果（切回文件模式并展开到它）。 */
+  onRevealInTree: (path: string) => void
+  /** 空查询时按 Esc：离开搜索、回到文件树。 */
+  onExit: () => void
 }
 
 /** 把匹配文本里的 query 高亮 */
@@ -45,101 +44,34 @@ function highlight(text: string, query: string): JSX.Element {
 }
 
 export default function SearchPanel({
-  root,
-  initialMode,
-  onModeChange,
-  reloadKey,
+  search,
   focusRequest = 0,
   onOpenResult,
   onOpenFile,
-  onBack,
+  onRevealInTree,
+  onExit,
 }: Props): JSX.Element {
-  const [query, setQuery] = useState('')
-  const [mode, setMode] = useState<FolderSearchMode>(initialMode)
-  const [results, setResults] = useState<SearchResult[]>([])
-  const [searchMeta, setSearchMeta] = useState<{
-    scannedFiles: number
-    totalMatches: number
-    truncated: boolean
-    reason: SearchResponse['reason']
-  }>({
-    scannedFiles: 0,
-    totalMatches: 0,
-    truncated: false,
-    reason: null,
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { query, mode, results, meta, loading, error, recentQueries, setQuery, setMode } = search
   const inputRef = useRef<HTMLInputElement>(null)
-  const reqId = useRef(0)
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [focusRequest])
 
-  // 查询条件本身变了，旧结果立刻作废，先清空避免展示不匹配的内容。
-  // reloadKey 变化不走这里：那只是文件落盘后的后台重新校验，清空会让列表闪一下白。
-  useEffect(() => {
-    setResults([])
-    setSearchMeta({ scannedFiles: 0, totalMatches: 0, truncated: false, reason: null })
-  }, [mode, query, root])
-
-  // 防抖搜索
-  useEffect(() => {
-    const id = ++reqId.current
-    setError(null)
-    if (!query.trim()) {
-      setLoading(false)
-      void desktop.cancelSearch()
-      return
-    }
-    setLoading(true)
-    const timer = setTimeout(() => {
-      void desktop
-        .searchInFolder(root, query, mode)
-        .then((response) => {
-          if (id === reqId.current && !response.cancelled) {
-            setResults(response.items)
-            setSearchMeta({
-              scannedFiles: response.scannedFiles,
-              totalMatches: response.totalMatches,
-              truncated: response.truncated,
-              reason: response.reason,
-            })
-          }
-        })
-        .catch(() => {
-          if (id === reqId.current) {
-            setResults([])
-            setSearchMeta({ scannedFiles: 0, totalMatches: 0, truncated: false, reason: null })
-            setError(getLang() === 'en' ? 'Search failed. Try again.' : '搜索失败，请重试。')
-          }
-        })
-        .finally(() => {
-          if (id === reqId.current) setLoading(false)
-        })
-    }, 250)
-    return () => {
-      clearTimeout(timer)
-      if (reqId.current === id) reqId.current += 1
-      void desktop.cancelSearch()
-    }
-  }, [mode, query, reloadKey, root])
-
   const en = getLang() === 'en'
   const summary = en
-    ? `${results.length} files, ${searchMeta.totalMatches} matches`
-    : `${results.length} 个文件，${searchMeta.totalMatches} 处匹配`
+    ? `${results.length} files, ${meta.totalMatches} matches`
+    : `${results.length} 个文件，${meta.totalMatches} 处匹配`
 
   // 后端截断时把「为什么」也说清楚。三种上限对用户的含义完全不同：
   // 缩小目录、加精确关键词、还是打开文件自己找——一句"已截断"帮不上忙。
-  const truncationHint = !searchMeta.truncated
+  const truncationHint = !meta.truncated
     ? null
-    : searchMeta.reason === 'file_limit'
+    : meta.reason === 'file_limit'
       ? en
-        ? `Stopped after scanning ${searchMeta.scannedFiles} files. Narrow the folder to see the rest.`
-        : `扫描 ${searchMeta.scannedFiles} 个文件后停止，缩小目录范围可以看到其余结果。`
-      : searchMeta.reason === 'per_file_limit'
+        ? `Stopped after scanning ${meta.scannedFiles} files. Narrow the folder to see the rest.`
+        : `扫描 ${meta.scannedFiles} 个文件后停止，缩小目录范围可以看到其余结果。`
+      : meta.reason === 'per_file_limit'
         ? en
           ? 'Some files have more matches than shown. Open the file to see them all.'
           : '部分文件的匹配数超出显示上限，打开文件可查看全部。'
@@ -161,16 +93,17 @@ export default function SearchPanel({
     }
   }
 
-  return (
-    <aside className="sidebar search-panel">
-      <div className="sidebar-header">
-        <button className="icon-btn sm" title={t('返回文件')} onClick={onBack}>
-          <ArrowLeft size={15} />
-        </button>
-        <span className="sidebar-title">{t('搜索')}</span>
-        <span />
-      </div>
+  /** Esc 分两级：先清空关键词（结果还在的时候多半只是想重搜），再退出搜索。 */
+  const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    event.stopPropagation()
+    if (query) setQuery('')
+    else onExit()
+  }
 
+  return (
+    <div className="sidebar-panel search-panel">
       <div className="search-input-wrap">
         <Search size={14} />
         <input
@@ -179,7 +112,22 @@ export default function SearchPanel({
           placeholder={t('在文件夹中搜索…')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onInputKeyDown}
         />
+        {query && (
+          <button
+            type="button"
+            className="search-clear"
+            title={t('清除')}
+            aria-label={t('清除')}
+            onClick={() => {
+              setQuery('')
+              inputRef.current?.focus()
+            }}
+          >
+            <X size={13} />
+          </button>
+        )}
       </div>
 
       <div className="search-scope-wrap">
@@ -188,11 +136,7 @@ export default function SearchPanel({
           id="folder-search-scope"
           className="search-scope"
           value={mode}
-          onChange={(e) => {
-            const next = e.target.value as FolderSearchMode
-            setMode(next)
-            onModeChange(next)
-          }}
+          onChange={(e) => setMode(e.target.value as FolderSearchMode)}
         >
           <option value="all">{t('文件名和内容')}</option>
           <option value="content">{t('仅搜索内容')}</option>
@@ -211,24 +155,53 @@ export default function SearchPanel({
 
       <div className="sidebar-body" onKeyDown={onResultsKeyDown}>
         {!loading && !error && !query.trim() && (
-          <p className="sidebar-empty search-empty">{t('输入关键词开始搜索当前文件夹。')}</p>
+          <>
+            {recentQueries.length > 0 && (
+              <div className="search-recent">
+                <div className="search-recent-label">{t('最近搜索')}</div>
+                {recentQueries.map((recent) => (
+                  <button
+                    key={recent}
+                    type="button"
+                    className="search-recent-item"
+                    onClick={() => setQuery(recent)}
+                  >
+                    <Search size={12} />
+                    <span>{recent}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="sidebar-empty search-empty">{t('输入关键词开始搜索当前文件夹。')}</p>
+          </>
         )}
         {!loading && !error && query.trim() && results.length === 0 && (
           <p className="sidebar-empty search-empty">{t('没有找到匹配的内容。')}</p>
         )}
-        {results.map((r) => (
+        {results.map((r: SearchResult) => (
           <div key={r.path} className="search-file">
-            <button
-              type="button"
-              className="search-file-head"
-              data-search-row
-              title={r.path}
-              onClick={() => onOpenFile(r.path)}
-            >
-              <FileText size={14} />
-              <span className="search-file-name">{highlight(r.name, query)}</span>
-              <span className="search-count">{r.matches.length + r.nameMatches}</span>
-            </button>
+            <div className="search-file-row">
+              <button
+                type="button"
+                className="search-file-head"
+                data-search-row
+                title={r.path}
+                onClick={() => onOpenFile(r.path)}
+              >
+                <FileText size={14} />
+                <span className="search-file-name">{highlight(r.name, query)}</span>
+                <span className="search-count">{r.matches.length + r.nameMatches}</span>
+              </button>
+              <button
+                type="button"
+                className="search-reveal-btn"
+                title={t('在文件树中定位')}
+                aria-label={t('在文件树中定位')}
+                onClick={() => onRevealInTree(r.path)}
+              >
+                <Crosshair size={13} />
+              </button>
+            </div>
             {r.matches.map((m) => (
               <button
                 type="button"
@@ -244,6 +217,6 @@ export default function SearchPanel({
           </div>
         ))}
       </div>
-    </aside>
+    </div>
   )
 }

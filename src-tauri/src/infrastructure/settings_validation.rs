@@ -176,6 +176,11 @@ pub(super) fn sanitize_loaded_settings(settings: &mut AppSettings) {
     if !settings.background_image_path.is_empty() && !valid_background_image_path(settings) {
         settings.background_image_path.clear();
     }
+    // 面板宽度：夹到与前端 useResizablePanels 相同的区间，配置被手改坏时不至于
+    // 出现一条 0px 或占满整屏的侧栏。
+    settings.sidebar_width = settings.sidebar_width.clamp(160, 520);
+    settings.results_width = settings.results_width.clamp(200, 560);
+    settings.outline_width = settings.outline_width.clamp(160, 520);
     settings.background_opacity = settings.background_opacity.min(100);
     settings.code_block_opacity = settings.code_block_opacity.min(100);
     settings.theme_shade = settings.theme_shade.clamp(-50, 50);

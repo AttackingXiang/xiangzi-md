@@ -8,6 +8,7 @@ import type { Folder, Tab } from '../../types'
 import type { AppSettings } from '../../platform/contracts'
 import type { useFileOps } from '../../hooks/useFileOps'
 import type { useTreeOps } from '../../hooks/useTreeOps'
+import type { SidebarMode } from '../../lib/sidebarMode'
 import { useTagIndex } from './useTagIndex'
 import { buildTagTree, isTagInSubtree } from './tagTree'
 import { buildFrecencyRank } from '../../lib/recency'
@@ -51,7 +52,9 @@ export interface UseTagFeatureDeps {
   pushUndo: ReturnType<typeof useTreeOps>['pushUndo']
   togglePinnedTag: (tagKey: string) => void
   setSidebarVisible: Dispatch<SetStateAction<boolean>>
-  setSearchView: Dispatch<SetStateAction<boolean>>
+  /** 左栏当前模式；点正文标签时用来判断"标签树本来就开着吗"。 */
+  sidebarMode: SidebarMode
+  setSidebarMode: Dispatch<SetStateAction<SidebarMode>>
   setInputDialog: Dispatch<SetStateAction<InputDialogState>>
   setCtxMenu: Dispatch<SetStateAction<ContextMenuState>>
 }
@@ -86,7 +89,8 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
     pushUndo,
     togglePinnedTag,
     setSidebarVisible,
-    setSearchView,
+    sidebarMode,
+    setSidebarMode,
     setInputDialog,
     setCtxMenu,
   } = deps
@@ -213,36 +217,35 @@ export function useTagFeature(deps: UseTagFeatureDeps) {
   // 标签」才在左侧展示标签树。标签树自身的点击走 openTreeTag，始终保留标签树。
   const openDocumentTag = useCallback(
     (tag: string): void => {
-      setSearchView(false)
       // 已经手动打开的标签树属于用户当前工作状态，切换文档内的标签时保留它；
       // 只有左侧仍是文件树且设置关闭时，才收起左栏、只展示结果列。
-      const openOverview = tagNavigation.overviewOpen || (settings?.tagClickOpensOverview ?? false)
+      const openOverview = sidebarMode === 'tags' || (settings?.tagClickOpensOverview ?? false)
       setSidebarVisible(openOverview)
-      tagNavigation.openTag(tag, openOverview)
+      setSidebarMode(openOverview ? 'tags' : 'files')
+      tagNavigation.openTag(tag)
     },
     [
-      setSearchView,
       setSidebarVisible,
+      sidebarMode,
+      setSidebarMode,
       tagNavigation.openTag,
-      tagNavigation.overviewOpen,
       settings?.tagClickOpensOverview,
     ],
   )
 
   const openTreeTag = useCallback(
     (tag: string): void => {
-      setSearchView(false)
       setSidebarVisible(true)
-      tagNavigation.openTag(tag, true)
+      setSidebarMode('tags')
+      tagNavigation.openTag(tag)
     },
-    [setSearchView, setSidebarVisible, tagNavigation.openTag],
+    [setSidebarVisible, setSidebarMode, tagNavigation.openTag],
   )
 
   const showAllTags = useCallback((): void => {
     setSidebarVisible(true)
-    setSearchView(false)
-    tagNavigation.showOverview()
-  }, [tagNavigation.showOverview])
+    setSidebarMode('tags')
+  }, [setSidebarVisible, setSidebarMode])
 
   /** 标签改名/移动统一入口：把 fromKey（连同整棵子树）改写成 toTag 前缀。
    * scope='active' 只改当前文档；'all' 改所有含此标签的文档（改盘前弹确认）。

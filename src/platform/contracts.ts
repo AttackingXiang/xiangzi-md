@@ -113,6 +113,10 @@ export interface AppSettings {
   favoriteLabels: Record<string, string>
   /** 左侧文件栏是否显示；首次安装默认关闭，之后记忆用户上次的切换状态。 */
   sidebarVisible: boolean
+  /** 左栏 / 中间结果列 / 右侧大纲的宽度（px）；拖动结束后记忆，双击拖拽条复位。 */
+  sidebarWidth: number
+  resultsWidth: number
+  outlineWidth: number
   session: { folder: string | null; openFiles: string[]; activePath: string | null }
   /** 文件树排序：'default'（文件夹在前、名称升序）/'nameDesc'/'modified'/'opened'/'smart' */
   fileTreeSort: FileTreeSort

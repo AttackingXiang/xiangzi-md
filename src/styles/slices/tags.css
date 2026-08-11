@@ -690,6 +690,12 @@ button.tag-chip-label {
   border-bottom: 1px solid var(--workspace-divider);
 }
 
+/* 左栏里的标签树：标题和退出入口都由共享头部 + 模式切换器承担了，这里只剩计数。 */
+.tag-sidebar-heading-slim {
+  padding: 0 12px 6px;
+  border-bottom: 0;
+}
+
 .tag-sidebar-back {
   display: inline-flex;
   align-items: center;

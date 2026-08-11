@@ -76,7 +76,7 @@ import { clipboardPath } from './lib/clipboardPath'
 import { currentDesktopPlatform, revealLocationKey } from './lib/platform'
 import { HIDDEN_SIDEBAR_CONTROLS, sidebarControlsFromSettings } from './lib/sidebarControls'
 import { recordContentChanges } from './lib/searchReload'
-import type { PathStat } from './platform/contracts'
+import type { FolderSearchMode, PathStat } from './platform/contracts'
 import { replaceMovedPath } from './lib/treeDrag'
 import { documentPathKey, isPathAtOrUnder, sameDocumentPath } from './lib/pathIdentity'
 import type { SortContext } from './lib/fileTreeSort'
@@ -104,7 +104,12 @@ import { useEditorContextMenu } from './hooks/useEditorContextMenu'
 import { useExportActions, type ExportActivity } from './hooks/useExportActions'
 import { useAppCommands } from './hooks/useAppCommands'
 import { useNativeIntegration } from './hooks/useNativeIntegration'
+import { hasEditor, onEditorAvailable, searchMountedEditor } from './lib/searchBridge'
 import { useResizablePanels } from './hooks/useResizablePanels'
+import { useFolderSearch } from './hooks/useFolderSearch'
+import ResizeHandle from './components/ResizeHandle'
+import SidebarModeTabs from './components/SidebarModeTabs'
+import type { SidebarMode } from './lib/sidebarMode'
 import { useWorkspaceSession } from './hooks/useWorkspaceSession'
 import type { SettingsSection } from './components/Settings'
 import { groupKeysToCollapse } from './features/tags/tagTree'
@@ -343,14 +348,24 @@ export default function App(): JSX.Element {
   }, [tabs])
 
   // ── Panel widths (drag-to-resize) ──────────────────────────────────────────
+  // 宽度跟 sidebarVisible 一样记忆下来：一个记住开合、一个每次启动弹回 256px 的
+  // 组合，用户是能察觉到的。只在拖动结束/复位时写盘，不是每一帧。
+  const persistPanelWidths = useCallback(
+    (widths: { sidebarWidth?: number; resultsWidth?: number; outlineWidth?: number }): void => {
+      persistUserSettings(widths)
+    },
+    [persistUserSettings],
+  )
   const {
-    sidebarWidth,
-    outlineWidth,
-    resultsWidth,
-    startSidebarResize,
-    startResultsResize,
-    startOutlineResize,
-  } = useResizablePanels()
+    sidebar: sidebarPanel,
+    results: resultsPanel,
+    outline: outlinePanel,
+  } = useResizablePanels({
+    sidebarWidth: settings?.sidebarWidth ?? null,
+    resultsWidth: settings?.resultsWidth ?? null,
+    outlineWidth: settings?.outlineWidth ?? null,
+    onPersist: persistPanelWidths,
+  })
 
   // ── Sidebar visibility ─────────────────────────────────────────────────────
   // The persisted value is loaded asynchronously. Keep the app shell behind the
@@ -429,7 +444,7 @@ export default function App(): JSX.Element {
     if (!tab?.path) return
     const tabPath = tab.path
     setSidebarVisible(true)
-    setSearchView(false)
+    setSidebarMode('files')
     const fileParent = dirName(tabPath)
     if (!fileParent) return
     const currentFolder = folderRef.current
@@ -519,6 +534,11 @@ export default function App(): JSX.Element {
   const [findFocusRequest, setFindFocusRequest] = useState(0)
   const requestFindFocus = useCallback(() => setFindFocusRequest((value) => value + 1), [])
   const [findInitial, setFindInitial] = useState('')
+  const [searchJump, setSearchJump] = useState<{
+    query: string
+    line?: number
+    matchIndex?: number
+  } | null>(null)
   const [findLine, setFindLine] = useState<number | undefined>(undefined)
   const [findMatchIndex, setFindMatchIndex] = useState<number | undefined>(undefined)
   // 文本文件的「查找替换」走 CodeMirror 自带面板（已汉化 + 贴合主题），不弹
@@ -529,14 +549,16 @@ export default function App(): JSX.Element {
       setShowFind(false)
     }
   }, [showFind, isTextKind])
-  const [searchView, setSearchView] = useState(false)
+  // 左栏在同一位置上轮流展示文件树 / 搜索 / 标签树，见 SidebarMode 的注释。
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('files')
   const [searchFocusRequest, setSearchFocusRequest] = useState(0)
   const requestSearchFocus = useCallback(() => setSearchFocusRequest((value) => value + 1), [])
   // 搜索面板就长在左栏里（替掉文件树），所以左栏必须是展开的。
   const openSidebarSearch = useCallback(() => {
     setSidebarVisible(true)
-    setSearchView(true)
-  }, [setSidebarVisible, setSearchView])
+    setSidebarMode('search')
+  }, [setSidebarVisible, setSidebarMode])
+  const showFileTree = useCallback(() => setSidebarMode('files'), [setSidebarMode])
   const [showPalette, setShowPalette] = useState(false)
   const [recentItemsSection, setRecentItemsSection] = useState<RecentItemsSection | null>(null)
   const showRecentItems = useCallback((section: RecentItemsSection): void => {
@@ -630,25 +652,33 @@ export default function App(): JSX.Element {
   })
 
   // ── Folder open ────────────────────────────────────────────────────────────
-  const openFolder = useCallback(async () => {
-    const result = await desktop.openFolder()
-    if (result) {
+  // tagNavigation 在下面才建（它依赖 folder），这里用 ref 反向拿它的 reset。
+  const resetTagNavigationRef = useRef<(() => void) | null>(null)
+
+  // 打开（或换）文件夹时把左栏拨回文件树：用户此刻想看的是新工作区的文件，
+  // 而不是上一个工作区留下的搜索结果或标签树。中间结果列同理清掉。
+  const enterFolder = useCallback(
+    (result: Folder): void => {
       setSidebarVisible(true)
+      setSidebarMode('files')
+      resetTagNavigationRef.current?.()
       setFolder(result)
       pushRecentFolder(result.root)
-    }
-  }, [pushRecentFolder, setSidebarVisible])
+    },
+    [pushRecentFolder, setSidebarVisible, setSidebarMode],
+  )
+
+  const openFolder = useCallback(async () => {
+    const result = await desktop.openFolder()
+    if (result) enterFolder(result)
+  }, [enterFolder])
 
   const chooseFolderFrom = useCallback(
     async (initialPath: string) => {
       const result = await desktop.openFolder(initialPath)
-      if (result) {
-        setSidebarVisible(true)
-        setFolder(result)
-        pushRecentFolder(result.root)
-      }
+      if (result) enterFolder(result)
     },
-    [pushRecentFolder, setSidebarVisible],
+    [enterFolder],
   )
 
   const openFolderByPath = useCallback(
@@ -661,15 +691,10 @@ export default function App(): JSX.Element {
         void desktop.notify(t('无法打开文件夹：\n') + root)
         return
       }
-      if (result) {
-        setSidebarVisible(true)
-        setFolder(result)
-        pushRecentFolder(result.root)
-      } else {
-        void desktop.notify(t('文件夹不存在：\n') + root)
-      }
+      if (result) enterFolder(result)
+      else void desktop.notify(t('文件夹不存在：\n') + root)
     },
-    [pushRecentFolder, setSidebarVisible],
+    [enterFolder],
   )
 
   const inspectClipboardPath = useCallback(async (): Promise<void> => {
@@ -841,10 +866,12 @@ export default function App(): JSX.Element {
     pushUndo,
     togglePinnedTag,
     setSidebarVisible,
-    setSearchView,
+    sidebarMode,
+    setSidebarMode,
     setInputDialog,
     setCtxMenu,
   })
+  resetTagNavigationRef.current = tagNavigation.reset
 
   // 搜索后删除/重命名会刷新 treeKey；已打开的文件保存后内容哈希变化，也要重搜，
   // 否则搜索结果会继续展示已不存在或已不再匹配的文件。判定逻辑见 recordContentChanges。
@@ -858,6 +885,27 @@ export default function App(): JSX.Element {
     if (changed) setSearchRevision((value) => value + 1)
   }, [tabs])
   const searchReloadKey = `${treeKey}:${searchRevision}`
+  const persistFolderSearchMode = useCallback(
+    (folderSearchMode: FolderSearchMode): void => {
+      persistUserSettings({ folderSearchMode })
+    },
+    [persistUserSettings],
+  )
+  // 搜索状态住在这里而不是面板里：切到文件树再切回来，关键词和结果都还在。
+  const folderSearch = useFolderSearch(
+    folder?.root ?? null,
+    searchReloadKey,
+    settings?.folderSearchMode ?? 'all',
+    persistFolderSearchMode,
+  )
+  /** 搜索结果 →「在文件树中定位」：切回文件模式并展开到那个文件。 */
+  const revealSearchResult = useCallback(
+    (path: string): void => {
+      setSidebarMode('files')
+      requestReveal(path)
+    },
+    [requestReveal, setSidebarMode],
+  )
 
   const sidebarControls = useMemo(
     () => (settings ? sidebarControlsFromSettings(settings) : HIDDEN_SIDEBAR_CONTROLS),
@@ -1027,13 +1075,36 @@ export default function App(): JSX.Element {
     async (path: string, query: string, lineNumber?: number, matchIndex?: number) => {
       const result = await openPath(path, baseName(path))
       if (result.kind === 'failed' || stateRef.current.activeId !== result.tabId) return
+      // 只跳转并高亮，不再自动弹出编辑器里的查找栏：左边已经有一个搜索面板了，
+      // 再顶出一条查找栏等于同屏两个搜索 UI。查找栏要用的初始值仍然记着，用户
+      // 按 ⌘F 时是预填好的；⌘G 也会照常打开它继续找下一个。
       setFindInitial(query)
       setFindLine(lineNumber)
       setFindMatchIndex(matchIndex)
-      setShowFind(true)
+      // 新对象 = 一次新的跳转请求，即使连点同一条结果也会重跑。真正的跳转在下面
+      // 的 effect 里做：那时这次打开文档的渲染已经提交，编辑器拿到的是新正文。
+      setSearchJump({ query, line: lineNumber, matchIndex })
     },
     [openPath, stateRef],
   )
+
+  // 跳到搜索命中的位置。编辑器可能是懒加载的（首次打开文档时还没 mount），
+  // 所以拿不到 view 时就等它注册进 bridge 再跳。
+  useEffect(() => {
+    if (!searchJump) return undefined
+    const jump = (): void => {
+      searchMountedEditor(searchJump.query, searchJump.matchIndex ?? 0, searchJump.line)
+    }
+    if (hasEditor()) {
+      jump()
+      return undefined
+    }
+    const unsubscribe = onEditorAvailable(() => {
+      unsubscribe()
+      jump()
+    })
+    return unsubscribe
+  }, [searchJump])
 
   // ── Outline navigation ─────────────────────────────────────────────────────
   const scrollToHeading = useCallback(
@@ -1193,7 +1264,7 @@ export default function App(): JSX.Element {
     importDocx,
     setShowPalette,
     setSidebarVisible,
-    setSearchView,
+    setSidebarMode,
     setShowFind,
     requestFindFocus,
     requestSearchFocus,
@@ -1286,7 +1357,10 @@ export default function App(): JSX.Element {
       )}
       <div className="workspace-shell">
         {sidebarVisible && (
-          <div className="sidebar-wrap" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+          <div
+            className="sidebar-wrap"
+            style={{ width: sidebarPanel.width, minWidth: sidebarPanel.width }}
+          >
             {isMac && (
               <MacWindowBar
                 onToggleSidebar={toggleSidebarVisible}
@@ -1295,41 +1369,52 @@ export default function App(): JSX.Element {
                 showRevealButton={settings.showRevealButton}
               />
             )}
-            {searchView && folder ? (
-              // 搜索占据文件树的位置（和标签树一样是左栏内的切换），不再单开一列。
-              <Suspense fallback={<PanelFallback />}>
-                <SearchPanel
-                  root={folder.root}
-                  reloadKey={searchReloadKey}
-                  focusRequest={searchFocusRequest}
-                  initialMode={settings.folderSearchMode}
-                  onModeChange={(folderSearchMode) => persistUserSettings({ folderSearchMode })}
-                  onOpenResult={openSearchResult}
-                  onOpenFile={(path) => void openPath(path, baseName(path))}
-                  onBack={() => setSearchView(false)}
-                />
-              </Suspense>
-            ) : tagNavigation.overviewOpen ? (
-              <aside className="sidebar">
-                <SidebarHeader
-                  folder={folder}
-                  isFav={
-                    folder
-                      ? settings.favorites.some((path) => sameDocumentPath(path, folder.root))
-                      : false
-                  }
-                  canUndo={canUndo}
-                  controls={sidebarControls}
-                  onUndo={undoLastOp}
-                  onToggleFavorite={toggleFavorite}
-                  onRefresh={refreshTree}
-                  onOpenSearch={openSidebarSearch}
-                  onShowTags={showAllTags}
-                  onOpenFolder={openFolder}
-                  onOpenSettings={openSidebarSettings}
-                  onRootContext={openRootContext}
-                />
-                {/* 标签树常驻左侧；点某个标签后，它的文档在中间“结果列”展示。 */}
+            {/* 头部（当前文件夹那一行）和模式切换器三种模式共用，只有下面的主体在换。
+                Esc 统一在这里退回文件树，不管焦点落在面板里还是切换器上；搜索框自己
+                会先吃掉一次 Esc 用来清空关键词（见 SearchPanel）。 */}
+            <aside
+              className="sidebar"
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape' || sidebarMode === 'files') return
+                event.preventDefault()
+                showFileTree()
+              }}
+            >
+              <SidebarHeader
+                folder={folder}
+                isFav={
+                  folder
+                    ? settings.favorites.some((path) => sameDocumentPath(path, folder.root))
+                    : false
+                }
+                canUndo={canUndo}
+                controls={sidebarControls}
+                onUndo={undoLastOp}
+                onToggleFavorite={toggleFavorite}
+                onRefresh={refreshTree}
+                onOpenSearch={openSidebarSearch}
+                onShowTags={showAllTags}
+                onOpenFolder={openFolder}
+                onOpenSettings={openSidebarSettings}
+                onRootContext={openRootContext}
+                // 排序只对文件树有意义，其余模式下这个按钮自然消失。
+                fileTreeSort={sidebarMode === 'files' ? fileTreeSortContext.mode : undefined}
+                onFileTreeSortChange={sidebarMode === 'files' ? changeFileTreeSort : undefined}
+              />
+              {folder && <SidebarModeTabs mode={sidebarMode} onChange={setSidebarMode} />}
+              {folder && sidebarMode === 'search' ? (
+                <Suspense fallback={<PanelFallback />}>
+                  <SearchPanel
+                    search={folderSearch}
+                    focusRequest={searchFocusRequest}
+                    onOpenResult={openSearchResult}
+                    onOpenFile={(path) => void openPath(path, baseName(path))}
+                    onRevealInTree={revealSearchResult}
+                    onExit={showFileTree}
+                  />
+                </Suspense>
+              ) : folder && sidebarMode === 'tags' ? (
+                /* 标签树占左栏；点某个标签后，它的文档在中间“结果列”展示。 */
                 <Suspense fallback={<PanelFallback />}>
                   <TagOverviewSidebar
                     tree={tagTree}
@@ -1339,7 +1424,6 @@ export default function App(): JSX.Element {
                     loading={tagIndex.loading}
                     error={tagIndex.error}
                     truncated={tagIndex.truncated}
-                    onClose={tagNavigation.hideOverview}
                     onOpenTag={openTreeTag}
                     onTogglePin={togglePinnedTag}
                     onToggleCollapsed={toggleTagCollapsed}
@@ -1347,50 +1431,52 @@ export default function App(): JSX.Element {
                     onMoveTag={moveTagUnder}
                   />
                 </Suspense>
-              </aside>
-            ) : (
-              <Sidebar
-                folder={folder}
-                activePath={activeTab?.path ?? null}
-                favorites={settings.favorites}
-                favoriteFiles={settings.favoriteFiles ?? []}
-                favoritesCollapsed={settings.favoritesCollapsed}
-                favoriteLabels={settings.favoriteLabels}
-                sortContext={fileTreeSortContext}
-                revealPath={revealPath}
-                revealRequestId={revealRequestId}
-                onRevealComplete={handleRevealComplete}
-                hideAttachmentFolders={settings.hideAttachmentFolders ?? false}
-                attachmentFolder={settings.attachmentFolder || 'assets'}
-                onOpenFolder={openFolder}
-                onOpenFolderPath={openFolderByPath}
-                onOpenFile={openPath}
-                onOpenSettings={openSidebarSettings}
-                onFileTreeSortChange={changeFileTreeSort}
-                controls={sidebarControls}
-                onOpenSearch={openSidebarSearch}
-                onShowTags={showAllTags}
-                onToggleFavorite={toggleFavorite}
-                onFavoritesCollapsedChange={setFavoritesCollapsed}
-                onFavoriteContext={openFavoriteContext}
-                onRefresh={refreshTree}
-                treeError={treeError}
-                onNodeContext={openNodeContext}
-                onRootContext={openRootContext}
-                onMove={moveTreeItem}
-                reloadKey={treeKey}
-                expandedPathsRef={expandedPathsRef}
-                canUndo={canUndo}
-                onUndo={undoLastOp}
-              />
-            )}
-            <div className="resize-handle" onMouseDown={startSidebarResize} />
+              ) : (
+                <Sidebar
+                  folder={folder}
+                  activePath={activeTab?.path ?? null}
+                  favorites={settings.favorites}
+                  favoriteFiles={settings.favoriteFiles ?? []}
+                  favoritesCollapsed={settings.favoritesCollapsed}
+                  favoriteLabels={settings.favoriteLabels}
+                  sortContext={fileTreeSortContext}
+                  revealPath={revealPath}
+                  revealRequestId={revealRequestId}
+                  onRevealComplete={handleRevealComplete}
+                  hideAttachmentFolders={settings.hideAttachmentFolders ?? false}
+                  attachmentFolder={settings.attachmentFolder || 'assets'}
+                  onOpenFolder={openFolder}
+                  onOpenFolderPath={openFolderByPath}
+                  onOpenFile={openPath}
+                  onFavoritesCollapsedChange={setFavoritesCollapsed}
+                  onFavoriteContext={openFavoriteContext}
+                  onRefresh={refreshTree}
+                  treeError={treeError}
+                  onNodeContext={openNodeContext}
+                  onRootContext={openRootContext}
+                  onMove={moveTreeItem}
+                  reloadKey={treeKey}
+                  expandedPathsRef={expandedPathsRef}
+                />
+              )}
+            </aside>
+            <ResizeHandle
+              label={t('侧边栏宽度')}
+              direction={1}
+              width={sidebarPanel.width}
+              onResizeStart={sidebarPanel.startResize}
+              onReset={sidebarPanel.reset}
+              onNudge={sidebarPanel.nudge}
+            />
           </div>
         )}
 
         {/* 中间“结果列”：点某个标签后的文档列表。可拖宽，关掉即隐藏。 */}
         {resultsPaneVisible ? (
-          <div className="results-wrap" style={{ width: resultsWidth, minWidth: resultsWidth }}>
+          <div
+            className="results-wrap"
+            style={{ width: resultsPanel.width, minWidth: resultsPanel.width }}
+          >
             {isMac && !sidebarVisible && (
               <MacWindowBar
                 onToggleSidebar={toggleSidebarVisible}
@@ -1413,14 +1499,21 @@ export default function App(): JSX.Element {
                   loading={tagIndex.loading}
                   error={tagIndex.error}
                   truncated={tagIndex.truncated}
-                  overviewOpen={tagNavigation.overviewOpen}
+                  overviewOpen={sidebarMode === 'tags' && sidebarVisible}
                   onShowAllTags={showAllTags}
                   onClose={tagNavigation.closeResults}
                   onOpenDocument={(path, name) => void openPath(path, name)}
                 />
               </Suspense>
             </div>
-            <div className="resize-handle" onMouseDown={startResultsResize} />
+            <ResizeHandle
+              label={t('结果列宽度')}
+              direction={1}
+              width={resultsPanel.width}
+              onResizeStart={resultsPanel.startResize}
+              onReset={resultsPanel.reset}
+              onNudge={resultsPanel.nudge}
+            />
           </div>
         ) : null}
 
@@ -1633,7 +1726,14 @@ export default function App(): JSX.Element {
 
             {outlineVisible && activeTab && !isTextKind && (
               <>
-                <div className="resize-handle" onMouseDown={startOutlineResize} />
+                <ResizeHandle
+                  label={t('大纲宽度')}
+                  direction={-1}
+                  width={outlinePanel.width}
+                  onResizeStart={outlinePanel.startResize}
+                  onReset={outlinePanel.reset}
+                  onNudge={outlinePanel.nudge}
+                />
                 <Suspense fallback={null}>
                   <Outline
                     documentId={activeTab.id}
@@ -1643,7 +1743,7 @@ export default function App(): JSX.Element {
                     onReorder={reorderSection}
                     onClose={closeOutline}
                     readOnly={readingMode}
-                    width={outlineWidth}
+                    width={outlinePanel.width}
                   />
                 </Suspense>
               </>

@@ -102,9 +102,68 @@ body.is-macos .sidebar-wrap > .sidebar {
 }
 
 .resize-handle:hover,
-.resize-handle:active {
+.resize-handle:active,
+.resize-handle:focus-visible {
   background: var(--accent);
   opacity: 0.45;
+  outline: none;
+}
+
+/* ---------- 左栏模式切换（文件 / 搜索 / 标签） ---------- */
+.sidebar-mode-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  margin: 0 8px 6px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+}
+
+.sidebar-mode-tab {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sidebar-mode-tab:hover {
+  color: var(--text-2);
+}
+
+.sidebar-mode-tab.active {
+  background: var(--bg-sidebar);
+  color: var(--accent-text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.sidebar-mode-tab svg {
+  flex-shrink: 0;
+}
+
+.sidebar-mode-tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 三种模式的主体共用这一层：撑满 SidebarHeader + 切换器之下的剩余高度。 */
+.sidebar-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .sidebar-header {
@@ -190,8 +249,13 @@ body.is-macos .sidebar-header {
   color: var(--accent-text);
 }
 
+/* 收藏区：限高并自己滚动。以前是 flex:0 0 auto 且不滚，收藏一多就把文件树
+   一路往下顶，窗口不高时文件树只剩几行、而收藏本身也翻不动。 */
 .sidebar-section {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  max-height: 40%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 4px 8px 8px;
   border-bottom: 1px solid var(--workspace-divider);
 }
@@ -494,6 +558,64 @@ body.is-macos .sidebar-header {
   border-radius: 6px;
 }
 
+.search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+/* 空查询时列出本次会话搜过的关键词，省得重打一遍。 */
+.search-recent {
+  padding: 6px 4px 2px;
+}
+
+.search-recent-label {
+  padding: 0 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.search-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-recent-item:hover {
+  background: var(--bg-hover);
+}
+
+.search-recent-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .search-scope-wrap {
   display: flex;
   align-items: center;
@@ -524,26 +646,59 @@ body.is-macos .sidebar-header {
   margin-bottom: 6px;
 }
 
+/* 文件名那一行：整行吸顶（sticky 挪到了外层，因为行内现在还有一个「定位」按钮）。 */
+.search-file-row {
+  display: flex;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: var(--bg-sidebar);
+}
+
 .search-file-head {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   border: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
+  padding: 5px 4px 5px 10px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--text-2);
-  position: sticky;
-  top: 0;
-  background: var(--bg-sidebar);
+  background: transparent;
   color: var(--text-2);
   text-align: left;
   cursor: pointer;
 }
 
-.search-file-head:hover {
+.search-file-row:hover {
   background: var(--bg-hover);
+}
+
+/* 定位按钮平时不占视觉重量，指针移到这一行（或键盘聚焦）才显出来。 */
+.search-reveal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 6px;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.search-file-row:hover .search-reveal-btn,
+.search-reveal-btn:focus-visible {
+  opacity: 1;
+}
+
+.search-reveal-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-text);
 }
 
 .search-file-name {

@@ -287,6 +287,9 @@ fn apply_patch(settings: &mut AppSettings, patch: SettingsPatch) {
     replace_if_some!(tag_result_sort);
     replace_if_some!(tag_click_opens_overview);
     replace_if_some!(sidebar_visible);
+    replace_if_some!(sidebar_width);
+    replace_if_some!(results_width);
+    replace_if_some!(outline_width);
     replace_if_some!(favorite_labels);
     replace_if_some!(session);
     replace_if_some!(file_tree_sort);
