@@ -24,9 +24,9 @@
    occupy only the editor pane, matching the split desktop-window structure. */
 body.is-macos .main > .tabbar {
   position: relative;
-  flex: 0 0 52px;
-  height: 52px;
-  min-height: 52px;
+  flex: 0 0 var(--mac-chrome-row-h);
+  height: var(--mac-chrome-row-h);
+  min-height: var(--mac-chrome-row-h);
   background: var(--workspace-surface);
 }
 
@@ -133,7 +133,9 @@ body.is-macos .main > .tabbar .tab.active::after {
   position: absolute;
   z-index: 2;
   right: 10px;
-  bottom: -10px;
+  /* 让指示条正好压在标签行底边的分隔线下方：标签(30px)在行内居中并下移 2px 后，
+     距行底还剩 5px，再多 1px 就落到分隔线之外。 */
+  bottom: -6px;
   left: 10px;
   height: 4px;
   border-radius: 2px 2px 0 0;

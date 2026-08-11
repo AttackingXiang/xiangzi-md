@@ -78,7 +78,7 @@ body.is-macos .sidebar-wrap > .sidebar {
 }
 
 .mac-window-bar {
-  flex: 0 0 52px;
+  flex: 0 0 var(--mac-chrome-row-h);
   display: flex;
   align-items: center;
   gap: 2px;

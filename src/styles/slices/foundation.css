@@ -24,6 +24,11 @@
   --accent-text: #4f46e5;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
   --radius: 8px;
+
+  /* macOS 顶部窗口行（左栏红绿灯行 + 右侧标签行）的统一高度。两侧必须同高，
+     否则两栏的横向分隔会错位；改这里时同步 tauri.macos.conf.json 里的
+     trafficLightPosition.y（该值近似等于红绿灯中心到窗口顶部的距离 + 2）。 */
+  --mac-chrome-row-h: 44px;
   --workspace-divider: color-mix(in srgb, var(--text) 11%, transparent);
   --workspace-divider-strong: color-mix(in srgb, var(--text) 18%, transparent);
   --code-block-opacity: 30%;
