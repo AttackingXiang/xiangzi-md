@@ -7,8 +7,12 @@ export default defineConfig({
     // e2e/ holds the Playwright browser regression suite (playwright.config.ts),
     // a separate runner with its own *.spec.ts files. Vitest's default include
     // pattern would otherwise pick those up too and fail outside a browser, so
-    // extend (not replace) the default exclude list with it.
-    exclude: [...configDefaults.exclude, 'e2e/**'],
+    // extend (not replace) the default exclude list with it. harmonyos/ is a
+    // gitignored, untracked ArkTS port with its own vitest.config.mts and its
+    // own @xiangzi/models workspace package — invisible to this project's
+    // resolver, so its *.test.ts files fail here with "package not found"
+    // rather than running.
+    exclude: [...configDefaults.exclude, 'e2e/**', 'harmonyos/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
