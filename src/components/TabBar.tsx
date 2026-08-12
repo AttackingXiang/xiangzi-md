@@ -209,6 +209,8 @@ const TabBar = memo(function TabBar({
     const isDragging = draggedTabId === tab.id
     const dropLeft = dropTarget?.tabId === tab.id && dropTarget.side === 'left'
     const dropRight = dropTarget?.tabId === tab.id && dropTarget.side === 'right'
+    const displayName = stripExtension(tab.name)
+    const closeLabel = `${t('关闭标签页')}: ${displayName}`
 
     return (
       <div
@@ -247,16 +249,22 @@ const TabBar = memo(function TabBar({
           }
         }}
       >
-        <span className="tab-name">{stripExtension(tab.name)}</span>
+        <span className="tab-name">{displayName}</span>
+        {tab.dirty && (
+          <span className="dot tab-dirty-indicator" role="img" aria-label={t('未保存')} />
+        )}
         <button
+          type="button"
           className="tab-close"
+          aria-label={closeLabel}
+          title={closeLabel}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation()
             onClose(tab.id)
           }}
         >
-          {tab.dirty ? <span className="dot" /> : <X size={13} />}
+          <X size={14} aria-hidden="true" />
         </button>
       </div>
     )

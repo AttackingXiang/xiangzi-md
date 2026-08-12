@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { act } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../types'
 import TabBar from './TabBar'
@@ -14,6 +14,10 @@ vi.mock('../lib/windowActions', () => ({
 }))
 
 vi.mock('./LazyHoverScrollbars', () => ({ default: () => null }))
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+
+const mountedRoots: Root[] = []
 
 function tab(id: string): Tab {
   return {
@@ -40,22 +44,29 @@ function renderTabBar({
   showLeadingControls = false,
   onMoveTab = vi.fn(),
   onSelect = vi.fn(),
+  onClose = vi.fn(),
+  tabs = [tab('a'), tab('b')],
+  activeId = 'a',
 }: {
   enableWindowDragging?: boolean
   showLeadingControls?: boolean
   onMoveTab?: (fromIndex: number, insertAt: number) => void
   onSelect?: (id: string) => void
+  onClose?: (id: string) => void
+  tabs?: Tab[]
+  activeId?: string | null
 } = {}): HTMLElement {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
+  mountedRoots.push(root)
   act(() =>
     root.render(
       <TabBar
-        tabs={[tab('a'), tab('b')]}
-        activeId="a"
+        tabs={tabs}
+        activeId={activeId}
         onSelect={onSelect}
-        onClose={vi.fn()}
+        onClose={onClose}
         onMoveTab={onMoveTab}
         onTabContext={vi.fn()}
         onShowWelcome={vi.fn()}
@@ -71,6 +82,9 @@ function renderTabBar({
 }
 
 afterEach(() => {
+  act(() => {
+    for (const root of mountedRoots.splice(0)) root.unmount()
+  })
   document.body.replaceChildren()
   vi.clearAllMocks()
 })
@@ -154,6 +168,39 @@ describe('TabBar window and tab dragging', () => {
     })
 
     expect(onSelect).toHaveBeenCalledWith('a')
+    expect(onMoveTab).not.toHaveBeenCalled()
+  })
+
+  it('keeps the close action present and named independently from unsaved state', () => {
+    const dirtyTab = { ...tab('draft'), dirty: true }
+    const host = renderTabBar({ tabs: [dirtyTab, tab('saved')], activeId: 'saved' })
+    const renderedTabs = host.querySelectorAll<HTMLElement>('.tab')
+    const dirtyClose = renderedTabs[0]?.querySelector<HTMLButtonElement>('.tab-close')
+    const savedClose = renderedTabs[1]?.querySelector<HTMLButtonElement>('.tab-close')
+    const dirtyIndicator = renderedTabs[0]?.querySelector<HTMLElement>('.tab-dirty-indicator')
+
+    expect(dirtyClose?.getAttribute('aria-label')).toBe('关闭标签页: draft')
+    expect(dirtyClose?.getAttribute('title')).toBe('关闭标签页: draft')
+    expect(dirtyClose?.querySelector('svg')).not.toBeNull()
+    expect(savedClose?.querySelector('svg')).not.toBeNull()
+    expect(dirtyIndicator?.getAttribute('aria-label')).toBe('未保存')
+    expect(renderedTabs[1]?.querySelector('.tab-dirty-indicator')).toBeNull()
+  })
+
+  it('closes the requested tab without selecting or starting a drag', () => {
+    const onClose = vi.fn()
+    const onSelect = vi.fn()
+    const onMoveTab = vi.fn()
+    const host = renderTabBar({ onClose, onSelect, onMoveTab })
+    const closeButton = host.querySelector<HTMLButtonElement>('.tab-close')
+
+    act(() => {
+      closeButton?.dispatchEvent(pointerEvent('pointerdown'))
+      closeButton?.click()
+    })
+
+    expect(onClose).toHaveBeenCalledWith('a')
+    expect(onSelect).not.toHaveBeenCalled()
     expect(onMoveTab).not.toHaveBeenCalled()
   })
 })
