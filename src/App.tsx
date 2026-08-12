@@ -130,6 +130,7 @@ export default function App(): JSX.Element {
     settingsReady,
     themeRenderVersion,
     customCssError,
+    searchFocusEffectCssError,
     backgroundImageError,
     settingsSaving,
     settingsSaveError,
@@ -1043,6 +1044,45 @@ export default function App(): JSX.Element {
     [lang, saveSettings],
   )
 
+  // ── Search focus effect marketplace deep links ───────────────────────────
+  useEffect(
+    () =>
+      desktop.onSearchFocusEffectInstallRequest((request) => {
+        setThemeInstallLabel(tf('正在安装焦点动画「{name}」…', { name: request.name }))
+        void desktop
+          .confirm(
+            tf('要安装并应用搜索焦点动画「{name}」吗？', { name: request.name }),
+            t('安装搜索焦点动画'),
+            t('安装'),
+            t('取消'),
+          )
+          .then((confirmed) => {
+            if (!confirmed) return null
+            return desktop.installSearchFocusEffectFromUrl(request)
+          })
+          .then(async (effect) => {
+            if (!effect) return
+            await saveSettings({
+              searchFocusEffect: effect.effect,
+              searchFocusEffectCssPath: effect.cssPath,
+            })
+            await desktop.notify(
+              `${effect.name} ${effect.version} ${t('已安装并应用。')}`,
+              t('搜索焦点动画安装完成'),
+            )
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error)
+            void desktop.notify(
+              tf('搜索焦点动画安装失败：{message}', { message }),
+              t('搜索焦点动画安装'),
+            )
+          })
+          .finally(() => setThemeInstallLabel(null))
+      }),
+    [lang, saveSettings],
+  )
+
   // ── Tab context menu ───────────────────────────────────────────────────────
   const openTabContext = useCallback(
     (id: string, x: number, y: number) => {
@@ -1820,6 +1860,7 @@ export default function App(): JSX.Element {
             settings={settings}
             updater={updater}
             customCssError={customCssError}
+            searchFocusEffectCssError={searchFocusEffectCssError}
             backgroundImageError={backgroundImageError}
             saving={settingsSaving}
             saveError={settingsSaveError}

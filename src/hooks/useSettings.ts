@@ -36,6 +36,7 @@ export function useSettings() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [settingsReady, setSettingsReady] = useState(false)
   const [customCssError, setCustomCssError] = useState(false)
+  const [searchFocusEffectCssError, setSearchFocusEffectCssError] = useState(false)
   const [backgroundImageError, setBackgroundImageError] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsSaveError, setSettingsSaveError] = useState(false)
@@ -141,6 +142,10 @@ export function useSettings() {
           document.head.appendChild(el)
         }
         el.textContent = res.content
+        // Installed focus-effect CSS must remain the final animation layer
+        // even when both local files finish loading in a different order.
+        const focusEffectStyle = document.getElementById('installed-search-focus-effect-style')
+        if (focusEffectStyle) document.head.appendChild(focusEffectStyle)
         setThemeRenderVersion((version) => version + 1)
       })
       .catch(() => {
@@ -150,6 +155,38 @@ export function useSettings() {
       cancelled = true
     }
   }, [settings?.customCssPath])
+
+  // ── Installed search focus effect CSS ─────────────────────────────────────
+  // Keep this in its own style element so installing an effect never replaces
+  // the user's workspace theme. Native installation has already validated the
+  // official source URL, size, remote-resource ban, and focus-effect contract.
+  useEffect(() => {
+    if (!settings) return undefined
+    const id = 'installed-search-focus-effect-style'
+    let el = document.getElementById(id) as HTMLStyleElement | null
+    el?.remove()
+    el = null
+    setSearchFocusEffectCssError(false)
+    if (!settings.searchFocusEffectCssPath) return undefined
+
+    let cancelled = false
+    desktop
+      .readFile(settings.searchFocusEffectCssPath)
+      .then((res) => {
+        if (cancelled) return
+        el = document.createElement('style')
+        el.id = id
+        el.textContent = res.content
+        document.head.appendChild(el)
+      })
+      .catch(() => {
+        if (!cancelled) setSearchFocusEffectCssError(true)
+      })
+    return () => {
+      cancelled = true
+      el?.remove()
+    }
+  }, [settings?.searchFocusEffectCssPath])
 
   // ── 背景图片 ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -575,6 +612,7 @@ export function useSettings() {
     settingsReady,
     themeRenderVersion,
     customCssError,
+    searchFocusEffectCssError,
     backgroundImageError,
     settingsSaving,
     settingsSaveError,

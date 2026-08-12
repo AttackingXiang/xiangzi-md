@@ -9,10 +9,12 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const desktop = vi.hoisted(() => ({
   listInstalledThemes: vi.fn(),
+  listInstalledSearchFocusEffects: vi.fn(),
   openExternal: vi.fn(),
   pickCss: vi.fn(),
   pickImage: vi.fn(),
   removeInstalledTheme: vi.fn(),
+  removeInstalledSearchFocusEffect: vi.fn(),
 }))
 
 vi.mock('../../platform', () => ({ desktop }))
@@ -36,8 +38,10 @@ beforeEach(() => {
   document.body.append(host)
   root = createRoot(host)
   desktop.listInstalledThemes.mockResolvedValue([])
+  desktop.listInstalledSearchFocusEffects.mockResolvedValue([])
   desktop.openExternal.mockResolvedValue(undefined)
   desktop.removeInstalledTheme.mockResolvedValue(undefined)
+  desktop.removeInstalledSearchFocusEffect.mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -45,8 +49,16 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-async function render(customCssPath = '', onChange = vi.fn()): Promise<void> {
-  const settings = { ...createBrowserPreviewSettings(), customCssPath }
+async function render(
+  customCssPath = '',
+  onChange = vi.fn(),
+  searchFocusEffectCssPath = '',
+): Promise<void> {
+  const settings = {
+    ...createBrowserPreviewSettings(),
+    customCssPath,
+    searchFocusEffectCssPath,
+  }
   await act(async () => {
     root.render(
       <AppearanceSection
@@ -54,6 +66,7 @@ async function render(customCssPath = '', onChange = vi.fn()): Promise<void> {
         onChange={onChange}
         en={false}
         customCssError={false}
+        searchFocusEffectCssError={false}
         backgroundImageError={false}
       />,
     )
@@ -78,6 +91,12 @@ describe('AppearanceSection theme actions', () => {
     expect(host.textContent).toContain('代码块不透明度')
     expect(host.textContent).toContain('搜索焦点动画')
     expect(host.textContent).toContain('完结撒花（夸张）')
+
+    act(() => host.querySelector<HTMLButtonElement>('.settings-more-focus-effects')?.click())
+    expect(desktop.openExternal).toHaveBeenCalledWith(
+      'https://xz.xzfast.top/md/themes#focus-effects',
+    )
+    desktop.openExternal.mockClear()
 
     act(() => host.querySelector<HTMLButtonElement>('.theme-current-change')?.click())
     expect(host.querySelector('.theme-choice-grid')).not.toBeNull()
@@ -123,6 +142,37 @@ describe('AppearanceSection theme actions', () => {
     expect(onChange).toHaveBeenCalledWith({ theme: 'light', customCssPath: '' })
     expect(dialog?.textContent).not.toContain('Morandi')
     expect(dialog?.textContent).toContain('Midnight')
+  })
+
+  it('selects and uninstalls installed search focus animations independently from themes', async () => {
+    const installedEffect = {
+      id: 'aurora-pulse',
+      name: '极光脉冲',
+      version: '1.0.0',
+      author: 'Xiangzi',
+      effect: 'ring' as const,
+      cssPath: '/focus-effects/aurora-pulse.css',
+    }
+    desktop.listInstalledSearchFocusEffects.mockResolvedValue([installedEffect])
+    const onChange = vi.fn()
+    await render('', onChange, installedEffect.cssPath)
+
+    const select = Array.from(host.querySelectorAll('select')).find((element) =>
+      element.querySelector('option[value="installed:aurora-pulse"]'),
+    )
+    expect(select?.value).toBe('installed:aurora-pulse')
+    expect(host.textContent).toContain('极光脉冲 · Xiangzi · v1.0.0')
+
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('.settings-remove-focus-effect')?.click()
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(desktop.removeInstalledSearchFocusEffect).toHaveBeenCalledWith('aurora-pulse')
+    expect(onChange).toHaveBeenCalledWith({
+      searchFocusEffect: 'sparkle',
+      searchFocusEffectCssPath: '',
+    })
   })
 
   it('traps focus in the local-theme manager and returns it to its opener', async () => {

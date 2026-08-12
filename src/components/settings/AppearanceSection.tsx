@@ -11,10 +11,11 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { desktop } from '../../platform'
-import type { InstalledTheme } from '../../platform/contracts'
+import type { InstalledSearchFocusEffect, InstalledTheme } from '../../platform/contracts'
 import type { AppSettings } from '../../types'
 import { t } from '../../lib/i18n'
 import { THEME_GALLERY_URL } from '../../lib/themeMarketplace'
+import { SEARCH_FOCUS_EFFECT_GALLERY_URL } from '../../lib/searchFocusEffectMarketplace'
 import {
   DEFAULT_SEARCH_FOCUS_EFFECT,
   normalizeSearchFocusEffect,
@@ -113,6 +114,7 @@ interface Props {
   onChange: (patch: Partial<AppSettings>) => void
   en: boolean
   customCssError: boolean
+  searchFocusEffectCssError: boolean
   backgroundImageError: boolean
 }
 
@@ -121,6 +123,7 @@ export default function AppearanceSection({
   onChange,
   en,
   customCssError,
+  searchFocusEffectCssError,
   backgroundImageError,
 }: Props): JSX.Element {
   const [installedThemes, setInstalledThemes] = useState<InstalledTheme[]>([])
@@ -129,6 +132,15 @@ export default function AppearanceSection({
   const [themeManagerOpen, setThemeManagerOpen] = useState(false)
   const [removingThemeId, setRemovingThemeId] = useState<string | null>(null)
   const [themeActionError, setThemeActionError] = useState<string | null>(null)
+  const [installedSearchFocusEffects, setInstalledSearchFocusEffects] = useState<
+    InstalledSearchFocusEffect[]
+  >([])
+  const [removingSearchFocusEffectId, setRemovingSearchFocusEffectId] = useState<string | null>(
+    null,
+  )
+  const [searchFocusEffectActionError, setSearchFocusEffectActionError] = useState<string | null>(
+    null,
+  )
   const closeThemeManager = useCallback(() => setThemeManagerOpen(false), [])
   const themeManagerDialogRef = useModalFocus<HTMLElement>(themeManagerOpen, closeThemeManager)
 
@@ -160,6 +172,32 @@ export default function AppearanceSection({
     }
   }, [en, settings.customCssPath])
 
+  useEffect(() => {
+    let cancelled = false
+    void desktop
+      .listInstalledSearchFocusEffects()
+      .then((effects) => {
+        if (!cancelled) {
+          setInstalledSearchFocusEffects(effects)
+          setSearchFocusEffectActionError(null)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setInstalledSearchFocusEffects([])
+          const detail = error instanceof Error ? error.message : String(error)
+          setSearchFocusEffectActionError(
+            en
+              ? `Could not load installed focus animations: ${detail}`
+              : `无法读取已安装焦点动画：${detail}`,
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [en, settings.searchFocusEffectCssPath])
+
   const installedTheme = installedThemes.find((theme) => theme.cssPath === settings.customCssPath)
   const themeValue = installedTheme
     ? `installed:${installedTheme.id}`
@@ -188,6 +226,9 @@ export default function AppearanceSection({
     settings.searchFocusEffect ?? DEFAULT_SEARCH_FOCUS_EFFECT,
   )
   const searchFocusPreset = SEARCH_FOCUS_EFFECT_PRESETS[searchFocusEffect]
+  const installedSearchFocusEffect = installedSearchFocusEffects.find(
+    (effect) => effect.cssPath === settings.searchFocusEffectCssPath,
+  )
 
   const removeInstalledTheme = async (theme: InstalledTheme): Promise<void> => {
     if (removingThemeId) return
@@ -207,6 +248,28 @@ export default function AppearanceSection({
       )
     } finally {
       setRemovingThemeId(null)
+    }
+  }
+
+  const removeInstalledSearchFocusEffect = async (
+    effect: InstalledSearchFocusEffect,
+  ): Promise<void> => {
+    if (removingSearchFocusEffectId) return
+    setSearchFocusEffectActionError(null)
+    setRemovingSearchFocusEffectId(effect.id)
+    try {
+      await desktop.removeInstalledSearchFocusEffect(effect.id)
+      setInstalledSearchFocusEffects((effects) => effects.filter((item) => item.id !== effect.id))
+      if (settings.searchFocusEffectCssPath === effect.cssPath) {
+        onChange({ searchFocusEffect: 'sparkle', searchFocusEffectCssPath: '' })
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      setSearchFocusEffectActionError(
+        en ? `Could not uninstall the animation: ${detail}` : `焦点动画卸载失败：${detail}`,
+      )
+    } finally {
+      setRemovingSearchFocusEffectId(null)
     }
   }
 
@@ -493,21 +556,94 @@ export default function AppearanceSection({
         </p>
         <SettingRow label={en ? 'Search focus animation' : '搜索焦点动画'}>
           <select
-            value={searchFocusEffect}
-            onChange={(event) =>
-              onChange({ searchFocusEffect: normalizeSearchFocusEffect(event.target.value) })
+            value={
+              installedSearchFocusEffect
+                ? `installed:${installedSearchFocusEffect.id}`
+                : `builtin:${searchFocusEffect}`
             }
+            onChange={(event) => {
+              const value = event.target.value
+              if (value.startsWith('builtin:')) {
+                onChange({
+                  searchFocusEffect: normalizeSearchFocusEffect(value.slice('builtin:'.length)),
+                  searchFocusEffectCssPath: '',
+                })
+                return
+              }
+              if (value.startsWith('installed:')) {
+                const selected = installedSearchFocusEffects.find(
+                  (effect) => effect.id === value.slice('installed:'.length),
+                )
+                if (selected) {
+                  onChange({
+                    searchFocusEffect: selected.effect,
+                    searchFocusEffectCssPath: selected.cssPath,
+                  })
+                }
+              }
+            }}
           >
-            {Object.entries(SEARCH_FOCUS_EFFECT_PRESETS).map(([value, preset]) => (
-              <option key={value} value={value}>
-                {en ? preset.label.en : preset.label.zh}
-              </option>
-            ))}
+            <optgroup label={en ? 'Built-in animations' : '内置动画'}>
+              {Object.entries(SEARCH_FOCUS_EFFECT_PRESETS).map(([value, preset]) => (
+                <option key={value} value={`builtin:${value}`}>
+                  {en ? preset.label.en : preset.label.zh}
+                </option>
+              ))}
+            </optgroup>
+            {installedSearchFocusEffects.length > 0 && (
+              <optgroup label={en ? 'Installed animations' : '已安装动画'}>
+                {installedSearchFocusEffects.map((effect) => (
+                  <option key={effect.id} value={`installed:${effect.id}`}>
+                    {effect.name} · {effect.version}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </SettingRow>
         <p className="settings-hint">
-          {en ? searchFocusPreset.description.en : searchFocusPreset.description.zh}
+          {installedSearchFocusEffect
+            ? `${installedSearchFocusEffect.name} · ${installedSearchFocusEffect.author} · v${installedSearchFocusEffect.version}`
+            : en
+              ? searchFocusPreset.description.en
+              : searchFocusPreset.description.zh}
         </p>
+        <div className="settings-row settings-focus-effect-actions">
+          <span className="settings-label">{en ? 'Focus animation gallery' : '更多焦点动画'}</span>
+          <span className="settings-inline">
+            {installedSearchFocusEffect && (
+              <button
+                type="button"
+                className="secondary-btn settings-remove-focus-effect"
+                disabled={removingSearchFocusEffectId === installedSearchFocusEffect.id}
+                onClick={() => void removeInstalledSearchFocusEffect(installedSearchFocusEffect)}
+              >
+                {removingSearchFocusEffectId === installedSearchFocusEffect.id ? (
+                  <LoaderCircle size={14} className="spin" aria-hidden="true" />
+                ) : (
+                  <Trash2 size={14} aria-hidden="true" />
+                )}
+                {en ? 'Uninstall current' : '卸载当前动画'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="secondary-btn settings-more-focus-effects"
+              onClick={() => void desktop.openExternal(SEARCH_FOCUS_EFFECT_GALLERY_URL)}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              {en ? 'Browse animations' : '浏览动画库'}
+            </button>
+          </span>
+        </div>
+        {(searchFocusEffectActionError || searchFocusEffectCssError) && (
+          <p className="settings-error" role="alert">
+            {searchFocusEffectActionError ??
+              (en
+                ? 'The installed animation CSS could not be read. Choose a built-in animation or reinstall it.'
+                : '无法读取已安装动画 CSS，请切换到内置动画或重新安装。')}
+          </p>
+        )}
       </SettingsCard>
 
       <SettingsCard title={en ? 'Background & custom styling' : '背景与自定义'}>

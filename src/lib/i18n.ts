@@ -73,6 +73,15 @@ const EN: Record<string, string> = {
   主题安装完成: 'Theme installed',
   '主题安装失败：{message}': 'Theme installation failed: {message}',
   主题安装: 'Theme installation',
+  // Search focus effect marketplace install
+  '正在安装焦点动画「{name}」…': 'Installing focus animation "{name}"…',
+  '要安装并应用搜索焦点动画「{name}」吗？':
+    'Install and apply the search focus animation "{name}"?',
+  安装搜索焦点动画: 'Install search focus animation',
+  安装: 'Install',
+  搜索焦点动画安装完成: 'Search focus animation installed',
+  '搜索焦点动画安装失败：{message}': 'Search focus animation installation failed: {message}',
+  搜索焦点动画安装: 'Search focus animation installation',
   // Document properties panel
   文档属性: 'Document properties',
   添加属性: 'Add property',

@@ -24,6 +24,24 @@ export interface InstalledTheme {
   cssPath: string
 }
 
+export interface SearchFocusEffectInstallRequest {
+  id: string
+  name: string
+  version: string
+  author: string
+  effect: Exclude<SearchFocusEffect, 'off'>
+  sourceUrl: string
+}
+
+export interface InstalledSearchFocusEffect {
+  id: string
+  name: string
+  version: string
+  author: string
+  effect: Exclude<SearchFocusEffect, 'off'>
+  cssPath: string
+}
+
 export interface FileNode {
   name: string
   path: string
@@ -134,6 +152,8 @@ export interface AppSettings {
   showSelectionToolbar: boolean
   /** Animation used to draw attention to the active search result in the document. */
   searchFocusEffect: SearchFocusEffect
+  /** Optional installed animation CSS layered independently from the workspace theme. */
+  searchFocusEffectCssPath: string
   /** Last used folder-search scope, restored when the panel reopens. */
   folderSearchMode: FolderSearchMode
   textColorPresets: string[]
@@ -450,6 +470,11 @@ export interface DesktopPort {
   listInstalledThemes(): Promise<InstalledTheme[]>
   installThemeFromUrl(request: ThemeInstallRequest): Promise<InstalledTheme>
   removeInstalledTheme(id: string): Promise<void>
+  listInstalledSearchFocusEffects(): Promise<InstalledSearchFocusEffect[]>
+  installSearchFocusEffectFromUrl(
+    request: SearchFocusEffectInstallRequest,
+  ): Promise<InstalledSearchFocusEffect>
+  removeInstalledSearchFocusEffect(id: string): Promise<void>
   pickImage(): Promise<{ path: string } | null>
   allowBackgroundImage(path: string): Promise<void>
   notify(message: string, title?: string): Promise<void>
@@ -458,5 +483,8 @@ export interface DesktopPort {
   triggerMenuAction(id: string): void
   onOpenPath(callback: (path: string) => void): () => void
   onThemeInstallRequest(callback: (request: ThemeInstallRequest) => void): () => void
+  onSearchFocusEffectInstallRequest(
+    callback: (request: SearchFocusEffectInstallRequest) => void,
+  ): () => void
   notifyQuitOk(): void
 }

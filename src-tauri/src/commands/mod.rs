@@ -6,6 +6,7 @@ pub mod pandoc;
 mod pandoc_args;
 pub mod raster_export;
 pub mod search;
+pub mod search_focus_effects;
 pub mod settings;
 pub mod themes;
 pub mod updates;

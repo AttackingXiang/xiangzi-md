@@ -3,7 +3,7 @@ use crate::domain::academic_layout::AcademicLayout;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 12;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u32 = 13;
 /// 最近文件和文件夹的持久化上限；前端列表在此范围内支持滚动查看。
 pub(crate) const MAX_RECENT_ITEMS: usize = 100;
 /// frecency 语料库上限：与展示用的 recent_files（100）一致，保留完整的打开历史用于打分。
@@ -161,6 +161,8 @@ pub struct AppSettings {
     pub show_selection_toolbar: bool,
     /// 搜索命中正文时用于定位焦点的动画预设。
     pub search_focus_effect: String,
+    /// 从官方动画库安装的焦点动画 CSS；空字符串表示使用内置动画。
+    pub search_focus_effect_css_path: String,
     /// 文件夹搜索的范围：all / content / filename。
     pub folder_search_mode: String,
     pub text_color_presets: Vec<String>,
@@ -284,6 +286,7 @@ impl Default for AppSettings {
             show_toolbar: false,
             show_selection_toolbar: false,
             search_focus_effect: "sparkle".into(),
+            search_focus_effect_css_path: String::new(),
             folder_search_mode: "all".into(),
             text_color_presets: [
                 "#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#2563eb", "#4f46e5",
@@ -386,6 +389,7 @@ pub struct SettingsPatch {
     pub show_toolbar: Option<bool>,
     pub show_selection_toolbar: Option<bool>,
     pub search_focus_effect: Option<String>,
+    pub search_focus_effect_css_path: Option<String>,
     pub folder_search_mode: Option<String>,
     pub text_color_presets: Option<Vec<String>>,
     pub default_text_color: Option<String>,

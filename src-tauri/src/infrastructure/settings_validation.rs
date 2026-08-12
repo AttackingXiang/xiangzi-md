@@ -37,6 +37,7 @@ pub(super) fn migrate_settings(settings: &mut AppSettings, source_version: u32) 
             9 => migrate_v9_to_v10(settings),
             10 => migrate_v10_to_v11(settings),
             11 => migrate_v11_to_v12(settings),
+            12 => migrate_v12_to_v13(settings),
             _ => {
                 return Err(AppError::new(
                     "settings_migration_missing",
@@ -74,6 +75,9 @@ fn migrate_v10_to_v11(_settings: &mut AppSettings) {}
 fn migrate_v11_to_v12(settings: &mut AppSettings) {
     settings.sidebar_visible = true;
 }
+
+/// v12→v13：新增独立的搜索焦点动画 CSS 路径。serde 默认值已经为空，升级时无需改值。
+fn migrate_v12_to_v13(_settings: &mut AppSettings) {}
 
 /// v8→v9：把纯 MRU 的 recent_files 灌进 frecency 语料 recent_docs，让老用户升级后立即
 /// 有打分原料。open_count 一律 1，last_opened_nanos 按 MRU 次序递减造一个单调时间戳
@@ -309,6 +313,7 @@ pub(super) fn validate_settings(settings: &AppSettings) -> AppResult<()> {
         return Err(AppError::new("settings_invalid", "快捷键设置无效"));
     }
     if settings.custom_css_path.len() > MAX_PATH_LENGTH
+        || settings.search_focus_effect_css_path.len() > MAX_PATH_LENGTH
         || settings.pandoc_path.len() > MAX_PATH_LENGTH
         || settings.pandoc_reference_doc.len() > MAX_PATH_LENGTH
         || settings

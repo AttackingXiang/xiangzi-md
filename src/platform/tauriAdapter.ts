@@ -17,10 +17,12 @@ import type {
   FolderSearchMode,
   Folder,
   InstalledTheme,
+  InstalledSearchFocusEffect,
   OpenedFile,
   PathStat,
   ReleaseSummary,
   SearchResponse,
+  SearchFocusEffectInstallRequest,
   ThemeInstallRequest,
   UpdaterPort,
 } from './contracts'
@@ -28,6 +30,7 @@ import { exportFileStem, imageFormatForPath } from '../lib/exportFormat'
 import { dirName } from '../lib/path'
 import { OPENABLE_DOCUMENT_EXTENSIONS } from '../lib/fileCapabilities'
 import { themeInstallRequestFromUrl } from '../lib/themeMarketplace'
+import { searchFocusEffectInstallRequestFromUrl } from '../lib/searchFocusEffectMarketplace'
 
 const MAX_BINARY_READ_BYTES = 64 * 1024 * 1024
 
@@ -372,6 +375,11 @@ export const tauriDesktopAdapter: DesktopPort = {
   installThemeFromUrl: (request: ThemeInstallRequest) =>
     invoke<InstalledTheme>('install_theme_from_url', { request }),
   removeInstalledTheme: (id) => invoke('remove_installed_theme', { id }),
+  listInstalledSearchFocusEffects: () =>
+    invoke<InstalledSearchFocusEffect[]>('list_installed_search_focus_effects'),
+  installSearchFocusEffectFromUrl: (request: SearchFocusEffectInstallRequest) =>
+    invoke<InstalledSearchFocusEffect>('install_search_focus_effect_from_url', { request }),
+  removeInstalledSearchFocusEffect: (id) => invoke('remove_installed_search_focus_effect', { id }),
   pickImage: async () => {
     const path = await open({
       multiple: false,
@@ -402,6 +410,31 @@ export const tauriDesktopAdapter: DesktopPort = {
       for (const raw of urls) {
         if (disposed || handled.has(raw)) continue
         const request = themeInstallRequestFromUrl(raw)
+        if (!request) continue
+        handled.add(raw)
+        callback(request)
+      }
+    }
+    void getCurrent().then((urls) => {
+      if (urls) accept(urls)
+    })
+    void onOpenUrl(accept).then((stop) => {
+      if (disposed) stop()
+      else unlisten = stop
+    })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  },
+  onSearchFocusEffectInstallRequest: (callback) => {
+    let disposed = false
+    let unlisten: UnlistenFn | undefined
+    const handled = new Set<string>()
+    const accept = (urls: string[]): void => {
+      for (const raw of urls) {
+        if (disposed || handled.has(raw)) continue
+        const request = searchFocusEffectInstallRequestFromUrl(raw)
         if (!request) continue
         handled.add(raw)
         callback(request)

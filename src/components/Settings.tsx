@@ -41,6 +41,7 @@ interface Props {
   settings: AppSettings
   updater: UpdaterController
   customCssError?: boolean
+  searchFocusEffectCssError?: boolean
   backgroundImageError?: boolean
   saving?: boolean
   saveError?: boolean
@@ -56,6 +57,7 @@ export default function Settings({
   settings,
   updater,
   customCssError = false,
+  searchFocusEffectCssError = false,
   backgroundImageError = false,
   saving = false,
   saveError = false,
@@ -154,6 +156,7 @@ export default function Settings({
                 onChange={onChange}
                 en={en}
                 customCssError={customCssError}
+                searchFocusEffectCssError={searchFocusEffectCssError}
                 backgroundImageError={backgroundImageError}
               />
             )}

@@ -143,6 +143,7 @@ export function createBrowserPreviewSettings(): AppSettings {
     showToolbar: true,
     showSelectionToolbar: true,
     searchFocusEffect: 'sparkle',
+    searchFocusEffectCssPath: '',
     folderSearchMode: 'all',
     textColorPresets: [
       '#dc2626',
@@ -406,6 +407,11 @@ export const browserDesktopAdapter: DesktopPort = {
     throw new Error('浏览器预览不支持安装主题')
   },
   removeInstalledTheme: async () => undefined,
+  listInstalledSearchFocusEffects: async () => [],
+  installSearchFocusEffectFromUrl: async () => {
+    throw new Error('浏览器预览不支持安装搜索焦点动画')
+  },
+  removeInstalledSearchFocusEffect: async () => undefined,
   pickImage: async () => null,
   allowBackgroundImage: async () => undefined,
   notify: async (message) => {
@@ -416,6 +422,7 @@ export const browserDesktopAdapter: DesktopPort = {
   triggerMenuAction: () => undefined,
   onOpenPath: () => () => undefined,
   onThemeInstallRequest: () => () => undefined,
+  onSearchFocusEffectInstallRequest: () => () => undefined,
   notifyQuitOk: () => undefined,
 }
 
