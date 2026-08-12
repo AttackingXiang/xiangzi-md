@@ -4,14 +4,12 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLivePreviewDecorations,
   buildHiddenMarkdownMarkerSets,
+  cleanupEmptyInlineHtml,
+  inlineHtmlUnwrapDeletion,
   isSinglePhysicalLineSelection,
   safeMarkdownLinkHref,
   shouldUseNativeSelectionPainting,
 } from './livePreview'
-import {
-  selectionCoordinatorState,
-  setPointerSelectionActive,
-} from './selection/selectionCoordinator'
 
 interface SeenDecoration {
   from: number
@@ -408,12 +406,11 @@ describe('CM6 Markdown live preview: safe inline HTML formatting', () => {
     expect(hidden.some(({ from }) => doc.slice(from).startsWith('<mark'))).toBe(false)
   })
 
-  it('reveals both tags together when the caret sits inside the colored text (Obsidian semantics)', () => {
-    // Matches how `**bold**` behaves via `isRevealed`: entering the
-    // construct must surface its source markers so they stay editable, and
-    // a caret resting on `</font>`'s trailing boundary must not still be
-    // "inside" a hidden atomic range (that used to be an unrecoverable
-    // Backspace dead key).
+  it('keeps both tags hidden with the caret inside the colored text, and still paints the color', () => {
+    // Inline HTML tags never reveal: `<font color="#ff0000">` is 22 characters,
+    // so revealing it (the old `**bold**`-style behaviour) reflowed the line
+    // into markup as soon as the caret entered the text to edit it. Deleting
+    // the wrapper is handled by `inlineHtmlUnwrapDeletion` instead.
     const doc = '<font color="#ff0000">notice</font>'
     const cursor = doc.indexOf('notice') + 2
     const state = createState(doc, cursor)
@@ -422,68 +419,133 @@ describe('CM6 Markdown live preview: safe inline HTML formatting', () => {
     const openingEnd = doc.indexOf('>') + 1
     const closingStart = doc.indexOf('</font>')
 
-    // The color mark decoration still applies while revealed, exactly like
-    // `**bold**` text staying bold while its markers are visible.
     expect(
       seen.some(
         ({ className, style }) => className === 'xmd-cm-inline-color' && style === 'color:#ff0000',
       ),
     ).toBe(true)
-    expect(hidden.some(({ from, to }) => from === 0 && to === openingEnd)).toBe(false)
-    expect(hidden.some(({ from, to }) => from === closingStart && to === doc.length)).toBe(false)
-  })
-
-  it('keeps color tags hidden for a non-empty text selection', () => {
-    const doc = '<font color="#ff0000">notice</font>'
-    const from = doc.indexOf('notice')
-    const state = createState(doc, from).update({
-      selection: EditorSelection.range(from, from + 'notice'.length),
-    }).state
-    const hidden = hiddenRanges(state, 0, doc.length)
-    const openingEnd = doc.indexOf('>') + 1
-    const closingStart = doc.indexOf('</font>')
-
     expect(hidden).toContainEqual({ from: 0, to: openingEnd })
     expect(hidden).toContainEqual({ from: closingStart, to: doc.length })
   })
 
-  it('keeps color tags hidden during the initial pointer-down caret frame', () => {
-    const doc = '<font color="#ff0000">notice</font>'
-    const cursor = doc.indexOf('notice') + 2
-    const initial = EditorState.create({
-      doc,
-      selection: EditorSelection.cursor(cursor),
-      extensions: [markdown({ base: markdownLanguage }), selectionCoordinatorState],
-    })
-    const state = initial.update({ effects: setPointerSelectionActive.of(true) }).state
-    const hidden = hiddenRanges(state, 0, doc.length)
-    const openingEnd = doc.indexOf('>') + 1
-    const closingStart = doc.indexOf('</font>')
-
-    expect(hidden).toContainEqual({ from: 0, to: openingEnd })
-    expect(hidden).toContainEqual({ from: closingStart, to: doc.length })
-  })
-
-  it('reveals a complete HTML pair whenever the caret touches either boundary, fixing the Backspace dead key', () => {
+  it('keeps the tag pair hidden at every caret position, including both atomic boundaries', () => {
     const doc = '- <font color="#ff0000">a long colored list item</font>'
     const openingFrom = doc.indexOf('<font')
     const openingTo = doc.indexOf('>') + 1
     const closingFrom = doc.indexOf('</font>')
     const closingTo = closingFrom + '</font>'.length
 
-    // A cursor inside the span, and a cursor resting exactly on either
-    // atomic boundary (the position a real Backspace/Delete probe lands on)
-    // must all count as "touching" — same semantics as `rangesTouch`.
-    for (const cursor of [openingFrom, openingFrom + 5, closingTo]) {
+    // Outside the span, inside the text, and resting on either atomic
+    // boundary — the positions a real Backspace/Delete probe lands on.
+    for (const cursor of [0, openingFrom, openingFrom + 5, closingTo]) {
       const hidden = hiddenRanges(createState(doc, cursor), 0, doc.length)
-      expect(hidden.some(({ from, to }) => from === openingFrom && to === openingTo)).toBe(false)
-      expect(hidden.some(({ from, to }) => from === closingFrom && to === closingTo)).toBe(false)
+      expect(hidden).toContainEqual({ from: openingFrom, to: openingTo })
+      expect(hidden).toContainEqual({ from: closingFrom, to: closingTo })
     }
 
-    // Outside the span, both tags stay hidden and atomic together.
-    const outsideHidden = hiddenRanges(createState(doc, 0), 0, doc.length)
-    expect(outsideHidden).toContainEqual({ from: openingFrom, to: openingTo })
-    expect(outsideHidden).toContainEqual({ from: closingFrom, to: closingTo })
+    // A non-empty selection over the colored text behaves the same.
+    const selected = createState(doc, openingTo).update({
+      selection: EditorSelection.range(openingTo, closingFrom),
+    }).state
+    const hidden = hiddenRanges(selected, 0, doc.length)
+    expect(hidden).toContainEqual({ from: openingFrom, to: openingTo })
+    expect(hidden).toContainEqual({ from: closingFrom, to: closingTo })
+  })
+
+  describe('cleanupEmptyInlineHtml', () => {
+    // 删光彩色文字后，空的 <font></font> 会留在源码里。标签是隐藏的，用户看不见
+    // 它，下一次在那儿打字还会继承颜色——所以删空即拆掉包裹。
+    const cleaned = (
+      doc: string,
+      change: { from: number; to: number; insert?: string },
+    ): string => {
+      const state = createState(doc, 0)
+      const transaction = state.update({ changes: change, userEvent: 'delete.selection' })
+      const spec = cleanupEmptyInlineHtml(transaction)
+      if (!spec) return transaction.state.doc.toString()
+      return transaction.state.update(spec).state.doc.toString()
+    }
+
+    it('removes a color wrapper whose text was deleted', () => {
+      const doc = '前缀<font color="#ff0000">红字</font>后缀'
+      const from = doc.indexOf('红字')
+      expect(cleaned(doc, { from, to: from + '红字'.length })).toBe('前缀后缀')
+    })
+
+    it('removes an emptied highlight wrapper too', () => {
+      const doc = '<mark style="background-color:#fde047">marked</mark> tail'
+      const from = doc.indexOf('marked')
+      expect(cleaned(doc, { from, to: from + 'marked'.length })).toBe(' tail')
+    })
+
+    it('keeps a wrapper that still has text in it', () => {
+      const doc = '前缀<font color="#ff0000">红字</font>后缀'
+      const from = doc.indexOf('红字')
+      expect(cleaned(doc, { from, to: from + 1 })).toBe('前缀<font color="#ff0000">字</font>后缀')
+    })
+
+    it('leaves wrappers on untouched lines alone', () => {
+      const doc = '<font color="#ff0000"></font>\n第二行'
+      const second = doc.indexOf('第二行')
+      // 只改第二行时不去动第一行遗留的空包裹：这一趟清理只负责本次编辑的后果。
+      expect(cleaned(doc, { from: second, to: second + 1 })).toBe(
+        '<font color="#ff0000"></font>\n二行',
+      )
+    })
+  })
+
+  describe('inlineHtmlUnwrapDeletion', () => {
+    // 光标停在包裹边界时，退格/删除去掉整对标签、保留文字——标签既然永远不显形，
+    // "删掉一个字符的标记"就没有意义了，能删的只有整个包裹。
+    const doc = '前缀<font color="#ff0000">红字</font>后缀'
+    const openingFrom = doc.indexOf('<font')
+    const openingTo = doc.indexOf('>') + 1
+    const closingFrom = doc.indexOf('</font>')
+    const closingTo = closingFrom + '</font>'.length
+    const unwrapped = '前缀红字后缀'
+
+    const applied = (cursor: number, forward: boolean): { doc: string; head: number } | null => {
+      const state = createState(doc, cursor)
+      const spec = inlineHtmlUnwrapDeletion(state, forward)
+      if (!spec) return null
+      const next = state.update(spec).state
+      return { doc: next.doc.toString(), head: next.selection.main.head }
+    }
+
+    it('removes the wrapper on Backspace after the closing tag', () => {
+      expect(applied(closingTo, false)).toEqual({
+        doc: unwrapped,
+        head: unwrapped.indexOf('后缀'),
+      })
+    })
+
+    it('removes the wrapper on Backspace at the start of the colored text', () => {
+      expect(applied(openingTo, false)).toEqual({
+        doc: unwrapped,
+        head: unwrapped.indexOf('红字'),
+      })
+    })
+
+    it('removes the wrapper on Delete before the opening tag and before the closing tag', () => {
+      expect(applied(openingFrom, true)).toEqual({
+        doc: unwrapped,
+        head: unwrapped.indexOf('红字'),
+      })
+      expect(applied(closingFrom, true)).toEqual({
+        doc: unwrapped,
+        head: unwrapped.indexOf('后缀'),
+      })
+    })
+
+    it('leaves ordinary positions to the default deletion commands', () => {
+      expect(applied(0, false)).toBeNull()
+      expect(applied(openingTo + 1, false)).toBeNull()
+      expect(applied(doc.length, true)).toBeNull()
+      // Backspace looks left, Delete looks right — a boundary only answers to
+      // the direction that actually points at the wrapper.
+      expect(applied(closingTo, true)).toBeNull()
+      expect(applied(openingFrom, false)).toBeNull()
+    })
   })
 
   it('never hides a range that crosses a newline, even when a tag itself spans multiple lines', () => {

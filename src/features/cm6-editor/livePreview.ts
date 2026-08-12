@@ -1,12 +1,19 @@
 import { syntaxTree } from '@codemirror/language'
 import type { SyntaxNode } from '@lezer/common'
-import { EditorState, Prec, type Extension } from '@codemirror/state'
+import {
+  EditorState,
+  Prec,
+  type Extension,
+  type Transaction,
+  type TransactionSpec,
+} from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import type { EditorView } from '@codemirror/view'
 import { Decoration, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { markdownHeadings } from '../../lib/linkNavigation'
 import {
   cleanupEmptyMarkdownFormatting,
+  INLINE_MARK_FILLER,
   deleteAtHiddenBoundary,
   hiddenMarkerRange,
   insertContainerMarkdownHardBreak,
@@ -27,7 +34,7 @@ import {
 } from './core/hiddenRanges'
 import { HEADING_NODE_NAMES } from './core/nodePolicy'
 import { computeRevealedRanges, isRevealed, type RevealedRanges } from './core/revealState'
-import { expandedVisibleRanges, rangesTouch, type PreviewRange } from './core/types'
+import { expandedVisibleRanges, type PreviewRange } from './core/types'
 import { markdownLinkData } from './markdownLinks'
 import {
   CalloutLabelWidget,
@@ -37,10 +44,7 @@ import {
   calloutStartAtLine,
 } from './livePreviewWidgets'
 import { livePreviewEventHandlers } from './livePreviewEvents'
-import {
-  isPointerSelectionActive,
-  nativeSelectionPresentationEnabled,
-} from './selection/selectionCoordinator'
+import { nativeSelectionPresentationEnabled } from './selection/selectionCoordinator'
 
 export {
   isSinglePhysicalLineSelection,
@@ -516,19 +520,82 @@ export function buildLivePreviewDecorations(
 }
 
 /**
- * Whether a collapsed caret touches `[from, to)` — reuses `rangesTouch` from
- * `core/types.ts`, including its boundary semantics. Non-empty selections keep
- * inline HTML rendered so showing tags cannot change line geometry mid-drag.
- * Inline HTML spans are discovered by hand rather than by `revealState`, so
- * they need this parallel caret check.
+ * Deleting the text inside `<font …>…</font>` (or `<mark>`) leaves the empty
+ * pair behind. Nothing renders for it — the tags are hidden — so the document
+ * silently accumulates markup the user cannot see, and the next thing typed
+ * there would inherit the colour. `cleanupEmptyMarkdownFormatting` does the
+ * same job for `**`/`~~`; inline HTML pairs are discovered by hand here, so
+ * they need their own pass.
+ *
+ * Runs against `transaction.state` (the post-edit tree), the coordinate space
+ * the `[transaction, cleanup]` pairing in the transaction filter expects.
  */
-function caretTouchesRange(state: EditorState, range: PreviewRange): boolean {
-  if (isPointerSelectionActive(state)) return false
-  return state.selection.ranges.some(
-    (selectionRange) =>
-      selectionRange.empty &&
-      rangesTouch({ from: selectionRange.from, to: selectionRange.to }, range),
-  )
+export function cleanupEmptyInlineHtml(transaction: Transaction): TransactionSpec | null {
+  if (!transaction.docChanged) return null
+  const state = transaction.state
+  const lines = new Set<number>()
+  transaction.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+    const first = state.doc.lineAt(fromB).number
+    const last = state.doc.lineAt(toB).number
+    for (let number = first; number <= last; number += 1) lines.add(number)
+  })
+
+  const changes: PreviewRange[] = []
+  for (const number of lines) {
+    const line = state.doc.line(number)
+    for (const span of inlineHtmlSpans(state, { from: line.from, to: line.to })) {
+      // Only a wrapper with nothing left inside it. A lone zero-width filler
+      // counts as nothing (see INLINE_MARK_FILLER).
+      const content = state.sliceDoc(span.to, span.closeFrom)
+      if (content !== '' && content !== INLINE_MARK_FILLER) continue
+      changes.push({ from: span.from, to: span.closeTo })
+    }
+  }
+  if (changes.length === 0) return null
+  changes.sort((a, b) => a.from - b.from)
+  return { changes: changes.map(({ from, to }) => ({ from, to })), sequential: true }
+}
+
+/**
+ * Backspace/Delete at the edge of an inline HTML wrapper removes the wrapper
+ * and keeps the text — "delete the colour", not "delete a character of markup".
+ *
+ * The tags are hidden and atomic, so without this the key is swallowed and
+ * nothing happens at all. Both edges of the pair are treated the same way:
+ * the caret sitting just outside the wrapper, or just inside it against a tag,
+ * means the nearest thing to delete is the wrapper itself.
+ */
+export function inlineHtmlUnwrapDeletion(
+  state: EditorState,
+  forward: boolean,
+): TransactionSpec | null {
+  if (state.readOnly) return null
+  const range = state.selection.main
+  if (!range.empty || state.selection.ranges.length !== 1) return null
+  const position = range.head
+  const line = state.doc.lineAt(position)
+  for (const span of inlineHtmlSpans(state, { from: line.from, to: line.to })) {
+    // Backspace looks left (a tag ending where the caret is), Delete looks
+    // right (a tag starting there).
+    const hit = forward
+      ? position === span.from || position === span.closeFrom
+      : position === span.to || position === span.closeTo
+    if (!hit) continue
+    return {
+      changes: [
+        { from: span.from, to: span.to },
+        { from: span.closeFrom, to: span.closeTo },
+      ],
+      // Keep the caret against the text it was next to: the content start when
+      // the wrapper opened where we stood, its end otherwise.
+      selection: {
+        anchor: position <= span.to ? span.from : span.closeFrom - (span.to - span.from),
+      },
+      scrollIntoView: true,
+      userEvent: forward ? 'delete.forward' : 'delete.backward',
+    }
+  }
+  return null
 }
 
 /** Split a node's range into per-line pieces so no hidden range crosses a newline. */
@@ -623,12 +690,15 @@ function collectHiddenRanges(
       },
     })
     for (const span of inlineHtmlSpans(state, visible)) {
-      // Obsidian semantics, same as `**bold**` via `isRevealed` elsewhere in
-      // this function: when a collapsed caret touches the whole span (open tag
-      // through close tag), reveal both tags together. A non-empty selection
-      // keeps them hidden so dragging never changes line geometry. Boundary
-      // carets must still reveal them to avoid an unrecoverable Backspace key.
-      if (caretTouchesRange(state, { from: span.from, to: span.closeTo })) continue
+      // Inline HTML tags stay hidden no matter where the caret is. They used
+      // to reveal as raw text whenever a caret touched the span (Obsidian's
+      // `**bold**` semantics), but a `<font color="#dc2626">` pair is 20+
+      // characters: putting the caret into coloured text to edit a word made
+      // the line reflow into markup. Editing the tags by hand is not a case
+      // worth optimising for; deleting the colour is, and that is what
+      // `unwrapInlineHtmlAtCaret` gives Backspace/Delete at the boundary —
+      // without it these atomic ranges make the key a no-op (the historical
+      // dead-key bug in e2e/inline-html-backspace.spec.ts).
       hidden.push({ from: span.from, to: span.to }, { from: span.closeFrom, to: span.closeTo })
     }
     const firstLine = state.doc.lineAt(visible.from)
@@ -707,12 +777,18 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
     { decorations: (plugin) => plugin.decorations },
   )
 
-  const deleteTouchesHiddenMarker = (view: EditorView, forward: boolean): boolean =>
-    deleteAtHiddenBoundary(view, forward, (state, from, to) =>
+  const deleteTouchesHiddenMarker = (view: EditorView, forward: boolean): boolean => {
+    const unwrap = inlineHtmlUnwrapDeletion(view.state, forward)
+    if (unwrap) {
+      view.dispatch(unwrap)
+      return true
+    }
+    return deleteAtHiddenBoundary(view, forward, (state, from, to) =>
       collectHiddenRanges(state, [{ from, to }], computeRevealedRanges(state), {
         viewportMargin: 0,
       }),
     )
+  }
 
   return [
     hiddenRangesEngine(),
@@ -723,7 +799,9 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
       const cleanup = cleanupEmptyMarkdownFormatting(transaction)
       if (cleanup) return [transaction, cleanup]
       const fillerCleanup = stripInlineMarkFillerOnType(transaction)
-      return fillerCleanup ? [transaction, fillerCleanup] : transaction
+      if (fillerCleanup) return [transaction, fillerCleanup]
+      const emptyInlineHtml = cleanupEmptyInlineHtml(transaction)
+      return emptyInlineHtml ? [transaction, emptyInlineHtml] : transaction
     }),
     paint,
     nativeSelectionPresentationEnabled.of(true),
