@@ -14,6 +14,7 @@ export type ShortcutAction =
   | 'find-next'
   | 'find-previous'
   | 'select-all'
+  | 'paste-plain'
   | 'command-palette'
   | 'toggle-sidebar'
   | 'toggle-outline'

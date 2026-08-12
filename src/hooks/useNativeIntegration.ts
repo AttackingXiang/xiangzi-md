@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { CloseDecision, CloseReason } from '../components/UnsavedChangesDialog'
 import { classifyExternalLink } from '../lib/externalLinks'
 import { tabsAreClean } from '../lib/documentState'
-import { clipboardCmd } from '../lib/editorCommands'
+import { clipboardCmd, pastePlainTextFromClipboard } from '../lib/editorCommands'
 import { t } from '../lib/i18n'
 import { isShortcutAction, type ShortcutAction } from '../lib/shortcuts'
 import { hasOpenModal } from '../lib/modalStack'
@@ -65,6 +65,7 @@ export function useNativeIntegration(options: NativeIntegrationOptions): void {
         // 复制为纯文本此前只有 Windows 的应用内菜单有；菜单模型统一后
         // macOS 原生菜单也会派发它。
         if (action === 'copy-as-plain-text') clipboardCmd.copyAsPlainText()
+        else if (action === 'paste-plain') void pastePlainTextFromClipboard()
         else if (action === 'add-property') onAddProperty()
         else if (action === 'show-recent-folders') onShowRecentItems('folders')
         else if (action === 'show-recent-files') onShowRecentItems('files')

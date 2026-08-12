@@ -159,6 +159,35 @@ export async function pasteFromClipboard(): Promise<boolean> {
   return true
 }
 
+/**
+ * 粘贴剪贴板里的纯文本，跳过 HTML → Markdown 转换。
+ *
+ * 外部来源（Word / Google Docs / Notion）常常给每个片段都写上样式，转换出来是
+ * 一堆 `<font>` / `<mark>` 包裹；不想要格式时这条路径是唯一的退路。
+ */
+export async function pastePlainTextFromClipboard(): Promise<boolean> {
+  const clipboard = await readClipboard()
+  const text = clipboard?.text
+  if (!text) return false
+
+  if (tableCellCommandBridge.isFocused()) {
+    return document.execCommand('insertText', false, text)
+  }
+
+  const view = cm6ActiveViewBridge.get()
+  if (!view || view.state.readOnly) return false
+  // 走同一个 plan：代码块里粘贴仍然享受语言识别等既有行为，差别只在没有富文本。
+  const plan = prepareMarkdownPaste(view.state, text)
+  view.dispatch({
+    changes: plan.changes,
+    selection: plan.selection,
+    userEvent: 'input.paste',
+    scrollIntoView: true,
+  })
+  view.focus()
+  return true
+}
+
 export const clipboardCmd = {
   copy: (): void => {
     document.execCommand('copy')

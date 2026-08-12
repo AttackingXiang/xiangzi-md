@@ -80,6 +80,13 @@
       "defaultBinding": "Mod+A"
     },
     {
+      "id": "paste-plain",
+      "category": "format",
+      "labelZh": "粘贴为纯文本",
+      "labelEn": "Paste as Plain Text",
+      "defaultBinding": "Mod+Shift+V"
+    },
+    {
       "id": "command-palette",
       "category": "navigation",
       "labelZh": "命令面板",

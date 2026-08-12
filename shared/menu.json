@@ -275,6 +275,14 @@
         },
         {
           "kind": "action",
+          "id": "paste-plain",
+          "label": {
+            "zh": "粘贴为纯文本",
+            "en": "Paste as Plain Text"
+          }
+        },
+        {
+          "kind": "action",
           "id": "select-all",
           "label": {
             "zh": "全选",

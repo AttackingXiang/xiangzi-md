@@ -11,7 +11,7 @@ import type { SettingsSection } from '../components/Settings'
 import { desktop } from '../platform'
 import type { Folder, Tab } from '../types'
 import { shouldOpenFolderSearchFromTarget, useAppShortcuts } from './useAppShortcuts'
-import { clipboardCmd, editorCmd } from '../lib/editorCommands'
+import { clipboardCmd, editorCmd, pastePlainTextFromClipboard } from '../lib/editorCommands'
 import { findNavigationBridge } from '../lib/findNavigationBridge'
 import { t } from '../lib/i18n'
 import type { ShortcutAction } from '../lib/shortcuts'
@@ -130,6 +130,11 @@ export function useAppCommands(options: AppCommandOptions): {
         },
       },
       {
+        id: 'paste-plain',
+        label: t('粘贴为纯文本'),
+        run: () => void pastePlainTextFromClipboard(),
+      },
+      {
         id: 'find',
         label: t('查找 / 替换'),
         run: () => {
@@ -231,6 +236,9 @@ export function useAppCommands(options: AppCommandOptions): {
           break
         case 'select-all':
           clipboardCmd.selectAll()
+          break
+        case 'paste-plain':
+          void pastePlainTextFromClipboard()
           break
         case 'command-palette':
           setShowPalette(true)

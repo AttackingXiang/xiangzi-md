@@ -79,6 +79,47 @@ const value = "保留源码"
     expect(markdown).not.toContain('alert(1)')
   })
 
+  it('drops the near-black color Word and Google Docs stamp on every span', () => {
+    // 这些来源会给几乎每个片段写上 color:#000000，包成 <font> 等于往文档里灌垃圾
+    // 标签——那段文字看起来根本没有颜色。
+    const markdown = markdownFromClipboardHtml(`
+      <p><span style="color:#000000">plain</span> <span style="color:rgb(55, 53, 47)">notion</span></p>
+    `)
+
+    expect(markdown).toBe('plain notion')
+  })
+
+  it('still keeps colors a reader would recognize as colors', () => {
+    const markdown = markdownFromClipboardHtml(`
+      <p><span style="color:#7f1d1d">dark red</span><span style="color:#1e3a8a">navy</span></p>
+    `)
+
+    expect(markdown).toContain('<font color="#7f1d1d">dark red</font>')
+    expect(markdown).toContain('<font color="#1e3a8a">navy</font>')
+  })
+
+  it('merges the fragment wrappers a source splits one colored run into', () => {
+    // Word/Docs 常把一段同色文字拆成多个 span（换行、拼写检查、注释锚点都会拆），
+    // 逐个包裹就成了一串碎片标签。
+    const markdown = markdownFromClipboardHtml(`
+      <p><span style="color:#dc2626">红</span><span style="color:#dc2626">色</span><span style="color:#dc2626">文字</span></p>
+    `)
+
+    expect(markdown).toBe('<font color="#dc2626">红色文字</font>')
+  })
+
+  it('does not merge across different colors or different wrappers', () => {
+    const markdown = markdownFromClipboardHtml(`
+      <p><span style="color:#dc2626">red</span><span style="color:#2563eb">blue</span></p>
+      <p><mark style="background-color:#fde047">a</mark><mark style="background-color:#bbf7d0">b</mark></p>
+    `)
+
+    expect(markdown).toContain('<font color="#dc2626">red</font><font color="#2563eb">blue</font>')
+    expect(markdown).toContain(
+      '<mark style="background-color:#fde047">a</mark><mark style="background-color:#bbf7d0">b</mark>',
+    )
+  })
+
   it('recognizes Word heading and list paragraph metadata', () => {
     const markdown = markdownFromClipboardHtml(`
       <p class="MsoHeading2"><b>Word heading</b></p>

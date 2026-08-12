@@ -30,6 +30,7 @@ pub(crate) const SHORTCUT_ACTIONS: &[&str] = &[
     "find",
     "search-in-folder",
     "select-all",
+    "paste-plain",
     "command-palette",
     "toggle-sidebar",
     "toggle-outline",

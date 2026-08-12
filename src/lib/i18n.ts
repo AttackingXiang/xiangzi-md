@@ -249,6 +249,7 @@ const EN: Record<string, string> = {
   '输入命令或文件名…': 'Type a command or file name…',
   无匹配项: 'No matches',
   '查找 / 替换': 'Find / Replace',
+  粘贴为纯文本: 'Paste as Plain Text',
   切换大纲: 'Toggle outline',
   切换源码模式: 'Toggle source mode',
   专注模式: 'Focus mode',

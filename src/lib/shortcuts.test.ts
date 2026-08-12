@@ -161,6 +161,7 @@ describe('shared shortcut registry', () => {
       'find-next': true,
       'find-previous': true,
       'select-all': true,
+      'paste-plain': true,
       'command-palette': true,
       'toggle-sidebar': true,
       'toggle-outline': true,

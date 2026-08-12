@@ -115,6 +115,44 @@ function styleValue(element: HTMLElement, property: string): string {
   return element.style.getPropertyValue(property).trim()
 }
 
+/**
+ * Word, Google Docs and Notion stamp an explicit near-black `color` on almost
+ * every span. Wrapping those in `<font>` fills the document with markup for
+ * text that is not coloured at all, so treat neutral near-black as "no colour".
+ * Anything a user would recognise as a colour (including dark reds and blues,
+ * which are not neutral) is kept.
+ */
+function isDefaultTextColor(hex: string): boolean {
+  const channels = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16))
+  const max = Math.max(...channels)
+  return max <= 0x40 && max - Math.min(...channels) <= 0x10
+}
+
+/**
+ * Collapse `<font c>A</font><font c>B</font>` (and the same for `<mark>`) into
+ * one wrapper.每个源元素各包一层，一段颜色相同的文字被源 HTML 拆成几个 span 时，
+ * 粘进来就是一串碎片标签。只合并相邻、同色、且内部没有同名嵌套的两段。
+ */
+export function mergeAdjacentInlineWrappers(markdown: string): string {
+  const patterns = [
+    /<font color="(#[\da-f]{6})">((?:(?!<\/?font)[\s\S])*)<\/font><font color="\1">/gi,
+    /<mark style="background-color:(#[\da-f]{6})">((?:(?!<\/?mark)[\s\S])*)<\/mark><mark style="background-color:\1">/gi,
+  ]
+  let result = markdown
+  for (const pattern of patterns) {
+    let previous: string
+    do {
+      previous = result
+      result = result.replace(pattern, (_match, color: string, inner: string) =>
+        pattern.source.startsWith('<font')
+          ? `<font color="${color}">${inner}`
+          : `<mark style="background-color:${color}">${inner}`,
+      )
+    } while (result !== previous)
+  }
+  return result
+}
+
 function isHidden(element: HTMLElement): boolean {
   return (
     styleValue(element, 'display').toLowerCase() === 'none' ||
@@ -139,9 +177,10 @@ function wrapInlineStyle(element: HTMLElement, value: string): string {
   const strike =
     tag === 'DEL' || tag === 'S' || tag === 'STRIKE' || decoration.includes('line-through')
   const underline = tag === 'U' || decoration.includes('underline')
-  const color = cssColor(
+  const rawColor = cssColor(
     tag === 'FONT' ? (element.getAttribute('color') ?? '') : styleValue(element, 'color'),
   )
+  const color = rawColor && isDefaultTextColor(rawColor) ? null : rawColor
   const background = cssColor(styleValue(element, 'background-color'))
 
   let result = value
@@ -353,6 +392,8 @@ export function markdownFromClipboardHtml(html: string): string | null {
   const document = new DOMParser().parseFromString(html, 'text/html')
   const embedded = embeddedMarkdownSource(document)
   if (embedded !== null) return embedded
-  const converted = normalizeConvertedMarkdown(blockChildren(document.body))
+  const converted = mergeAdjacentInlineWrappers(
+    normalizeConvertedMarkdown(blockChildren(document.body)),
+  )
   return converted || null
 }
