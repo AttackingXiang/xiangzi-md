@@ -6,11 +6,13 @@ import { EditorState, type Extension } from '@codemirror/state'
 import { GFM } from '@lezer/markdown'
 import { languages } from '@codemirror/language-data'
 import {
+  crosshairCursor,
   drawSelection,
   dropCursor,
   EditorView,
   highlightActiveLine,
   keymap,
+  rectangularSelection,
 } from '@codemirror/view'
 import { pendingTextColor, planPendingColorInput } from './commands'
 import { contextMenuSelection } from './contextMenuSelection'
@@ -63,6 +65,11 @@ export function createBaseExtensions(): Extension[] {
     dropCursor(),
     bracketMatching(),
     highlightActiveLine(),
+    // Alt+拖拽拉出按列的矩形选区（Alt+点击的多光标是 CM6 默认行为，一直就有）。
+    // 本编辑器自己的指针处理器都在按住 Alt 时让路——见 livePreviewEvents 的
+    // `event.altKey` 判断——所以这条手势是空着的，纯文本编辑器早就装了同一对。
+    rectangularSelection(),
+    crosshairCursor(),
     selectionCoordinator(),
     contextMenuSelection(),
     pendingTextColor,
