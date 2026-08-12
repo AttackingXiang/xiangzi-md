@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'node_modules', 'src-tauri/gen', 'src-tauri/target'],
+    ignores: ['dist', 'node_modules', 'src-tauri/gen', 'src-tauri/target', 'harmonyos'],
   },
   { ...js.configs.recommended, files: ['**/*.{js,mjs,cjs}'] },
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({
