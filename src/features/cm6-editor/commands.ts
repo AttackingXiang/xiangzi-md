@@ -595,9 +595,47 @@ function planPlainParagraph(state: EditorState): MarkdownEditPlan {
   return { changes, selection: selectionMappedThrough(state, changes) }
 }
 
+/**
+ * Whether `line` is a standalone block image — its only content is a single
+ * `Image` node (matching the `block` classification in `findVisibleMarkdownImages`).
+ * Such a line is painted as an atomic widget, so the caret rests at its
+ * boundary rather than inside; wrapping it into a fence would slurp the image
+ * markdown into the code block instead of inserting an empty one.
+ */
+function lineIsBlockImage(state: EditorState, line: { from: number; to: number; text: string }): boolean {
+  const trimmed = line.text.trim()
+  if (!trimmed.startsWith('![')) return false
+  let match = false
+  syntaxTree(state).iterate({
+    from: line.from,
+    to: line.to,
+    enter(node) {
+      if (match) return false
+      if (node.name === 'Image' && state.doc.sliceString(node.from, node.to).trim() === trimmed) {
+        match = true
+        return false
+      }
+      return undefined
+    },
+  })
+  return match
+}
+
 export function planCodeFence(state: EditorState, language = ''): MarkdownEditPlan {
   const original = state.selection.main
   const line = state.doc.lineAt(original.head)
+  // Inserting a code block while the caret sits on a standalone block image
+  // should add a fresh empty block above the image, not convert the image's
+  // markdown into code. Anchor to the line start and keep a trailing newline so
+  // the image stays on its own following line.
+  if (original.empty && lineIsBlockImage(state, line)) {
+    const fence = '```'
+    const opening = `${fence}${language.replace(/[\r\n`~]/g, '').trim()}`
+    return {
+      changes: { from: line.from, insert: `${opening}\n\n${fence}\n` },
+      selection: selection(line.from + opening.length + 1),
+    }
+  }
   const range = original.empty && line.length > 0 ? { from: line.from, to: line.to } : original
   const selected = state.sliceDoc(range.from, range.to)
   const longestBacktickRun = Math.max(

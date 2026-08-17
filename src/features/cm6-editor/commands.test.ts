@@ -340,6 +340,20 @@ describe('CM6 Markdown commands', () => {
     })
   })
 
+  it('inserts an empty block above a standalone image instead of wrapping it', () => {
+    const doc = 'intro\n![image.png](<assets/image-1.png>)'
+    const imageLineFrom = doc.indexOf('![')
+    expect(run(doc, EditorSelection.cursor(imageLineFrom), insertCodeFence())).toEqual({
+      doc: 'intro\n```\n\n```\n![image.png](<assets/image-1.png>)',
+      from: 10,
+      to: 10,
+    })
+    // The caret resting at the end of the image line behaves identically.
+    expect(run(doc, EditorSelection.cursor(doc.length), insertCodeFence()).doc).toBe(
+      'intro\n```\n\n```\n![image.png](<assets/image-1.png>)',
+    )
+  })
+
   it('chooses a longer fence when selected code contains backticks', () => {
     expect(run('const value = ```', EditorSelection.range(0, 17), insertCodeFence()).doc).toBe(
       '````\nconst value = ```\n````',
