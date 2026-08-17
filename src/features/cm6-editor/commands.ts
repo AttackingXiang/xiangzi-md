@@ -602,7 +602,10 @@ function planPlainParagraph(state: EditorState): MarkdownEditPlan {
  * boundary rather than inside; wrapping it into a fence would slurp the image
  * markdown into the code block instead of inserting an empty one.
  */
-function lineIsBlockImage(state: EditorState, line: { from: number; to: number; text: string }): boolean {
+function lineIsBlockImage(
+  state: EditorState,
+  line: { from: number; to: number; text: string },
+): boolean {
   const trimmed = line.text.trim()
   if (!trimmed.startsWith('![')) return false
   let match = false
