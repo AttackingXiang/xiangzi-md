@@ -1086,6 +1086,7 @@ function editableCellsInOrder(dom: HTMLElement): HTMLElement[] {
 }
 
 const CELL_BREAK_PATTERN = /^<br\s*\/?\s*>$/i
+const TABLE_CELL_BREAK_ATTRIBUTE = 'data-xmd-table-break'
 
 function tableCellBreakRanges(value: string): { from: number; to: number }[] {
   const ranges: { from: number; to: number }[] = []
@@ -1118,7 +1119,7 @@ export function normalizeTableCellBreaks(value: string): string {
 
 function renderTableInlinePart(part: TableInlinePart): Node {
   if (part.kind === 'text') return document.createTextNode(part.text)
-  if (part.kind === 'break') return document.createElement('br')
+  if (part.kind === 'break') return createTableCellBreak()
   const tag =
     part.kind === 'strong'
       ? 'strong'
@@ -1139,6 +1140,13 @@ function renderTableInlinePart(part: TableInlinePart): Node {
   return element
 }
 
+/** Mark breaks that came from Markdown or an explicit editing action. */
+function createTableCellBreak(): HTMLBRElement {
+  const element = document.createElement('br')
+  element.setAttribute(TABLE_CELL_BREAK_ATTRIBUTE, 'true')
+  return element
+}
+
 /** Render Markdown's portable in-cell line break without enabling arbitrary HTML. */
 export function setTableCellContent(element: HTMLElement, value: string): void {
   element.replaceChildren()
@@ -1151,7 +1159,14 @@ export function readTableCellContent(element: HTMLElement): string {
     // A terminal soft break needs a real following caret box in WebKit. The
     // invisible sentinel supplies that box, but is never part of Markdown.
     if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? '').replace(/\u200b/g, '')
-    if (node.nodeName === 'BR') return '<br>'
+    // Browsers insert an unmarked BR as a contenteditable filler when the
+    // last visible character is deleted. Only breaks rendered from Markdown
+    // or inserted by our own editing paths are real cell content.
+    if (node.nodeName === 'BR') {
+      return node instanceof HTMLElement && node.getAttribute(TABLE_CELL_BREAK_ATTRIBUTE) === 'true'
+        ? '<br>'
+        : ''
+    }
     const content = Array.from(node.childNodes, read).join('')
     if (node instanceof HTMLElement && node.dataset.xmdTableInline === 'true') {
       // If all visible content of a format wrapper was deleted, drop its hidden
@@ -1349,7 +1364,7 @@ function replaceCellSelection(element: HTMLElement, value: string): boolean {
   let lastNode: Node | null = null
   parts.forEach((part, index) => {
     if (index > 0) {
-      lastNode = document.createElement('br')
+      lastNode = createTableCellBreak()
       fragment.append(lastNode)
     }
     if (part) {
@@ -1391,7 +1406,7 @@ function insertTableCellSoftBreak(element: HTMLElement): boolean {
     range.collapse(false)
   }
   range.deleteContents()
-  const breakElement = document.createElement('br')
+  const breakElement = createTableCellBreak()
   const sentinel = document.createTextNode('\u200b')
   const fragment = document.createDocumentFragment()
   fragment.append(breakElement, sentinel)

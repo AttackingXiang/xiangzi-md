@@ -20,6 +20,16 @@
   -webkit-user-select: none;
 }
 
+/* The editor toolbar overlaps the compact macOS tab row by a few pixels and
+   has its own stacking context. Raise the whole tab row while its fixed
+   overflow menu is open, otherwise the toolbar can paint over one of the menu
+   entries (the menu's z-index alone cannot outrank a sibling stacking
+   context). */
+.tabbar.overflow-open {
+  position: relative;
+  z-index: 10;
+}
+
 /* On macOS the leading pane owns the traffic-light row, while document tabs
    occupy only the editor pane, matching the split desktop-window structure. */
 body.is-macos .main > .tabbar {

@@ -272,7 +272,7 @@ const TabBar = memo(function TabBar({
 
   return (
     <div
-      className="tabbar"
+      className={`tabbar${showOverflow ? ' overflow-open' : ''}`}
       onPointerDown={enableWindowDragging ? handleWindowDragPointerDown : undefined}
     >
       {showLeadingControls && (
