@@ -154,6 +154,31 @@ body.is-macos .main > .tabbar .tab.active::after {
   pointer-events: none;
 }
 
+/* 标签之间一条淡竖线：关闭按钮收窄成 0 后，纯文字标签挨得很近，靠这条线
+   分出边界。只在两边都是「平铺」状态时露出——挨着 active/hover 的标签自己
+   已经有背景色区分，线再画上去反而多余。 */
+body.is-macos .main > .tabbar .tabs .tab {
+  position: relative;
+}
+
+body.is-macos .main > .tabbar .tabs .tab:not(:first-child)::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 7px;
+  bottom: 7px;
+  width: 1px;
+  background: var(--workspace-divider-strong);
+  pointer-events: none;
+}
+
+body.is-macos .main > .tabbar .tabs .tab.active::before,
+body.is-macos .main > .tabbar .tabs .tab:hover::before,
+body.is-macos .main > .tabbar .tabs .tab.active + .tab::before,
+body.is-macos .main > .tabbar .tabs .tab:hover + .tab::before {
+  opacity: 0;
+}
+
 .tab-name {
   overflow: hidden;
   text-overflow: ellipsis;
