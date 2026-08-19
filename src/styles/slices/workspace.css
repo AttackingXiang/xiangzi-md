@@ -181,12 +181,22 @@ body.is-macos .main > .tabbar .tab.active::after {
   color: var(--text);
 }
 
+/* 平时把关闭按钮宽度收进 0，而不是只降 opacity——不然每个标签哪怕没 hover
+   也会白白留出一个 28px 的空按钮位，标签之间显得空荡荡的。宽度随 hover 展开，
+   跟其它 app 的标签栏是一个味儿。 */
 body.is-macos .main > .tabbar .tab .tab-close {
+  width: 0;
+  padding: 0;
   opacity: 0;
+  overflow: hidden;
+  transition:
+    width 0.12s ease,
+    opacity 0.12s ease;
 }
 
 body.is-macos .main > .tabbar .tab:hover .tab-close,
 body.is-macos .main > .tabbar .tab:focus-within .tab-close {
+  width: 28px;
   opacity: 1;
 }
 
