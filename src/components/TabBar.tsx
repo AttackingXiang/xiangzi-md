@@ -4,7 +4,11 @@ import type { Tab } from '../types'
 import { t } from '../lib/i18n'
 import { stripExtension } from '../lib/path'
 import { shortcutHint } from '../lib/shortcuts'
-import { handleWindowDragPointerDown } from '../lib/windowDragRegion'
+import { runWindowAction } from '../lib/windowActions'
+import {
+  handleWindowDragPointerDown,
+  isWindowDragInteractiveTarget,
+} from '../lib/windowDragRegion'
 import HoverScrollbars from './LazyHoverScrollbars'
 
 interface Props {
@@ -274,6 +278,17 @@ const TabBar = memo(function TabBar({
     <div
       className={`tabbar${showOverflow ? ' overflow-open' : ''}`}
       onPointerDown={enableWindowDragging ? handleWindowDragPointerDown : undefined}
+      onDoubleClick={
+        enableWindowDragging
+          ? (event) => {
+              if (isWindowDragInteractiveTarget(event.target)) return
+              event.preventDefault()
+              void runWindowAction('maximize').catch((error: unknown) =>
+                console.error('Window maximize failed', error),
+              )
+            }
+          : undefined
+      }
     >
       {showLeadingControls && (
         <>
