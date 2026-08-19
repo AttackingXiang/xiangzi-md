@@ -5,10 +5,7 @@ import { t } from '../lib/i18n'
 import { stripExtension } from '../lib/path'
 import { shortcutHint } from '../lib/shortcuts'
 import { runWindowAction } from '../lib/windowActions'
-import {
-  handleWindowDragPointerDown,
-  isWindowDragInteractiveTarget,
-} from '../lib/windowDragRegion'
+import { handleWindowDragPointerDown, isWindowDragInteractiveTarget } from '../lib/windowDragRegion'
 import HoverScrollbars from './LazyHoverScrollbars'
 
 interface Props {
