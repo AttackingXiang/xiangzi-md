@@ -352,8 +352,17 @@ export function MarkdownEditor({
     scroller.addEventListener('scroll', reportScroll, { passive: true })
     const reportSelectionToolbar = (): void => reportSelectionToolbarRef.current(controller.view)
     scroller.addEventListener('scroll', reportSelectionToolbar, { passive: true })
-    window.addEventListener('resize', reportSelectionToolbar)
-    reportSelectionToolbar()
+    // CM6's own ResizeObserver (on scrollDOM) is supposed to re-measure line
+    // wrapping when the container resizes, but WKWebView has been seen to miss
+    // or delay that callback on a native window resize, leaving prose wrapped
+    // at the old width while plain-CSS content (tables) reflows immediately.
+    // Force a measure ourselves as a cheap, redundant safety net.
+    const handleWindowResize = (): void => {
+      controller.view.requestMeasure()
+      reportSelectionToolbar()
+    }
+    window.addEventListener('resize', handleWindowResize)
+    handleWindowResize()
 
     // CM6 lays out synchronously, but live-preview line heights settle over the
     // next frames. Reapply briefly without reporting these internal scrolls.
@@ -373,7 +382,7 @@ export function MarkdownEditor({
       cancelAnimationFrame(restoreFrame)
       scroller.removeEventListener('scroll', reportScroll)
       scroller.removeEventListener('scroll', reportSelectionToolbar)
-      window.removeEventListener('resize', reportSelectionToolbar)
+      window.removeEventListener('resize', handleWindowResize)
       disposeRichClipboard()
       // Persist the actual position even when the component unmounts during restore.
       onScrollTopChangeRef.current?.(scroller.scrollTop)
