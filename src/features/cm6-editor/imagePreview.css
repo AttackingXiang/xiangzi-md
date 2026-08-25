@@ -7,11 +7,29 @@
 .xmd-cm-image-preview.is-block {
   align-items: center;
   display: flex;
+  font-size: 1rem;
   justify-content: center;
+  line-height: var(--xmd-document-line-height, 1.75);
   margin: 0.4em auto;
   overflow: hidden;
   position: relative;
   width: fit-content;
+}
+
+/* A block image's widget decoration isn't a CM6 *block* decoration (that
+   would need the async-dispatching StateField CM6 requires for one, which
+   for a widget whose real height rarely matches its placeholder estimate
+   risks a dispatch/remeasure feedback loop — see imagePreview.ts). Left as
+   an ordinary replacement, the widget's block-level `<div>` still sits
+   inside the line's *inline* formatting context, so the browser reserves a
+   full anonymous line box — a whole extra `line-height` — on each side of
+   it, roughly doubling the visual gap between two stacked images. Zeroing
+   the line's own font-size/line-height collapses those struts; the rule
+   above restores real sizing on the widget itself so its content (image,
+   copy button, the `em`-based margin) isn't affected. */
+.xmd-cm-editor .cm-line:has(> .xmd-cm-image-preview.is-block) {
+  font-size: 0;
+  line-height: 0;
 }
 
 .xmd-cm-image-preview.is-block.is-loading.is-unmeasured {

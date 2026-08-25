@@ -37,16 +37,32 @@ export function useEditorContextMenu(
   const openEditorContext = useCallback(
     (x: number, y: number, image?: HTMLImageElement) => {
       const sz = 15
+      // An image widget isn't text: cut/paste/plain-text-copy and every
+      // WYSIWYG formatting command below operate on a text selection the
+      // right-clicked image never has, so none of them apply here.
+      if (image) {
+        setCtxMenu({
+          x,
+          y,
+          items: [
+            {
+              label: t('复制图片'),
+              icon: <Copy size={sz} />,
+              onClick: () => void copyImageElement(image),
+            },
+            {
+              label: t('全选'),
+              icon: <TextSelect size={sz} />,
+              hint: shortcutHint('Mod+A'),
+              onClick: clipboardCmd.selectAll,
+              separatorBefore: true,
+            },
+          ],
+          preserveSelection: true,
+        })
+        return
+      }
       const items: MenuItem[] = [
-        ...(image
-          ? [
-              {
-                label: t('复制图片'),
-                icon: <Copy size={sz} />,
-                onClick: () => void copyImageElement(image),
-              },
-            ]
-          : []),
         {
           label: t('剪切'),
           icon: <Scissors size={sz} />,
