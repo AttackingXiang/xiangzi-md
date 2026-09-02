@@ -88,6 +88,7 @@ import { subscribeCodeLanguageFeedback } from './lib/codeLanguageFeedback'
 import { clipboardCmd } from './lib/editorCommands'
 import { cm6ActiveViewBridge } from './features/cm6-editor/activeViewBridge'
 import { reorderHeading, revealHeading } from './features/cm6-editor/outline'
+import { normalizeEditorDocument } from './features/cm6-editor/sync'
 import { tablePickerBridge } from './lib/tablePickerBridge'
 import { tableZoomBridge } from './lib/tableZoomBridge'
 import { linkPromptBridge } from './lib/linkPromptBridge'
@@ -924,8 +925,16 @@ export default function App(): JSX.Element {
   const deferredOutlineContent = useDeferredValue(
     outlineVisible && activeTab ? (sourceMode ? activeTab.content : activeFrontmatter.body) : '',
   )
+  // 标题 offset 最终都会喂给 CM6（revealHeading / lineBlockAt），而 CM6 的文档模型
+  // 只有 LF：CRLF 文件进编辑器时每个 \r\n 被折成 \n。若按磁盘原文（可能是 CRLF）
+  // 算 offset，就会每过一行多偏一个字符，长文档里点击大纲会跳到错误的行。这里用与
+  // 编辑器相同的 normalizeEditorDocument 先把换行统一成 LF，让大纲坐标和编辑器一致。
+  // 只影响派生的大纲数据，不触碰 activeTab.content / tab.eol，保存仍按原换行风格还原。
   const outline = useMemo(
-    () => (outlineVisible && deferredOutlineContent ? parseOutline(deferredOutlineContent) : []),
+    () =>
+      outlineVisible && deferredOutlineContent
+        ? parseOutline(normalizeEditorDocument(deferredOutlineContent))
+        : [],
     [deferredOutlineContent, outlineVisible],
   )
   const [activeOutlineIndex, setActiveOutlineIndex] = useState<number | null>(null)

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { normalizeEditorDocument } from '../features/cm6-editor/sync'
 import {
   outlineDescendantEnd,
   outlineHasChildren,
@@ -70,5 +71,61 @@ describe('parseOutline', () => {
   it('keeps siblings visible when only a nested section is collapsed', () => {
     const items = parseOutline('# A\n## A.1\n### A.1.1\n## A.2\n# B')
     expect(visibleOutlineIndices(items, new Set([1]))).toEqual([0, 1, 3, 4])
+  })
+})
+
+// App.tsx feeds every outline offset straight to CodeMirror (revealHeading /
+// lineBlockAt), and CM6's document is always LF. The outline must therefore be
+// parsed from the same LF-normalized text the editor holds, never from the raw
+// CRLF file — otherwise offsets drift one char per preceding line and clicking a
+// heading in a long CRLF document scrolls to the wrong line.
+describe('parseOutline CRLF coordinate model', () => {
+  it('offsets computed from raw CRLF text drift past the LF editor position', () => {
+    const crlf = '# A\r\nbody\r\n\r\n## B\r\nmore\r\n\r\n### C\r\n'
+    const raw = parseOutline(crlf)
+    const lf = normalizeEditorDocument(crlf)
+    // Raw CRLF offsets do not land on the '#' once the doc is LF.
+    expect(raw.slice(1).every((h) => lf[h.offset] === '#')).toBe(false)
+  })
+
+  it('normalizing first makes every offset land exactly on its heading marker', () => {
+    const crlf = '# A\r\nbody\r\n\r\n## B\r\nmore\r\n\r\n### C\r\n'
+    const lf = normalizeEditorDocument(crlf)
+    const items = parseOutline(lf)
+    expect(items.map((h) => h.text)).toEqual(['A', 'B', 'C'])
+    for (const item of items) expect(lf[item.offset]).toBe('#')
+  })
+
+  it('matches the offsets of the equivalent LF-authored document', () => {
+    const body = '# A\nintro\n\n## B\ndetail\n\n## C\nend\n'
+    const fromLf = parseOutline(body)
+    const fromCrlf = parseOutline(normalizeEditorDocument(body.replace(/\n/g, '\r\n')))
+    expect(fromCrlf).toEqual(fromLf)
+  })
+
+  it('keeps a CRLF frontmatter body aligned after normalization', () => {
+    // Mirrors App.tsx non-source mode: outline runs on the frontmatter-stripped
+    // body, which is a slice of the raw CRLF file and still carries \r\n.
+    const crlfBody = '# Title\r\n\r\ntext\r\n\r\n## Section\r\nmore text\r\n'
+    const lfBody = normalizeEditorDocument(crlfBody)
+    const items = parseOutline(lfBody)
+    expect(items.map((h) => h.text)).toEqual(['Title', 'Section'])
+    for (const item of items) {
+      expect(lfBody.slice(item.offset).startsWith('#')).toBe(true)
+    }
+  })
+
+  it('holds alignment across a long document where drift is largest', () => {
+    const lines: string[] = []
+    for (let i = 0; i < 400; i += 1) lines.push(`filler line ${i}`)
+    lines.push('# Deep Heading')
+    for (let i = 0; i < 200; i += 1) lines.push(`tail line ${i}`)
+    lines.push('## Deeper Heading')
+    const lf = lines.join('\n')
+    const crlfNormalized = normalizeEditorDocument(lines.join('\r\n'))
+    expect(crlfNormalized).toBe(lf)
+    const items = parseOutline(crlfNormalized)
+    expect(items.map((h) => h.text)).toEqual(['Deep Heading', 'Deeper Heading'])
+    for (const item of items) expect(lf[item.offset]).toBe('#')
   })
 })
