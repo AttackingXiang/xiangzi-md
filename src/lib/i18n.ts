@@ -346,6 +346,9 @@ const EN: Record<string, string> = {
   无法打开上级文件夹: 'Unable to open parent folder',
   无法定位文件所在目录: 'Unable to locate the file folder',
   '无法打开该类型的文件：\n': 'Cannot open this type of file:\n',
+  '无法打开拖入的这些文件，例如：\n{path}': 'Cannot open the dropped files, for example:\n{path}',
+  '一次最多打开 {count} 个文件，其余已忽略。':
+    'At most {count} files can be opened at once; the rest were ignored.',
   打开: 'Open',
   打开外部链接: 'Open external link',
   '是否在系统浏览器中打开此链接？': 'Open this link in your browser?',

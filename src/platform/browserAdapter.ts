@@ -421,6 +421,7 @@ export const browserDesktopAdapter: DesktopPort = {
   onMenuAction: () => () => undefined,
   triggerMenuAction: () => undefined,
   onOpenPath: () => () => undefined,
+  onDropReport: () => () => undefined,
   onThemeInstallRequest: () => () => undefined,
   onSearchFocusEffectInstallRequest: () => () => undefined,
   notifyQuitOk: () => undefined,

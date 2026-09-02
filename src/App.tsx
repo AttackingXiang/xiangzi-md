@@ -1030,6 +1030,34 @@ export default function App(): JSX.Element {
     return desktop.onOpenPath((p) => openPath(p, baseName(p)))
   }, [openPath])
 
+  // ── Window drag-and-drop feedback ─────────────────────────────────────────
+  // Files that opened arrive through onOpenPath above and are their own
+  // feedback. Only the cases that produce no visible result need a message:
+  // the OS shows a valid drop target either way, so staying silent reads as
+  // the app being broken.
+  useEffect(() => {
+    if (!desktop) return undefined
+    return desktop.onDropReport((report) => {
+      if (report.truncated) {
+        void desktop.notify(
+          tf('一次最多打开 {count} 个文件，其余已忽略。', {
+            count: String(report.opened),
+          }),
+        )
+        return
+      }
+      if (report.opened > 0 || report.rejected.length === 0) return
+      // `rejected` is capped natively, so it carries an example rather than a
+      // trustworthy total — never phrase this message as a count.
+      const [first, ...rest] = report.rejected
+      void desktop.notify(
+        rest.length === 0
+          ? t('无法打开该类型的文件：\n') + first
+          : tf('无法打开拖入的这些文件，例如：\n{path}', { path: first }),
+      )
+    })
+  }, [])
+
   // ── Theme marketplace deep links ─────────────────────────────────────────
   useEffect(
     () =>

@@ -47,21 +47,29 @@ pub fn run() {
             // Dropping a file onto the window opens it, exactly like the
             // "Open With" file-association and CLI-argument paths: route every
             // dropped path through the same capability filter + scope grant +
-            // `open-path` emit. `dragDropEnabled` is left at its default (true),
-            // so the WebView never navigates to the raw `file://` URL and this
-            // is the only place the drop is observed. Non-text paths (images,
-            // folders, unknown types) are silently ignored by `supported_path`.
+            // `open-path` emit.
+            //
+            // This arm is the *only* observer of an OS file drop. Tauri's
+            // drag-drop handler (`dragDropEnabled` defaults to true) always
+            // reports the drop as handled, so wry never forwards it to the
+            // WebView: the page sees no `drop` event and cannot navigate to the
+            // raw `file://` URL. Anything not handled here is therefore lost —
+            // hence the report back to the frontend, which turns an empty drop
+            // into a message instead of silence.
             tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
                 let handle = window.app_handle();
-                let mut opened_any = false;
-                for path in paths {
-                    let raw = path.to_string_lossy();
-                    opened_any |= infrastructure::lifecycle::supported_path(&raw).is_some();
-                    infrastructure::lifecycle::queue_supported_path(handle, &raw);
-                }
-                if opened_any {
+                let raw_paths: Vec<String> = paths
+                    .iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect();
+                let report = infrastructure::lifecycle::open_dropped_paths(
+                    handle,
+                    raw_paths.iter().map(String::as_str),
+                );
+                if report.opened > 0 {
                     infrastructure::lifecycle::reveal_main_window(handle);
                 }
+                let _ = window.emit("drop-report", report);
             }
             _ => {}
         })

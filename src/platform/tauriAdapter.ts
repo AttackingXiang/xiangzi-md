@@ -402,6 +402,7 @@ export const tauriDesktopAdapter: DesktopPort = {
     subscribe('open-path', callback, () => {
       void invoke('frontend_ready')
     }),
+  onDropReport: (callback) => subscribe('drop-report', callback),
   onThemeInstallRequest: (callback) => {
     let disposed = false
     let unlisten: UnlistenFn | undefined

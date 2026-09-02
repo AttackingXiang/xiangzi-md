@@ -20,6 +20,12 @@ function isNativeMenuUseful(target: EventTarget | null): boolean {
  * - 把文件拖到编辑器**以外**的区域，WebView 会直接导航到那个 file:// URL，
  *   整个应用被替换成一个文件预览页，只能重启。
  *
+ * 关于第三点：从**操作系统**拖进来的文件其实到不了这里。Tauri 的 drag-drop
+ * 处理器（dragDropEnabled 默认 true）一律把拖放报告为已处理，wry 因此不会把它
+ * 转交给 WebView——页面收不到 drop，也就无从导航。这类拖放由 Rust 侧的
+ * `WindowEvent::DragDrop` 独家接管（见 src-tauri/src/lib.rs），会直接开成标签页。
+ * 下面这层只兜底应用内部产生的拖放，以及未来 dragDropEnabled 被关掉的情况。
+ *
  * 返回取消注册的函数。
  */
 export function installWebViewChrome(): () => void {

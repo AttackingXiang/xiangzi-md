@@ -150,6 +150,13 @@ export function imageInsertion(options: ImageInsertionOptions): Extension {
           if (handled) event.preventDefault()
           return handled
         },
+        // Unreachable for images dragged in from Finder/Explorer: Tauri's
+        // drag-drop handler always reports an OS drop as handled, so wry never
+        // forwards it to the WebView and `dataTransfer.files` is never
+        // populated. Only in-app drags reach this. Dropping an image from the
+        // OS is currently a no-op (the Rust handler in src-tauri/src/lib.rs
+        // opens documents only); wiring it up means routing image paths from
+        // there to `save_attachment` rather than reviving this handler.
         drop(event, view) {
           const files = imageFiles(event.dataTransfer?.files ?? null)
           if (!files.length || view.state.readOnly) return false

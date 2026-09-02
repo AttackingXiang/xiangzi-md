@@ -1,4 +1,5 @@
 use super::file_capabilities::is_known_text;
+use serde::Serialize;
 use std::{
     path::Path,
     sync::{
@@ -10,6 +11,17 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 
 const MAX_PENDING_OPEN_PATHS: usize = 32;
+
+/// How many documents a single window drop may open.
+///
+/// `queue_open_path` only applies `MAX_PENDING_OPEN_PATHS` while the frontend
+/// is still starting; once it is ready every path is emitted unconditionally,
+/// which is fine for a file association (one path) but not for a drop, where
+/// the OS hands over whatever the user selected in Finder/Explorer. Beyond the
+/// tab flood, each accepted path permanently widens the fs and asset scopes,
+/// and `tauri-plugin-persisted-scope` writes those entries to disk — so one
+/// stray select-all drop would slow down every future launch.
+const MAX_DROPPED_PATHS: usize = 32;
 
 pub struct LifecycleState {
     frontend_ready: AtomicBool,
@@ -84,10 +96,77 @@ pub fn queue_supported_arguments(app: &AppHandle, arguments: impl IntoIterator<I
 
 pub fn queue_supported_path(app: &AppHandle, raw: &str) {
     if let Some(path) = supported_path(raw) {
-        let _ = app.fs_scope().allow_file(&path);
-        let _ = app.asset_protocol_scope().allow_file(&path);
-        app.state::<LifecycleState>().queue_open_path(app, path);
+        queue_resolved_path(app, path);
     }
+}
+
+/// Grant access to an already-validated path and hand it to the frontend.
+/// Split out so callers that have run `supported_path` themselves do not pay
+/// for a second `is_file` stat — and cannot disagree with the first result if
+/// the file disappears in between.
+fn queue_resolved_path(app: &AppHandle, path: String) {
+    let _ = app.fs_scope().allow_file(&path);
+    let _ = app.asset_protocol_scope().allow_file(&path);
+    app.state::<LifecycleState>().queue_open_path(app, path);
+}
+
+/// What a window drop resolved to, so the frontend can report it.
+///
+/// A drop that opens nothing must still say something: unlike the file picker
+/// or a file association, the OS gives no feedback of its own, so a swallowed
+/// drop is indistinguishable from a broken app.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
+pub struct DropReport {
+    /// Documents actually handed to the frontend.
+    pub opened: usize,
+    /// Paths the editor cannot open — images, folders, unknown types.
+    pub rejected: Vec<String>,
+    /// Whether openable paths were dropped beyond `MAX_DROPPED_PATHS`.
+    pub truncated: bool,
+}
+
+/// Split dropped paths into what the editor can open and what it cannot,
+/// capping the batch. Separated from the side effects so the batching rules
+/// are testable without standing up a Tauri app.
+fn classify_dropped_paths<'a>(
+    raw_paths: impl IntoIterator<Item = &'a str>,
+) -> (Vec<String>, DropReport) {
+    let mut openable: Vec<String> = Vec::new();
+    let mut report = DropReport::default();
+    for raw in raw_paths {
+        match supported_path(raw) {
+            Some(path) => {
+                // Finder hands over duplicates when the same file is selected
+                // through an alias; opening it twice would just race the tab.
+                if openable.contains(&path) {
+                    continue;
+                }
+                if openable.len() == MAX_DROPPED_PATHS {
+                    report.truncated = true;
+                    continue;
+                }
+                openable.push(path);
+            }
+            None if report.rejected.len() < MAX_DROPPED_PATHS => {
+                report.rejected.push(raw.to_owned())
+            }
+            None => {}
+        }
+    }
+    report.opened = openable.len();
+    (openable, report)
+}
+
+/// Open every dropped path the editor understands, returning what happened.
+pub fn open_dropped_paths<'a>(
+    app: &AppHandle,
+    raw_paths: impl IntoIterator<Item = &'a str>,
+) -> DropReport {
+    let (openable, report) = classify_dropped_paths(raw_paths);
+    for path in openable {
+        queue_resolved_path(app, path);
+    }
+    report
 }
 
 pub fn reveal_main_window(app: &AppHandle) {
@@ -100,9 +179,9 @@ pub fn reveal_main_window(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::supported_path;
+    use super::{classify_dropped_paths, MAX_DROPPED_PATHS};
     use crate::infrastructure::file_capabilities::{MARKDOWN_EXTENSIONS, TEXT_EXTENSIONS};
-    use std::fs;
+    use std::{fs, path::Path};
 
     #[test]
     fn external_open_uses_the_full_editor_manifest() {
@@ -113,26 +192,69 @@ mod tests {
         assert!(TEXT_EXTENSIONS.contains(&"tsx"));
     }
 
-    // The window drag-drop handler (see lib.rs) forwards every dropped path
-    // straight to `supported_path`; these pin the filter it depends on.
+    fn write(dir: &Path, name: &str) -> String {
+        let path = dir.join(name);
+        fs::write(&path, "x").expect("write fixture");
+        path.to_string_lossy().into_owned()
+    }
+
     #[test]
-    fn dropped_paths_open_only_real_editable_text_files() {
+    fn dropping_editable_files_opens_them_and_reports_nothing_rejected() {
         let dir = tempfile::tempdir().expect("temp dir");
+        let markdown = write(dir.path(), "note.md");
+        // No extension still counts as text — the same rule the file tree uses.
+        let license = write(dir.path(), "LICENSE");
 
-        let markdown = dir.path().join("note.md");
-        fs::write(&markdown, "# hi").expect("write md");
-        assert!(supported_path(&markdown.to_string_lossy()).is_some());
+        let (openable, report) = classify_dropped_paths([markdown.as_str(), license.as_str()]);
+        assert_eq!(openable, vec![markdown, license]);
+        assert_eq!(report.opened, 2);
+        assert!(report.rejected.is_empty());
+        assert!(!report.truncated);
+    }
 
-        let extensionless = dir.path().join("LICENSE");
-        fs::write(&extensionless, "MIT").expect("write license");
-        assert!(supported_path(&extensionless.to_string_lossy()).is_some());
+    #[test]
+    fn images_folders_dotfiles_and_missing_paths_are_reported_as_rejected() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let image = write(dir.path(), "photo.png");
+        let dotfile = write(dir.path(), ".env");
+        let folder = dir.path().to_string_lossy().into_owned();
+        let missing = dir.path().join("missing.md").to_string_lossy().into_owned();
 
-        let image = dir.path().join("photo.png");
-        fs::write(&image, [0u8; 8]).expect("write png");
-        assert!(supported_path(&image.to_string_lossy()).is_none());
+        let (openable, report) = classify_dropped_paths([
+            image.as_str(),
+            dotfile.as_str(),
+            folder.as_str(),
+            missing.as_str(),
+        ]);
+        // Nothing opens, so the caller must be able to tell the user why
+        // instead of leaving the drop silent.
+        assert!(openable.is_empty());
+        assert_eq!(report.opened, 0);
+        assert_eq!(report.rejected, vec![image, dotfile, folder, missing]);
+        assert!(!report.truncated);
+    }
 
-        // A directory drop and a path that does not exist both no-op.
-        assert!(supported_path(&dir.path().to_string_lossy()).is_none());
-        assert!(supported_path(&dir.path().join("missing.md").to_string_lossy()).is_none());
+    #[test]
+    fn a_large_drop_is_capped_and_flagged_as_truncated() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let paths: Vec<String> = (0..MAX_DROPPED_PATHS + 5)
+            .map(|index| write(dir.path(), &format!("note-{index}.md")))
+            .collect();
+
+        let (openable, report) = classify_dropped_paths(paths.iter().map(String::as_str));
+        assert_eq!(openable.len(), MAX_DROPPED_PATHS);
+        assert_eq!(report.opened, MAX_DROPPED_PATHS);
+        assert!(report.truncated);
+    }
+
+    #[test]
+    fn the_same_path_dropped_twice_opens_one_document() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let markdown = write(dir.path(), "note.md");
+
+        let (openable, report) = classify_dropped_paths([markdown.as_str(), markdown.as_str()]);
+        assert_eq!(openable, vec![markdown]);
+        assert_eq!(report.opened, 1);
+        assert!(!report.truncated);
     }
 }

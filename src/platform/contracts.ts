@@ -269,6 +269,20 @@ export interface FileWatchEvent {
   paths: string[]
 }
 
+/**
+ * Outcome of dropping files onto the window, reported by the native drag-drop
+ * handler. The OS gives no feedback of its own for a drop that opens nothing,
+ * so the app has to say why instead of leaving it silent.
+ */
+export interface DropReport {
+  /** Documents actually opened. */
+  opened: number
+  /** Paths the editor cannot open — images, folders, unknown types. */
+  rejected: string[]
+  /** Openable paths were dropped beyond the per-drop limit and ignored. */
+  truncated: boolean
+}
+
 export interface FileWatchOptions {
   recursive?: boolean
   delayMs?: number
@@ -482,6 +496,7 @@ export interface DesktopPort {
   onMenuAction(callback: (action: string) => void): () => void
   triggerMenuAction(id: string): void
   onOpenPath(callback: (path: string) => void): () => void
+  onDropReport(callback: (report: DropReport) => void): () => void
   onThemeInstallRequest(callback: (request: ThemeInstallRequest) => void): () => void
   onSearchFocusEffectInstallRequest(
     callback: (request: SearchFocusEffectInstallRequest) => void,
