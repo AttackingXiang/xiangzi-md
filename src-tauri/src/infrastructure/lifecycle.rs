@@ -100,7 +100,9 @@ pub fn reveal_main_window(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    use super::supported_path;
     use crate::infrastructure::file_capabilities::{MARKDOWN_EXTENSIONS, TEXT_EXTENSIONS};
+    use std::fs;
 
     #[test]
     fn external_open_uses_the_full_editor_manifest() {
@@ -109,5 +111,28 @@ mod tests {
         assert!(TEXT_EXTENSIONS.contains(&"txt"));
         assert!(TEXT_EXTENSIONS.contains(&"html"));
         assert!(TEXT_EXTENSIONS.contains(&"tsx"));
+    }
+
+    // The window drag-drop handler (see lib.rs) forwards every dropped path
+    // straight to `supported_path`; these pin the filter it depends on.
+    #[test]
+    fn dropped_paths_open_only_real_editable_text_files() {
+        let dir = tempfile::tempdir().expect("temp dir");
+
+        let markdown = dir.path().join("note.md");
+        fs::write(&markdown, "# hi").expect("write md");
+        assert!(supported_path(&markdown.to_string_lossy()).is_some());
+
+        let extensionless = dir.path().join("LICENSE");
+        fs::write(&extensionless, "MIT").expect("write license");
+        assert!(supported_path(&extensionless.to_string_lossy()).is_some());
+
+        let image = dir.path().join("photo.png");
+        fs::write(&image, [0u8; 8]).expect("write png");
+        assert!(supported_path(&image.to_string_lossy()).is_none());
+
+        // A directory drop and a path that does not exist both no-op.
+        assert!(supported_path(&dir.path().to_string_lossy()).is_none());
+        assert!(supported_path(&dir.path().join("missing.md").to_string_lossy()).is_none());
     }
 }

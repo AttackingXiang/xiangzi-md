@@ -36,14 +36,34 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| menu::handle_event(app, event.id().as_ref()))
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 let lifecycle = window.state::<LifecycleState>();
                 if !lifecycle.is_quit_confirmed() {
                     api.prevent_close();
                     let _ = window.emit("menu-action", "query-dirty");
                 }
             }
+            // Dropping a file onto the window opens it, exactly like the
+            // "Open With" file-association and CLI-argument paths: route every
+            // dropped path through the same capability filter + scope grant +
+            // `open-path` emit. `dragDropEnabled` is left at its default (true),
+            // so the WebView never navigates to the raw `file://` URL and this
+            // is the only place the drop is observed. Non-text paths (images,
+            // folders, unknown types) are silently ignored by `supported_path`.
+            tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                let handle = window.app_handle();
+                let mut opened_any = false;
+                for path in paths {
+                    let raw = path.to_string_lossy();
+                    opened_any |= infrastructure::lifecycle::supported_path(&raw).is_some();
+                    infrastructure::lifecycle::queue_supported_path(handle, &raw);
+                }
+                if opened_any {
+                    infrastructure::lifecycle::reveal_main_window(handle);
+                }
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::get_app_info,
