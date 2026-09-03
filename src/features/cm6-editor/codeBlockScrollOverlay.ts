@@ -30,7 +30,8 @@ import {
   type OverlayPinGeometry,
 } from './codeBlockGeometry'
 import { mermaidSourceRange, setMermaidSourceRange } from './mermaidPreview'
-import { checkIcon, copyIcon, eyeIcon } from './widgetIcons'
+import { bracesIcon, checkIcon, copyIcon, eyeIcon } from './widgetIcons'
+import { formatJsonSource, isFormattableJsonLanguage } from './jsonCodeBlock'
 import { selectionIntent, transactionHasSelectionIntent } from './selection/selectionIntent'
 
 export interface CodeBlockPreviewOptions {
@@ -38,11 +39,19 @@ export interface CodeBlockPreviewOptions {
   maxHeight?: number
   copyLabel?: string
   copiedLabel?: string
+  formatJsonLabel?: string
+  formattedLabel?: string
+  invalidJsonLabel?: string
   /** Wrap long code lines. Disabled by default so source layout is preserved. */
   lineWrapping?: boolean
 }
 
 let codeLanguageMenuSequence = 0
+
+type OverlayLabels = Pick<
+  CodeBlockPreviewOptions,
+  'copyLabel' | 'copiedLabel' | 'formatJsonLabel' | 'formattedLabel' | 'invalidJsonLabel'
+>
 
 /**
  * The copy/language controls for the active code block. This is no longer a
@@ -62,7 +71,8 @@ class CodeBlockControlsOverlay {
   readonly setBlock: (data: FencedCodeData, readOnly: boolean) => void
   readonly setMermaidSourceVisible: (visible: boolean) => void
 
-  constructor(view: EditorView, copyLabel: string, copiedLabel: string) {
+  constructor(view: EditorView, labels: Required<OverlayLabels>) {
+    const { copyLabel, copiedLabel, formatJsonLabel, formattedLabel, invalidJsonLabel } = labels
     /** `from` of the block the controls currently operate on. */
     let blockFrom = -1
     /** Last language committed to (or read from) the document; what Escape
@@ -265,7 +275,62 @@ class CodeBlockControlsOverlay {
       view.focus()
     })
 
-    header.append(language, menu, mermaidPreview, copy)
+    // Pretty-print a `json` block in place. Only rendered for a fence the
+    // strict parser can actually handle (see isFormattableJsonLanguage), so
+    // the button never advertises an action that is bound to fail.
+    const formatJson = document.createElement('button')
+    formatJson.className = 'xmd-cm-code-preview-format'
+    formatJson.type = 'button'
+    formatJson.hidden = true
+    formatJson.setAttribute('aria-label', formatJsonLabel)
+    formatJson.title = formatJsonLabel
+    formatJson.append(bracesIcon())
+    let formatFeedbackTimer = 0
+    /** Flash the outcome on the button itself, in the copy button's idiom —
+     * a modal for a formatting slip would be far heavier than the action. */
+    const showFormatFeedback = (label: string, failed: boolean): void => {
+      formatJson.replaceChildren(failed ? bracesIcon() : checkIcon())
+      formatJson.classList.toggle('is-error', failed)
+      formatJson.title = label
+      formatJson.setAttribute('aria-label', label)
+      window.clearTimeout(formatFeedbackTimer)
+      formatFeedbackTimer = window.setTimeout(
+        () => {
+          if (!formatJson.isConnected) return
+          formatJson.replaceChildren(bracesIcon())
+          formatJson.classList.remove('is-error')
+          formatJson.title = formatJsonLabel
+          formatJson.setAttribute('aria-label', formatJsonLabel)
+        },
+        failed ? 2600 : 1200,
+      )
+    }
+    formatJson.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (view.state.readOnly) return
+      const current = findFencedCodeAt(view.state, blockFrom)
+      if (!current) return
+      const source = view.state.doc.sliceString(current.codeFrom, current.codeTo)
+      const result = formatJsonSource(source)
+      // `null` means the block is already formatted: say so rather than
+      // pushing an empty transaction onto the undo stack.
+      if (!result) {
+        showFormatFeedback(formattedLabel, false)
+        return
+      }
+      if (!result.ok) {
+        showFormatFeedback(`${invalidJsonLabel}: ${result.message}`, true)
+        return
+      }
+      view.dispatch({
+        changes: { from: current.codeFrom, to: current.codeTo, insert: result.text },
+      })
+      showFormatFeedback(formattedLabel, false)
+      view.focus()
+    })
+
+    header.append(language, menu, mermaidPreview, formatJson, copy)
     this.dom = header
     this.setMermaidSourceVisible = (visible) => {
       mermaidPreview.hidden = !visible
@@ -275,6 +340,7 @@ class CodeBlockControlsOverlay {
       const normalized = normalizedLanguageValue(data.language)
       committedLanguage = normalized
       language.disabled = readOnly
+      formatJson.hidden = readOnly || !isFormattableJsonLanguage(data.language)
       this.setMermaidSourceVisible(isEditableMermaidSource(view.state, data))
       // Never fight an in-progress edit: only mirror document state into the
       // input while focus is outside the overlay.
@@ -365,11 +431,13 @@ class CodeBlockScrollPlugin {
     readonly view: EditorView,
     options: CodeBlockPreviewOptions = {},
   ) {
-    this.controls = new CodeBlockControlsOverlay(
-      view,
-      options.copyLabel ?? 'Copy',
-      options.copiedLabel ?? 'Copied',
-    )
+    this.controls = new CodeBlockControlsOverlay(view, {
+      copyLabel: options.copyLabel ?? 'Copy',
+      copiedLabel: options.copiedLabel ?? 'Copied',
+      formatJsonLabel: options.formatJsonLabel ?? 'Format JSON',
+      formattedLabel: options.formattedLabel ?? 'Formatted',
+      invalidJsonLabel: options.invalidJsonLabel ?? 'Invalid JSON',
+    })
     view.scrollDOM.appendChild(this.controls.dom)
     this.scrollbar = options.lineWrapping ? null : createCodeScrollbarElement()
     if (this.scrollbar) {

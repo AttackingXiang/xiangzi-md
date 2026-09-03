@@ -296,7 +296,10 @@
   background: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
-.xmd-cm-code-preview-copy {
+/* The JSON formatting button only exists on `json` fences, so it shares every
+   rule with copy rather than growing a second visual language beside it. */
+.xmd-cm-code-preview-copy,
+.xmd-cm-code-preview-format {
   align-items: center;
   appearance: none;
   background: transparent;
@@ -319,20 +322,37 @@
 
 .xmd-cm-code-preview-header.is-active .xmd-cm-code-preview-copy,
 .xmd-cm-code-preview-header:focus-within .xmd-cm-code-preview-copy,
-.xmd-cm-code-preview-copy:focus-visible {
+.xmd-cm-code-preview-copy:focus-visible,
+.xmd-cm-code-preview-header.is-active .xmd-cm-code-preview-format,
+.xmd-cm-code-preview-header:focus-within .xmd-cm-code-preview-format,
+.xmd-cm-code-preview-format:focus-visible {
   opacity: 0.78;
   pointer-events: auto;
 }
 
-.xmd-cm-code-preview-copy:hover {
+.xmd-cm-code-preview-copy:hover,
+.xmd-cm-code-preview-format:hover {
   background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
   opacity: 1;
 }
 
-.xmd-cm-code-preview-copy:focus-visible {
+.xmd-cm-code-preview-copy:focus-visible,
+.xmd-cm-code-preview-format:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+.xmd-cm-code-preview-format[hidden] {
+  display: none;
+}
+
+/* A parse failure keeps the button in place and turns it red for a moment;
+   the message itself lives in the title, like every other overlay control. */
+.xmd-cm-code-preview-format.is-error,
+.xmd-cm-code-preview-format.is-error:hover {
+  color: var(--danger, #c43d4d);
+  opacity: 1;
 }
 
 /* CM6's rectangle selection layer intentionally fills open line ranges to the

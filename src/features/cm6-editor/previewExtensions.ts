@@ -33,6 +33,9 @@ export function createMarkdownPreviewExtensions(
     markdownCodeBlockPreview({
       copyLabel: '复制',
       copiedLabel: '已复制',
+      formatJsonLabel: '格式化 JSON',
+      formattedLabel: '已格式化',
+      invalidJsonLabel: 'JSON 解析失败',
       lineWrapping: options.codeBlockLineWrapping,
     }),
     markdownImagePreview({
