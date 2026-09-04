@@ -47,6 +47,19 @@
   height: 0;
 }
 
+/* WKWebView can route a native scrollbar-thumb drag into CodeMirror's
+   contenteditable selection. The editor uses the same app-owned overlay as
+   sidebars so thumb gestures never enter the document selection surface. */
+.xmd-cm-editor.scrollbar-host .cm-scroller {
+  scrollbar-width: none;
+}
+
+.xmd-cm-editor.scrollbar-host .cm-scroller::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .hover-scrollbars {
   position: absolute;
   z-index: 5;

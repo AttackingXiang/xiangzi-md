@@ -1,6 +1,6 @@
 import type { Extension } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createCm6Editor } from './controller'
 import { imageInsertion } from './imageInsertion'
@@ -14,6 +14,7 @@ import type { TableColumnWidthMode } from './tablePreview'
 import { markdownEditorExportBridge } from './exportBridge'
 import { selectionTouchesCodeBlock } from './toolbarState'
 import SelectionToolbar, { type SelectionToolbarAnchor } from '../../components/SelectionToolbar'
+import HoverScrollbars from '../../components/LazyHoverScrollbars'
 import { highlighterModeBridge } from '../../lib/highlighterModeBridge'
 import { setTextHighlight } from './commands'
 import { selectionCoordinatorObserver, selectionSnapshot } from './selection/selectionCoordinator'
@@ -128,6 +129,7 @@ export function MarkdownEditor({
 }: MarkdownEditorProps): ReactNode {
   const rootRef = useRef<HTMLDivElement>(null)
   const mountRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLElement | null>(null)
   const controllerRef = useRef<Cm6EditorController | null>(null)
   const onChangeRef = useRef(onChange)
   const onReadyRef = useRef(onReady)
@@ -345,6 +347,7 @@ export function MarkdownEditor({
     })
 
     const scroller = controller.view.scrollDOM
+    scrollerRef.current = scroller
     const disposeRichClipboard = setupRichClipboard(mount, stableImageResolverRef.current)
     const reportScroll = (): void => {
       if (!restoringScroll) onScrollTopChangeRef.current?.(scroller.scrollTop)
@@ -388,6 +391,7 @@ export function MarkdownEditor({
       onScrollTopChangeRef.current?.(scroller.scrollTop)
       unregisterExport()
       controllerRef.current = null
+      scrollerRef.current = null
       tagPortalHostRef.current = null
       controller.destroy()
     }
@@ -457,6 +461,7 @@ export function MarkdownEditor({
 
   const rootClassName = [
     'xmd-cm-editor',
+    'scrollbar-host',
     tagBar ? 'has-tag-bar' : '',
     readingMode ? 'is-reading' : '',
     livePreview ? 'is-live-preview' : 'is-source',
@@ -498,6 +503,9 @@ export function MarkdownEditor({
       }}
     >
       <div ref={mountRef} className="xmd-cm-mount" />
+      <Suspense fallback={null}>
+        <HoverScrollbars targetRef={scrollerRef} axes="vertical" />
+      </Suspense>
       {tagPortalHost && tagBar ? createPortal(tagBar, tagPortalHost) : null}
       {selectionToolbarAnchor && !readingMode ? (
         <SelectionToolbar
