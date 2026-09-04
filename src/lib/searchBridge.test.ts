@@ -16,12 +16,26 @@ import {
 
 function stateView(doc: string): { view: EditorView; state: () => EditorState } {
   let current = EditorState.create({ doc, extensions: [search(), history()] })
+  const scrollDOM = { scrollTop: 0, clientHeight: 400 }
   const view = {
     get state() {
       return current
     },
     dispatch(spec: TransactionSpec) {
       current = current.update(spec).state
+    },
+    scrollDOM,
+    lineBlockAt(position: number) {
+      return {
+        from: position,
+        to: position,
+        top: position * 10,
+        bottom: position * 10 + 20,
+        height: 20,
+      }
+    },
+    plugin() {
+      return null
     },
     root: { activeElement: null },
   } as unknown as EditorView
@@ -119,7 +133,7 @@ describe('CM6 shared search bridge', () => {
     expect(calls).toBe(1)
   })
 
-  it('reasserts only scrolling after mount-time layout restoration settles', () => {
+  it('reasserts the real scroller after mount-time layout restoration settles', () => {
     const frames: FrameRequestCallback[] = []
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       frames.push(callback)
@@ -135,6 +149,8 @@ describe('CM6 shared search bridge', () => {
         dispatches += 1
         current = current.update(spec).state
       },
+      scrollDOM: { scrollTop: 500, clientHeight: 400 },
+      lineBlockAt: vi.fn(() => ({ from: 0, to: 6, top: 120, bottom: 140, height: 20 })),
       root: { activeElement: null },
     } as unknown as EditorView
     cm6ActiveViewBridge.register(view)
@@ -142,6 +158,24 @@ describe('CM6 shared search bridge', () => {
     expect(searchMountedEditor('target')).toBe(true)
     for (let frame = 0; frame < 4; frame += 1) frames.shift()?.(frame)
 
-    expect(dispatches).toBe(2)
+    expect(dispatches).toBe(1)
+    expect(view.scrollDOM.scrollTop).toBe(0)
+  })
+
+  it('moves the real scroller for next-match navigation in a long document', () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback)
+      return frames.length
+    })
+    const harness = stateView(`${'prefix '.repeat(80)}target`)
+    cm6ActiveViewBridge.register(harness.view)
+
+    expect(searchFind('target')).toBe(true)
+    expect(harness.view.scrollDOM.scrollTop).toBeGreaterThan(0)
+
+    harness.view.scrollDOM.scrollTop = 0
+    frames.shift()?.(0)
+    expect(harness.view.scrollDOM.scrollTop).toBeGreaterThan(0)
   })
 })

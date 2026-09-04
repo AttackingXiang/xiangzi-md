@@ -52,19 +52,25 @@ function currentSearchView(): EditorView | null {
   return view && getSearchQuery(view.state).valid ? view : null
 }
 
+function runSearchNavigation(view: EditorView, command: (target: EditorView) => boolean): boolean {
+  const found = command(view)
+  if (found) stabilizeSearchScroll(view, view.state.selection)
+  return found
+}
+
 export function searchFind(text: string, replace = ''): boolean {
   const view = setQuery(text, replace)
-  return view ? findNext(view) : false
+  return view ? runSearchNavigation(view, findNext) : false
 }
 
 export function searchNext(): boolean {
   const view = currentSearchView()
-  return view ? findNext(view) : false
+  return view ? runSearchNavigation(view, findNext) : false
 }
 
 export function searchPrev(): boolean {
   const view = currentSearchView()
-  return view ? findPrevious(view) : false
+  return view ? runSearchNavigation(view, findPrevious) : false
 }
 
 export function searchReplace(text: string, replace: string): boolean {
@@ -89,25 +95,34 @@ export interface SearchMatchRange {
   to: number
 }
 
+const SEARCH_SCROLL_SETTLE_FRAMES = 4
+
+function applySearchScroll(view: EditorView, selection: EditorSelection): void {
+  const block = view.lineBlockAt(selection.main.from)
+  const centeredOffset = Math.max(32, (view.scrollDOM.clientHeight - block.height) / 2)
+  view.scrollDOM.scrollTop = Math.max(0, block.top - centeredOffset)
+}
+
+/**
+ * Keep the selected match visible in desktop WebViews where CM6's scroll effect
+ * updates its height map but does not always move the real scroller. Live-preview
+ * widgets also settle over several frames, so re-read the line block each time.
+ */
 function stabilizeSearchScroll(view: EditorView, selection: EditorSelection): void {
+  applySearchScroll(view, selection)
   if (typeof requestAnimationFrame !== 'function') return
   const document = view.state.doc
-  let frames = 4
+  let frames = SEARCH_SCROLL_SETTLE_FRAMES
   const afterLayout = (): void => {
     frames -= 1
-    if (frames > 0) {
-      requestAnimationFrame(afterLayout)
-      return
-    }
     if (
       cm6ActiveViewBridge.get() !== view ||
       view.state.doc !== document ||
       !view.state.selection.eq(selection)
     )
       return
-    view.dispatch({
-      effects: EditorView.scrollIntoView(selection.main, { y: 'center', yMargin: 32 }),
-    })
+    applySearchScroll(view, selection)
+    if (frames > 0) requestAnimationFrame(afterLayout)
   }
   requestAnimationFrame(afterLayout)
 }
@@ -175,8 +190,8 @@ export function searchMountedEditor(
     userEvent: 'select.search',
   })
   // MarkdownEditor restores stored scroll positions for its first three
-  // layout frames. Reassert only the scroll effect afterwards, and only if the
-  // target selection/document are still current.
+  // layout frames. Reassert the real scrollDOM position afterwards, and only if
+  // the target selection/document are still current.
   stabilizeSearchScroll(view, selection)
   return true
 }
