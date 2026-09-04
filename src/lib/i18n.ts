@@ -248,6 +248,10 @@ const EN: Record<string, string> = {
   仅搜索文件名: 'File name only',
   '输入关键词开始搜索当前文件夹。': 'Type to search the current folder.',
   '没有找到匹配的内容。': 'No matches found.',
+  '已到文档底部，再次查找将从头开始。':
+    'Reached the end of the document. Find again to continue from the beginning.',
+  '已到文档顶部，再次查找将从末尾开始。':
+    'Reached the beginning of the document. Find again to continue from the end.',
   '在文件夹中搜索…': 'Search in folder…',
   '搜索中…': 'Searching…',
   个文件: ' files',

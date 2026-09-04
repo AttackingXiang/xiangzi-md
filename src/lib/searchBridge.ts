@@ -52,25 +52,52 @@ function currentSearchView(): EditorView | null {
   return view && getSearchQuery(view.state).valid ? view : null
 }
 
-function runSearchNavigation(view: EditorView, command: (target: EditorView) => boolean): boolean {
+export type SearchNavigationOutcome = 'match' | 'not-found' | 'at-start' | 'at-end' | 'unavailable'
+
+function searchBoundary(
+  view: EditorView,
+  direction: 'forward' | 'backward',
+): SearchNavigationOutcome {
+  const query = getSearchQuery(view.state)
+  const current = view.state.selection.main
+  if (direction === 'forward') {
+    const next = query
+      .getCursor(
+        view.state,
+        Math.min(view.state.doc.length, current.from + 1),
+        view.state.doc.length,
+      )
+      .next()
+    return next.done ? 'at-end' : 'match'
+  }
+  const previous = query.getCursor(view.state, 0, current.to).next()
+  return previous.done || previous.value.from >= current.from ? 'at-start' : 'match'
+}
+
+function runSearchNavigation(
+  view: EditorView,
+  command: (target: EditorView) => boolean,
+  direction: 'forward' | 'backward',
+): SearchNavigationOutcome {
   const found = command(view)
-  if (found) stabilizeSearchScroll(view, view.state.selection)
-  return found
+  if (!found) return 'not-found'
+  stabilizeSearchScroll(view, view.state.selection)
+  return searchBoundary(view, direction)
 }
 
-export function searchFind(text: string, replace = ''): boolean {
+export function searchFind(text: string, replace = ''): SearchNavigationOutcome {
   const view = setQuery(text, replace)
-  return view ? runSearchNavigation(view, findNext) : false
+  return view ? runSearchNavigation(view, findNext, 'forward') : 'unavailable'
 }
 
-export function searchNext(): boolean {
+export function searchNext(): SearchNavigationOutcome {
   const view = currentSearchView()
-  return view ? runSearchNavigation(view, findNext) : false
+  return view ? runSearchNavigation(view, findNext, 'forward') : 'unavailable'
 }
 
-export function searchPrev(): boolean {
+export function searchPrev(): SearchNavigationOutcome {
   const view = currentSearchView()
-  return view ? runSearchNavigation(view, findPrevious) : false
+  return view ? runSearchNavigation(view, findPrevious, 'backward') : 'unavailable'
 }
 
 export function searchReplace(text: string, replace: string): boolean {

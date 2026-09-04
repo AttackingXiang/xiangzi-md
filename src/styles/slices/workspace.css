@@ -449,6 +449,18 @@ body.is-macos .main > .tabbar .tabbar-actions {
   gap: 4px;
 }
 
+.findbar-hint {
+  min-height: 16px;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.findbar-hint.is-empty {
+  color: var(--code-invalid);
+}
+
 .text-btn {
   border: 1px solid color-mix(in srgb, var(--workspace-divider-strong) 72%, transparent);
   background: transparent;

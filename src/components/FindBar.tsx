@@ -12,6 +12,7 @@ import {
   searchReplaceAll,
   searchMountedEditor,
   subscribeEditorAvailability,
+  type SearchNavigationOutcome,
 } from '../lib/searchBridge'
 import { findNavigationBridge } from '../lib/findNavigationBridge'
 import { t } from '../lib/i18n'
@@ -42,6 +43,7 @@ export default function FindBar({
   const [find, setFind] = useState(initialQuery.trim())
   const [replace, setReplace] = useState('')
   const [showReplace, setShowReplace] = useState(false)
+  const [searchHint, setSearchHint] = useState<SearchNavigationOutcome>('match')
   const [editorAvailable, setEditorAvailable] = useState(hasEditor)
   const inputRef = useRef<HTMLInputElement>(null)
   const pendingFindRef = useRef<(() => void) | null>(null)
@@ -88,14 +90,15 @@ export default function FindBar({
     pendingFindRef.current = null
     if (!text) {
       searchClear()
+      setSearchHint('match')
       return
     }
-    if (hasEditor()) searchFind(text, replace)
+    if (hasEditor()) setSearchHint(searchFind(text, replace))
     else {
       const unsubscribe = onEditorAvailable(() => {
         unsubscribe()
         pendingFindRef.current = null
-        searchFind(text, replace)
+        setSearchHint(searchFind(text, replace))
       })
       pendingFindRef.current = unsubscribe
     }
@@ -103,12 +106,21 @@ export default function FindBar({
 
   const goNext = (): void => {
     if (!find) return
-    searchNext()
+    setSearchHint(searchNext())
   }
   const goPrev = (): void => {
     if (!find) return
-    searchPrev()
+    setSearchHint(searchPrev())
   }
+
+  const hintText =
+    searchHint === 'not-found'
+      ? t('没有找到匹配的内容。')
+      : searchHint === 'at-end'
+        ? t('已到文档底部，再次查找将从头开始。')
+        : searchHint === 'at-start'
+          ? t('已到文档顶部，再次查找将从末尾开始。')
+          : ''
 
   // 全局 ⌘G / F3 通过这个桥推进匹配，不需要焦点回到查找框。
   useEffect(() => {
@@ -183,6 +195,16 @@ export default function FindBar({
             >
               {t('全部替换')}
             </button>
+          </div>
+        )}
+
+        {hintText && (
+          <div
+            className={`findbar-hint${searchHint === 'not-found' ? ' is-empty' : ''}`}
+            role="status"
+            aria-live="polite"
+          >
+            {hintText}
           </div>
         )}
       </div>

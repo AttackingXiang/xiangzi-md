@@ -11,6 +11,7 @@ import {
   searchFind,
   searchMountedEditor,
   searchNext,
+  searchPrev,
   searchReplaceAll,
 } from './searchBridge'
 
@@ -82,8 +83,8 @@ describe('CM6 shared search bridge', () => {
 
     expect(searchMountedEditor('content')).toBe(true)
     const selectedMatch = harness.state().selection
-    expect(searchFind('')).toBe(false)
-    expect(searchNext()).toBe(false)
+    expect(searchFind('')).toBe('unavailable')
+    expect(searchNext()).toBe('unavailable')
     expect(searchMountedEditor('', 0)).toBe(false)
     expect(harness.state().selection.eq(selectedMatch)).toBe(true)
   })
@@ -171,11 +172,21 @@ describe('CM6 shared search bridge', () => {
     const harness = stateView(`${'prefix '.repeat(80)}target`)
     cm6ActiveViewBridge.register(harness.view)
 
-    expect(searchFind('target')).toBe(true)
+    expect(searchFind('target')).toBe('at-end')
     expect(harness.view.scrollDOM.scrollTop).toBeGreaterThan(0)
 
     harness.view.scrollDOM.scrollTop = 0
     frames.shift()?.(0)
     expect(harness.view.scrollDOM.scrollTop).toBeGreaterThan(0)
+  })
+
+  it('reports missing matches and both document boundaries', () => {
+    const harness = stateView('target middle target')
+    cm6ActiveViewBridge.register(harness.view)
+
+    expect(searchFind('missing')).toBe('not-found')
+    expect(searchFind('target')).toBe('match')
+    expect(searchNext()).toBe('at-end')
+    expect(searchPrev()).toBe('at-start')
   })
 })
