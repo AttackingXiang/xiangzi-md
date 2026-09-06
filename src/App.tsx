@@ -1610,6 +1610,7 @@ export default function App(): JSX.Element {
           {showFind && !isTextKind && (
             <Suspense fallback={null}>
               <FindBar
+                documentKey={activeId}
                 initialQuery={findInitial}
                 initialLine={findLine}
                 initialMatchIndex={findMatchIndex}

@@ -32,6 +32,38 @@ afterEach(() => {
 })
 
 describe('FindBar', () => {
+  it('closes with Escape from a navigation button', () => {
+    const onClose = vi.fn()
+    const { host, root } = renderFindBar(0)
+    act(() => root.render(<FindBar onClose={onClose} />))
+    act(() => {
+      host
+        .querySelector('button[title^="下一个"]')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(onClose).toHaveBeenCalledOnce()
+    act(() => root.unmount())
+  })
+
+  it('refreshes the hint after replacing all matches without navigating again', () => {
+    vi.spyOn(searchBridge, 'hasEditor').mockReturnValue(true)
+    vi.spyOn(searchBridge, 'canReplaceInEditor').mockReturnValue(true)
+    const search = vi.spyOn(searchBridge, 'searchFind').mockReturnValue('at-end')
+    vi.spyOn(searchBridge, 'searchReplaceAll').mockReturnValue(true)
+    vi.spyOn(searchBridge, 'searchStatus').mockReturnValue('not-found')
+    const { host, root } = renderFindBar(0)
+    act(() => typeInto(host.querySelector<HTMLInputElement>('.find-input')!, 'target'))
+    act(() => host.querySelector<HTMLButtonElement>('button[title="替换"]')?.click())
+    act(() => {
+      Array.from(host.querySelectorAll('button'))
+        .find((button) => button.textContent === '全部替换')
+        ?.click()
+    })
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('没有找到匹配的内容。')
+    expect(search).toHaveBeenCalledOnce()
+    act(() => root.unmount())
+  })
+
   it('returns focus to the find input when the global find command repeats', () => {
     const { host, root } = renderFindBar(0)
     const input = host.querySelector<HTMLInputElement>('.find-input')

@@ -11,13 +11,16 @@ import {
   searchReplace,
   searchReplaceAll,
   searchMountedEditor,
+  searchStatus,
   subscribeEditorAvailability,
   type SearchNavigationOutcome,
 } from '../lib/searchBridge'
 import { findNavigationBridge } from '../lib/findNavigationBridge'
 import { t } from '../lib/i18n'
+import { hasOpenModal } from '../lib/modalStack'
 
 interface Props {
+  documentKey?: string | null
   initialQuery?: string
   /** Line number hint from full-text search; used to scroll to the match after open */
   initialLine?: number
@@ -34,6 +37,7 @@ interface Props {
  * 懒加载期间通过 active-view 订阅等待编辑器，不搜索应用外壳 DOM。
  */
 export default function FindBar({
+  documentKey,
   initialQuery = '',
   initialLine,
   initialMatchIndex,
@@ -47,6 +51,33 @@ export default function FindBar({
   const [editorAvailable, setEditorAvailable] = useState(hasEditor)
   const inputRef = useRef<HTMLInputElement>(null)
   const pendingFindRef = useRef<(() => void) | null>(null)
+  const queryRef = useRef({ find, replace })
+  queryRef.current = { find, replace }
+  const previousDocumentRef = useRef(documentKey)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.isComposing || hasOpenModal()) return
+      event.preventDefault()
+      event.stopPropagation()
+      closeRef.current()
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [])
+
+  useEffect(() => {
+    if (previousDocumentRef.current === documentKey) return
+    previousDocumentRef.current = documentKey
+    const refresh = (): void => {
+      const query = queryRef.current
+      setSearchHint(query.find ? searchFind(query.find, query.replace) : 'match')
+    }
+    if (hasEditor()) refresh()
+    else return onEditorAvailable(refresh)
+  }, [documentKey])
 
   const replaceEnabled = editorAvailable && canReplaceInEditor()
 
@@ -158,7 +189,6 @@ export default function FindBar({
                 if (e.shiftKey) goPrev()
                 else goNext()
               }
-              if (e.key === 'Escape') onClose()
             }}
           />
           <button className="icon-btn sm" title={`${t('上一个')} (⇧Enter)`} onClick={goPrev}>
@@ -177,21 +207,24 @@ export default function FindBar({
               value={replace}
               disabled={!replaceEnabled}
               onChange={(e) => setReplace(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') onClose()
-              }}
             />
             <button
               className="text-btn"
               disabled={!replaceEnabled || !find}
-              onClick={() => searchReplace(find, replace)}
+              onClick={() => {
+                searchReplace(find, replace)
+                setSearchHint(searchStatus())
+              }}
             >
               {t('替换')}
             </button>
             <button
               className="text-btn"
               disabled={!replaceEnabled || !find}
-              onClick={() => searchReplaceAll(find, replace)}
+              onClick={() => {
+                searchReplaceAll(find, replace)
+                setSearchHint(searchStatus())
+              }}
             >
               {t('全部替换')}
             </button>

@@ -144,7 +144,7 @@ export function shouldDeferSelectAllToFocusedEditor(target: EventTarget | null):
 
 /** File-tree focus should make Cmd/Ctrl+F open the folder search surface. */
 export function shouldOpenFolderSearchFromTarget(target: EventTarget | null): boolean {
-  return selectAllFocusTarget(target)?.closest('.sidebar-wrap, .search-panel') !== null
+  return Boolean(selectAllFocusTarget(target)?.closest('.sidebar-wrap, .search-panel'))
 }
 
 function selectAllFocusTarget(target: EventTarget | null): Element | null {

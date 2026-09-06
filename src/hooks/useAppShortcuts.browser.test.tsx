@@ -39,6 +39,11 @@ afterEach(() => {
 })
 
 describe('application select-all shortcut routing', () => {
+  it('does not route an absent focus target to folder search', () => {
+    expect(shouldOpenFolderSearchFromTarget(null)).toBe(false)
+    expect(shouldOpenFolderSearchFromTarget(window)).toBe(false)
+  })
+
   it('recognizes the file tree as the folder-search context', () => {
     const sidebar = document.createElement('div')
     sidebar.className = 'sidebar-wrap'

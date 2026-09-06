@@ -100,6 +100,14 @@ export function searchPrev(): SearchNavigationOutcome {
   return view ? runSearchNavigation(view, findPrevious, 'backward') : 'unavailable'
 }
 
+/** Read the current result state without changing selection or scroll position. */
+export function searchStatus(): SearchNavigationOutcome {
+  const view = currentSearchView()
+  if (!view) return 'unavailable'
+  const first = getSearchQuery(view.state).getCursor(view.state).next()
+  return first.done ? 'not-found' : searchBoundary(view, 'forward')
+}
+
 export function searchReplace(text: string, replace: string): boolean {
   const view = setQuery(text, replace)
   return view ? replaceNext(view) : false
