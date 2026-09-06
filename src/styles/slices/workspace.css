@@ -225,6 +225,14 @@ body.is-macos .main > .tabbar .tab:focus-within .tab-close {
   opacity: 1;
 }
 
+/* 溢出时最右侧标签紧贴滚动容器右边缘，它的关闭按钮平时收进 0、hover 才展开，
+   展开出来的 28px 正好落在裁剪边界之外，够不着也点不到。一旦标签行开始横向
+   滚动，就把最后一个标签的关闭按钮常驻展开，给它预留位置、始终可见。 */
+body.is-macos .main > .tabbar .tabs.tabs--overflowing .tab:last-child .tab-close {
+  width: 28px;
+  opacity: 1;
+}
+
 .tab-close:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;

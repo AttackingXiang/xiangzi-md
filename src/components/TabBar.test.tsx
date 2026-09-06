@@ -187,6 +187,32 @@ describe('TabBar window and tab dragging', () => {
     expect(renderedTabs[1]?.querySelector('.tab-dirty-indicator')).toBeNull()
   })
 
+  it('marks the tab strip as overflowing so the last close button can be pinned open', async () => {
+    const prior = new Map<string, PropertyDescriptor | undefined>()
+    const stub = (name: 'scrollWidth' | 'clientWidth', wide: number): void => {
+      prior.set(name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name))
+      Object.defineProperty(HTMLElement.prototype, name, {
+        configurable: true,
+        get(this: HTMLElement): number {
+          return this.classList.contains('tabs') ? wide : 0
+        },
+      })
+    }
+    stub('scrollWidth', 900)
+    stub('clientWidth', 300)
+    try {
+      const host = renderTabBar({ tabs: [tab('a'), tab('b'), tab('c')], activeId: 'a' })
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+      })
+      expect(host.querySelector('.tabs')?.classList.contains('tabs--overflowing')).toBe(true)
+    } finally {
+      for (const [name, descriptor] of prior) {
+        if (descriptor) Object.defineProperty(HTMLElement.prototype, name, descriptor)
+      }
+    }
+  })
+
   it('closes the requested tab without selecting or starting a drag', () => {
     const onClose = vi.fn()
     const onSelect = vi.fn()

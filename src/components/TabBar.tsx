@@ -347,7 +347,7 @@ const TabBar = memo(function TabBar({
 
       {/* ── 滚动区（normal tabs） ──────────────────────────────────────── */}
       <div className="scrollbar-host tabs-scrollbar-host">
-        <div className="tabs" ref={tabsRef}>
+        <div className={`tabs${hasOverflow ? ' tabs--overflowing' : ''}`} ref={tabsRef}>
           {normalTabs.map((tab) => renderTab(tab, true))}
         </div>
         <Suspense fallback={null}>
