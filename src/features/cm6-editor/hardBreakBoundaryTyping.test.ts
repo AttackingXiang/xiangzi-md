@@ -56,7 +56,7 @@ function forwardDelete(view: EditorView): void {
   runScopeHandlers(view, new KeyboardEvent('keydown', { key: 'Delete' }), 'editor')
 }
 
-describe('markdownLivePreview: typing between a hard break\'s hidden backslash and its newline', () => {
+describe("markdownLivePreview: typing between a hard break's hidden backslash and its newline", () => {
   it('redirects an ordinary typed character in front of the backslash, keeping the break', () => {
     const view = createView('a\\\nb')
     // Position 2 sits between the backslash (index 1) and the newline (index 2).

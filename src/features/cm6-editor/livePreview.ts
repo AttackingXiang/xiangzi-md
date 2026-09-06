@@ -858,11 +858,7 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
       // Hard breaks and backslash escapes are inline-markdown constructs. In
       // code (fenced, indented, inline), HTML or frontmatter a `\` is literal
       // and must stay exactly one glyph — never doubled into an escape pair.
-      for (
-        let node: SyntaxNode | null = tree.resolveInner(fromA, -1);
-        node;
-        node = node.parent
-      ) {
+      for (let node: SyntaxNode | null = tree.resolveInner(fromA, -1); node; node = node.parent) {
         if (LITERAL_CONTEXT_NAMES.has(node.name)) return
       }
       // `$$…$$` / `$…$` math is a text scan, not Lezer nodes, so the ancestor
