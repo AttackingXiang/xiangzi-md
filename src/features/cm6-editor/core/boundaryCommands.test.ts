@@ -3,6 +3,8 @@ import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
   cleanupEmptyMarkdownFormatting,
+  escapeBoundaryDeletion,
+  hardBreakBoundaryDeletion,
   headingBoundaryDeletion,
   INLINE_MARK_FILLER,
   insertContainerMarkdownHardBreak,
@@ -284,6 +286,74 @@ describe('quote boundary deletion', () => {
   it('leaves an ordinary blank line behind when the only quote level is removed', () => {
     const result = deleteAtQuoteBoundary(createState('> quoted', 0), false)
     expect(result.doc.toString()).toBe('quoted')
+  })
+})
+
+describe('escape boundary deletion', () => {
+  const apply = (doc: string, cursor: number, forward: boolean): string | null => {
+    const spec = escapeBoundaryDeletion(createState(doc, cursor), forward)
+    return spec ? createState(doc, cursor).update(spec).state.doc.toString() : null
+  }
+
+  it('removes the whole escape on Backspace just after it', () => {
+    // `a` + `\*` + `b`; caret after the escaped `*`.
+    expect(apply('a\\*b', 3, false)).toBe('ab')
+  })
+
+  it('removes the whole escape on Delete just before it', () => {
+    expect(apply('a\\*b', 1, true)).toBe('ab')
+  })
+
+  it('removes the whole escape from inside it, in either direction', () => {
+    expect(apply('a\\*b', 2, false)).toBe('ab')
+    expect(apply('a\\*b', 2, true)).toBe('ab')
+  })
+
+  it('handles an escaped backslash the same way', () => {
+    expect(apply('a\\\\b', 3, false)).toBe('ab')
+  })
+
+  it('does not fire when the caret only touches the far side', () => {
+    // Backspace before the escape / Delete after it point away from it.
+    expect(apply('a\\*b', 1, false)).toBeNull()
+    expect(apply('a\\*b', 3, true)).toBeNull()
+    expect(apply('plain text', 4, false)).toBeNull()
+  })
+})
+
+describe('hard break boundary deletion', () => {
+  // 'a\\\nb' == a + `\` + newline + b: a bare hard break with the `\` at 1.
+  const apply = (
+    doc: string,
+    cursor: number,
+    forward: boolean,
+  ): { doc: string; head: number } | null => {
+    const spec = hardBreakBoundaryDeletion(createState(doc, cursor), forward)
+    if (!spec) return null
+    const next = createState(doc, cursor).update(spec).state
+    return { doc: next.doc.toString(), head: next.selection.main.head }
+  }
+
+  it('relaxes the forced break into a soft wrap at the visual line end', () => {
+    // Backspace answers to either side of the hidden `\` (index 1 or 2) —
+    // both render at the same spot.
+    expect(apply('a\\\nb', 2, false)).toEqual({ doc: 'a\nb', head: 1 })
+    expect(apply('a\\\nb', 1, false)).toEqual({ doc: 'a\nb', head: 1 })
+    // Delete with the caret before the hidden `\` (index 1).
+    expect(apply('a\\\nb', 1, true)).toEqual({ doc: 'a\nb', head: 1 })
+  })
+
+  it('joins the lines from the far side of the newline', () => {
+    // Backspace at the start of the next line (index 3).
+    expect(apply('a\\\nb', 3, false)).toEqual({ doc: 'ab', head: 1 })
+    // Delete sitting on the newline (index 2).
+    expect(apply('a\\\nb', 2, true)).toEqual({ doc: 'ab', head: 1 })
+  })
+
+  it('ignores positions that are not the hard break boundary', () => {
+    expect(apply('a\\\nb', 0, false)).toBeNull()
+    expect(apply('a\\\nb', 2, true)).not.toBeNull() // sanity: the boundary does fire
+    expect(apply('plain\ntext', 5, false)).toBeNull() // ordinary soft newline
   })
 })
 

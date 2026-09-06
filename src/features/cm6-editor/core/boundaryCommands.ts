@@ -754,6 +754,77 @@ export function quoteBoundaryDeletion(
 }
 
 /**
+ * Backspace/Delete adjacent to a backslash escape (`\*`, `\\`, …) removes the
+ * whole two-character node as one unit, from either side and whether or not
+ * the caret has revealed its source `\`. Live preview hides only the leading
+ * backslash, so without this the atomic range would let CM6's default delete
+ * strip the escaped character alone and leave a dangling `\` behind.
+ */
+export function escapeBoundaryDeletion(
+  state: EditorState,
+  forward: boolean,
+): TransactionSpec | null {
+  if (state.readOnly) return null
+  const selection = state.selection.main
+  if (!selection.empty) return null
+  const pos = selection.head
+  const tree = syntaxTree(state)
+  for (const node of [tree.resolveInner(pos, -1), tree.resolveInner(pos, 1)]) {
+    if (node.name !== 'Escape') continue
+    const canDelete = forward ? pos < node.to : pos > node.from
+    if (!canDelete) continue
+    return {
+      changes: { from: node.from, to: node.to },
+      selection: { anchor: node.from },
+      scrollIntoView: true,
+      userEvent: forward ? 'delete.forward' : 'delete.backward',
+    }
+  }
+  return null
+}
+
+/**
+ * Backspace/Delete at a hard break (`\` + `\n`, backslash hidden by live
+ * preview). Without this the hidden, atomic backslash makes the key a dead
+ * no-op at the visual line end. Instead:
+ *
+ *   - at the visual line end (Backspace) / before the hidden `\` (Delete):
+ *     remove just the `\`, relaxing the forced break into an ordinary wrap so
+ *     the next keystroke behaves like any line end. Both sides of the hidden
+ *     backslash render at the same spot, so Backspace answers to either;
+ *     deleting the line's last visible character then just takes one more
+ *     press, the same as it would past any hidden marker.
+ *   - from the next line's start (Backspace) / at the `\n` (Delete): remove
+ *     `\` + `\n` together, joining the lines.
+ */
+export function hardBreakBoundaryDeletion(
+  state: EditorState,
+  forward: boolean,
+): TransactionSpec | null {
+  if (state.readOnly) return null
+  const selection = state.selection.main
+  if (!selection.empty) return null
+  const pos = selection.head
+  const tree = syntaxTree(state)
+  for (const node of [tree.resolveInner(pos, -1), tree.resolveInner(pos, 1)]) {
+    if (node.name !== 'HardBreak') continue
+    const newlineAt = node.from + 1 // node spans `\`(node.from) + `\n`(newlineAt)
+    const relaxBreak =
+      (!forward && (pos === node.from || pos === newlineAt)) || (forward && pos === node.from)
+    const joinLines = (!forward && pos === node.to) || (forward && pos === newlineAt)
+    if (!relaxBreak && !joinLines) continue
+    const to = relaxBreak ? newlineAt : node.to
+    return {
+      changes: { from: node.from, to },
+      selection: { anchor: node.from },
+      scrollIntoView: true,
+      userEvent: forward ? 'delete.forward' : 'delete.backward',
+    }
+  }
+  return null
+}
+
+/**
  * Backspace/Delete at a position that touches a *hidden* (not widget-owned)
  * range: try the heading/list/quote boundary commands first, then fall back
  * to removing a thematic break (HR) as one atomic unit, or — for any other
@@ -782,6 +853,16 @@ export function deleteAtHiddenBoundary(
   const quote = quoteBoundaryDeletion(view.state, forward)
   if (quote) {
     view.dispatch(quote)
+    return true
+  }
+  const escape = escapeBoundaryDeletion(view.state, forward)
+  if (escape) {
+    view.dispatch(escape)
+    return true
+  }
+  const hardBreak = hardBreakBoundaryDeletion(view.state, forward)
+  if (hardBreak) {
+    view.dispatch(hardBreak)
     return true
   }
 

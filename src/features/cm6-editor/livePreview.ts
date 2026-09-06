@@ -44,6 +44,7 @@ import {
   calloutStartAtLine,
 } from './livePreviewWidgets'
 import { livePreviewEventHandlers } from './livePreviewEvents'
+import { findVisibleMathExpressions } from './mathPreview'
 import { nativeSelectionPresentationEnabled } from './selection/selectionCoordinator'
 
 export {
@@ -271,6 +272,24 @@ function inlineHtmlSpans(state: EditorState, visible: PreviewRange): InlineHtmlS
  * owned by the code-block/table preview extensions anyway.
  */
 const LITERAL_BLOCK_NAMES = new Set(['FencedCode', 'CodeBlock', 'Table'])
+
+/**
+ * Syntax-tree ancestors that mean "a backslash here is literal text": Lezer
+ * does not parse `HardBreak` or `Escape` inside any of them, so the hard-break
+ * typing redirect must leave them completely alone.
+ */
+const LITERAL_CONTEXT_NAMES = new Set([
+  'FencedCode',
+  'CodeBlock',
+  'CodeText',
+  'InlineCode',
+  'Table',
+  'HTMLBlock',
+  'HTMLTag',
+  'CommentBlock',
+  'Comment',
+  'Frontmatter',
+])
 
 /** Whether `pos` sits inside one of those literal blocks. */
 function isLiteralBlockPosition(state: EditorState, pos: number): boolean {
@@ -687,6 +706,15 @@ function collectHiddenRanges(
           // but hide its source backslash in live preview.
           hidden.push({ from: node.from, to: node.from + 1 })
         }
+
+        if (node.name === 'Escape') {
+          // `\*` / `\\` / `\/` … render as the bare escaped character. The
+          // leading backslash is hidden unconditionally (never revealed by an
+          // adjacent caret, unlike `**` markers) so one keystroke stays one
+          // glyph with no cursor-move to settle it; `escapeBoundaryDeletion`
+          // still removes the whole pair on Backspace/Delete.
+          hidden.push({ from: node.from, to: node.from + 1 })
+        }
       },
     })
     for (const span of inlineHtmlSpans(state, visible)) {
@@ -790,12 +818,110 @@ export function markdownLivePreview(options: LivePreviewOptions = {}): Extension
     )
   }
 
+  // Typing right before a line-ending `\n` is where the hard-break encoding
+  // (`\` + `\n`, backslash hidden — see the `HardBreak` case in
+  // `collectHiddenRanges`) leaks. The caret's natural end-of-line rest is the
+  // position just before that newline, and Markdown's left-to-right escape
+  // rule then reinterprets whatever lands there:
+  //
+  //   - a lone typed `\` pairs with the newline into a *new* hard break, so
+  //     the character the user typed vanishes (it is now a hidden marker);
+  //   - a `\` typed against an *existing* hard break pairs with that break's
+  //     own backslash, dropping the forced break instead;
+  //   - a raw `\\` shows up as two glyphs for one keystroke.
+  //
+  // Fix: the run of backslashes immediately before a `\n` is a structural
+  // property — odd means "hard break here", even means "no hard break" — that
+  // only Shift-Enter and hard-break deletion may flip. Typing literal
+  // backslashes there must preserve it, so every backslash the user wants to
+  // see is stored as its own escaped pair `\\` (the run grows by two, parity
+  // unchanged) and `collectHiddenRanges` hides one backslash per pair. N
+  // keystrokes then show exactly N glyphs, `escapeBoundaryDeletion` removes
+  // one pair (one glyph) per Backspace, and no hard break appears or
+  // disappears as a side effect.
+  const redirectTypingAtHardBreak = (transaction: Transaction): TransactionSpec | null => {
+    if (!transaction.docChanged || !transaction.isUserEvent('input')) return null
+    const state = transaction.startState
+    const tree = syntaxTree(state)
+    let changeCount = 0
+    let redirect: TransactionSpec | null = null
+    transaction.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+      changeCount += 1
+      if (redirect || fromA !== toA) return
+      // The caret is in a line-ending backslash run only if walking forward
+      // over `\`s from the insertion point lands exactly on a newline. Check
+      // this first — it is false for almost every keystroke, and skips the
+      // syntax-tree work below.
+      let newline = fromA
+      while (state.sliceDoc(newline, newline + 1) === '\\') newline += 1
+      if (state.sliceDoc(newline, newline + 1) !== '\n') return
+      // Hard breaks and backslash escapes are inline-markdown constructs. In
+      // code (fenced, indented, inline), HTML or frontmatter a `\` is literal
+      // and must stay exactly one glyph — never doubled into an escape pair.
+      for (
+        let node: SyntaxNode | null = tree.resolveInner(fromA, -1);
+        node;
+        node = node.parent
+      ) {
+        if (LITERAL_CONTEXT_NAMES.has(node.name)) return
+      }
+      // `$$…$$` / `$…$` math is a text scan, not Lezer nodes, so the ancestor
+      // walk cannot see it. Inside math a `\` is LaTeX (`\\` is the row
+      // break) — leave it exactly as typed.
+      const mathWindow = {
+        from: Math.max(0, fromA - 8192),
+        to: Math.min(state.doc.length, fromA + 8192),
+      }
+      if (
+        findVisibleMathExpressions(state, [mathWindow], 0).some(
+          (expression) => expression.from <= fromA && fromA <= expression.to,
+        )
+      ) {
+        return
+      }
+      // Walk back to the start of the whole run.
+      let runStart = fromA
+      while (runStart > 0 && state.sliceDoc(runStart - 1, runStart) === '\\') runStart -= 1
+      let isHardBreak = false
+      tree.iterate({
+        from: Math.max(0, newline - 1),
+        to: newline + 1,
+        enter: (candidate) => {
+          if (candidate.name === 'HardBreak') isHardBreak = true
+        },
+      })
+      const typed = inserted.sliceString(0)
+      const trailingBackslashes = /\\*$/.exec(typed)?.[0].length ?? 0
+      // Nothing to protect: no hard break, and the keystroke adds no backslash
+      // that could pair with the newline into one. Let it type normally.
+      if (!isHardBreak && trailingBackslashes === 0) return
+      const head = typed.slice(0, typed.length - trailingBackslashes)
+      // Double the trailing backslashes so the run's parity — and therefore
+      // the presence or absence of the hard break — is left untouched.
+      const insert = head + '\\\\'.repeat(trailingBackslashes)
+      const anchor = isHardBreak
+        ? newline + insert.length - 1 // in front of the hidden hard-break `\`
+        : newline + insert.length // at the true end of the line
+      redirect = {
+        changes: { from: runStart, to: runStart, insert },
+        selection: { anchor },
+        scrollIntoView: true,
+        userEvent: 'input',
+      }
+    })
+    // A multi-cursor edit that only partly lands in the gap is left alone —
+    // redirecting just the one change would silently drop the others.
+    return changeCount === 1 ? redirect : null
+  }
+
   return [
     hiddenRangesEngine(),
     hiddenRangeSource.of(({ state, visibleRanges, revealed }) =>
       collectHiddenRanges(state, visibleRanges, revealed, options),
     ),
     EditorState.transactionFilter.of((transaction) => {
+      const hardBreakRedirect = redirectTypingAtHardBreak(transaction)
+      if (hardBreakRedirect) return hardBreakRedirect
       const cleanup = cleanupEmptyMarkdownFormatting(transaction)
       if (cleanup) return [transaction, cleanup]
       const fillerCleanup = stripInlineMarkFillerOnType(transaction)

@@ -14,7 +14,9 @@
   注册的隐藏范围聚合成**唯一一个** `EditorView.atomicRanges` provider 和一份按
   `presentation` 构建的 decoration 集合。
 - `boundaryCommands.ts` — 最小边界命令集：标题/列表/引用行首 Backspace、块拆分/合并、
-  Enter/Shift-Enter、"删空即清除"。
+  Enter/Shift-Enter、"删空即清除"；`escapeBoundaryDeletion` 把反斜杠转义整节点删除，
+  `hardBreakBoundaryDeletion` 让硬换行行尾的退格/删除不再是死键（先松开强制换行为软换行，
+  再按一次才合并行）。
 - `types.ts` — `PreviewRange`/`mergeRanges`/`rangesTouch`/`expandedVisibleRanges` 等与
   Markdown 无关的纯几何工具。
 - `../selection/selectionCoordinator.ts` — 编辑器唯一的选区交互状态机：记录鼠标拖选阶段和
@@ -29,6 +31,10 @@
 - **`reveal-on-selection`**（行内标记，如 `**`/`*`/`~~`/`` ` ``/链接方括号与目标）：
   折叠光标位于节点范围内时，其标记字符正常显示、可编辑；非空选区保持渲染形态，避免拖选时
   因标记显隐引起换行和选区层抖动。光标离开后标记重新隐藏且保持原子。
+  反斜杠转义 `Escape`（`\*`/`\\`/`\/` 等）**不属于**这一类：`livePreview.ts` 无条件隐藏
+  前导 `\`（Typora 语义，光标贴上去也不显形），让被转义的标点始终按裸字符渲染、一次按键
+  一个字形；退格/删除由 `boundaryCommands.ts` 的 `escapeBoundaryDeletion` 整节点删除，
+  避免只删掉标点、留下悬空 `\`。
 - **`always-hidden`**（标题 `#`/Setext 下划线、HR 源文本、链接引用定义整行）：
   无论选区在哪，源码永远不显示，且必须是原子的。标题这一类**绝不能吞掉点击**——点击
   标题文字任意位置，光标必须落在被点击的字符上，而不是跳到行首（见

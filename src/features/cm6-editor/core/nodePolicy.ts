@@ -21,6 +21,12 @@ export interface NodePolicy {
  * Obsidian-like editing semantics: hidden while the caret is outside the
  * construct, shown verbatim when a collapsed caret enters it. Non-empty
  * selections keep the rendered form stable. Driven by `revealState.ts`.
+ *
+ * Backslash escapes (`Escape`: `\*`, `\\`, `\/`, …) are deliberately *not*
+ * here: `livePreview.ts` hides the leading `\` unconditionally (Typora
+ * semantics) so an escaped punctuation mark always paints as the bare
+ * character, one glyph per keystroke, without a cursor-move to settle.
+ * `boundaryCommands.ts`'s `escapeBoundaryDeletion` removes the pair as a unit.
  */
 const REVEAL_ON_SELECTION = new Set([
   'StrongEmphasis',

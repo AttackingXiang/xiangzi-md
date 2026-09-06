@@ -343,6 +343,35 @@ describe('CM6 Markdown live preview: reveal-on-selection inline marks', () => {
     expect(seen.some((item) => item.className === 'xmd-cm-strikethrough')).toBe(true)
     expect(seen.some((item) => item.replacement && item.to - item.from === 3)).toBe(true)
   })
+
+  it('collapses a backslash escape to the bare character, hiding only the `\\`', () => {
+    const doc = 'a \\* b \\\\ c \\/ d'
+    const state = createState(doc, doc.indexOf('d')) // caret outside every escape
+    const hidden = hiddenRanges(state, 0, doc.length)
+
+    // One hidden, atomic, single-character range per escape — the leading `\`.
+    for (const escaped of ['\\*', '\\\\', '\\/']) {
+      const backslash = doc.indexOf(escaped)
+      expect(hidden).toContainEqual({ from: backslash, to: backslash + 1 })
+    }
+  })
+
+  it('keeps the escape source `\\` hidden even while the caret sits on it', () => {
+    const doc = 'a \\* b'
+    const backslash = doc.indexOf('\\*')
+    for (const caret of [backslash, backslash + 1, backslash + 2]) {
+      const hidden = hiddenRanges(createState(doc, caret), 0, doc.length)
+      expect(hidden).toContainEqual({ from: backslash, to: backslash + 1 })
+    }
+  })
+
+  it('does not touch a lone backslash before a non-escapable character', () => {
+    const doc = 'a \\q b'
+    const hidden = hiddenRanges(createState(doc, doc.length), 0, doc.length)
+    const backslash = doc.indexOf('\\q')
+
+    expect(hidden).not.toContainEqual({ from: backslash, to: backslash + 1 })
+  })
 })
 
 describe('CM6 Markdown live preview: safe inline HTML formatting', () => {
