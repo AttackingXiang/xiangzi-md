@@ -612,7 +612,10 @@ export function markdownCodeBlockPreview(options: CodeBlockPreviewOptions = {}):
         const anchor = fencedCodeFenceRedirectTarget(view.state, linePosition)
         if (anchor === null || view.state.selection.main.head === anchor) return false
         event.preventDefault()
-        view.dispatch({ selection: { anchor }, scrollIntoView: true })
+        // The fence receiving this pointer event is already visible. Asking CM6
+        // to scroll again can amplify a temporarily stale height map directly
+        // after an app-owned scrollbar drag.
+        view.dispatch({ selection: { anchor } })
         view.focus()
         return true
       },

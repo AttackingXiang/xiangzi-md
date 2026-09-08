@@ -32,10 +32,12 @@ describe('live preview link activation', () => {
 
 describe('live preview empty-line pointer handling', () => {
   let view: EditorView | null = null
+  let selectionScrollRequests: boolean[] = []
 
   afterEach(() => {
     view?.destroy()
     view = null
+    selectionScrollRequests = []
     document.body.replaceChildren()
   })
 
@@ -49,13 +51,44 @@ describe('live preview empty-line pointer handling', () => {
       state: EditorState.create({
         doc,
         selection: { anchor: 0 },
-        extensions: [livePreviewEventHandlers()],
+        extensions: [
+          livePreviewEventHandlers(),
+          EditorView.updateListener.of((update) => {
+            for (const transaction of update.transactions) {
+              if (transaction.selection) selectionScrollRequests.push(transaction.scrollIntoView)
+            }
+          }),
+        ],
       }),
     })
     const lines = [...view.contentDOM.querySelectorAll<HTMLElement>('.cm-line')]
     const emptyLine = lines.find((line) => line.textContent === '')
     if (!emptyLine) throw new Error('expected an empty editor line')
     return { emptyLine, emptyLineFrom }
+  }
+
+  function createHeadingView(): HTMLElement {
+    const parent = document.createElement('div')
+    document.body.append(parent)
+    view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc: '# Heading',
+        selection: { anchor: 0 },
+        extensions: [
+          livePreviewEventHandlers(),
+          EditorView.updateListener.of((update) => {
+            for (const transaction of update.transactions) {
+              if (transaction.selection) selectionScrollRequests.push(transaction.scrollIntoView)
+            }
+          }),
+        ],
+      }),
+    })
+    const line = view.contentDOM.querySelector<HTMLElement>('.cm-line')
+    if (!line) throw new Error('expected a heading editor line')
+    line.classList.add('xmd-cm-heading')
+    return line
   }
 
   it('does not cancel pointerdown, preserving a drag that starts on the empty line', () => {
@@ -75,5 +108,22 @@ describe('live preview empty-line pointer handling', () => {
 
     expect(event.defaultPrevented).toBe(true)
     expect(view?.state.selection.main.head).toBe(emptyLineFrom)
+    expect(selectionScrollRequests.at(-1)).toBe(false)
+  })
+
+  it('does not request another scroll when correcting a visible heading click', () => {
+    const heading = createHeadingView()
+    const event = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      clientX: 20,
+      clientY: 10,
+    })
+
+    heading.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(selectionScrollRequests.at(-1)).toBe(false)
   })
 })

@@ -84,7 +84,6 @@ export function livePreviewEventHandlers(): Extension {
         event.preventDefault()
         view.dispatch({
           selection: { anchor },
-          scrollIntoView: true,
           annotations: selectionIntent.of('programmatic'),
         })
         view.focus()
@@ -103,7 +102,6 @@ export function livePreviewEventHandlers(): Extension {
       event.preventDefault()
       view.dispatch({
         selection: { anchor },
-        scrollIntoView: true,
         annotations: selectionIntent.of('programmatic'),
       })
       view.focus()

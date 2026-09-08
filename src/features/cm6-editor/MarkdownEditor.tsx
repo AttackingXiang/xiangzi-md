@@ -1,6 +1,6 @@
 import type { Extension } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
-import { Suspense, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { createCm6Editor } from './controller'
 import { imageInsertion } from './imageInsertion'
@@ -130,6 +130,7 @@ export function MarkdownEditor({
   const rootRef = useRef<HTMLDivElement>(null)
   const mountRef = useRef<HTMLDivElement>(null)
   const scrollerRef = useRef<HTMLElement | null>(null)
+  const scrollbarSettleFrameRef = useRef(0)
   const controllerRef = useRef<Cm6EditorController | null>(null)
   const onChangeRef = useRef(onChange)
   const onReadyRef = useRef(onReady)
@@ -172,6 +173,33 @@ export function MarkdownEditor({
   const [highlighterActive, setHighlighterActive] = useState(initialHighlighterMode.active)
   const [selectionToolbarAnchor, setSelectionToolbarAnchor] =
     useState<SelectionToolbarAnchor | null>(null)
+
+  const beginScrollbarInteraction = useCallback((): void => {
+    cancelAnimationFrame(scrollbarSettleFrameRef.current)
+    scrollbarSettleFrameRef.current = 0
+  }, [])
+
+  const settleScrollbarInteraction = useCallback((): void => {
+    const controller = controllerRef.current
+    const scroller = scrollerRef.current
+    if (!controller || !scroller) return
+
+    // Programmatic scrollTop writes may be coalesced by WKWebView. Deliver one
+    // synchronous scroll notification so CM6 cannot handle the next content
+    // click with the viewport/height map from before the thumb drag.
+    scroller.dispatchEvent(new Event('scroll'))
+    controller.view.requestMeasure()
+
+    let remainingFrames = 2
+    const settle = (): void => {
+      const current = controllerRef.current
+      if (current !== controller) return
+      current.view.requestMeasure()
+      remainingFrames -= 1
+      scrollbarSettleFrameRef.current = remainingFrames > 0 ? requestAnimationFrame(settle) : 0
+    }
+    scrollbarSettleFrameRef.current = requestAnimationFrame(settle)
+  }, [])
   const reportSelectionToolbarRef = useRef<(view: EditorView) => void>(() => undefined)
   const selectionToolbarExtensionRef = useRef<Extension | null>(null)
   if (!selectionToolbarExtensionRef.current) {
@@ -383,6 +411,7 @@ export function MarkdownEditor({
 
     return () => {
       cancelAnimationFrame(restoreFrame)
+      cancelAnimationFrame(scrollbarSettleFrameRef.current)
       scroller.removeEventListener('scroll', reportScroll)
       scroller.removeEventListener('scroll', reportSelectionToolbar)
       window.removeEventListener('resize', handleWindowResize)
@@ -504,7 +533,12 @@ export function MarkdownEditor({
     >
       <div ref={mountRef} className="xmd-cm-mount" />
       <Suspense fallback={null}>
-        <HoverScrollbars targetRef={scrollerRef} axes="vertical" />
+        <HoverScrollbars
+          targetRef={scrollerRef}
+          axes="vertical"
+          onInteractionStart={beginScrollbarInteraction}
+          onInteractionEnd={settleScrollbarInteraction}
+        />
       </Suspense>
       {tagPortalHost && tagBar ? createPortal(tagBar, tagPortalHost) : null}
       {selectionToolbarAnchor && !readingMode ? (

@@ -5,6 +5,8 @@ type ScrollAxis = 'horizontal' | 'vertical'
 interface Props {
   targetRef: RefObject<HTMLElement | null>
   axes?: 'both' | 'horizontal' | 'vertical'
+  onInteractionStart?: () => void
+  onInteractionEnd?: () => void
 }
 
 interface Metrics {
@@ -37,9 +39,18 @@ function pointerPosition(axis: ScrollAxis, event: PointerEvent<HTMLDivElement>):
   return axis === 'horizontal' ? event.clientX : event.clientY
 }
 
-export default function HoverScrollbars({ targetRef, axes = 'both' }: Props): JSX.Element | null {
+export default function HoverScrollbars({
+  targetRef,
+  axes = 'both',
+  onInteractionStart,
+  onInteractionEnd,
+}: Props): JSX.Element | null {
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const dragRef = useRef<DragState | null>(null)
+  const onInteractionStartRef = useRef(onInteractionStart)
+  const onInteractionEndRef = useRef(onInteractionEnd)
+  onInteractionStartRef.current = onInteractionStart
+  onInteractionEndRef.current = onInteractionEnd
 
   const refresh = useCallback(() => {
     const target = targetRef.current
@@ -76,17 +87,22 @@ export default function HoverScrollbars({ targetRef, axes = 'both' }: Props): JS
     }
   }, [refresh, targetRef])
 
-  useEffect(() => {
-    const clearDrag = (): void => {
-      dragRef.current = null
-    }
-    window.addEventListener('pointerup', clearDrag)
-    window.addEventListener('pointercancel', clearDrag)
-    return () => {
-      window.removeEventListener('pointerup', clearDrag)
-      window.removeEventListener('pointercancel', clearDrag)
-    }
+  const finishDrag = useCallback((): void => {
+    if (!dragRef.current) return
+    dragRef.current = null
+    onInteractionEndRef.current?.()
   }, [])
+
+  useEffect(() => {
+    window.addEventListener('pointerup', finishDrag)
+    window.addEventListener('pointercancel', finishDrag)
+    window.addEventListener('blur', finishDrag)
+    return () => {
+      window.removeEventListener('pointerup', finishDrag)
+      window.removeEventListener('pointercancel', finishDrag)
+      window.removeEventListener('blur', finishDrag)
+    }
+  }, [finishDrag])
 
   if (!metrics) return null
 
@@ -118,7 +134,12 @@ export default function HoverScrollbars({ targetRef, axes = 'both' }: Props): JS
   const handleTrackPointerDown = (axis: ScrollAxis, event: PointerEvent<HTMLDivElement>): void => {
     if (event.target !== event.currentTarget) return
     event.preventDefault()
-    scrollAxis(axis, event, event.currentTarget)
+    onInteractionStartRef.current?.()
+    try {
+      scrollAxis(axis, event, event.currentTarget)
+    } finally {
+      onInteractionEndRef.current?.()
+    }
   }
 
   const handleThumbPointerDown = (axis: ScrollAxis, event: PointerEvent<HTMLDivElement>): void => {
@@ -126,6 +147,7 @@ export default function HoverScrollbars({ targetRef, axes = 'both' }: Props): JS
     event.stopPropagation()
     const target = targetRef.current
     if (!target) return
+    onInteractionStartRef.current?.()
     dragRef.current = {
       axis,
       pointerPosition: pointerPosition(axis, event),
@@ -191,6 +213,7 @@ export default function HoverScrollbars({ targetRef, axes = 'both' }: Props): JS
             }}
             onPointerDown={(event) => handleThumbPointerDown('vertical', event)}
             onPointerMove={(event) => handleThumbPointerMove('vertical', event)}
+            onLostPointerCapture={finishDrag}
           />
         </div>
       )}
@@ -207,6 +230,7 @@ export default function HoverScrollbars({ targetRef, axes = 'both' }: Props): JS
             }}
             onPointerDown={(event) => handleThumbPointerDown('horizontal', event)}
             onPointerMove={(event) => handleThumbPointerMove('horizontal', event)}
+            onLostPointerCapture={finishDrag}
           />
         </div>
       )}
