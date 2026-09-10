@@ -6,9 +6,8 @@ import { fencedCodeContentRange } from '../features/cm6-editor/codeBlockPreview'
 import { computeCm6ToolbarState } from '../features/cm6-editor/toolbarState'
 import { linkPromptBridge } from './linkPromptBridge'
 import { readClipboard } from './clipboardRead'
-import { markdownFromClipboardHtml } from './markdownPaste'
 import { emitCodeLanguageFeedback } from './codeLanguageFeedback'
-import { prepareMarkdownPaste } from '../features/cm6-editor/richPaste'
+import { clipboardTextForSelection, prepareMarkdownPaste } from '../features/cm6-editor/richPaste'
 import { detectClipboardCodeLanguage } from '../features/cm6-editor/clipboardCodeLanguage'
 import { tableCellCommandBridge, type TableCellInlineFormat } from './tableCellCommandBridge'
 import { withClipboardFormat } from './copyPreferences'
@@ -127,12 +126,6 @@ export async function pasteFromClipboard(): Promise<boolean> {
   const clipboard = await readClipboard()
   if (!clipboard) return false
 
-  // 有 HTML 就还原成 Markdown，和 ⌘V 走的 richPaste 是同一个转换器，
-  // 这样两条路径粘出来的结果一致。
-  const markdown = clipboard.html ? markdownFromClipboardHtml(clipboard.html) : null
-  const rich = markdown ?? clipboard.text
-  if (!rich) return false
-
   // 表格单元格是 contenteditable。insertText 与 paste 不同，至今仍受支持，
   // 并且和用户直接输入走同一条 DOM 插入路径（单元格里不该出现块级 Markdown，
   // 所以这里用纯文本）。
@@ -142,6 +135,8 @@ export async function pasteFromClipboard(): Promise<boolean> {
 
   const view = cm6ActiveViewBridge.get()
   if (!view || view.state.readOnly) return false
+  const rich = clipboardTextForSelection(view.state, clipboard)
+  if (!rich) return false
   // 语言提示也要和 ⌘V 一致；这条路径读不到 vscode-editor-data，只有 HTML 一份。
   const plan = prepareMarkdownPaste(
     view.state,

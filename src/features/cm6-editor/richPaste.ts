@@ -7,11 +7,36 @@ import {
   type SelectionRange,
 } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { ensureSyntaxTree } from '@codemirror/language'
 import { markdownFromClipboardHtml } from '../../lib/markdownPaste'
 import { emitCodeLanguageFeedback } from '../../lib/codeLanguageFeedback'
 import { detectCodeLanguage, type DetectedCodeLanguage } from './codeLanguageDetection'
 import { detectClipboardCodeLanguage } from './clipboardCodeLanguage'
 import { fencedCodeAtSelection, isCodeBlockPresentation } from './codeBlockDetection'
+
+/** Clipboard representations are selected before serialization. Code bodies
+ * consume literal text, never Markdown generated from the rich representation.
+ * Returning null lets the native paste path handle HTML-only code pastes. */
+export function clipboardTextForSelection(
+  state: EditorState,
+  clipboard: { text: string; html?: string | null },
+): string | null {
+  const range = state.selection.main
+  const tree = ensureSyntaxTree(state, range.to, 100)
+  const code = fencedCodeAtSelection(state, tree ?? undefined)
+  const inCode = code && range.from >= code.codeFrom && range.to <= code.codeTo
+  let node = (tree ?? null)?.resolveInner(range.from, 1)
+  let inLiteral = false
+  while (node) {
+    if (['InlineCode', 'CodeBlock'].includes(node.name) && range.to <= node.to) {
+      inLiteral = true
+      break
+    }
+    node = node.parent ?? undefined
+  }
+  if (inCode || inLiteral) return clipboard.text || null
+  return (clipboard.html ? markdownFromClipboardHtml(clipboard.html) : null) ?? clipboard.text
+}
 
 export interface MarkdownPastePlan {
   changes: ChangeSpec | readonly ChangeSpec[]
@@ -74,8 +99,10 @@ export function richMarkdownPaste(): Extension {
       const clipboard = event.clipboardData
       if (!clipboard || clipboard.files.length > 0) return false
       const html = clipboard.getData('text/html')
-      const markdown = html ? markdownFromClipboardHtml(html) : null
-      const pasted = markdown ?? clipboard.getData('text/plain')
+      const pasted = clipboardTextForSelection(view.state, {
+        html,
+        text: clipboard.getData('text/plain'),
+      })
       if (!pasted) return false
 
       event.preventDefault()

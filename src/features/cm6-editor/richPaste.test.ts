@@ -1,7 +1,10 @@
+// @vitest-environment happy-dom
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorSelection, EditorState } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
-import { prepareMarkdownPaste } from './richPaste'
+import { clipboardTextForSelection, prepareMarkdownPaste, richMarkdownPaste } from './richPaste'
+import { embedMarkdownSourceInClipboardHtml } from '../../lib/markdownPaste'
 
 function stateAt(doc: string, position: number): EditorState {
   return EditorState.create({
@@ -17,6 +20,90 @@ function applyPaste(state: EditorState, pasted: string): EditorState {
 }
 
 describe('Markdown code-block paste', () => {
+  const literal = String.raw`sample\*\~value!$x#2\@X`
+
+  it('routes a real DOM paste event through the literal boundary', () => {
+    const parent = document.createElement('div')
+    document.body.append(parent)
+    const view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc: '```text\n\n```',
+        selection: EditorSelection.cursor(8),
+        extensions: [markdown(), richMarkdownPaste()],
+      }),
+    })
+    try {
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: {
+          files: [],
+          getData: (type: string) =>
+            type === 'text/plain' ? literal : type === 'text/html' ? `<b>${literal}</b>` : '',
+        },
+      })
+      view.contentDOM.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(true)
+      expect(view.state.doc.toString()).toBe('```text\n' + literal + '\n```')
+    } finally {
+      view.destroy()
+      parent.remove()
+    }
+  })
+
+  it.each(['```text\n\n```', '~~~text\n\n~~~', '```text\n', '```mermaid\n\n```'])(
+    'preserves clipboard characters in a fenced body: %s',
+    (doc) => {
+      const state = stateAt(doc, doc.indexOf('\n') + 1)
+      const pasted = clipboardTextForSelection(state, {
+        text: literal,
+        html: `<p>${literal}</p>`,
+      })!
+      expect(pasted).toBe(literal)
+      const saved = applyPaste(state, pasted).doc.toString()
+      const reopened = stateAt(saved, saved.indexOf('\n') + 1)
+      expect(reopened.doc.line(2).text).toBe(literal)
+    },
+  )
+
+  it.each(['`abc`', '    abc'])('keeps inline and indented code literal: %s', (doc) => {
+    expect(
+      clipboardTextForSelection(stateAt(doc, doc.indexOf('b')), {
+        text: literal,
+        html: `<strong>${literal}</strong>`,
+      }),
+    ).toBe(literal)
+  })
+
+  it('does not insert embedded Markdown source into code', () => {
+    const html = embedMarkdownSourceInClipboardHtml('<b>visible</b>', '**visible**')
+    expect(
+      clipboardTextForSelection(stateAt('```\n\n```', 4), {
+        text: 'visible',
+        html,
+      }),
+    ).toBe('visible')
+    expect(
+      clipboardTextForSelection(stateAt('', 0), {
+        text: 'visible',
+        html,
+      }),
+    ).toBe('**visible**')
+  })
+
+  it('serializes rich paragraphs once but preserves plain clipboard input', () => {
+    const state = stateAt('', 0)
+    expect(clipboardTextForSelection(state, { text: literal })).toBe(literal)
+    expect(clipboardTextForSelection(state, { text: 'bold', html: '<b>bold</b>' })).toBe('**bold**')
+  })
+
+  it('preserves whitespace and does not guess text from HTML-only code clipboard', () => {
+    const state = stateAt('```text\n\n```', 8)
+    const text = '\t a  b\n\nlast\n'
+    expect(clipboardTextForSelection(state, { text, html: '<p>a b</p>' })).toBe(text)
+    expect(clipboardTextForSelection(state, { text: '', html: '<b>x</b>' })).toBeNull()
+  })
+
   it('marks an empty text code block when the pasted snippet is recognized', () => {
     const doc = '```\n\n```'
     const state = stateAt(doc, doc.indexOf('\n\n') + 1)
