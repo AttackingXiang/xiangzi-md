@@ -2111,7 +2111,10 @@ export function markdownTablePreview(options: MarkdownTablePreviewOptions = {}):
         const overrides = this.view.state.field(tableLayoutOverrides)
         const ranges = findVisibleMarkdownTables(
           this.view.state,
-          this.view.visibleRanges,
+          // visibleRanges excludes replaced source. When a tall table fills
+          // the viewport it can be empty; removing the widget then changes
+          // the height map and repeatedly reintroduces the same table.
+          [this.view.viewport],
           bufferChars,
         ).map((table) =>
           Decoration.replace({
@@ -2133,8 +2136,15 @@ export function markdownTablePreview(options: MarkdownTablePreviewOptions = {}):
     tableLayoutOverrides,
     decorationField,
     viewportObserver,
-    hiddenRangeSource.of(({ state, visibleRanges }) =>
-      collectTableHiddenRanges(state, visibleRanges, bufferChars),
-    ),
+    hiddenRangeSource.of(({ state }) => {
+      // Atomic ranges must follow the installed widgets, including a table
+      // that fills the viewport and therefore has no visible source spans.
+      const ranges: HiddenRange[] = []
+      const cursor = state.field(decorationField).iter()
+      for (; cursor.value; cursor.next()) {
+        ranges.push({ from: cursor.from, to: cursor.to, presentation: 'external' })
+      }
+      return ranges
+    }),
   ]
 }
